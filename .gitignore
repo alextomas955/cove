@@ -275,3 +275,10 @@ packages/react-devtools-timeline/dist
 **/artifacts/*
 .playwright-mcp/*
 gitignored-docs/
+# Local planning / AI-assistant scaffolding — not part of the published project.
+.planning/
+.claude/
+.agents/
+.cursor/
+.codex/
+CLAUDE.local.md
