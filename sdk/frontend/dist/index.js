@@ -15,4 +15,4 @@ export { defineExtension } from "./define";
 // Typed API client + host-session accessor, plus the extension helpers.
 export { createCoveClient, configureCoveClientAuth, ApiError, createExtensionStore, runExtensionJob, } from "./api";
 // Hooks
-export { useFetch, useExtensionStore, useEntityList } from "./hooks";
+export { useFetch, useExtensionStore, useEntityList, useJobPolling, isTerminalJobStatus, DEFAULT_JOB_POLL_INTERVAL_MS, } from "./hooks";
