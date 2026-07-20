@@ -38,7 +38,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     configureCoveClientAuth({ getAccessToken: () => "access-1" });
     fetchMock.mockResolvedValueOnce(okResponse());
 
-    const client = createCoveClient();
+    const client = createCoveClient({ baseUrl: "http://localhost" });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -53,7 +53,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     });
     fetchMock.mockResolvedValueOnce(okResponse());
 
-    const client = createCoveClient();
+    const client = createCoveClient({ baseUrl: "http://localhost" });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     const req = requestAt(fetchMock, 0);
@@ -77,7 +77,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
       .mockResolvedValueOnce(unauthorizedResponse())
       .mockResolvedValueOnce(okResponse());
 
-    const client = createCoveClient();
+    const client = createCoveClient({ baseUrl: "http://localhost" });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(tryRefresh).toHaveBeenCalledTimes(1);
@@ -96,7 +96,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     const dispatched = vi.fn();
     window.addEventListener("cove-auth-required", dispatched);
 
-    const client = createCoveClient();
+    const client = createCoveClient({ baseUrl: "http://localhost" });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(tryRefresh).toHaveBeenCalledTimes(1);
@@ -111,7 +111,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     const dispatched = vi.fn();
     window.addEventListener("cove-auth-required", dispatched);
 
-    const client = createCoveClient();
+    const client = createCoveClient({ baseUrl: "http://localhost" });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
