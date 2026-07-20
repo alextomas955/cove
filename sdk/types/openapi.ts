@@ -53,7 +53,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    hostId?: number | string;
+                    hostId?: number;
                     hostType?: string;
                     kinds?: string;
                     modality?: string;
@@ -98,12 +98,12 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     runKey?: string;
                     sourceKey?: string;
                     status?: components["schemas"]["AiRunStatus"];
-                    targetId?: number | string;
+                    targetId?: number;
                     targetType?: components["schemas"]["AiRunTargetType"];
                 };
                 header?: never;
@@ -274,10 +274,10 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
-                    seed?: number | string;
+                    seed?: number;
                     sort?: string;
                 };
                 header?: never;
@@ -508,7 +508,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -811,8 +811,8 @@ export interface paths {
                     action?: string;
                     actor?: string;
                     outcome?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                 };
                 header?: never;
                 path?: never;
@@ -1297,7 +1297,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    roleId?: number | string;
+                    roleId?: number;
                 };
                 header?: never;
                 path?: never;
@@ -1416,7 +1416,7 @@ export interface paths {
             parameters: {
                 query?: {
                     entityKind?: string;
-                    roleId?: number | string;
+                    roleId?: number;
                 };
                 header?: never;
                 path?: never;
@@ -1962,12 +1962,12 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    hostId?: number | string;
+                    hostId?: number;
                     hostType?: components["schemas"]["EmbeddingHostType"];
                     kind?: string;
                     kindFamily?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     sourceKey?: string;
                     sourceRunId?: string;
                 };
@@ -2365,9 +2365,9 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    hostId?: number | string;
+                    hostId?: number;
                     hostType?: string;
-                    limit?: number | string;
+                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -3142,8 +3142,8 @@ export interface paths {
             parameters: {
                 query?: {
                     category?: string;
-                    page?: number | string;
-                    pageSize?: number | string;
+                    page?: number;
+                    pageSize?: number;
                     q?: string;
                     sort?: string;
                     type?: string;
@@ -3265,42 +3265,42 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    appearanceCount?: number | string;
-                    appearanceCount2?: number | string;
+                    appearanceCount?: number;
+                    appearanceCount2?: number;
                     appearanceCountModifier?: string;
                     customFieldCriteria?: string;
-                    detectionCount?: number | string;
-                    detectionCount2?: number | string;
+                    detectionCount?: number;
+                    detectionCount2?: number;
                     detectionCountModifier?: string;
                     direction?: components["schemas"]["SortDirection"];
-                    frameSampleCount?: number | string;
-                    frameSampleCount2?: number | string;
+                    frameSampleCount?: number;
+                    frameSampleCount2?: number;
                     frameSampleCountModifier?: string;
                     hasCover?: boolean;
                     ignored?: boolean;
-                    imageCount?: number | string;
-                    imageCount2?: number | string;
+                    imageCount?: number;
+                    imageCount2?: number;
                     imageCountModifier?: string;
                     label?: string;
                     labelModifier?: string;
                     linked?: boolean;
                     merged?: boolean;
-                    mergedIntoFaceId?: number | string;
-                    minSuggestionConfidence?: number | string;
-                    page?: number | string;
-                    performerId?: number | string;
+                    mergedIntoFaceId?: number;
+                    minSuggestionConfidence?: number;
+                    page?: number;
+                    performerId?: number;
                     performerIds?: string;
-                    perPage?: number | string;
+                    perPage?: number;
                     primarySourceKey?: string;
                     primarySourceKeyModifier?: string;
                     q?: string;
                     sort?: string;
-                    suggestionConfidence?: number | string;
-                    suggestionConfidence2?: number | string;
+                    suggestionConfidence?: number;
+                    suggestionConfidence2?: number;
                     suggestionConfidenceModifier?: string;
                     topSuggestionPerformerIds?: string;
-                    videoCount?: number | string;
-                    videoCount2?: number | string;
+                    videoCount?: number;
+                    videoCount2?: number;
                     videoCountModifier?: string;
                 };
                 header?: never;
@@ -3455,8 +3455,8 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
                     sort?: string;
                 };
@@ -3667,7 +3667,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -3840,10 +3840,10 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    k?: number | string;
+                    k?: number;
                     kindFamily?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
                     sort?: string;
                 };
@@ -3886,7 +3886,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    maxResults?: number | string;
+                    maxResults?: number;
                 };
                 header?: never;
                 path: {
@@ -4060,7 +4060,7 @@ export interface paths {
                 query?: {
                     completedAt?: string;
                     startedAt?: string;
-                    take?: number | string;
+                    take?: number;
                 };
                 header?: never;
                 path?: never;
@@ -4099,7 +4099,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    take?: number | string;
+                    take?: number;
                 };
                 header?: never;
                 path?: never;
@@ -4365,16 +4365,16 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    imageId?: number | string;
+                    imageId?: number;
                     organized?: boolean;
-                    page?: number | string;
+                    page?: number;
                     performerIds?: string;
-                    perPage?: number | string;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
-                    studioId?: number | string;
+                    studioId?: number;
                     tagIds?: string;
                     title?: string;
                 };
@@ -4723,7 +4723,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -4761,7 +4761,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -4843,7 +4843,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -5216,13 +5216,13 @@ export interface paths {
                     direction?: string;
                     kind?: string;
                     name?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
-                    studioId?: number | string;
+                    studioId?: number;
                     tagIds?: string;
                 };
                 header?: never;
@@ -5469,8 +5469,8 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
                     sort?: string;
                 };
@@ -5760,7 +5760,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -5842,7 +5842,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -6364,17 +6364,17 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    galleryId?: number | string;
+                    galleryId?: number;
                     ids?: string;
                     organized?: boolean;
-                    page?: number | string;
+                    page?: number;
                     performerIds?: string;
-                    perPage?: number | string;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
-                    studioId?: number | string;
+                    studioId?: number;
                     tagIds?: string;
                     title?: string;
                 };
@@ -6548,9 +6548,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": number | string;
-                        "text/json": number | string;
-                        "text/plain": number | string;
+                        "application/json": number;
+                        "text/json": number;
+                        "text/plain": number;
                     };
                 };
             };
@@ -6572,9 +6572,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": number | string;
-                        "text/json": number | string;
-                        "text/plain": number | string;
+                        "application/json": number;
+                        "text/json": number;
+                        "text/plain": number;
                     };
                 };
             };
@@ -6610,9 +6610,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": number | string;
-                        "text/json": number | string;
-                        "text/plain": number | string;
+                        "application/json": number;
+                        "text/json": number;
+                        "text/plain": number;
                     };
                 };
             };
@@ -7379,7 +7379,7 @@ export interface paths {
             parameters: {
                 query?: {
                     level?: string;
-                    limit?: number | string;
+                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -7873,13 +7873,13 @@ export interface paths {
                     direction?: string;
                     favorite?: boolean;
                     name?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
-                    studioId?: number | string;
+                    studioId?: number;
                     tagIds?: string;
                 };
                 header?: never;
@@ -8034,8 +8034,8 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
                     sort?: string;
                 };
@@ -8124,8 +8124,8 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
                     sort?: string;
                 };
@@ -8168,7 +8168,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -9432,9 +9432,9 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    entityId?: number | string;
+                    entityId?: number;
                     entityType?: string;
-                    limit?: number | string;
+                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -10037,18 +10037,18 @@ export interface paths {
                 query?: {
                     colorHint?: string;
                     colorHintModifier?: string;
-                    confidence?: number | string;
-                    confidence2?: number | string;
+                    confidence?: number;
+                    confidence2?: number;
                     confidenceModifier?: string;
                     createdAt?: string;
                     createdAt2?: string;
                     createdAtModifier?: string;
                     direction?: string;
                     durationModifier?: string;
-                    durationSec?: number | string;
-                    durationSec2?: number | string;
-                    endSec?: number | string;
-                    endSec2?: number | string;
+                    durationSec?: number;
+                    durationSec2?: number;
+                    endSec?: number;
+                    endSec2?: number;
                     endSecModifier?: string;
                     excludeVideoIds?: string;
                     hasImage?: boolean;
@@ -10056,32 +10056,32 @@ export interface paths {
                     hostType?: string;
                     ids?: string;
                     kind?: string;
-                    minConfidence?: number | string;
-                    minDurationSec?: number | string;
-                    page?: number | string;
+                    minConfidence?: number;
+                    minDurationSec?: number;
+                    page?: number;
                     performerIds?: string;
-                    perPage?: number | string;
+                    perPage?: number;
                     q?: string;
                     refIds?: string;
-                    seed?: number | string;
+                    seed?: number;
                     sort?: string;
                     sourceCategory?: string;
                     sourceKey?: string;
                     sourceRunId?: string;
                     sourceRunIdModifier?: string;
-                    startSec?: number | string;
-                    startSec2?: number | string;
+                    startSec?: number;
+                    startSec2?: number;
                     startSecModifier?: string;
-                    tagDepth?: number | string;
+                    tagDepth?: number;
                     tagged?: boolean;
-                    tagId?: number | string;
+                    tagId?: number;
                     tagIds?: string;
                     title?: string;
                     titleModifier?: string;
                     updatedAt?: string;
                     updatedAt2?: string;
                     updatedAtModifier?: string;
-                    videoId?: number | string;
+                    videoId?: number;
                     videoIds?: string;
                     videoTitle?: string;
                 };
@@ -10161,7 +10161,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -10695,7 +10695,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                 };
                 header?: never;
                 path: {
@@ -10767,7 +10767,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                 };
                 header?: never;
                 path: {
@@ -11141,7 +11141,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    seconds?: number | string;
+                    seconds?: number;
                 };
                 header?: never;
                 path: {
@@ -11178,7 +11178,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    seconds?: number | string;
+                    seconds?: number;
                 };
                 header?: never;
                 path: {
@@ -11251,7 +11251,7 @@ export interface paths {
             parameters: {
                 query?: {
                     resolution?: string;
-                    start?: number | string;
+                    start?: number;
                 };
                 header?: never;
                 path: {
@@ -11326,11 +11326,11 @@ export interface paths {
                     direction?: string;
                     favorite?: boolean;
                     name?: string;
-                    page?: number | string;
-                    parentId?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    parentId?: number;
+                    perPage?: number;
                     q?: string;
-                    seed?: number | string;
+                    seed?: number;
                     sort?: string;
                     tagIds?: string;
                 };
@@ -11398,7 +11398,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    depth?: number | string;
+                    depth?: number;
                 };
                 header?: never;
                 path: {
@@ -11487,7 +11487,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -12918,7 +12918,7 @@ export interface paths {
                             [key: string]: string[];
                         };
                         /** Format: int64 */
-                        Length?: number | string;
+                        Length?: number;
                         Name?: string;
                     };
                 };
@@ -12965,7 +12965,7 @@ export interface paths {
                             [key: string]: string[];
                         };
                         /** Format: int64 */
-                        Length?: number | string;
+                        Length?: number;
                         Name?: string;
                     };
                 };
@@ -12996,9 +12996,9 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    contextId?: number | string;
+                    contextId?: number;
                     contextType?: string;
-                    hostId?: number | string;
+                    hostId?: number;
                     hostType?: string;
                 };
                 header?: never;
@@ -13292,11 +13292,11 @@ export interface paths {
                     favorite?: boolean;
                     includeCounts?: boolean;
                     name?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
                 };
                 header?: never;
@@ -13363,7 +13363,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    depth?: number | string;
+                    depth?: number;
                 };
                 header?: never;
                 path: {
@@ -13452,7 +13452,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -13703,7 +13703,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    count?: number | string;
+                    count?: number;
                 };
                 header?: never;
                 path: {
@@ -14058,10 +14058,10 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    page?: number | string;
-                    perPage?: number | string;
+                    page?: number;
+                    perPage?: number;
                     q?: string;
-                    seed?: number | string;
+                    seed?: number;
                     sort?: string;
                 };
                 header?: never;
@@ -14292,7 +14292,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -14884,18 +14884,18 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    galleryId?: number | string;
-                    groupId?: number | string;
+                    galleryId?: number;
+                    groupId?: number;
                     ids?: string;
                     organized?: boolean;
-                    page?: number | string;
+                    page?: number;
                     performerIds?: string;
-                    perPage?: number | string;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
-                    studioId?: number | string;
+                    studioId?: number;
                     tagIds?: string;
                     title?: string;
                 };
@@ -15250,7 +15250,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    max?: number | string;
+                    max?: number;
                     v?: string;
                 };
                 header?: never;
@@ -15348,9 +15348,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": number | string;
-                        "text/json": number | string;
-                        "text/plain": number | string;
+                        "application/json": number;
+                        "text/json": number;
+                        "text/plain": number;
                     };
                 };
             };
@@ -15705,9 +15705,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": null | number | string;
-                        "text/json": null | number | string;
-                        "text/plain": null | number | string;
+                        "application/json": null | number;
+                        "text/json": null | number;
+                        "text/plain": null | number;
                     };
                 };
             };
@@ -16178,7 +16178,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    profile?: number | string;
+                    profile?: number;
                 };
                 header?: never;
                 path: {
@@ -16264,7 +16264,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    profile?: number | string;
+                    profile?: number;
                 };
                 header?: never;
                 path: {
@@ -16384,8 +16384,8 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    distance?: number | string;
-                    durationDiff?: number | string;
+                    distance?: number;
+                    durationDiff?: number;
                     matchType?: string;
                 };
                 header?: never;
@@ -16593,7 +16593,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    count?: number | string;
+                    count?: number;
                     q?: string;
                 };
                 header?: never;
@@ -16634,18 +16634,18 @@ export interface paths {
             parameters: {
                 query?: {
                     direction?: string;
-                    galleryId?: number | string;
-                    groupId?: number | string;
+                    galleryId?: number;
+                    groupId?: number;
                     isVr?: boolean;
                     organized?: boolean;
-                    page?: number | string;
+                    page?: number;
                     performerIds?: string;
-                    perPage?: number | string;
+                    perPage?: number;
                     q?: string;
-                    rating?: number | string;
-                    seed?: number | string;
+                    rating?: number;
+                    seed?: number;
                     sort?: string;
-                    studioId?: number | string;
+                    studioId?: number;
                     tagIds?: string;
                     title?: string;
                 };
@@ -16716,94 +16716,94 @@ export interface components {
         AddSubGroup: {
             description?: null | string;
             /** Format: int32 */
-            orderIndex?: null | number | string;
+            orderIndex?: null | number;
             /** Format: int32 */
-            subGroupId: number | string;
+            subGroupId: number;
         };
         AdminPasswordRequest: {
             newPassword: string;
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         AffinityHostType: "video" | "image" | "performer" | "face" | "tag" | "studio" | "gallery" | "group" | "audio" | "text" | "segment";
         AiDataPurgeRequest: {
             /** @default false */
             dryRun: boolean;
             /** Format: int32 */
-            hostId: null | number | string;
-            hostType: null | string;
-            kinds: null | string[];
-            modality: null | string;
-            model: null | string;
-            sourceKey: null | string;
-            sourceRunId: null | string;
+            hostId?: null | number;
+            hostType?: null | string;
+            kinds?: null | string[];
+            modality?: null | string;
+            model?: null | string;
+            sourceKey?: null | string;
+            sourceRunId?: null | string;
         };
         AiDataPurgeResult: {
             removedCounts: {
-                [key: string]: number | string;
+                [key: string]: number;
             };
         };
         AiDataSelector: {
             /** Format: int32 */
-            hostId: null | number | string;
-            hostType: null | string;
-            kinds: null | string[];
-            modality: null | string;
-            model: null | string;
-            sourceKey: null | string;
-            sourceRunId: null | string;
+            hostId?: null | number;
+            hostType?: null | string;
+            kinds?: null | string[];
+            modality?: null | string;
+            model?: null | string;
+            sourceKey?: null | string;
+            sourceRunId?: null | string;
         };
         AiDataSummary: {
             items: components["schemas"]["AiDataSummaryItem"][];
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
             totals: {
-                [key: string]: number | string;
+                [key: string]: number;
             };
         };
         AiDataSummaryItem: {
             /** Format: int32 */
-            count: number | string;
-            detail: null | string;
+            count: number;
+            detail?: null | string;
             hostType: string;
             kind: string;
-            model: null | string;
+            model?: null | string;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
         };
         AiRun: {
             /** Format: date-time */
-            completedAt: null | string;
+            completedAt?: null | string;
             /** Format: date-time */
             createdAt: string;
-            error: null | string;
+            error?: null | string;
             /** Format: double */
-            frameIntervalSec: null | number | string;
+            frameIntervalSec?: null | number;
             /** Format: int32 */
-            id: number | string;
-            jobId: null | string;
-            loadPolicy: null | string;
-            models: null | components["schemas"]["JsonElement"];
-            request: null | components["schemas"]["JsonElement"];
+            id: number;
+            jobId?: null | string;
+            loadPolicy?: null | string;
+            models?: null | components["schemas"]["JsonElement"];
+            request?: null | components["schemas"]["JsonElement"];
             runKey: string;
             sourceKey: string;
             /** Format: date-time */
             startedAt: string;
             status: components["schemas"]["AiRunStatus"];
-            summary: null | components["schemas"]["JsonElement"];
+            summary?: null | components["schemas"]["JsonElement"];
             /** Format: int32 */
-            targetId: number | string;
+            targetId: number;
             targetType: components["schemas"]["AiRunTargetType"];
-            trigger: null | string;
+            trigger?: null | string;
             /** Format: date-time */
             updatedAt: string;
-            vr: null | boolean;
+            vr?: null | boolean;
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         AiRunStatus: "pending" | "running" | "completed" | "failed" | "cancelled";
-        /** @enum {unknown} */
+        /** @enum {string} */
         AiRunTargetType: "video" | "image" | "performer" | "face";
         ApplyVideoScrapeAttempt: {
-            collectionModes: null | {
+            collectionModes?: null | {
                 [key: string]: string;
             };
             /** @default true */
@@ -16817,80 +16817,80 @@ export interface components {
             /** @default false */
             markOrganized: boolean;
             performerSelections?: null | components["schemas"]["ScrapeCollectionItemSelection"][];
-            replaceFields: null | string[];
+            replaceFields?: null | string[];
             /** Format: int32 */
-            selectedCandidateIndex?: null | number | string;
+            selectedCandidateIndex?: null | number;
             tagSelections?: null | components["schemas"]["ScrapeCollectionItemSelection"][];
         };
         Audio: {
-            code: null | string;
+            code?: null | string;
             contextTagApplications?: null | components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            fileCount: number | string;
+            fileCount: number;
             files: components["schemas"]["AudioFile"][];
             groups: components["schemas"]["GroupSummary"][];
             hasVideoFiles: boolean;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             imagePath?: null | string;
             /** Format: double */
-            maxDuration: number | string;
+            maxDuration: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
             /** Format: int32 */
-            studioId: null | number | string;
-            studioName: null | string;
+            studioId?: null | number;
+            studioName?: null | string;
             tags: components["schemas"]["Tag"][];
-            title: null | string;
+            title?: null | string;
             tracks: components["schemas"]["AudioTrack"][];
             updatedAt: string;
             urls: string[];
         };
         AudioCreate: {
-            code: null | string;
+            code?: null | string;
             customFields?: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            groupIds: null | components["schemas"]["VideoGroupInput"][];
+            date?: null | string;
+            details?: null | string;
+            groupIds?: null | components["schemas"]["VideoGroupInput"][];
             organized: boolean;
-            performerIds: null | (number | string)[];
+            performerIds?: null | number[];
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         AudioFile: {
             audioCodec: string;
             basename: string;
             /** Format: int64 */
-            bitRate: number | string;
+            bitRate: number;
             /** Format: int32 */
-            channels: null | number | string;
+            channels?: null | number;
             /** Format: double */
-            duration: number | string;
+            duration: number;
             format: string;
             hasVideoTrack: boolean;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             path: string;
             /** Format: int32 */
-            sampleRate: null | number | string;
+            sampleRate?: null | number;
             /** Format: int64 */
-            size: number | string;
+            size: number;
         };
-        AudioFilter: {
+        AudioFilter: null | {
             audioCodecCriterion?: null | components["schemas"]["StringCriterion"];
             bitRateCriterion?: null | components["schemas"]["IntCriterion"];
             channelsCriterion?: null | components["schemas"]["IntCriterion"];
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: null | components["schemas"]["DateCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -16924,33 +16924,33 @@ export interface components {
         };
         AudioTrack: {
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            orderIndex: number | string;
+            orderIndex: number;
             /** Format: double */
-            startSec: number | string;
-            title: null | string;
+            startSec: number;
+            title?: null | string;
         };
         AudioUpdate: {
-            code: null | string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            groupIds: null | components["schemas"]["VideoGroupInput"][];
-            organized: null | boolean;
-            performerIds: null | (number | string)[];
+            code?: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
+            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            organized?: null | boolean;
+            performerIds?: null | number[];
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         BackupResult: {
             backupPath: string;
             /** Format: int64 */
-            sizeBytes: number | string;
+            sizeBytes: number;
             timestamp: string;
         };
         BatchDelete: {
@@ -16958,33 +16958,33 @@ export interface components {
             deleteFiles: boolean;
             /** @default false */
             deleteGenerated: boolean;
-            ids: (number | string)[];
+            ids: number[];
         };
         Bookmark: {
             createdAt: string;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["AffinityHostType"];
         };
         BookmarkBatchRequest: {
-            hostIds: (number | string)[];
+            hostIds: number[];
             hostType: components["schemas"]["AffinityHostType"];
         };
         BookmarkState: {
-            createdAt: null | string;
+            createdAt?: null | string;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["AffinityHostType"];
             saved: boolean;
         };
         BookmarkToggle: {
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["AffinityHostType"];
             saved: boolean;
         };
-        BoolCriterion: {
-            value?: boolean;
+        BoolCriterion: null | {
+            value: boolean;
         };
         BootstrapOwnerRequest: {
             password: string;
@@ -16995,147 +16995,147 @@ export interface components {
             code?: null | string;
             date?: null | string;
             details?: null | string;
-            ids?: (number | string)[];
+            ids: number[];
             organized?: null | boolean;
-            performerIds?: null | (number | string)[];
-            performerMode?: components["schemas"]["BulkUpdateMode"];
+            performerIds?: null | number[];
+            performerMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            studioId?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkGalleryUpdate: {
             clearFields?: null | string[];
             code?: null | string;
             date?: null | string;
             details?: null | string;
-            ids?: (number | string)[];
+            ids: number[];
             organized?: null | boolean;
-            performerIds?: null | (number | string)[];
-            performerMode?: components["schemas"]["BulkUpdateMode"];
+            performerIds?: null | number[];
+            performerMode: components["schemas"]["BulkUpdateMode"];
             photographer?: null | string;
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkGroupUpdate: {
             clearFields?: null | string[];
             date?: null | string;
             description?: null | string;
             director?: null | string;
-            ids?: (number | string)[];
+            ids: number[];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkImageUpdate: {
             clearFields?: null | string[];
             code?: null | string;
             date?: null | string;
             details?: null | string;
-            galleryIds?: null | (number | string)[];
-            galleryMode?: components["schemas"]["BulkUpdateMode"];
-            ids?: (number | string)[];
+            galleryIds?: null | number[];
+            galleryMode: components["schemas"]["BulkUpdateMode"];
+            ids: number[];
             organized?: null | boolean;
-            performerIds?: null | (number | string)[];
-            performerMode?: components["schemas"]["BulkUpdateMode"];
+            performerIds?: null | number[];
+            performerMode: components["schemas"]["BulkUpdateMode"];
             photographer?: null | string;
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkPerformerUpdate: {
             details?: null | string;
             favorite?: null | boolean;
             gender?: null | string;
-            ids?: (number | string)[];
+            ids: number[];
             /** Format: int32 */
-            rating?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            rating?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkStudioUpdate: {
             clearFields?: null | string[];
             details?: null | string;
             favorite?: null | boolean;
-            ids?: (number | string)[];
+            ids: number[];
             organized?: null | boolean;
             /** Format: int32 */
-            rating?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            rating?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkTagUpdate: {
-            childIds?: null | (number | string)[];
-            childMode?: components["schemas"]["BulkUpdateMode"];
+            childIds?: null | number[];
+            childMode: components["schemas"]["BulkUpdateMode"];
             clearFields?: null | string[];
             color?: null | string;
             description?: null | string;
             favorite?: null | boolean;
-            ids?: (number | string)[];
+            ids: number[];
             /** Format: double */
-            minOccurrencePercent?: null | number | string;
+            minOccurrencePercent?: null | number;
             /** Format: double */
-            minOccurrenceSec?: null | number | string;
+            minOccurrenceSec?: null | number;
             organized?: null | boolean;
-            parentIds?: null | (number | string)[];
-            parentMode?: components["schemas"]["BulkUpdateMode"];
+            parentIds?: null | number[];
+            parentMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            tagGroupId?: null | number | string;
+            tagGroupId?: null | number;
         };
         BulkTextDocumentUpdate: {
             clearFields?: null | string[];
             code?: null | string;
             date?: null | string;
             details?: null | string;
-            ids?: (number | string)[];
+            ids: number[];
             organized?: null | boolean;
-            performerIds?: null | (number | string)[];
-            performerMode?: components["schemas"]["BulkUpdateMode"];
+            performerIds?: null | number[];
+            performerMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            studioId?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         BulkUpdateMode: "set" | "add" | "remove";
         BulkVideoUpdate: {
             clearFields?: null | string[];
             code?: null | string;
             date?: null | string;
             director?: null | string;
-            galleryIds?: null | (number | string)[];
-            galleryMode?: components["schemas"]["BulkUpdateMode"];
+            galleryIds?: null | number[];
+            galleryMode: components["schemas"]["BulkUpdateMode"];
             groupIds?: null | components["schemas"]["VideoGroupInput"][];
-            groupMode?: components["schemas"]["BulkUpdateMode"];
-            ids?: (number | string)[];
+            groupMode: components["schemas"]["BulkUpdateMode"];
+            ids: number[];
             isVr?: null | boolean;
             organized?: null | boolean;
-            performerIds?: null | (number | string)[];
-            performerMode?: components["schemas"]["BulkUpdateMode"];
+            performerIds?: null | number[];
+            performerMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId?: null | number | string;
-            tagIds?: null | (number | string)[];
-            tagMode?: components["schemas"]["BulkUpdateMode"];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            tagMode: components["schemas"]["BulkUpdateMode"];
         };
         Caption: {
             captionType: string;
             filename: string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             languageCode: string;
         };
         ChangePasswordRequest: {
@@ -17143,78 +17143,78 @@ export interface components {
             newPassword: string;
         };
         CleanOptions: {
-            dryRun?: boolean;
+            dryRun: boolean;
             paths?: null | string[];
         };
         ConfigBackupResult: {
             backupPath: string;
             /** Format: int64 */
-            sizeBytes: number | string;
+            sizeBytes: number;
             timestamp: string;
         };
         CoveConfig: {
-            audioExtensions?: string[];
+            audioExtensions: string[];
             cachePath?: null | string;
-            calculateMd5?: boolean;
-            covePaths?: components["schemas"]["CovePath"][];
-            createGalleriesFromFolders?: boolean;
-            createImageClipsFromVideos?: boolean;
-            customFieldDefinitions?: components["schemas"]["CustomFieldDefinition"][];
-            deleteGeneratedDefault?: boolean;
-            disabledPlugins?: string[];
-            downloaderPathOverrides?: components["schemas"]["DownloaderPathOverride"][];
+            calculateMd5: boolean;
+            covePaths: components["schemas"]["CovePath"][];
+            createGalleriesFromFolders: boolean;
+            createImageClipsFromVideos: boolean;
+            customFieldDefinitions: components["schemas"]["CustomFieldDefinition"][];
+            deleteGeneratedDefault: boolean;
+            disabledPlugins: string[];
+            downloaderPathOverrides: components["schemas"]["DownloaderPathOverride"][];
             enableFfmpegHwAccel?: null | boolean;
-            excludeGalleryPatterns?: string[];
-            excludeImagePatterns?: string[];
-            excludePatterns?: string[];
+            excludeGalleryPatterns: string[];
+            excludeImagePatterns: string[];
+            excludePatterns: string[];
             ffmpegInputArgs?: null | string;
             ffmpegOutputArgs?: null | string;
             ffmpegPath?: null | string;
             ffprobePath?: null | string;
-            frameExtractionMode?: string;
-            galleryCoverRegex?: string;
-            galleryExtensions?: string[];
+            frameExtractionMode: string;
+            galleryCoverRegex: string;
+            galleryExtensions: string[];
             generatedPath?: null | string;
             hardwareAcceleration?: null | string;
             /** Format: int32 */
-            hardwareEncodeSessionLimit?: number | string;
-            host?: string;
-            imageExtensions?: string[];
-            interface?: components["schemas"]["InterfaceConfig"];
+            hardwareEncodeSessionLimit: number;
+            host: string;
+            imageExtensions: string[];
+            interface: components["schemas"]["InterfaceConfig"];
             liveTranscodeInputArgs?: null | string;
             liveTranscodeOutputArgs?: null | string;
-            logLevel?: string;
+            logLevel: string;
             /** Format: int32 */
-            maxConcurrentDownloads?: number | string;
+            maxConcurrentDownloads: number;
             /** Format: int32 */
-            maxParallelTasks?: number | string;
+            maxParallelTasks: number;
             /** Format: int32 */
-            maxStreamingTranscodeSize?: number | string;
+            maxStreamingTranscodeSize: number;
             /** Format: int32 */
-            maxTranscodeSize?: null | number | string;
-            pluginConfigurations?: {
+            maxTranscodeSize?: null | number;
+            pluginConfigurations: {
                 [key: string]: Record<string, never>;
             };
             /** Format: int32 */
-            port?: number | string;
-            previewAudio?: string;
-            previewPreset?: string;
-            scraping?: components["schemas"]["ScrapingConfig"];
-            security?: components["schemas"]["SecurityConfig"];
-            textExtensions?: string[];
+            port: number;
+            previewAudio: string;
+            previewPreset: string;
+            scraping: components["schemas"]["ScrapingConfig"];
+            security: components["schemas"]["SecurityConfig"];
+            textExtensions: string[];
             transcodeHardwareAcceleration?: null | string;
             transcodeInputArgs?: null | string;
             transcodeOutputArgs?: null | string;
-            ui?: components["schemas"]["UiConfig"];
-            videoExtensions?: string[];
-            writeImageThumbnails?: boolean;
+            ui: components["schemas"]["UiConfig"];
+            videoExtensions: string[];
+            writeImageThumbnails: boolean;
         };
         CovePath: {
-            excludeAudio?: boolean;
-            excludeImage?: boolean;
-            excludeText?: boolean;
-            excludeVideo?: boolean;
-            path?: string;
+            excludeAudio: boolean;
+            excludeImage: boolean;
+            excludeText: boolean;
+            excludeVideo: boolean;
+            path: string;
         };
         CreateApiTokenRequest: {
             /** Format: date-time */
@@ -17227,7 +17227,7 @@ export interface components {
             effect: string;
             entityKind: string;
             /** Format: int32 */
-            roleId: number | string;
+            roleId: number;
             scopeKind: string;
             scopeValue: string;
         };
@@ -17237,7 +17237,7 @@ export interface components {
             entityId: string;
             entityKind: string;
             /** Format: int32 */
-            roleId: number | string;
+            roleId: number;
         };
         CreateInviteRequest: {
             displayName?: null | string;
@@ -17246,19 +17246,19 @@ export interface components {
             username?: null | string;
         };
         CreateRoleRequest: {
-            description: null | string;
+            description?: null | string;
             name: string;
             permissions: string[];
         };
         CreateScrapeAttempt: {
             /** Format: int32 */
-            entityId: null | number | string;
+            entityId?: null | number;
             entityType: string;
-            fragment: null | Record<string, never>;
+            fragment?: null | Record<string, never>;
             inputKind: string;
-            name: null | string;
+            name?: null | string;
             scraperId: string;
-            url: null | string;
+            url?: null | string;
         };
         CreateShareLinkRequest: {
             entityIds: string[];
@@ -17272,63 +17272,63 @@ export interface components {
             email?: null | string;
             /** @default false */
             mustChangePassword: boolean;
-            password: null | string;
+            password?: null | string;
             roles?: null | string[];
             username: string;
         };
-        CriterionModifier: unknown;
-        CustomFieldCriterion: {
-            key?: string;
-            modifier?: components["schemas"]["CriterionModifier"];
-            type?: string;
-            value?: string;
+        CriterionModifier: string;
+        CustomFieldCriterion: null | {
+            key: string;
+            modifier: components["schemas"]["CriterionModifier"];
+            type: string;
+            value: string;
             value2?: null | string;
         };
         CustomFieldDefinition: {
             createdAt?: null | string;
             /** Format: int32 */
-            displayOrder?: number | string;
-            entityTypes?: string[];
-            filterable?: boolean;
+            displayOrder: number;
+            entityTypes: string[];
+            filterable: boolean;
             /** Format: int32 */
-            id?: number | string;
-            isMultiValue?: boolean;
-            key?: string;
-            label?: string;
-            options?: string[];
-            sortable?: boolean;
-            type?: string;
+            id: number;
+            isMultiValue: boolean;
+            key: string;
+            label: string;
+            options: string[];
+            sortable: boolean;
+            type: string;
             updatedAt?: null | string;
         };
         CustomFieldDefinitionCreate: {
             /** Format: int32 */
-            displayOrder?: null | number | string;
-            entityTypes?: string[];
-            filterable?: boolean;
-            isMultiValue?: boolean;
+            displayOrder?: null | number;
+            entityTypes: string[];
+            filterable: boolean;
+            isMultiValue: boolean;
             key?: null | string;
-            label?: string;
-            options?: string[];
-            sortable?: boolean;
-            type?: string;
+            label: string;
+            options: string[];
+            sortable: boolean;
+            type: string;
         };
         CustomFieldDefinitionSync: {
             /** Format: int32 */
-            displayOrder?: null | number | string;
-            entityTypes?: string[];
-            filterable?: boolean;
+            displayOrder?: null | number;
+            entityTypes: string[];
+            filterable: boolean;
             /** Format: int32 */
-            id?: null | number | string;
-            isMultiValue?: boolean;
-            key?: string;
-            label?: string;
-            options?: string[];
-            sortable?: boolean;
-            type?: string;
+            id?: null | number;
+            isMultiValue: boolean;
+            key: string;
+            label: string;
+            options: string[];
+            sortable: boolean;
+            type: string;
         };
         CustomFieldDefinitionUpdate: {
             /** Format: int32 */
-            displayOrder?: null | number | string;
+            displayOrder?: null | number;
             entityTypes?: null | string[];
             filterable?: null | boolean;
             isMultiValue?: null | boolean;
@@ -17343,131 +17343,131 @@ export interface components {
             message: string;
             migrationRequired: boolean;
             pendingMigrations: string[];
-            preMigrationBackupPath: null | string;
+            preMigrationBackupPath?: null | string;
         };
-        DateCriterion: {
-            modifier?: components["schemas"]["CriterionModifier"];
-            value?: string;
+        DateCriterion: null | {
+            modifier: components["schemas"]["CriterionModifier"];
+            value: string;
             value2?: null | string;
         };
         DeleteFiles: {
             deleteFromDisk: boolean;
-            fileIds: (number | string)[];
+            fileIds: number[];
         };
         DependencyInfo: {
             available: boolean;
             id: string;
             /** @default false */
             installed: boolean;
-            name: null | string;
-            resolvedVersion: null | string;
+            name?: null | string;
+            resolvedVersion?: null | string;
             versionConstraint: string;
         };
         DependencyProblem: {
-            dependencyId: null | string;
+            dependencyId?: null | string;
             extensionId: string;
             message: string;
         };
         Detection: {
             class: string;
             createdAt: string;
-            extra: null | components["schemas"]["JsonElement"];
+            extra?: null | components["schemas"]["JsonElement"];
             /** Format: int32 */
-            frameHeight: number | string;
+            frameHeight: number;
             /** Format: int32 */
-            frameWidth: number | string;
-            groupKey: null | string;
+            frameWidth: number;
+            groupKey?: null | string;
             /** Format: float */
-            h: number | string;
+            h: number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["DetectionHostType"];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: double */
-            observedAtSec: null | number | string;
+            observedAtSec?: null | number;
             /** Format: int64 */
-            refId: null | number | string;
-            refKind: null | string;
+            refId?: null | number;
+            refKind?: null | string;
             /** Format: float */
-            score: number | string;
+            score: number;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             updatedAt: string;
             /** Format: float */
-            w: number | string;
+            w: number;
             /** Format: float */
-            x: number | string;
+            x: number;
             /** Format: float */
-            y: number | string;
+            y: number;
         };
         DetectionCreate: {
             class: string;
-            extra: null | components["schemas"]["JsonElement"];
+            extra?: null | components["schemas"]["JsonElement"];
             /** Format: int32 */
-            frameHeight: number | string;
+            frameHeight: number;
             /** Format: int32 */
-            frameWidth: number | string;
-            groupKey: null | string;
+            frameWidth: number;
+            groupKey?: null | string;
             /** Format: float */
-            h: number | string;
+            h: number;
             /** Format: double */
-            observedAtSec: null | number | string;
+            observedAtSec?: null | number;
             /** Format: int64 */
-            refId: null | number | string;
-            refKind: null | string;
+            refId?: null | number;
+            refKind?: null | string;
             /** Format: float */
-            score: number | string;
-            sourceKey: null | string;
-            sourceRunId: null | string;
+            score: number;
+            sourceKey?: null | string;
+            sourceRunId?: null | string;
             /** Format: float */
-            w: number | string;
+            w: number;
             /** Format: float */
-            x: number | string;
+            x: number;
             /** Format: float */
-            y: number | string;
+            y: number;
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         DetectionHostType: "video" | "image";
         DetectionUpdate: {
             class: string;
-            extra: null | components["schemas"]["JsonElement"];
+            extra?: null | components["schemas"]["JsonElement"];
             /** Format: int32 */
-            frameHeight: number | string;
+            frameHeight: number;
             /** Format: int32 */
-            frameWidth: number | string;
-            groupKey: null | string;
+            frameWidth: number;
+            groupKey?: null | string;
             /** Format: float */
-            h: number | string;
+            h: number;
             /** Format: double */
-            observedAtSec: null | number | string;
+            observedAtSec?: null | number;
             /** Format: int64 */
-            refId: null | number | string;
-            refKind: null | string;
+            refId?: null | number;
+            refKind?: null | string;
             /** Format: float */
-            score: number | string;
+            score: number;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: float */
-            w: number | string;
+            w: number;
             /** Format: float */
-            x: number | string;
+            x: number;
             /** Format: float */
-            y: number | string;
+            y: number;
         };
         DirectoryEntry: {
             isDirectory: boolean;
             path: string;
         };
         DownloaderBatchFollowUp: {
-            allowDuplicateDownloads?: boolean;
-            autoApplyMetadata?: boolean;
-            createMissingPerformers?: boolean;
-            createMissingStudio?: boolean;
-            createMissingTags?: boolean;
+            allowDuplicateDownloads: boolean;
+            autoApplyMetadata: boolean;
+            createMissingPerformers: boolean;
+            createMissingStudio: boolean;
+            createMissingTags: boolean;
             generate?: null | components["schemas"]["GenerateOptions"];
-            markOrganized?: boolean;
-            scrapeVideos?: boolean;
+            markOrganized: boolean;
+            scrapeVideos: boolean;
         };
         DownloaderBatchIssue: {
             kind: string;
@@ -17475,34 +17475,34 @@ export interface components {
             reason: string;
         };
         DownloaderBatchItem: {
-            autoApplyMetadata?: boolean;
-            createEntityIfMissing?: boolean;
-            createMissingPerformers?: boolean;
-            createMissingStudio?: boolean;
-            createMissingTags?: boolean;
+            autoApplyMetadata: boolean;
+            createEntityIfMissing: boolean;
+            createMissingPerformers: boolean;
+            createMissingStudio: boolean;
+            createMissingTags: boolean;
             downloaderId?: null | string;
-            entity?: string;
+            entity: string;
             /** Format: int32 */
-            entityId?: null | number | string;
-            galleryIds?: null | (number | string)[];
+            entityId?: null | number;
+            galleryIds?: null | number[];
             groupIds?: null | components["schemas"]["VideoGroupInput"][];
             label?: null | string;
-            markOrganized?: boolean;
+            markOrganized: boolean;
             qualityId?: null | string;
             sourceUrl?: null | string;
             title?: null | string;
-            url?: string;
+            url: string;
         };
         DownloaderBatchStartRequest: {
-            followUp?: components["schemas"]["DownloaderBatchFollowUp"];
-            items?: components["schemas"]["DownloaderBatchItem"][];
-            preflightBeforeQueue?: boolean;
+            followUp: components["schemas"]["DownloaderBatchFollowUp"];
+            items: components["schemas"]["DownloaderBatchItem"][];
+            preflightBeforeQueue: boolean;
         };
         DownloaderBatchStartResponse: {
             issues: components["schemas"]["DownloaderBatchIssue"][];
-            jobId: null | string;
+            jobId?: null | string;
             /** Format: int32 */
-            queuedCount: number | string;
+            queuedCount: number;
         };
         DownloaderDescriptor: {
             capabilities: string[];
@@ -17514,7 +17514,7 @@ export interface components {
         DownloaderMatch: {
             downloaderId: string;
             downloaderName: string;
-            label: null | string;
+            label?: null | string;
             normalizedUrl: string;
             qualityOptions: components["schemas"]["DownloaderQualityOption"][];
             sourceUrl?: null | string;
@@ -17524,18 +17524,18 @@ export interface components {
             url: string;
         };
         DownloaderPathOverride: {
-            downloaderId?: string;
-            path?: string;
+            downloaderId: string;
+            path: string;
             site?: null | string;
         };
         DownloaderPreflightRequest: {
-            entity?: string;
+            entity: string;
             /** Format: int32 */
-            entityId?: null | number | string;
-            url?: string;
+            entityId?: null | number;
+            url: string;
         };
         DownloaderPreflightResponse: {
-            duplicateReason: null | string;
+            duplicateReason?: null | string;
             isDuplicate: boolean;
         };
         DownloaderQualityOption: {
@@ -17544,19 +17544,19 @@ export interface components {
             label: string;
         };
         DownloaderStartRequest: {
-            allowDuplicateDownload?: boolean;
-            autoApplyMetadata?: boolean;
-            createMissingPerformers?: boolean;
-            createMissingStudio?: boolean;
-            createMissingTags?: boolean;
-            downloaderId?: string;
-            entity?: string;
+            allowDuplicateDownload: boolean;
+            autoApplyMetadata: boolean;
+            createMissingPerformers: boolean;
+            createMissingStudio: boolean;
+            createMissingTags: boolean;
+            downloaderId: string;
+            entity: string;
             /** Format: int32 */
-            entityId?: null | number | string;
-            markOrganized?: boolean;
+            entityId?: null | number;
+            markOrganized: boolean;
             qualityId?: null | string;
             sourceUrl?: null | string;
-            url?: string;
+            url: string;
         };
         DynamicGroupSource: {
             displayName: string;
@@ -17566,112 +17566,112 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             /** Format: int32 */
-            dim: number | string;
+            dim: number;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["EmbeddingHostType"];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             isSemantic: boolean;
             kind: string;
-            kindFamily: null | string;
-            meta: null | components["schemas"]["JsonElement"];
+            kindFamily?: null | string;
+            meta?: null | components["schemas"]["JsonElement"];
             modality: components["schemas"]["EmbeddingModality"];
             /** Format: int32 */
-            sectionIndex: number | string;
+            sectionIndex: number;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            startSec: null | number | string;
+            startSec?: null | number;
             /** Format: date-time */
             updatedAt: string;
-            vector: (number | string)[];
+            vector: number[];
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         EmbeddingHostType: "video" | "image" | "performer" | "face" | "segment";
-        /** @enum {unknown} */
+        /** @enum {string} */
         EmbeddingModality: "visual" | "audio" | "face" | "text" | "other";
         EmbeddingSearchRequest: {
             /** Format: int32 */
-            hostId: null | number | string;
-            hostType: null | components["schemas"]["EmbeddingHostType"];
-            isSemantic: null | boolean;
+            hostId?: null | number;
+            hostType?: null | components["schemas"]["EmbeddingHostType"];
+            isSemantic?: null | boolean;
             /**
              * Format: int32
              * @default 20
              */
-            k: number | string;
-            kind: null | string;
-            kindFamily: null | string;
-            modality: null | components["schemas"]["EmbeddingModality"];
-            queryText: null | string;
-            queryVector: null | (number | string)[];
-            sourceKey: null | string;
+            k: number;
+            kind?: null | string;
+            kindFamily?: null | string;
+            modality?: null | components["schemas"]["EmbeddingModality"];
+            queryText?: null | string;
+            queryVector?: null | number[];
+            sourceKey?: null | string;
         };
         EmbeddingSearchResult: {
             /** Format: float */
-            distance: number | string;
+            distance: number;
             /** Format: int32 */
-            embeddingId: number | string;
+            embeddingId: number;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["EmbeddingHostType"];
             isSemantic: boolean;
             kind: string;
-            kindFamily: null | string;
+            kindFamily?: null | string;
             modality: components["schemas"]["EmbeddingModality"];
             /** Format: int32 */
-            sectionIndex: number | string;
+            sectionIndex: number;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            startSec: null | number | string;
+            startSec?: null | number;
         };
         EngagementInteraction: {
             at: string;
             /** Format: int32 */
-            hostId: null | number | string;
+            hostId?: null | number;
             hostType: string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             kind: string;
             meta?: unknown;
         };
         EngagementInteractionWrite: {
             /** Format: int32 */
-            hostId: null | number | string;
+            hostId?: null | number;
             hostType: string;
             kind: string;
             meta?: unknown;
         };
         EntityEngagement: {
             /** Format: int32 */
-            completeCount: number | string;
+            completeCount: number;
             /** Format: int32 */
-            derivedLikeCount: number | string;
+            derivedLikeCount: number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             isFavorite: boolean;
-            lastPlayedAt: null | string;
+            lastPlayedAt?: null | string;
             /** Format: int32 */
-            likeCount: number | string;
+            likeCount: number;
             /** Format: int32 */
-            pageVisitCount: number | string;
+            pageVisitCount: number;
             /** Format: int32 */
-            playCount: number | string;
+            playCount: number;
             /** Format: double */
-            playDuration: number | string;
+            playDuration: number;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             /** Format: double */
-            resumeTime: number | string;
+            resumeTime: number;
         };
         EntityEngagementBatchRequest: {
-            hostIds: (number | string)[];
+            hostIds: number[];
             hostType: components["schemas"]["AffinityHostType"];
         };
         EntityFavorite: {
@@ -17679,24 +17679,24 @@ export interface components {
         };
         EntityImageCoverSource: {
             /** Format: int32 */
-            imageId?: null | number | string;
+            imageId?: null | number;
             /** Format: int32 */
-            videoId?: null | number | string;
+            videoId?: null | number;
         };
         EntityRatings: {
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             ratings: {
-                [key: string]: number | string;
+                [key: string]: number;
             };
         };
         ExportOptions: {
-            includeGalleries?: boolean;
-            includeGroups?: boolean;
-            includePerformers?: boolean;
-            includeStudios?: boolean;
-            includeTags?: boolean;
-            includeVideos?: boolean;
+            includeGalleries: boolean;
+            includeGroups: boolean;
+            includePerformers: boolean;
+            includeStudios: boolean;
+            includeTags: boolean;
+            includeVideos: boolean;
         };
         ExtensionAction: {
             actionType: string;
@@ -17711,13 +17711,13 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             pages?: null | string[];
             requiredPermission?: null | string;
             /** @default false */
             suppressSuccessAlert: boolean;
         };
-        ExtensionDependencyImpact: {
+        ExtensionDependencyImpact: null | {
             enabled: boolean;
             id: string;
             kind: string;
@@ -17726,30 +17726,30 @@ export interface components {
             version: string;
         };
         ExtensionExternalDependency: {
-            configurationKeys?: string[];
+            configurationKeys: string[];
             description?: null | string;
             dockerHint?: null | string;
-            environmentVariables?: string[];
-            executables?: string[];
-            extensionIds?: string[];
+            environmentVariables: string[];
+            executables: string[];
+            extensionIds: string[];
             id: string;
             installHint?: null | string;
-            kind?: string;
+            kind: string;
             name: string;
             nativeHint?: null | string;
             optional?: null | boolean;
-            required?: boolean;
+            required: boolean;
             settingsKey?: null | string;
             url?: null | string;
             versionRequirement?: null | string;
         };
         ExtensionInfo: {
-            author: null | string;
+            author?: null | string;
             categories: string[];
             dependencies: {
                 [key: string]: string;
             };
-            description: null | string;
+            description?: null | string;
             enabled: boolean;
             externalDependencies: components["schemas"]["ExtensionExternalDependency"][];
             hasActions: boolean;
@@ -17760,108 +17760,108 @@ export interface components {
             hasMiddleware: boolean;
             hasState: boolean;
             hasUI: boolean;
-            iconUrl: null | string;
+            iconUrl?: null | string;
             id: string;
             /** Format: date-time */
-            installedAt: null | string;
+            installedAt?: null | string;
             jobs: components["schemas"]["JobInfo"][];
             kind: string;
-            minCoveVersion: null | string;
+            minCoveVersion?: null | string;
             name: string;
             settings: components["schemas"]["ExtensionSettingManifest"][];
             source: string;
-            url: null | string;
+            url?: null | string;
             version: string;
         };
         ExtensionSettingManifest: {
             defaultValue?: null | string;
             description?: null | string;
             displayName?: null | string;
-            extensionIds?: string[];
+            extensionIds: string[];
             key?: null | string;
             label?: null | string;
-            name?: string;
+            name: string;
             scope?: null | string;
-            type?: string;
+            type: string;
         };
         Face: {
             /**
              * Format: int32
              * @default 0
              */
-            appearanceCount: number | string;
-            coverImageUrl: null | string;
+            appearanceCount: number;
+            coverImageUrl?: null | string;
             /** Format: date-time */
             createdAt: string;
             /** Format: int32 */
-            detectionCount: number | string;
+            detectionCount: number;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /**
              * Format: int32
              * @default 0
              */
-            frameSampleCount: number | string;
+            frameSampleCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             ignored: boolean;
             /** Format: int32 */
-            imageCount: number | string;
-            label: null | string;
+            imageCount: number;
+            label?: null | string;
             /** Format: int32 */
-            mergedIntoFaceId: null | number | string;
+            mergedIntoFaceId?: null | number;
             /**
              * Format: int32
              * @default 0
              */
-            performerFaceCount: number | string;
+            performerFaceCount: number;
             /**
              * Format: int32
              * @default 0
              */
-            performerFaceIndex: number | string;
+            performerFaceIndex: number;
             /** Format: int32 */
-            performerId: null | number | string;
-            performerName: null | string;
-            primarySourceKey: null | string;
+            performerId?: null | number;
+            performerName?: null | string;
+            primarySourceKey?: null | string;
             topSuggestion?: null | components["schemas"]["FaceTopSuggestion"];
             /** Format: date-time */
             updatedAt: string;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         FaceAppearance: {
             /** Format: int32 */
-            appearanceId: number | string;
+            appearanceId: number;
             /** Format: double */
-            firstSeenAtSec: null | number | string;
+            firstSeenAtSec?: null | number;
             /** Format: int32 */
-            frameSampleCount: number | string;
+            frameSampleCount: number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: string;
             /** Format: double */
-            lastSeenAtSec: null | number | string;
+            lastSeenAtSec?: null | number;
             /** Format: int32 */
-            retainedSpatialSampleCount: number | string;
+            retainedSpatialSampleCount: number;
             /** Format: int32 */
-            segmentCount: number | string;
+            segmentCount: number;
             thumbnailUrl: string;
             title: string;
             /** Format: float */
-            topConfidence: null | number | string;
+            topConfidence?: null | number;
         };
         FaceBatchDelete: {
-            faceIds: (number | string)[];
+            faceIds: number[];
         };
         FaceBatchFailed: {
             error: string;
             /** Format: int32 */
-            faceId: number | string;
+            faceId: number;
         };
         FaceBatchLinkTopSuggestion: {
             /** @default false */
             createFromReference: boolean;
-            faceIds: (number | string)[];
+            faceIds: number[];
             /** @default false */
             linkConflicting: boolean;
             /** @default false */
@@ -17870,19 +17870,19 @@ export interface components {
         FaceBatchOperationResult: {
             failed: components["schemas"]["FaceBatchFailed"][];
             skipped: components["schemas"]["FaceBatchSkipped"][];
-            succeeded: (number | string)[];
+            succeeded: number[];
         };
         FaceBatchSkipped: {
             /** Format: int32 */
-            faceId: number | string;
+            faceId: number;
             reason: string;
         };
         FaceCreate: {
             ignored: boolean;
-            label: null | string;
+            label?: null | string;
             /** Format: int32 */
-            performerId: null | number | string;
-            primarySourceKey: null | string;
+            performerId?: null | number;
+            primarySourceKey?: null | string;
         };
         FaceCreatePerformer: {
             name: string;
@@ -17891,95 +17891,95 @@ export interface components {
         };
         FaceDeleteImpact: {
             /** Format: int32 */
-            detectionCount: number | string;
+            detectionCount: number;
             /** Format: int32 */
-            embeddingCount: number | string;
+            embeddingCount: number;
             hasCoverImage: boolean;
             /** Format: int32 */
-            releasedMergedFaceCount: number | string;
+            releasedMergedFaceCount: number;
             /** Format: int32 */
-            segmentCount: number | string;
+            segmentCount: number;
         };
         FaceHostFace: {
             /** Format: int32 */
-            appearanceCount: number | string;
-            coverImageUrl: null | string;
+            appearanceCount: number;
+            coverImageUrl?: null | string;
             /** Format: double */
-            firstSeenAtSec: null | number | string;
+            firstSeenAtSec?: null | number;
             /** Format: int32 */
-            frameSampleCount: number | string;
+            frameSampleCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
-            label: null | string;
+            imageCount: number;
+            label?: null | string;
             /** Format: double */
-            lastSeenAtSec: null | number | string;
+            lastSeenAtSec?: null | number;
             /** Format: int32 */
-            performerId: null | number | string;
-            performerName: null | string;
+            performerId?: null | number;
+            performerName?: null | string;
             /** Format: float */
-            topConfidence: null | number | string;
+            topConfidence?: null | number;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         FaceIgnore: {
             ignored: boolean;
         };
         FaceLink: {
             /** Format: int32 */
-            performerId: null | number | string;
+            performerId?: null | number;
             /** @default false */
             setPerformerImage: boolean;
         };
         FaceMerge: {
             /** Format: int32 */
-            targetFaceId: number | string;
+            targetFaceId: number;
         };
         FaceSimilar: {
             /** Format: int32 */
-            appearanceCount: number | string;
-            coverImageUrl: null | string;
+            appearanceCount: number;
+            coverImageUrl?: null | string;
             /** Format: date-time */
             createdAt: string;
             /** Format: int32 */
-            detectionCount: number | string;
+            detectionCount: number;
             /** Format: float */
-            distance: number | string;
+            distance: number;
             /** Format: int32 */
-            frameSampleCount: number | string;
+            frameSampleCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             ignored: boolean;
             /** Format: int32 */
-            imageCount: number | string;
-            label: null | string;
+            imageCount: number;
+            label?: null | string;
             /** Format: int32 */
-            mergedIntoFaceId: null | number | string;
+            mergedIntoFaceId?: null | number;
             /** Format: int32 */
-            performerId: null | number | string;
-            performerName: null | string;
-            primarySourceKey: null | string;
+            performerId?: null | number;
+            performerName?: null | string;
+            primarySourceKey?: null | string;
             /** Format: date-time */
             updatedAt: string;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         FaceSuggestion: {
             /** Format: float */
-            confidence: number | string;
+            confidence: number;
             conflictGroupId?: null | string;
-            coverImageUrl: null | string;
+            coverImageUrl?: null | string;
             evidence: components["schemas"]["FaceSuggestionEvidence"][];
             externalUrl?: null | string;
             /** @default false */
             localPerformerHasImage: boolean;
             /** Format: int32 */
-            localPerformerId?: null | number | string;
+            localPerformerId?: null | number;
             /** @default false */
             localPerformerIsLocalOnly: boolean;
             /** Format: int32 */
-            performerId: number | string;
+            performerId: number;
             performerName: string;
             referenceEndpoint?: null | string;
             referenceExternalId?: null | string;
@@ -17990,68 +17990,68 @@ export interface components {
         FaceSuggestionDecision: {
             decision: string;
             /** Format: int32 */
-            performerId: number | string;
+            performerId: number;
             referenceEndpoint?: null | string;
             referenceExternalId?: null | string;
             /** @default false */
             referenceUpdateMetadata: boolean;
-            secondaryPerformerIds?: null | (number | string)[];
+            secondaryPerformerIds?: null | number[];
             /** @default false */
             setPerformerImage: boolean;
         };
         FaceSuggestionEvidence: {
             /** Format: int32 */
-            faceId: number | string;
+            faceId: number;
             /** Format: float */
-            similarity: number | string;
-            thumbnailUrl: null | string;
+            similarity: number;
+            thumbnailUrl?: null | string;
         };
-        FaceTopSuggestion: {
+        FaceTopSuggestion: null | {
             /** Format: float */
-            confidence: number | string;
-            coverImageUrl: null | string;
+            confidence: number;
+            coverImageUrl?: null | string;
             externalUrl?: null | string;
             /** @default false */
             localPerformerHasImage: boolean;
             /** Format: int32 */
-            localPerformerId?: null | number | string;
+            localPerformerId?: null | number;
             /** @default false */
             localPerformerIsLocalOnly: boolean;
             /** Format: int32 */
-            performerId: number | string;
+            performerId: number;
             performerName: string;
         };
         FaceUpdate: {
             ignored: boolean;
-            label: null | string;
+            label?: null | string;
             /** Format: int32 */
-            performerId: null | number | string;
-            primarySourceKey: null | string;
+            performerId?: null | number;
+            primarySourceKey?: null | string;
         };
         FfmpegCapabilities: {
             accelerators: string[];
             decoders: string[];
             ffmpegFound: boolean;
-            ffmpegPath: null | string;
+            ffmpegPath?: null | string;
             /** Format: date-time */
             probedAtUtc: string;
         };
         FieldProvenance: {
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             createdAt: string;
             fieldKey: string;
-            modelKey: null | string;
+            modelKey?: null | string;
             sourceKey: string;
-            sourceRunId: null | string;
-            value: null | components["schemas"]["JsonElement"];
+            sourceRunId?: null | string;
+            value?: null | components["schemas"]["JsonElement"];
         };
         FileBackedCreate: {
             filePath: string;
         };
         FileSetFingerprints: {
             /** Format: int32 */
-            fileId: number | string;
+            fileId: number;
             fingerprints: components["schemas"]["FingerprintEntry"][];
         };
         FilteredQueryRequestOfAudioFilter: {
@@ -18090,25 +18090,25 @@ export interface components {
             findFilter?: null | components["schemas"]["FindFilter"];
             objectFilter?: null | components["schemas"]["VideoFilter"];
         };
-        FindFilter: {
-            direction?: components["schemas"]["SortDirection"];
+        FindFilter: null | {
+            direction: components["schemas"]["SortDirection"];
             /** Format: int32 */
-            page?: number | string;
+            page: number;
             /** Format: int32 */
-            perPage?: number | string;
+            perPage: number;
             q?: null | string;
             /** Format: int32 */
-            seed?: null | number | string;
+            seed?: null | number;
             sort?: null | string;
         };
         Fingerprint: {
             type: string;
             value: string;
         };
-        FingerprintCriterion: {
-            modifier?: components["schemas"]["CriterionModifier"];
-            type?: string;
-            value?: string;
+        FingerprintCriterion: null | {
+            modifier: components["schemas"]["CriterionModifier"];
+            type: string;
+            value: string;
         };
         FingerprintEntry: {
             type: string;
@@ -18116,91 +18116,91 @@ export interface components {
         };
         Gallery: {
             backCoverPath?: null | string;
-            code: null | string;
+            code?: null | string;
             /** Format: int32 */
-            coverImageId?: null | number | string;
+            coverImageId?: null | number;
             coverPath?: null | string;
             createdAt: string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
             displayName?: null | string;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             files: components["schemas"]["GalleryFileInfo"][];
-            folderPath: null | string;
+            folderPath?: null | string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
+            imageCount: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
-            photographer: null | string;
+            photographer?: null | string;
             /** Format: int32 */
-            studioId: null | number | string;
-            studioName: null | string;
+            studioId?: null | number;
+            studioName?: null | string;
             tags: components["schemas"]["Tag"][];
-            title: null | string;
+            title?: null | string;
             updatedAt: string;
             urls: string[];
             /** Format: int32 */
-            videoCount: number | string;
-            videoIds: (number | string)[];
+            videoCount: number;
+            videoIds: number[];
         };
         GalleryAddImages: {
-            imageIds: (number | string)[];
+            imageIds: number[];
         };
         GalleryChapter: {
             createdAt: string;
             /** Format: int32 */
-            galleryId: number | string;
+            galleryId: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageIndex: number | string;
+            imageIndex: number;
             title: string;
             updatedAt: string;
         };
         GalleryChapterCreate: {
             /** Format: int32 */
-            imageIndex: number | string;
+            imageIndex: number;
             title: string;
         };
         GalleryChapterUpdate: {
             /** Format: int32 */
-            imageIndex: null | number | string;
-            title: null | string;
+            imageIndex?: null | number;
+            title?: null | string;
         };
         GalleryCreate: {
-            code: null | string;
+            code?: null | string;
             customFields?: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
+            date?: null | string;
+            details?: null | string;
             organized: boolean;
-            performerIds: null | (number | string)[];
-            photographer: null | string;
+            performerIds?: null | number[];
+            photographer?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
-            videoIds: null | (number | string)[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
+            videoIds?: null | number[];
         };
         GalleryFileInfo: {
             fingerprints: components["schemas"]["Fingerprint"][];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             modTime: string;
             path: string;
             /** Format: int64 */
-            size: number | string;
+            size: number;
         };
-        GalleryFilter: {
+        GalleryFilter: null | {
             checksumCriterion?: null | components["schemas"]["StringCriterion"];
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: null | components["schemas"]["DateCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -18208,7 +18208,7 @@ export interface components {
             fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
             imageCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            imageId?: null | number | string;
+            imageId?: null | number;
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             organized?: null | boolean;
             organizedCriterion?: null | components["schemas"]["BoolCriterion"];
@@ -18216,18 +18216,18 @@ export interface components {
             performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            performerIds?: null | (number | string)[];
+            performerIds?: null | number[];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             photographerCriterion?: null | components["schemas"]["StringCriterion"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number | string;
+            studioId?: null | number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             title?: null | string;
             titleCriterion?: null | components["schemas"]["StringCriterion"];
@@ -18237,100 +18237,100 @@ export interface components {
             videosCriterion?: null | components["schemas"]["MultiIdCriterion"];
         };
         GalleryRemoveImages: {
-            imageIds: (number | string)[];
+            imageIds: number[];
         };
         GallerySetCover: {
             /** Format: int32 */
-            imageId: number | string;
+            imageId: number;
         };
         GallerySummary: {
-            date: null | string;
+            date?: null | string;
             /** Format: int32 */
-            id: number | string;
-            title: null | string;
+            id: number;
+            title?: null | string;
         };
         GalleryUpdate: {
-            code: null | string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            organized: null | boolean;
-            performerIds: null | (number | string)[];
-            photographer: null | string;
+            code?: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
+            organized?: null | boolean;
+            performerIds?: null | number[];
+            photographer?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
-            videoIds: null | (number | string)[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
+            videoIds?: null | number[];
         };
         GenerateOptions: {
-            audioIds?: null | (number | string)[];
-            audioPhashes?: boolean;
-            galleryThumbnails?: boolean;
-            imageIds?: null | (number | string)[];
-            imagePhashes?: boolean;
-            imageThumbnails?: boolean;
-            md5?: boolean;
-            overwrite?: boolean;
+            audioIds?: null | number[];
+            audioPhashes: boolean;
+            galleryThumbnails: boolean;
+            imageIds?: null | number[];
+            imagePhashes: boolean;
+            imageThumbnails: boolean;
+            md5: boolean;
+            overwrite: boolean;
             paths?: null | string[];
-            phashes?: boolean;
-            previews?: boolean;
-            segmentPreviews?: boolean;
-            segments?: boolean;
-            segmentThumbnails?: boolean;
-            sprites?: boolean;
-            textIds?: null | (number | string)[];
-            textPhashes?: boolean;
-            thumbnails?: boolean;
-            videoIds?: null | (number | string)[];
+            phashes: boolean;
+            previews: boolean;
+            segmentPreviews: boolean;
+            segments: boolean;
+            segmentThumbnails: boolean;
+            sprites: boolean;
+            textIds?: null | number[];
+            textPhashes: boolean;
+            thumbnails: boolean;
+            videoIds?: null | number[];
         };
         GenerateScreenshot: {
             /** Format: double */
-            atSeconds?: null | number | string;
+            atSeconds?: null | number;
         };
         Group: {
-            aliases: null | string;
+            aliases?: null | string;
             allowedHostTypes?: null | string[];
             /**
              * Format: int32
              * @default 0
              */
-            audioCount: number | string;
-            backImagePath: null | string;
+            audioCount: number;
+            backImagePath?: null | string;
             /** Format: int32 */
-            cachedItemCount?: null | number | string;
+            cachedItemCount?: null | number;
             /** Format: int32 */
-            containingGroupCount: number | string;
+            containingGroupCount: number;
             createdAt: string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            description: null | string;
-            director: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            description?: null | string;
+            director?: null | string;
             /**
              * Format: int32
              * @default 0
              */
-            faceCount: number | string;
+            faceCount: number;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
-            frontImagePath: null | string;
+            frontImagePath?: null | string;
             /**
              * Format: int32
              * @default 0
              */
-            galleryCount: number | string;
+            galleryCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /**
              * Format: int32
              * @default 0
              */
-            imageCount: number | string;
+            imageCount: number;
             isCompilation: boolean;
             /** Format: int32 */
-            itemCount: number | string;
+            itemCount: number;
             kind?: components["schemas"]["GroupKind"];
             lastResolvedAt?: null | string;
             name: string;
@@ -18338,76 +18338,76 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            performerCount: number | string;
+            performerCount: number;
             queryJson?: null | string;
             querySourceKey?: null | string;
             /**
              * Format: int32
              * @default 0
              */
-            segmentCount: number | string;
+            segmentCount: number;
             /** @default false */
             showInVideoLists: boolean;
             /**
              * Format: int32
              * @default 0
              */
-            sortOrder: number | string;
+            sortOrder: number;
             /**
              * Format: int32
              * @default 0
              */
-            studioCount: number | string;
+            studioCount: number;
             /** Format: int32 */
-            studioId: null | number | string;
-            studioName: null | string;
+            studioId?: null | number;
+            studioName?: null | string;
             /** Format: int32 */
-            subGroupCount: number | string;
+            subGroupCount: number;
             /**
              * Format: int32
              * @default 0
              */
-            tagItemCount: number | string;
+            tagItemCount: number;
             tags: components["schemas"]["Tag"][];
             /**
              * Format: int32
              * @default 0
              */
-            textCount: number | string;
+            textCount: number;
             updatedAt: string;
             urls: string[];
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         GroupCreate: {
-            aliases: null | string;
+            aliases?: null | string;
             allowedHostTypes?: null | string[];
             customFields?: null | Record<string, never>;
-            date: null | string;
-            description: null | string;
-            director: null | string;
+            date?: null | string;
+            description?: null | string;
+            director?: null | string;
             kind?: null | components["schemas"]["GroupKind"];
             name: string;
             queryJson?: null | string;
             querySourceKey?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             showInVideoLists?: null | boolean;
             /** Format: int32 */
-            sortOrder?: null | number | string;
+            sortOrder?: null | number;
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            urls?: null | string[];
         };
-        GroupFilter: {
+        GroupFilter: null | {
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             allowedHostTypesCriterion?: null | components["schemas"]["StringCriterion"];
             audioCountCriterion?: null | components["schemas"]["IntCriterion"];
             cachedItemCountCriterion?: null | components["schemas"]["IntCriterion"];
             containingGroupCountCriterion?: null | components["schemas"]["IntCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: null | components["schemas"]["DateCriterion"];
             directorCriterion?: null | components["schemas"]["StringCriterion"];
@@ -18427,19 +18427,19 @@ export interface components {
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             querySourceKeyCriterion?: null | components["schemas"]["StringCriterion"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             segmentCountCriterion?: null | components["schemas"]["IntCriterion"];
             showInVideoListsCriterion?: null | components["schemas"]["BoolCriterion"];
             sortOrderCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number | string;
+            studioId?: null | number;
             studioItemCountCriterion?: null | components["schemas"]["IntCriterion"];
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             subGroupCountCriterion?: null | components["schemas"]["IntCriterion"];
             synopsisCriterion?: null | components["schemas"]["StringCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             tagItemCountCriterion?: null | components["schemas"]["IntCriterion"];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             textCountCriterion?: null | components["schemas"]["IntCriterion"];
@@ -18449,59 +18449,59 @@ export interface components {
         };
         GroupItem: {
             /** Format: int32 */
-            childGroupId: null | number | string;
-            childGroupName: null | string;
+            childGroupId?: null | number;
+            childGroupName?: null | string;
             createdAt: string;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            groupId: number | string;
+            groupId: number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageId: null | number | string;
-            imageTitle: null | string;
+            imageId?: null | number;
+            imageTitle?: null | string;
             kind: components["schemas"]["GroupItemKind"];
-            notes: null | string;
+            notes?: null | string;
             /** Format: int32 */
-            orderIndex: number | string;
-            snapshotAt: null | string;
+            orderIndex: number;
+            snapshotAt?: null | string;
             /** Format: int32 */
-            sourceProfileId: null | number | string;
-            sourceQueryJson: null | string;
-            sourceSpanKey: null | string;
+            sourceProfileId?: null | number;
+            sourceQueryJson?: null | string;
+            sourceSpanKey?: null | string;
             /** Format: double */
-            startSec: null | number | string;
-            title: null | string;
+            startSec?: null | number;
+            title?: null | string;
             updatedAt: string;
             /** Format: int32 */
-            videoId: null | number | string;
-            videoTitle: null | string;
+            videoId?: null | number;
+            videoTitle?: null | string;
         };
         GroupItemCreate: {
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            hostId: null | number | string;
-            hostType: null | string;
+            hostId?: null | number;
+            hostType?: null | string;
             kind: components["schemas"]["GroupItemKind"];
-            notes: null | string;
+            notes?: null | string;
             /** Format: int32 */
-            orderIndex: number | string;
+            orderIndex: number;
             /** Format: int32 */
-            sourceProfileId: null | number | string;
+            sourceProfileId?: null | number;
             sourceQueryJson?: null | string;
-            sourceSpanKey: null | string;
+            sourceSpanKey?: null | string;
             /** Format: double */
-            startSec: null | number | string;
-            title: null | string;
+            startSec?: null | number;
+            title?: null | string;
             /** Format: int32 */
-            videoId: null | number | string;
+            videoId?: null | number;
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         GroupItemKind: "video" | "videoRange" | "image" | "audio" | "text" | "group" | "performer" | "studio" | "tag" | "gallery" | "face" | "segment";
         GroupItemsFromSpans: {
             spans: components["schemas"]["GroupItemSpanInput"][];
@@ -18509,42 +18509,42 @@ export interface components {
         GroupItemSpanInput: {
             derivedQuery?: null | components["schemas"]["SegmentSpanDerivedQuery"];
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            profileId: null | number | string;
-            spanKey: null | string;
+            profileId?: null | number;
+            spanKey?: null | string;
             /** Format: double */
-            startSec: null | number | string;
-            title: null | string;
+            startSec?: null | number;
+            title?: null | string;
             /** Format: int32 */
-            videoId: null | number | string;
+            videoId?: null | number;
         };
         GroupItemsRemoveHosts: {
-            hostIds: (number | string)[];
+            hostIds: number[];
             kind: components["schemas"]["GroupItemKind"];
         };
         GroupItemsReorder: {
-            ids: (number | string)[];
+            ids: number[];
             /**
              * Format: int32
              * @default 0
              */
-            startIndex: number | string;
+            startIndex: number;
         };
         GroupItemUpdate: {
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             kind: components["schemas"]["GroupItemKind"];
-            notes: null | string;
+            notes?: null | string;
             /** Format: int32 */
-            orderIndex: number | string;
+            orderIndex: number;
             /** Format: double */
-            startSec: null | number | string;
-            title: null | string;
+            startSec?: null | number;
+            title?: null | string;
         };
         /**
          * @default static
-         * @enum {unknown}
+         * @enum {string}
          */
         GroupKind: "static" | "dynamic";
         GroupPlaybackManifest: {
@@ -18552,80 +18552,80 @@ export interface components {
         };
         GroupPlaybackManifestItem: {
             /** Format: int32 */
-            audioId: null | number | string;
+            audioId?: null | number;
             /** Format: double */
-            displayDurationSec: null | number | string;
+            displayDurationSec?: null | number;
             /** Format: double */
-            durationSec: null | number | string;
+            durationSec?: null | number;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             format?: null | string;
             /** Format: int32 */
-            groupItemId: number | string;
+            groupItemId: number;
             /** @default false */
             hasVideoTrack: boolean;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: string;
             /** Format: int32 */
-            imageId: null | number | string;
-            posterPath: null | string;
+            imageId?: null | number;
+            posterPath?: null | string;
             /** Format: int32 */
-            segmentId: null | number | string;
+            segmentId?: null | number;
             src: string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
             /** Format: int32 */
-            textId: null | number | string;
-            title: null | string;
+            textId?: null | number;
+            title?: null | string;
             /** Format: int32 */
-            videoId: null | number | string;
-            videoTitle: null | string;
+            videoId?: null | number;
+            videoTitle?: null | string;
         };
         GroupQueryUpdate: {
             /** Format: int32 */
-            cacheTtlSec?: null | number | string;
+            cacheTtlSec?: null | number;
             queryJson?: null | string;
             querySourceKey: string;
         };
         GroupSummary: {
             /** Format: int32 */
-            id: number | string;
+            id: number;
             name: string;
             /** Format: int32 */
-            videoIndex: number | string;
+            videoIndex: number;
         };
         GroupUpdate: {
-            aliases: null | string;
+            aliases?: null | string;
             allowedHostTypes?: null | string[];
-            customFields: null | Record<string, never>;
-            date: null | string;
-            description: null | string;
-            director: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            description?: null | string;
+            director?: null | string;
             kind?: null | components["schemas"]["GroupKind"];
-            name: null | string;
+            name?: null | string;
             queryJson?: null | string;
             querySourceKey?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             showInVideoLists?: null | boolean;
             /** Format: int32 */
-            sortOrder?: null | number | string;
+            sortOrder?: null | number;
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            urls?: null | string[];
         };
         IdentifyDefaultsConfig: {
             /** Format: int32 */
-            autoApplyMaxDurationDifferenceSeconds?: null | number | string;
+            autoApplyMaxDurationDifferenceSeconds?: null | number;
             /** Format: int32 */
-            autoApplyMaxPhashDistance?: null | number | string;
+            autoApplyMaxPhashDistance?: null | number;
             /** Format: int32 */
-            autoApplyMinFingerprintMatches?: null | number | string;
-            createPerformers?: boolean;
-            createStudios?: boolean;
-            createTags?: boolean;
+            autoApplyMinFingerprintMatches?: null | number;
+            createPerformers: boolean;
+            createStudios: boolean;
+            createTags: boolean;
         };
         IdentifyOptions: {
             createPerformers?: null | boolean;
@@ -18634,82 +18634,82 @@ export interface components {
             fieldStrategies?: null | {
                 [key: string]: string;
             };
-            markOrganized?: boolean;
+            markOrganized: boolean;
             performerGenders?: null | string[];
-            setCoverImage?: boolean;
-            setPerformers?: boolean;
-            setStudio?: boolean;
-            setTags?: boolean;
-            skipMultipleMatches?: boolean;
-            skipSingleNamePerformers?: boolean;
+            setCoverImage: boolean;
+            setPerformers: boolean;
+            setStudio: boolean;
+            setTags: boolean;
+            skipMultipleMatches: boolean;
+            skipSingleNamePerformers: boolean;
             sources?: null | string[];
-            videoIds?: null | (number | string)[];
+            videoIds?: null | number[];
         };
         /** Format: binary */
         IFormFile: string;
         Image: {
-            code: null | string;
+            code?: null | string;
             contextTagApplications?: null | components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             files: components["schemas"]["ImageFile"][];
             galleries: components["schemas"]["GallerySummary"][];
             /** Format: int32 */
-            galleryCount: number | string;
-            galleryIds: (number | string)[];
+            galleryCount: number;
+            galleryIds: number[];
             groups: components["schemas"]["GroupSummary"][];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
-            photographer: null | string;
+            photographer?: null | string;
             /** Format: int32 */
-            studioId: null | number | string;
-            studioName: null | string;
+            studioId?: null | number;
+            studioName?: null | string;
             tags: components["schemas"]["Tag"][];
-            title: null | string;
+            title?: null | string;
             updatedAt: string;
             urls: string[];
         };
         ImageCreate: {
-            code: null | string;
+            code?: null | string;
             customFields?: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            galleryIds: null | (number | string)[];
-            groupIds: null | components["schemas"]["VideoGroupInput"][];
+            date?: null | string;
+            details?: null | string;
+            galleryIds?: null | number[];
+            groupIds?: null | components["schemas"]["VideoGroupInput"][];
             organized: boolean;
-            performerIds: null | (number | string)[];
-            photographer: null | string;
+            performerIds?: null | number[];
+            photographer?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         ImageFile: {
             basename: string;
             format: string;
             /** Format: int32 */
-            height: number | string;
+            height: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             path: string;
             /** Format: int64 */
-            size: number | string;
+            size: number;
             /** Format: int32 */
-            width: number | string;
+            width: number;
         };
-        ImageFilter: {
+        ImageFilter: null | {
             checksumCriterion?: null | components["schemas"]["StringCriterion"];
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: null | components["schemas"]["DateCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -18717,8 +18717,8 @@ export interface components {
             fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
             galleriesCriterion?: null | components["schemas"]["MultiIdCriterion"];
             /** Format: int32 */
-            galleryId?: null | number | string;
-            ids?: null | (number | string)[];
+            galleryId?: null | number;
+            ids?: null | number[];
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
             organized?: null | boolean;
@@ -18728,19 +18728,19 @@ export interface components {
             performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            performerIds?: null | (number | string)[];
+            performerIds?: null | number[];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             photographerCriterion?: null | components["schemas"]["StringCriterion"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             resolutionCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number | string;
+            studioId?: null | number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             title?: null | string;
             titleCriterion?: null | components["schemas"]["StringCriterion"];
@@ -18748,44 +18748,44 @@ export interface components {
             urlCriterion?: null | components["schemas"]["StringCriterion"];
         };
         ImageUpdate: {
-            code: null | string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            galleryIds: null | (number | string)[];
-            groupIds: null | components["schemas"]["VideoGroupInput"][];
-            organized: null | boolean;
-            performerIds: null | (number | string)[];
-            photographer: null | string;
+            code?: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
+            galleryIds?: null | number[];
+            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            organized?: null | boolean;
+            performerIds?: null | number[];
+            photographer?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         ImportOptions: {
-            duplicateHandling?: boolean;
-            filePath?: string;
+            duplicateHandling: boolean;
+            filePath: string;
         };
         ImportRequest: {
-            generatedPath: null | string;
+            generatedPath?: null | string;
             /** @default true */
             migrateGeneratedContent: boolean;
             pathMappings?: null | components["schemas"]["PathMappingRequest"][];
             stashDbPath: string;
         };
         InstallExtensionFromUrlRequest: {
-            trustUnverified?: boolean;
+            trustUnverified: boolean;
             url: string;
         };
-        IntCriterion: {
-            modifier?: components["schemas"]["CriterionModifier"];
+        IntCriterion: null | {
+            modifier: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
-            value?: number | string;
+            value: number;
             /** Format: int32 */
-            value2?: null | number | string;
+            value2?: null | number;
         };
         InteractionEvent: {
             at: string;
@@ -18794,14 +18794,14 @@ export interface components {
         };
         InterfaceConfig: {
             /** Format: int32 */
-            defaultDurationForImages?: null | number | string;
-            disableDropdownCreatePerformer?: boolean;
-            disableDropdownCreateStudio?: boolean;
-            disableDropdownCreateTag?: boolean;
-            handyConnectionEnabled?: boolean;
+            defaultDurationForImages?: null | number;
+            disableDropdownCreatePerformer: boolean;
+            disableDropdownCreateStudio: boolean;
+            disableDropdownCreateTag: boolean;
+            handyConnectionEnabled: boolean;
             handyKey?: null | string;
             language?: null | string;
-            menuItems?: string[];
+            menuItems: string[];
         };
         InviteRedeemRequest: {
             password: string;
@@ -18809,7 +18809,7 @@ export interface components {
             username?: null | string;
         };
         JobInfo: {
-            description: null | string;
+            description?: null | string;
             id: string;
             name: string;
         };
@@ -18821,9 +18821,9 @@ export interface components {
         };
         LogEntry: {
             exception?: null | string;
-            level?: string;
-            message?: string;
-            timestamp?: string;
+            level: string;
+            message: string;
+            timestamp: string;
         };
         LoginRequest: {
             password: string;
@@ -18835,24 +18835,24 @@ export interface components {
             user: components["schemas"]["MeUser"];
         };
         MetadataBatchDefaultsConfig: {
-            createParentStudios?: boolean;
-            excludeFields?: string[];
-            refreshAlreadyTagged?: boolean;
+            createParentStudios: boolean;
+            excludeFields: string[];
+            refreshAlreadyTagged: boolean;
         };
         MetadataServer: {
-            apiKey?: string;
-            endpoint?: string;
+            apiKey: string;
+            endpoint: string;
             /** Format: int32 */
-            maxRequestsPerMinute?: number | string;
-            name?: string;
+            maxRequestsPerMinute: number;
+            name: string;
         };
         MetadataServerEndpoint: {
             endpoint: string;
         };
-        MetadataServerEntityCandidate: {
+        MetadataServerEntityCandidate: null | {
             existsLocally: boolean;
             /** Format: int32 */
-            localId: null | number | string;
+            localId?: null | number;
             name: string;
             remoteId: string;
         };
@@ -18863,72 +18863,72 @@ export interface components {
         MetadataServerFingerprint: {
             algorithm: string;
             /** Format: int32 */
-            duration: null | number | string;
+            duration?: null | number;
             hash: string;
         };
         MetadataServerPerformerBatchTagRequest: {
-            endpoint?: string;
+            endpoint: string;
             excludeFields?: null | string[];
             filter?: null | components["schemas"]["PerformerFilter"];
-            ids?: null | (number | string)[];
-            refreshAlreadyTagged?: boolean;
-            selectAll?: boolean;
+            ids?: null | number[];
+            refreshAlreadyTagged: boolean;
+            selectAll: boolean;
         };
         MetadataServerPerformerImportRequest: {
-            endpoint?: string;
+            endpoint: string;
             fieldStrategies?: null | {
                 [key: string]: string;
             };
-            performerId?: string;
+            performerId: string;
         };
         MetadataServerPerformerMatch: {
             aliases: string[];
-            birthDate: null | string;
-            country: null | string;
+            birthDate?: null | string;
+            country?: null | string;
             deleted: boolean;
-            disambiguation: null | string;
+            disambiguation?: null | string;
             endpoint: string;
-            gender: null | string;
+            gender?: null | string;
             id: string;
-            imageUrl: null | string;
-            mergedIntoId: null | string;
+            imageUrl?: null | string;
+            mergedIntoId?: null | string;
             metadataServerName: string;
             name: string;
             urls: string[];
         };
         MetadataServerStudioBatchTagRequest: {
-            createParentStudios?: boolean;
-            endpoint?: string;
+            createParentStudios: boolean;
+            endpoint: string;
             excludeFields?: null | string[];
             filter?: null | components["schemas"]["StudioFilter"];
-            ids?: null | (number | string)[];
-            refreshAlreadyTagged?: boolean;
-            selectAll?: boolean;
+            ids?: null | number[];
+            refreshAlreadyTagged: boolean;
+            selectAll: boolean;
         };
         MetadataServerStudioImportRequest: {
-            endpoint?: string;
+            endpoint: string;
             fieldStrategies?: null | {
                 [key: string]: string;
             };
-            studioId?: string;
+            studioId: string;
         };
         MetadataServerStudioMatch: {
             aliases: string[];
             endpoint: string;
             id: string;
-            imageUrl: null | string;
+            imageUrl?: null | string;
             metadataServerName: string;
             name: string;
-            parentName: null | string;
+            parentName?: null | string;
             urls: string[];
         };
         MetadataServerTagBatchTagRequest: {
-            endpoint?: string;
+            endpoint: string;
             excludeFields?: null | string[];
             filter?: null | components["schemas"]["TagFilter"];
-            ids?: null | (number | string)[];
-            refreshAlreadyTagged?: boolean;
-            selectAll?: boolean;
+            ids?: null | number[];
+            refreshAlreadyTagged: boolean;
+            selectAll: boolean;
         };
         MetadataServerTagImportRequest: {
             endpoint: string;
@@ -18936,7 +18936,7 @@ export interface components {
         };
         MetadataServerTagMatch: {
             aliases: string[];
-            description: null | string;
+            description?: null | string;
             endpoint: string;
             id: string;
             metadataServerName: string;
@@ -18944,236 +18944,236 @@ export interface components {
         };
         MetadataServerValidationResult: {
             status: string;
-            username: null | string;
+            username?: null | string;
             valid: boolean;
         };
-        MetadataServerVideoEntityOverride: {
-            action?: string;
+        MetadataServerVideoEntityOverride: null | {
+            action: string;
             /** Format: int32 */
-            localId?: null | number | string;
-            name?: string;
-            remoteId?: string;
+            localId?: null | number;
+            name: string;
+            remoteId: string;
         };
         MetadataServerVideoImportRequest: {
-            endpoint?: string;
+            endpoint: string;
             excludedPerformerNames?: null | string[];
             excludedTagNames?: null | string[];
             fieldStrategies?: null | {
                 [key: string]: string;
             };
-            markOrganized?: boolean;
-            onlyExistingPerformers?: boolean;
-            onlyExistingStudio?: boolean;
-            onlyExistingTags?: boolean;
-            overwriteExplicitCover?: boolean;
+            markOrganized: boolean;
+            onlyExistingPerformers: boolean;
+            onlyExistingStudio: boolean;
+            onlyExistingTags: boolean;
+            overwriteExplicitCover: boolean;
             performerGenders?: null | string[];
             performerOverrides?: null | components["schemas"]["MetadataServerVideoEntityOverride"][];
-            setCoverImage?: boolean;
-            setPerformers?: boolean;
-            setStudio?: boolean;
-            setTags?: boolean;
-            skipSingleNamePerformers?: boolean;
+            setCoverImage: boolean;
+            setPerformers: boolean;
+            setStudio: boolean;
+            setTags: boolean;
+            skipSingleNamePerformers: boolean;
             studioOverride?: null | components["schemas"]["MetadataServerVideoEntityOverride"];
             tagOverrides?: null | components["schemas"]["MetadataServerVideoEntityOverride"][];
-            videoId?: string;
+            videoId: string;
         };
         MetadataServerVideoMatch: {
-            code: null | string;
-            date: null | string;
-            details: null | string;
-            director: null | string;
+            code?: null | string;
+            date?: null | string;
+            details?: null | string;
+            director?: null | string;
             /** Format: int32 */
-            duration: null | number | string;
+            duration?: null | number;
             endpoint: string;
             fingerprintAlgorithms: string[];
             fingerprints: components["schemas"]["MetadataServerFingerprint"][];
             id: string;
-            imageUrl: null | string;
+            imageUrl?: null | string;
             /** Format: int32 */
-            matchCount: number | string;
+            matchCount: number;
             metadataServerName: string;
             performerCandidates: components["schemas"]["MetadataServerEntityCandidate"][];
             performerNames: string[];
-            studioCandidate: null | components["schemas"]["MetadataServerEntityCandidate"];
-            studioName: null | string;
+            studioCandidate?: null | components["schemas"]["MetadataServerEntityCandidate"];
+            studioName?: null | string;
             tagCandidates: components["schemas"]["MetadataServerEntityCandidate"][];
             tagNames: string[];
-            title: null | string;
+            title?: null | string;
             urls: string[];
         };
         MeUser: {
-            id: null | string;
+            id?: null | string;
             kind: string;
             roles: string[];
-            uiPreferences: null | components["schemas"]["UserUiPreferences"];
-            username: null | string;
+            uiPreferences?: null | components["schemas"]["UserUiPreferences"];
+            username?: null | string;
         };
         MoveFiles: {
             destinationPath: string;
-            fileIds: (number | string)[];
+            fileIds: number[];
         };
-        MultiIdCriterion: {
+        MultiIdCriterion: null | {
             /** Format: int32 */
-            depth?: null | number | string;
-            excludes?: null | (number | string)[];
-            modifier?: components["schemas"]["CriterionModifier"];
-            requiredIds?: null | (number | string)[];
+            depth?: null | number;
+            excludes?: null | number[];
+            modifier: components["schemas"]["CriterionModifier"];
+            requiredIds?: null | number[];
             /** Format: int32 */
-            requiredIdsDepth?: null | number | string;
-            value?: (number | string)[];
+            requiredIdsDepth?: null | number;
+            value: number[];
         };
         PaginatedResponseOfAiRun: {
             items: components["schemas"]["AiRun"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfAudio: {
             items: components["schemas"]["Audio"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfEmbedding: {
             items: components["schemas"]["Embedding"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfFace: {
             items: components["schemas"]["Face"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfFaceAppearance: {
             items: components["schemas"]["FaceAppearance"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfFaceSimilar: {
             items: components["schemas"]["FaceSimilar"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfGallery: {
             items: components["schemas"]["Gallery"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfGroup: {
             items: components["schemas"]["Group"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfGroupItem: {
             items: components["schemas"]["GroupItem"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfImage: {
             items: components["schemas"]["Image"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfPerformer: {
             items: components["schemas"]["Performer"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfSegmentRecord: {
             items: components["schemas"]["SegmentRecord"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfStudio: {
             items: components["schemas"]["Studio"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfTagList: {
             items: components["schemas"]["TagList"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfTextDocument: {
             items: components["schemas"]["TextDocument"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfVideo: {
             items: components["schemas"]["Video"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PaginatedResponseOfVideoListEntry: {
             items: components["schemas"]["VideoListEntry"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         PathMappingRequest: {
             source: string;
@@ -19182,99 +19182,99 @@ export interface components {
         Performer: {
             aliases: string[];
             /** Format: int32 */
-            audioCount: number | string;
-            birthdate: null | string;
-            careerEnd: null | string;
-            careerStart: null | string;
-            circumcised: null | string;
-            country: null | string;
+            audioCount: number;
+            birthdate?: null | string;
+            careerEnd?: null | string;
+            careerStart?: null | string;
+            circumcised?: null | string;
+            country?: null | string;
             createdAt: string;
-            customFields: null | Record<string, never>;
-            deathDate: null | string;
-            details: null | string;
-            disambiguation: null | string;
-            ethnicity: null | string;
-            eyeColor: null | string;
+            customFields?: null | Record<string, never>;
+            deathDate?: null | string;
+            details?: null | string;
+            disambiguation?: null | string;
+            ethnicity?: null | string;
+            eyeColor?: null | string;
             /**
              * Format: int32
              * @default 0
              */
-            faceCount: number | string;
-            fakeTits: null | string;
+            faceCount: number;
+            fakeTits?: null | string;
             favorite: boolean;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            galleryCount: number | string;
-            gender: null | string;
+            galleryCount: number;
+            gender?: null | string;
             /** Format: int32 */
-            groupCount: number | string;
-            hairColor: null | string;
+            groupCount: number;
+            hairColor?: null | string;
             /** Format: int32 */
-            heightCm: null | number | string;
+            heightCm?: null | number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
-            imagePath: null | string;
-            measurements: null | string;
+            imageCount: number;
+            imagePath?: null | string;
+            measurements?: null | string;
             name: string;
             /** Format: double */
-            penisLength: null | number | string;
-            piercings: null | string;
+            penisLength?: null | number;
+            piercings?: null | string;
             remoteIds: components["schemas"]["PerformerRemoteId"][];
             tags: components["schemas"]["Tag"][];
-            tattoos: null | string;
+            tattoos?: null | string;
             /** Format: int32 */
-            textCount: number | string;
+            textCount: number;
             updatedAt: string;
             urls: string[];
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
             /** Format: int32 */
-            weight: null | number | string;
+            weight?: null | number;
         };
         PerformerApplyScrapedRequest: {
             collectionModes?: null | {
                 [key: string]: string;
             };
-            createMissingTags?: boolean;
+            createMissingTags: boolean;
             replaceFields?: null | string[];
-            scraped?: components["schemas"]["ScrapedPerformer"];
+            scraped: components["schemas"]["ScrapedPerformer"];
         };
         PerformerCreate: {
-            aliases: null | string[];
-            birthdate: null | string;
-            careerEnd: null | string;
-            careerStart: null | string;
-            circumcised: null | string;
-            country: null | string;
+            aliases?: null | string[];
+            birthdate?: null | string;
+            careerEnd?: null | string;
+            careerStart?: null | string;
+            circumcised?: null | string;
+            country?: null | string;
             customFields?: null | Record<string, never>;
-            deathDate: null | string;
-            details: null | string;
-            disambiguation: null | string;
-            ethnicity: null | string;
-            eyeColor: null | string;
-            fakeTits: null | string;
+            deathDate?: null | string;
+            details?: null | string;
+            disambiguation?: null | string;
+            ethnicity?: null | string;
+            eyeColor?: null | string;
+            fakeTits?: null | string;
             favorite: boolean;
-            gender: null | string;
-            hairColor: null | string;
+            gender?: null | string;
+            hairColor?: null | string;
             /** Format: int32 */
-            heightCm: null | number | string;
-            measurements: null | string;
+            heightCm?: null | number;
+            measurements?: null | string;
             name: string;
             /** Format: double */
-            penisLength: null | number | string;
-            piercings: null | string;
+            penisLength?: null | number;
+            piercings?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             remoteIds?: null | components["schemas"]["PerformerRemoteId"][];
-            tagIds: null | (number | string)[];
-            tattoos: null | string;
-            urls: null | string[];
+            tagIds?: null | number[];
+            tattoos?: null | string;
+            urls?: null | string[];
             /** Format: int32 */
-            weight: null | number | string;
+            weight?: null | number;
         };
-        PerformerFilter: {
+        PerformerFilter: null | {
             ageCriterion?: null | components["schemas"]["IntCriterion"];
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             birthdateCriterion?: null | components["schemas"]["DateCriterion"];
@@ -19284,7 +19284,7 @@ export interface components {
             circumcisedCriterion?: null | components["schemas"]["StringCriterion"];
             countryCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             deathDateCriterion?: null | components["schemas"]["DateCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -19310,17 +19310,17 @@ export interface components {
             piercingsCriterion?: null | components["schemas"]["StringCriterion"];
             playCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             remoteIdValueCriterion?: null | components["schemas"]["StringCriterion"];
             studioCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number | string;
+            studioId?: null | number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tattooCriterion?: null | components["schemas"]["StringCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
@@ -19329,9 +19329,9 @@ export interface components {
             weightCriterion?: null | components["schemas"]["IntCriterion"];
         };
         PerformerMerge: {
-            sourceIds: (number | string)[];
+            sourceIds: number[];
             /** Format: int32 */
-            targetId: number | string;
+            targetId: number;
         };
         PerformerRemoteId: {
             endpoint: string;
@@ -19340,135 +19340,135 @@ export interface components {
         PerformerScrapePreview: {
             inputKind: string;
             scraped: components["schemas"]["ScrapedPerformer"];
-            sourceValue: null | string;
+            sourceValue?: null | string;
         };
         PerformerScrapeRequest: {
             /** @default true */
             createMissingTags: boolean;
-            inputKind: null | string;
-            name: null | string;
-            scraperId: null | string;
-            url: null | string;
+            inputKind?: null | string;
+            name?: null | string;
+            scraperId?: null | string;
+            url?: null | string;
         };
         PerformerScrapeUrlRequest: {
             /** @default true */
             createMissingTags: boolean;
-            url: null | string;
+            url?: null | string;
         };
         PerformerSummary: {
             /**
              * Format: int32
              * @default 0
              */
-            audioCount: number | string;
-            birthdate: null | string;
-            disambiguation: null | string;
+            audioCount: number;
+            birthdate?: null | string;
+            disambiguation?: null | string;
             favorite: boolean;
             /**
              * Format: int32
              * @default 0
              */
-            galleryCount: number | string;
-            gender: null | string;
+            galleryCount: number;
+            gender?: null | string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /**
              * Format: int32
              * @default 0
              */
-            imageCount: number | string;
-            imagePath: null | string;
+            imageCount: number;
+            imagePath?: null | string;
             name: string;
             /**
              * Format: int32
              * @default 0
              */
-            textCount: number | string;
+            textCount: number;
             /**
              * Format: int32
              * @default 0
              */
-            videoCount: number | string;
+            videoCount: number;
         };
         PerformerUpdate: {
-            aliases: null | string[];
-            birthdate: null | string;
-            careerEnd: null | string;
-            careerStart: null | string;
-            circumcised: null | string;
-            country: null | string;
-            customFields: null | Record<string, never>;
-            deathDate: null | string;
-            details: null | string;
-            disambiguation: null | string;
-            ethnicity: null | string;
-            eyeColor: null | string;
-            fakeTits: null | string;
-            favorite: null | boolean;
-            gender: null | string;
-            hairColor: null | string;
+            aliases?: null | string[];
+            birthdate?: null | string;
+            careerEnd?: null | string;
+            careerStart?: null | string;
+            circumcised?: null | string;
+            country?: null | string;
+            customFields?: null | Record<string, never>;
+            deathDate?: null | string;
+            details?: null | string;
+            disambiguation?: null | string;
+            ethnicity?: null | string;
+            eyeColor?: null | string;
+            fakeTits?: null | string;
+            favorite?: null | boolean;
+            gender?: null | string;
+            hairColor?: null | string;
             /** Format: int32 */
-            heightCm: null | number | string;
-            measurements: null | string;
-            name: null | string;
+            heightCm?: null | number;
+            measurements?: null | string;
+            name?: null | string;
             /** Format: double */
-            penisLength: null | number | string;
-            piercings: null | string;
+            penisLength?: null | number;
+            piercings?: null | string;
             /** Format: int32 */
-            rating: null | number | string;
-            remoteIds: null | components["schemas"]["PerformerRemoteId"][];
-            tagIds: null | (number | string)[];
-            tattoos: null | string;
-            urls: null | string[];
+            rating?: null | number;
+            remoteIds?: null | components["schemas"]["PerformerRemoteId"][];
+            tagIds?: null | number[];
+            tattoos?: null | string;
+            urls?: null | string[];
             /** Format: int32 */
-            weight: null | number | string;
+            weight?: null | number;
         };
         PlaybackInterval: {
             /** Format: double */
-            endSec: number | string;
+            endSec: number;
             recordedAt: string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
         };
         PlaybackIntervalInput: {
             /** Format: double */
-            endSec: number | string;
+            endSec: number;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
         };
         PlaybackIntervalsRequest: {
             autoplay?: null | boolean;
             /** Format: double */
-            clipEndSec?: null | number | string;
+            clipEndSec?: null | number;
             /** Format: double */
-            clipStartSec?: null | number | string;
+            clipStartSec?: null | number;
             context?: unknown;
             /** Format: double */
-            currentPositionSec: number | string;
+            currentPositionSec: number;
             fullscreen?: null | boolean;
             /** Format: int32 */
-            groupItemId?: null | number | string;
+            groupItemId?: null | number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: string;
             intervals: components["schemas"]["PlaybackIntervalInput"][];
             /** Format: int32 */
-            itemHostId?: null | number | string;
+            itemHostId?: null | number;
             itemHostType?: null | string;
             /** Format: double */
-            mediaDurationSec: number | string;
+            mediaDurationSec: number;
             muted?: null | boolean;
             /** Format: int32 */
-            parentHostId?: null | number | string;
+            parentHostId?: null | number;
             parentHostType?: null | string;
             /** Format: double */
-            playbackRate?: null | number | string;
+            playbackRate?: null | number;
             recommendationSource?: null | string;
             referrer?: null | string;
             route?: null | string;
             scopeKey?: null | string;
             /** Format: int32 */
-            segmentId?: null | number | string;
+            segmentId?: null | number;
             /** Format: uuid */
             sessionId: string;
             state: string;
@@ -19490,8 +19490,8 @@ export interface components {
             };
         };
         PluginSettingSchema: {
-            description: null | string;
-            displayName: null | string;
+            description?: null | string;
+            displayName?: null | string;
             name: string;
             type: string;
         };
@@ -19502,65 +19502,65 @@ export interface components {
         PreviewRequest: {
             stashDbPath: string;
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         RatingStarPrecision: "full" | "half" | "quarter" | "tenth";
         RatingSystemOptions: {
-            starPrecision?: components["schemas"]["RatingStarPrecision"];
-            type?: components["schemas"]["RatingSystemType"];
+            starPrecision: components["schemas"]["RatingStarPrecision"];
+            type: components["schemas"]["RatingSystemType"];
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         RatingSystemType: "stars" | "decimal";
         RecomputeDerivedCountsResult: {
             /** Format: int32 */
-            entitiesRecomputed: number | string;
+            entitiesRecomputed: number;
         };
         RefreshRequest: {
             refreshToken: string;
         };
         RegistryExtensionDetail: {
             author?: null | string;
-            categories?: string[];
+            categories: string[];
             changelog?: null | string;
-            dependencies?: {
+            dependencies: {
                 [key: string]: string;
             };
             description?: null | string;
-            externalDependencies?: components["schemas"]["ExtensionExternalDependency"][];
+            externalDependencies: components["schemas"]["ExtensionExternalDependency"][];
             iconUrl?: null | string;
             id: string;
-            kind?: string;
+            kind: string;
             minCoveVersion?: null | string;
             name: string;
             readme?: null | string;
-            screenshots?: string[];
-            settings?: components["schemas"]["ExtensionSettingManifest"][];
+            screenshots: string[];
+            settings: components["schemas"]["ExtensionSettingManifest"][];
             /** Format: date-time */
             updatedAt?: null | string;
             url?: null | string;
             version: string;
-            versions?: components["schemas"]["RegistryVersionInfo"][];
+            versions: components["schemas"]["RegistryVersionInfo"][];
         };
         RegistryExtensionSummary: {
             author?: null | string;
-            categories?: string[];
+            categories: string[];
             description?: null | string;
             iconUrl?: null | string;
             id: string;
-            kind?: string;
+            kind: string;
             minCoveVersion?: null | string;
             name: string;
             /** Format: date-time */
             updatedAt?: null | string;
             version: string;
         };
-        RegistryInstallExtensionRef: {
+        RegistryInstallExtensionRef: null | {
             id: string;
             name: string;
             version: string;
         };
         RegistryInstallRequest: {
             extensionId: string;
-            installDependencies?: boolean;
+            installDependencies: boolean;
             version: string;
         };
         RegistryInstallResult: {
@@ -19572,17 +19572,17 @@ export interface components {
             requiresDependencies?: null | boolean;
         };
         RegistrySearchResult: {
-            items?: components["schemas"]["RegistryExtensionSummary"][];
+            items: components["schemas"]["RegistryExtensionSummary"][];
             /** Format: int32 */
-            page?: number | string;
+            page: number;
             /** Format: int32 */
-            pageSize?: number | string;
+            pageSize: number;
             /** Format: int32 */
-            totalCount?: number | string;
+            totalCount: number;
         };
         RegistryUninstallRequest: {
             extensionId: string;
-            uninstallDependents?: boolean;
+            uninstallDependents: boolean;
         };
         RegistryUninstallResult: {
             dependents?: null | components["schemas"]["ExtensionDependencyImpact"][];
@@ -19600,7 +19600,7 @@ export interface components {
         RegistryVersionInfo: {
             changelog?: null | string;
             checksum?: null | string;
-            dependencies?: {
+            dependencies: {
                 [key: string]: string;
             };
             minCoveVersion?: null | string;
@@ -19612,55 +19612,55 @@ export interface components {
             beforeJobId?: null | string;
         };
         ReorderSubGroups: {
-            subGroupIds: (number | string)[];
+            subGroupIds: number[];
         };
         ResolvedSpan: {
             collapsedToInstant: boolean;
-            colorHint: null | string;
+            colorHint?: null | string;
             /** Format: double */
-            endSec: number | string;
+            endSec: number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["SegmentHostType"];
-            kind: null | string;
+            kind?: null | string;
             /** Format: int32 */
-            lane: null | number | string;
-            segmentIds: (number | string)[];
-            sourceKey: null | string;
+            lane?: null | number;
+            segmentIds: number[];
+            sourceKey?: null | string;
             spanKey: string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
             /** Format: int32 */
-            tagId: null | number | string;
-            tagName: null | string;
+            tagId?: null | number;
+            tagName?: null | string;
         };
         ResolvedSpanDetail: {
             intervals: components["schemas"]["ResolvedSpanInterval"][];
             /** Format: int32 */
-            profileId: number | string;
+            profileId: number;
             /** Format: int32 */
-            profileVersion: number | string;
+            profileVersion: number;
             span: components["schemas"]["ResolvedSpan"];
             /** Format: int32 */
-            videoId: number | string;
-            videoTitle: null | string;
+            videoId: number;
+            videoTitle?: null | string;
         };
         ResolvedSpanInterval: {
             /** Format: double */
-            endSec: number | string;
+            endSec: number;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
         };
         ResolvedSpanList: {
             spans: components["schemas"]["ResolvedSpan"][];
         };
         ResolveScrapeRelationsRequest: {
-            performers?: string[];
-            tags?: string[];
+            performers: string[];
+            tags: string[];
         };
         ResolveScrapeRelationsResult: {
-            performers?: components["schemas"]["ScrapeRelationMatch"][];
-            tags?: components["schemas"]["ScrapeRelationMatch"][];
+            performers: components["schemas"]["ScrapeRelationMatch"][];
+            tags: components["schemas"]["ScrapeRelationMatch"][];
         };
         RestoreBackupRequest: {
             backupPath: string;
@@ -19668,82 +19668,82 @@ export interface components {
         RestoreBackupResult: {
             backupPath: string;
             message: string;
-            preRestoreBackupPath: null | string;
+            preRestoreBackupPath?: null | string;
         };
         RunPluginTask: {
-            args: null | {
+            args?: null | {
                 [key: string]: string;
             };
             pluginId: string;
             taskName: string;
         };
         SavedFilter: {
-            findFilter: null | string;
+            findFilter?: null | string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             mode: string;
             name: string;
-            objectFilter: null | string;
-            uiOptions: null | string;
+            objectFilter?: null | string;
+            uiOptions?: null | string;
         };
         SavedFilterCreate: {
-            findFilter: null | string;
+            findFilter?: null | string;
             mode: string;
             name: string;
-            objectFilter: null | string;
-            uiOptions: null | string;
+            objectFilter?: null | string;
+            uiOptions?: null | string;
         };
         SavedFilterUpdate: {
-            findFilter: null | string;
-            mode: null | string;
-            name: null | string;
-            objectFilter: null | string;
-            uiOptions: null | string;
+            findFilter?: null | string;
+            mode?: null | string;
+            name?: null | string;
+            objectFilter?: null | string;
+            uiOptions?: null | string;
         };
         ScanOptions: {
             paths?: null | string[];
-            rescan?: boolean;
-            scanGenerateAudioPhashes?: boolean;
-            scanGenerateCovers?: boolean;
-            scanGenerateImagePhashes?: boolean;
-            scanGenerateMd5?: boolean;
-            scanGeneratePhashes?: boolean;
-            scanGeneratePreviews?: boolean;
-            scanGenerateSprites?: boolean;
-            scanGenerateTextPhashes?: boolean;
-            scanGenerateThumbnails?: boolean;
-            scanGenerators?: boolean;
+            rescan: boolean;
+            scanGenerateAudioPhashes: boolean;
+            scanGenerateCovers: boolean;
+            scanGenerateImagePhashes: boolean;
+            scanGenerateMd5: boolean;
+            scanGeneratePhashes: boolean;
+            scanGeneratePreviews: boolean;
+            scanGenerateSprites: boolean;
+            scanGenerateTextPhashes: boolean;
+            scanGenerateThumbnails: boolean;
+            scanGenerators: boolean;
         };
         ScrapeApplyDefaultsConfig: {
-            createMissingPerformers?: boolean;
-            createMissingStudio?: boolean;
-            createMissingTags?: boolean;
-            hydratePerformers?: boolean;
-            markOrganized?: boolean;
+            createMissingPerformers: boolean;
+            createMissingStudio: boolean;
+            createMissingTags: boolean;
+            hydratePerformers: boolean;
+            markOrganized: boolean;
         };
         ScrapeAttempt: {
-            appliedAt: null | string;
-            candidateResultsJson: null | string;
+            appliedAt?: null | string;
+            candidateResultsJson?: null | string;
             createdAt: string;
             /** Format: int32 */
-            entityId: null | number | string;
-            entitySnapshotJson: null | string;
+            entityId?: null | number;
+            entitySnapshotJson?: null | string;
             entityType: string;
-            error: null | string;
+            error?: null | string;
             /** Format: uuid */
             id: string;
-            inputJson: null | string;
+            inputJson?: null | string;
             inputKind: string;
-            resultJson: null | string;
+            resultJson?: null | string;
             scraperId: string;
             status: string;
         };
         ScrapeCollectionItemSelection: {
-            action: null | string;
-            name: null | string;
+            action?: null | string;
+            name?: null | string;
         };
         ScrapedPerformer: {
-            aliases?: string[];
+            aliases: string[];
             birthdate?: null | string;
             country?: null | string;
             details?: null | string;
@@ -19753,17 +19753,17 @@ export interface components {
             gender?: null | string;
             hairColor?: null | string;
             /** Format: int32 */
-            heightCm?: null | number | string;
+            heightCm?: null | number;
             imageUrl?: null | string;
             measurements?: null | string;
             name?: null | string;
             piercings?: null | string;
             sourceScraperId?: null | string;
-            tagNames?: string[];
+            tagNames: string[];
             tattoos?: null | string;
-            urls?: string[];
+            urls: string[];
             /** Format: int32 */
-            weight?: null | number | string;
+            weight?: null | number;
         };
         ScrapeFragmentRequest: {
             entityType: string;
@@ -19784,9 +19784,9 @@ export interface components {
             url: string;
         };
         ScraperPreference: {
-            entityType?: string;
-            scraperId?: string;
-            site?: string;
+            entityType: string;
+            scraperId: string;
+            site: string;
         };
         ScraperSummary: {
             entityType: string;
@@ -19803,533 +19803,533 @@ export interface components {
             url: string;
         };
         ScrapingConfig: {
-            identifyDefaults?: components["schemas"]["IdentifyDefaultsConfig"];
-            metadataBatchDefaults?: components["schemas"]["MetadataBatchDefaultsConfig"];
-            metadataServers?: components["schemas"]["MetadataServer"][];
-            scrapeApplyDefaults?: components["schemas"]["ScrapeApplyDefaultsConfig"];
-            scraperDirectories?: string[];
-            scraperPreferences?: components["schemas"]["ScraperPreference"][];
+            identifyDefaults: components["schemas"]["IdentifyDefaultsConfig"];
+            metadataBatchDefaults: components["schemas"]["MetadataBatchDefaultsConfig"];
+            metadataServers: components["schemas"]["MetadataServer"][];
+            scrapeApplyDefaults: components["schemas"]["ScrapeApplyDefaultsConfig"];
+            scraperDirectories: string[];
+            scraperPreferences: components["schemas"]["ScraperPreference"][];
         };
         SecurityConfig: {
-            allowAnonymousShareLinks?: boolean;
-            enabled?: boolean;
-            enforceDefaultDeny?: boolean;
+            allowAnonymousShareLinks: boolean;
+            enabled: boolean;
+            enforceDefaultDeny: boolean;
             knownProxies?: null | string[];
             newPassword?: null | string;
             trustedHosts?: null | string[];
             username?: null | string;
         };
         Segment: {
-            colorHint: null | string;
+            colorHint?: null | string;
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             createdAt: string;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: components["schemas"]["SegmentHostType"];
             /** Format: int32 */
-            id: number | string;
-            kind: null | string;
-            payload: null | components["schemas"]["JsonElement"];
+            id: number;
+            kind?: null | string;
+            payload?: null | components["schemas"]["JsonElement"];
             /** Format: int64 */
-            refId: null | number | string;
+            refId?: null | number;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
             /** Format: int32 */
-            tagId: null | number | string;
-            tagName: null | string;
-            title: null | string;
+            tagId?: null | number;
+            tagName?: null | string;
+            title?: null | string;
             updatedAt: string;
         };
         SegmentCreate: {
-            colorHint: null | string;
+            colorHint?: null | string;
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             /** Format: double */
-            endSec: null | number | string;
-            kind: null | string;
-            payload: null | components["schemas"]["JsonElement"];
+            endSec?: null | number;
+            kind?: null | string;
+            payload?: null | components["schemas"]["JsonElement"];
             /** Format: int64 */
-            refId: null | number | string;
-            sourceKey: null | string;
-            sourceRunId: null | string;
+            refId?: null | number;
+            sourceKey?: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
             /** Format: int32 */
-            tagId: null | number | string;
-            title: null | string;
+            tagId?: null | number;
+            title?: null | string;
         };
         SegmentDisplayProfile: {
             createdAt: string;
-            description: null | string;
+            description?: null | string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             isDefault: boolean;
             isSystem: boolean;
             name: string;
             updatedAt: string;
             /** Format: int32 */
-            userId: null | number | string;
+            userId?: null | number;
             /** Format: int32 */
-            version: number | string;
+            version: number;
         };
         SegmentDisplayProfileCreate: {
-            description: null | string;
+            description?: null | string;
             isDefault: boolean;
             name: string;
         };
         SegmentDisplayProfilePreviewRequest: {
             rules: components["schemas"]["SegmentDisplayRuleCreate"][];
             /** Format: int32 */
-            videoId: number | string;
+            videoId: number;
         };
         SegmentDisplayProfileUpdate: {
-            description: null | string;
+            description?: null | string;
             name: string;
         };
         SegmentDisplayRule: {
             collapseToInstant: boolean;
-            colorOverride: null | string;
+            colorOverride?: null | string;
             createdAt: string;
-            hostType: null | components["schemas"]["SegmentHostType"];
+            hostType?: null | components["schemas"]["SegmentHostType"];
             /** Format: int32 */
-            id: number | string;
-            kind: null | string;
+            id: number;
+            kind?: null | string;
             /** Format: int32 */
-            lane: null | number | string;
+            lane?: null | number;
             /** Format: double */
-            mergeGapSec: null | number | string;
+            mergeGapSec?: null | number;
             /** Format: float */
-            minConfidence: null | number | string;
+            minConfidence?: null | number;
             /** Format: double */
-            minDurationSec: null | number | string;
+            minDurationSec?: null | number;
             /** Format: int32 */
-            priority: null | number | string;
-            sourceKey: null | string;
-            tagCategory: null | string;
+            priority?: null | number;
+            sourceKey?: null | string;
+            tagCategory?: null | string;
             /** Format: int32 */
-            tagId: null | number | string;
-            tagName: null | string;
+            tagId?: null | number;
+            tagName?: null | string;
             updatedAt: string;
             /** Format: int32 */
-            userId: null | number | string;
+            userId?: null | number;
             visible: boolean;
         };
         SegmentDisplayRuleCreate: {
             collapseToInstant: boolean;
-            colorOverride: null | string;
-            hostType: null | components["schemas"]["SegmentHostType"];
-            kind: null | string;
+            colorOverride?: null | string;
+            hostType?: null | components["schemas"]["SegmentHostType"];
+            kind?: null | string;
             /** Format: int32 */
-            lane: null | number | string;
+            lane?: null | number;
             /** Format: double */
-            mergeGapSec: null | number | string;
+            mergeGapSec?: null | number;
             /** Format: float */
-            minConfidence: null | number | string;
+            minConfidence?: null | number;
             /** Format: double */
-            minDurationSec: null | number | string;
+            minDurationSec?: null | number;
             /** Format: int32 */
-            priority: null | number | string;
-            sourceKey: null | string;
-            tagCategory: null | string;
+            priority?: null | number;
+            sourceKey?: null | string;
+            tagCategory?: null | string;
             /** Format: int32 */
-            tagId: null | number | string;
+            tagId?: null | number;
             visible: boolean;
         };
         SegmentDisplayRuleUpdate: {
             collapseToInstant: boolean;
-            colorOverride: null | string;
-            hostType: null | components["schemas"]["SegmentHostType"];
-            kind: null | string;
+            colorOverride?: null | string;
+            hostType?: null | components["schemas"]["SegmentHostType"];
+            kind?: null | string;
             /** Format: int32 */
-            lane: null | number | string;
+            lane?: null | number;
             /** Format: double */
-            mergeGapSec: null | number | string;
+            mergeGapSec?: null | number;
             /** Format: float */
-            minConfidence: null | number | string;
+            minConfidence?: null | number;
             /** Format: double */
-            minDurationSec: null | number | string;
+            minDurationSec?: null | number;
             /** Format: int32 */
-            priority: null | number | string;
-            sourceKey: null | string;
-            tagCategory: null | string;
+            priority?: null | number;
+            sourceKey?: null | string;
+            tagCategory?: null | string;
             /** Format: int32 */
-            tagId: null | number | string;
+            tagId?: null | number;
             visible: boolean;
         };
         SegmentDistinctValue: {
             /** Format: int32 */
-            count: number | string;
+            count: number;
             value: string;
         };
         /** @enum {unknown} */
         SegmentHostType: "video" | "image" | "audio" | null;
         SegmentRecord: {
-            colorHint: null | string;
+            colorHint?: null | string;
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             createdAt: string;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            hostId: number | string;
-            hostTitle: null | string;
+            hostId: number;
+            hostTitle?: null | string;
             hostType: components["schemas"]["SegmentHostType"];
             /** Format: int32 */
-            id: number | string;
-            kind: null | string;
-            payload: null | components["schemas"]["JsonElement"];
+            id: number;
+            kind?: null | string;
+            payload?: null | components["schemas"]["JsonElement"];
             /** Format: int32 */
-            performerId: null | number | string;
-            performerName: null | string;
+            performerId?: null | number;
+            performerName?: null | string;
             /** Format: int64 */
-            refId: null | number | string;
-            refLabel: null | string;
+            refId?: null | number;
+            refLabel?: null | string;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
             /** Format: int32 */
-            tagId: null | number | string;
-            tagName: null | string;
-            title: null | string;
+            tagId?: null | number;
+            tagName?: null | string;
+            title?: null | string;
             updatedAt: string;
         };
         SegmentSpanCountResponse: {
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
-        SegmentSpanDerivedQuery: {
+        SegmentSpanDerivedQuery: null | {
             /** Format: double */
-            mergeGapSec: null | number | string;
+            mergeGapSec?: null | number;
             /** Format: double */
-            minDurationSec: null | number | string;
+            minDurationSec?: null | number;
             operands: components["schemas"]["SegmentSpanOperand"][];
             operator: string;
         };
         SegmentSpanOperand: {
-            kind: null | string;
+            kind?: null | string;
             /** Format: float */
-            minConfidence: null | number | string;
-            refIds?: null | (number | string)[];
-            sourceKey: null | string;
-            tagIds: null | (number | string)[];
+            minConfidence?: null | number;
+            refIds?: null | number[];
+            sourceKey?: null | string;
+            tagIds?: null | number[];
         };
         SegmentSpanQueryRequest: {
             /** Format: double */
-            mergeGapSec: null | number | string;
+            mergeGapSec?: null | number;
             /** Format: double */
-            minDurationSec: null | number | string;
+            minDurationSec?: null | number;
             operands: components["schemas"]["SegmentSpanOperand"][];
             operator: string;
             /** Format: int32 */
-            profile: null | number | string;
+            profile?: null | number;
         };
         SegmentSpanSearchRequest: {
             colorHint?: null | string;
             colorHintModifier?: null | string;
             /** Format: float */
-            confidence?: null | number | string;
+            confidence?: null | number;
             /** Format: float */
-            confidence2?: null | number | string;
+            confidence2?: null | number;
             confidenceModifier?: null | string;
             createdAt?: null | string;
             createdAt2?: null | string;
             createdAtModifier?: null | string;
-            derivedQuery: null | components["schemas"]["SegmentSpanDerivedQuery"];
-            direction: null | string;
+            derivedQuery?: null | components["schemas"]["SegmentSpanDerivedQuery"];
+            direction?: null | string;
             durationModifier?: null | string;
             /** Format: double */
-            durationSec?: null | number | string;
+            durationSec?: null | number;
             /** Format: double */
-            durationSec2?: null | number | string;
+            durationSec2?: null | number;
             /** Format: double */
-            endSec?: null | number | string;
+            endSec?: null | number;
             /** Format: double */
-            endSec2?: null | number | string;
+            endSec2?: null | number;
             endSecModifier?: null | string;
-            excludeVideoIds: null | (number | string)[];
+            excludeVideoIds?: null | number[];
             hasImage?: null | boolean;
             hasPayload?: null | boolean;
             hostType?: null | string;
             kind?: null | string;
             /** Format: int32 */
-            page: null | number | string;
-            performerIds?: null | (number | string)[];
+            page?: null | number;
+            performerIds?: null | number[];
             /** Format: int32 */
-            perPage: null | number | string;
+            perPage?: null | number;
             /** Format: int32 */
-            profile: null | number | string;
-            q: null | string;
-            refIds?: null | (number | string)[];
+            profile?: null | number;
+            q?: null | string;
+            refIds?: null | number[];
             /** Format: int32 */
-            seed?: null | number | string;
-            sort: null | string;
+            seed?: null | number;
+            sort?: null | string;
             sourceCategory?: null | string;
             sourceKey?: null | string;
             sourceRunId?: null | string;
             sourceRunIdModifier?: null | string;
             /** Format: double */
-            startSec?: null | number | string;
+            startSec?: null | number;
             /** Format: double */
-            startSec2?: null | number | string;
+            startSec2?: null | number;
             startSecModifier?: null | string;
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             title?: null | string;
             titleModifier?: null | string;
             updatedAt?: null | string;
             updatedAt2?: null | string;
             updatedAtModifier?: null | string;
-            videoIds: null | (number | string)[];
-            videoTitle: null | string;
+            videoIds?: null | number[];
+            videoTitle?: null | string;
         };
         SegmentSpanSearchResponse: {
             /** @default false */
             hasMore: boolean;
             items: components["schemas"]["SegmentSpanSearchResultItem"][];
             /** Format: int32 */
-            page: number | string;
+            page: number;
             /** Format: int32 */
-            perPage: number | string;
+            perPage: number;
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         SegmentSpanSearchResultItem: {
             /** Format: int32 */
-            profileId: number | string;
+            profileId: number;
             span: components["schemas"]["ResolvedSpan"];
             /** Format: int32 */
-            videoId: number | string;
-            videoTitle: null | string;
-            videoUpdatedAt: null | string;
+            videoId: number;
+            videoTitle?: null | string;
+            videoUpdatedAt?: null | string;
         };
         SegmentTagBulkRemoveRequest: {
-            ids: null | (number | string)[];
+            ids?: null | number[];
             /** Format: int32 */
-            tagId: number | string;
+            tagId: number;
         };
         SegmentUpdate: {
-            colorHint: null | string;
+            colorHint?: null | string;
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             /** Format: double */
-            endSec: null | number | string;
-            kind: null | string;
-            payload: null | components["schemas"]["JsonElement"];
+            endSec?: null | number;
+            kind?: null | string;
+            payload?: null | components["schemas"]["JsonElement"];
             /** Format: int64 */
-            refId: null | number | string;
+            refId?: null | number;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            startSec: number | string;
+            startSec: number;
             /** Format: int32 */
-            tagId: null | number | string;
-            title: null | string;
+            tagId?: null | number;
+            title?: null | string;
         };
         SetLogLevelRequest: {
-            level: null | string;
+            level?: null | string;
         };
         SetRolesRequest: {
             roles: string[];
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         SettingsTabLayout: "panels" | "page";
         SetupTokenRedeemRequest: {
             password: string;
             token: string;
             username?: null | string;
         };
-        /** @enum {unknown} */
+        /** @enum {string} */
         SortDirection: "asc" | "desc";
         StashImportResult: {
             /** Format: int32 */
-            galleries: number | string;
+            galleries: number;
             /** Format: int32 */
-            groups: number | string;
+            groups: number;
             /** Format: int32 */
-            images: number | string;
+            images: number;
             /** Format: int32 */
-            performers: number | string;
+            performers: number;
             /** Format: int32 */
-            studios: number | string;
+            studios: number;
             /** Format: int32 */
-            tags: number | string;
+            tags: number;
             /** Format: int32 */
-            videos: number | string;
+            videos: number;
         };
         StashPreviewResult: {
-            error: null | string;
+            error?: null | string;
             /** Format: int32 */
-            galleries: number | string;
+            galleries: number;
             /** @default false */
             generatedContentFound: boolean;
             generatedPath?: null | string;
             /** Format: int32 */
-            groups: number | string;
+            groups: number;
             /** Format: int32 */
-            images: number | string;
+            images: number;
             isValid: boolean;
             /** Format: int32 */
-            performers: number | string;
+            performers: number;
             /** Format: int32 */
-            studios: number | string;
+            studios: number;
             /** Format: int32 */
-            tags: number | string;
+            tags: number;
             /** Format: int32 */
-            videos: number | string;
+            videos: number;
         };
         Stats: {
             /** Format: int32 */
-            aiRunCount: number | string;
+            aiRunCount: number;
             /** Format: int64 */
-            audioCompleteCount: number | string;
+            audioCompleteCount: number;
             /** Format: double */
-            audioConsumedSeconds: number | string;
+            audioConsumedSeconds: number;
             /** Format: int32 */
-            audioCount: number | string;
+            audioCount: number;
             /** Format: double */
-            audioDuration: number | string;
+            audioDuration: number;
             /** Format: int64 */
-            audioFileSize: number | string;
+            audioFileSize: number;
             /** Format: int64 */
-            audioPlayCount: number | string;
+            audioPlayCount: number;
             /** Format: int32 */
-            detectionCount: number | string;
+            detectionCount: number;
             /** Format: int32 */
-            embeddingCount: number | string;
+            embeddingCount: number;
             /** Format: int32 */
-            faceAppearanceCount: number | string;
+            faceAppearanceCount: number;
             /** Format: int32 */
-            faceCount: number | string;
+            faceCount: number;
             /** Format: int32 */
-            galleryCount: number | string;
+            galleryCount: number;
             /** Format: int32 */
-            groupCount: number | string;
+            groupCount: number;
             /** Format: int64 */
-            imageCompleteCount: number | string;
+            imageCompleteCount: number;
             /** Format: double */
-            imageConsumedSeconds: number | string;
+            imageConsumedSeconds: number;
             /** Format: int32 */
-            imageCount: number | string;
+            imageCount: number;
             /** Format: int64 */
-            imageFileSize: number | string;
+            imageFileSize: number;
             /** Format: int64 */
-            imageViewCount: number | string;
+            imageViewCount: number;
             /** Format: int32 */
-            performerCount: number | string;
+            performerCount: number;
             /** Format: int64 */
-            segmentCompleteCount: number | string;
+            segmentCompleteCount: number;
             /** Format: double */
-            segmentConsumedSeconds: number | string;
+            segmentConsumedSeconds: number;
             /** Format: int32 */
-            segmentCount: number | string;
+            segmentCount: number;
             /** Format: int64 */
-            segmentViewCount: number | string;
+            segmentViewCount: number;
             /** Format: int32 */
-            studioCount: number | string;
+            studioCount: number;
             /** Format: int32 */
-            tagApplicationCount: number | string;
+            tagApplicationCount: number;
             /** Format: int32 */
-            tagCount: number | string;
+            tagCount: number;
             /** Format: int64 */
-            textCompleteCount: number | string;
+            textCompleteCount: number;
             /** Format: double */
-            textConsumedSeconds: number | string;
+            textConsumedSeconds: number;
             /** Format: int32 */
-            textCount: number | string;
+            textCount: number;
             /** Format: int64 */
-            textFileSize: number | string;
+            textFileSize: number;
             /** Format: int64 */
-            textReadCount: number | string;
+            textReadCount: number;
             /** Format: int64 */
-            totalDerivedLikes: number | string;
+            totalDerivedLikes: number;
             /** Format: int64 */
-            totalFavorites: number | string;
+            totalFavorites: number;
             /** Format: int64 */
-            totalFileSize: number | string;
+            totalFileSize: number;
             /** Format: int64 */
-            totalLikes: number | string;
+            totalLikes: number;
             /** Format: double */
-            totalPlayDuration: number | string;
+            totalPlayDuration: number;
             /** Format: int64 */
-            videoCompleteCount: number | string;
+            videoCompleteCount: number;
             /** Format: double */
-            videoConsumedSeconds: number | string;
+            videoConsumedSeconds: number;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
             /** Format: double */
-            videoDuration: number | string;
+            videoDuration: number;
             /** Format: int64 */
-            videoFileSize: number | string;
+            videoFileSize: number;
             /** Format: int64 */
-            videoPlayCount: number | string;
+            videoPlayCount: number;
         };
-        StringCriterion: {
-            modifier?: components["schemas"]["CriterionModifier"];
-            value?: string;
+        StringCriterion: null | {
+            modifier: components["schemas"]["CriterionModifier"];
+            value: string;
         };
         Studio: {
             aliases: string[];
             /** Format: int32 */
-            audioCount: number | string;
+            audioCount: number;
             /** Format: int32 */
-            childStudioCount: number | string;
+            childStudioCount: number;
             createdAt: string;
-            customFields: null | Record<string, never>;
-            details: null | string;
+            customFields?: null | Record<string, never>;
+            details?: null | string;
             favorite: boolean;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            galleryCount: number | string;
+            galleryCount: number;
             /** Format: int32 */
-            groupCount: number | string;
+            groupCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
-            imagePath: null | string;
+            imageCount: number;
+            imagePath?: null | string;
             name: string;
             organized: boolean;
             /** Format: int32 */
-            parentId: null | number | string;
-            parentName: null | string;
+            parentId?: null | number;
+            parentName?: null | string;
             /** Format: int32 */
-            performerCount: number | string;
+            performerCount: number;
             remoteIds: components["schemas"]["StudioRemoteId"][];
             tags: components["schemas"]["Tag"][];
             /** Format: int32 */
-            textCount: number | string;
+            textCount: number;
             updatedAt: string;
             urls: string[];
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         StudioCreate: {
-            aliases: null | string[];
+            aliases?: null | string[];
             customFields?: null | Record<string, never>;
-            details: null | string;
+            details?: null | string;
             favorite: boolean;
             name: string;
             organized: boolean;
             /** Format: int32 */
-            parentId: null | number | string;
+            parentId?: null | number;
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             remoteIds?: null | components["schemas"]["StudioRemoteId"][];
-            tagIds: null | (number | string)[];
-            urls: null | string[];
+            tagIds?: null | number[];
+            urls?: null | string[];
         };
-        StudioFilter: {
+        StudioFilter: null | {
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             childCountCriterion?: null | components["schemas"]["IntCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
             favorite?: null | boolean;
@@ -20343,51 +20343,51 @@ export interface components {
             organizedCriterion?: null | components["schemas"]["BoolCriterion"];
             parentCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            parentId?: null | number | string;
+            parentId?: null | number;
             parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             urlCriterion?: null | components["schemas"]["StringCriterion"];
             videoCountCriterion?: null | components["schemas"]["IntCriterion"];
         };
         StudioMerge: {
-            sourceIds: (number | string)[];
+            sourceIds: number[];
             /** Format: int32 */
-            targetId: number | string;
+            targetId: number;
         };
         StudioRemoteId: {
             endpoint: string;
             remoteId: string;
         };
         StudioUpdate: {
-            aliases: null | string[];
-            customFields: null | Record<string, never>;
-            details: null | string;
-            favorite: null | boolean;
-            name: null | string;
-            organized: null | boolean;
+            aliases?: null | string[];
+            customFields?: null | Record<string, never>;
+            details?: null | string;
+            favorite?: null | boolean;
+            name?: null | string;
+            organized?: null | boolean;
             /** Format: int32 */
-            parentId: null | number | string;
+            parentId?: null | number;
             /** Format: int32 */
-            rating: null | number | string;
-            remoteIds: null | components["schemas"]["StudioRemoteId"][];
-            tagIds: null | (number | string)[];
-            urls: null | string[];
+            rating?: null | number;
+            remoteIds?: null | components["schemas"]["StudioRemoteId"][];
+            tagIds?: null | number[];
+            urls?: null | string[];
         };
         SyncFingerprintsOptions: {
             apiKey?: null | string;
             sourceUrl?: null | string;
         };
         SystemStatus: {
-            appDir: null | string;
+            appDir?: null | string;
             /** @default false */
             authEnabled: boolean;
-            configFile: null | string;
+            configFile?: null | string;
             databasePath: string;
             /** @default false */
             migrationRequired: boolean;
@@ -20405,262 +20405,262 @@ export interface components {
             canReportIncorrect: boolean;
             color?: null | string;
             customFields?: null | Record<string, never>;
-            description: null | string;
+            description?: null | string;
             /** Format: double */
-            effectiveDurationPercent?: null | number | string;
+            effectiveDurationPercent?: null | number;
             /** Format: double */
-            effectiveDurationSec?: null | number | string;
+            effectiveDurationSec?: null | number;
             favorite: boolean;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** @default false */
             isDerived: boolean;
             /** Format: double */
-            minOccurrencePercent?: null | number | string;
+            minOccurrencePercent?: null | number;
             /** Format: double */
-            minOccurrenceSec?: null | number | string;
+            minOccurrenceSec?: null | number;
             name: string;
             /** @default false */
             organized: boolean;
             provenance?: null | components["schemas"]["TagProvenance"][];
             segmentColorOverride?: null | string;
             /** Format: int32 */
-            segmentLaneOverride?: null | number | string;
+            segmentLaneOverride?: null | number;
             showAsSegment?: null | boolean;
             tagGroupColor?: null | string;
             /** Format: int32 */
-            tagGroupId?: null | number | string;
+            tagGroupId?: null | number;
             tagGroupName?: null | string;
         };
         TagApplication: {
             appliedAt: string;
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             /** Format: int32 */
-            contextId: null | number | string;
-            contextType: null | string;
+            contextId?: null | number;
+            contextType?: null | string;
             /** Format: double */
-            hostDurationSec: null | number | string;
+            hostDurationSec?: null | number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: string;
             /** Format: int32 */
-            id: number | string;
-            modelKey: null | string;
+            id: number;
+            modelKey?: null | string;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             tag: components["schemas"]["Tag"];
             /** Format: double */
-            totalDurationSec: null | number | string;
+            totalDurationSec?: null | number;
         };
         TagApplicationCreate: {
             /** Format: float */
-            confidence?: null | number | string;
+            confidence?: null | number;
             /** Format: int32 */
-            contextId?: null | number | string;
+            contextId?: null | number;
             contextType?: null | string;
             /** Format: double */
-            hostDurationSec?: null | number | string;
+            hostDurationSec?: null | number;
             /** Format: int32 */
-            hostId: number | string;
+            hostId: number;
             hostType: string;
             modelKey?: null | string;
             /** @default user */
             sourceKey: string;
             sourceRunId?: null | string;
             /** Format: int32 */
-            tagId: number | string;
+            tagId: number;
             /** Format: double */
-            totalDurationSec?: null | number | string;
+            totalDurationSec?: null | number;
         };
         TagCreate: {
-            aliases: null | string[];
-            childIds: null | (number | string)[];
+            aliases?: null | string[];
+            childIds?: null | number[];
             color?: null | string;
             customFields?: null | Record<string, never>;
-            description: null | string;
+            description?: null | string;
             favorite: boolean;
             /** Format: double */
-            minOccurrencePercent?: null | number | string;
+            minOccurrencePercent?: null | number;
             /** Format: double */
-            minOccurrenceSec?: null | number | string;
+            minOccurrenceSec?: null | number;
             name: string;
             /** @default false */
             organized: boolean;
-            parentIds: null | (number | string)[];
+            parentIds?: null | number[];
             remoteIds?: null | components["schemas"]["TagRemoteId"][];
             segmentColorOverride?: null | string;
             /** Format: int32 */
-            segmentLaneOverride?: null | number | string;
+            segmentLaneOverride?: null | number;
             showAsSegment?: null | boolean;
-            sortName: null | string;
+            sortName?: null | string;
             /** Format: int32 */
-            tagGroupId?: null | number | string;
+            tagGroupId?: null | number;
         };
         TagDetail: {
             aliases: string[];
             /** Format: int32 */
-            audioCount: number | string;
+            audioCount: number;
             children: components["schemas"]["Tag"][];
             color?: null | string;
             createdAt: string;
-            customFields: null | Record<string, never>;
-            description: null | string;
+            customFields?: null | Record<string, never>;
+            description?: null | string;
             favorite: boolean;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            galleryCount: number | string;
+            galleryCount: number;
             /** Format: int32 */
-            groupCount: number | string;
+            groupCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
+            imageCount: number;
             /** Format: double */
-            minOccurrencePercent?: null | number | string;
+            minOccurrencePercent?: null | number;
             /** Format: double */
-            minOccurrenceSec?: null | number | string;
+            minOccurrenceSec?: null | number;
             name: string;
             /** @default false */
             organized: boolean;
             parents: components["schemas"]["Tag"][];
             /** Format: int32 */
-            performerCount: number | string;
+            performerCount: number;
             remoteIds?: null | components["schemas"]["TagRemoteId"][];
             segmentColorOverride?: null | string;
             /** Format: int32 */
-            segmentCount: number | string;
+            segmentCount: number;
             /** Format: int32 */
-            segmentLaneOverride?: null | number | string;
+            segmentLaneOverride?: null | number;
             showAsSegment?: null | boolean;
-            sortName: null | string;
+            sortName?: null | string;
             /** Format: int32 */
-            studioCount: number | string;
+            studioCount: number;
             tagGroupColor?: null | string;
             /** Format: int32 */
-            tagGroupId?: null | number | string;
+            tagGroupId?: null | number;
             tagGroupName?: null | string;
             /** Format: int32 */
-            textCount: number | string;
+            textCount: number;
             updatedAt: string;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         TagDurationClause: {
-            contextMode?: string;
+            contextMode: string;
             contextType?: null | string;
-            modifier?: components["schemas"]["CriterionModifier"];
+            modifier: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
-            tagId?: number | string;
-            unit?: string;
+            tagId: number;
+            unit: string;
             /** Format: double */
-            value?: null | number | string;
+            value?: null | number;
             /** Format: double */
-            value2?: null | number | string;
+            value2?: null | number;
         };
-        TagDurationCriterion: {
-            clauses?: components["schemas"]["TagDurationClause"][];
-            contextMode?: string;
+        TagDurationCriterion: null | {
+            clauses: components["schemas"]["TagDurationClause"][];
+            contextMode: string;
             contextType?: null | string;
-            modifier?: components["schemas"]["CriterionModifier"];
+            modifier: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
-            tagId?: number | string;
-            unit?: string;
+            tagId: number;
+            unit: string;
             /** Format: double */
-            value?: null | number | string;
+            value?: null | number;
             /** Format: double */
-            value2?: null | number | string;
+            value2?: null | number;
         };
-        TagFilter: {
+        TagFilter: null | {
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             childCountCriterion?: null | components["schemas"]["IntCriterion"];
             childrenCriterion?: null | components["schemas"]["MultiIdCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             descriptionCriterion?: null | components["schemas"]["StringCriterion"];
             favorite?: null | boolean;
             favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
             galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
-            galleryCountIncludesChildren?: boolean;
+            galleryCountIncludesChildren: boolean;
             groupCountCriterion?: null | components["schemas"]["IntCriterion"];
-            groupCountIncludesChildren?: boolean;
+            groupCountIncludesChildren: boolean;
             imageCountCriterion?: null | components["schemas"]["IntCriterion"];
-            imageCountIncludesChildren?: boolean;
+            imageCountIncludesChildren: boolean;
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             name?: null | string;
             nameCriterion?: null | components["schemas"]["StringCriterion"];
             parentCountCriterion?: null | components["schemas"]["IntCriterion"];
             parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performerCountIncludesChildren?: boolean;
+            performerCountIncludesChildren: boolean;
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             remoteIdValueCriterion?: null | components["schemas"]["StringCriterion"];
             sortNameCriterion?: null | components["schemas"]["StringCriterion"];
             studioCountCriterion?: null | components["schemas"]["IntCriterion"];
-            studioCountIncludesChildren?: boolean;
+            studioCountIncludesChildren: boolean;
             tagGroupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             videoCountCriterion?: null | components["schemas"]["IntCriterion"];
-            videoCountIncludesChildren?: boolean;
+            videoCountIncludesChildren: boolean;
         };
         TagGraphLink: {
             /** Format: int32 */
-            sourceId: number | string;
+            sourceId: number;
             /** Format: int32 */
-            targetId: number | string;
+            targetId: number;
         };
         TagGraphNode: {
-            childIds: (number | string)[];
-            description: null | string;
+            childIds: number[];
+            description?: null | string;
             favorite: boolean;
             /** Format: int32 */
-            galleryCount: number | string;
+            galleryCount: number;
             /** Format: int32 */
-            groupCount: number | string;
+            groupCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
-            imagePath: null | string;
+            imageCount: number;
+            imagePath?: null | string;
             name: string;
-            parentIds: (number | string)[];
+            parentIds: number[];
             /** Format: int32 */
-            performerCount: number | string;
+            performerCount: number;
             /** Format: int32 */
-            segmentCount: number | string;
+            segmentCount: number;
             /** Format: int32 */
-            studioCount: number | string;
-            tagGroupColor: null | string;
+            studioCount: number;
+            tagGroupColor?: null | string;
             /** Format: int32 */
-            tagGroupId: null | number | string;
-            tagGroupName: null | string;
+            tagGroupId?: null | number;
+            tagGroupName?: null | string;
             /** Format: int32 */
-            totalUsageCount: number | string;
+            totalUsageCount: number;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         TagGraphResponse: {
             items: components["schemas"]["TagGraphNode"][];
             links: components["schemas"]["TagGraphLink"][];
             /** Format: int32 */
-            totalCount: number | string;
+            totalCount: number;
         };
         TagGroup: {
-            color: null | string;
+            color?: null | string;
             createdAt: string;
-            description: null | string;
+            description?: null | string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             name: string;
             /** Format: int32 */
-            sortOrder: number | string;
+            sortOrder: number;
             /** Format: int32 */
-            tagCount: number | string;
+            tagCount: number;
             updatedAt: string;
         };
         TagGroupCreate: {
@@ -20668,72 +20668,72 @@ export interface components {
             description?: null | string;
             name: string;
             /** Format: int32 */
-            sortOrder?: null | number | string;
+            sortOrder?: null | number;
         };
         TagGroupUpdate: {
             color?: null | string;
             description?: null | string;
             name?: null | string;
             /** Format: int32 */
-            sortOrder?: null | number | string;
+            sortOrder?: null | number;
         };
         TagList: {
             aliases: string[];
             color?: null | string;
-            description: null | string;
+            description?: null | string;
             favorite: boolean;
             /** Format: int32 */
-            galleryCount: number | string;
+            galleryCount: number;
             /** Format: int32 */
-            groupCount: number | string;
+            groupCount: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            imageCount: number | string;
-            imagePath: null | string;
+            imageCount: number;
+            imagePath?: null | string;
             /** Format: double */
-            minOccurrencePercent?: null | number | string;
+            minOccurrencePercent?: null | number;
             /** Format: double */
-            minOccurrenceSec?: null | number | string;
+            minOccurrenceSec?: null | number;
             name: string;
             /** @default false */
             organized: boolean;
             /** Format: int32 */
-            performerCount: number | string;
+            performerCount: number;
             segmentColorOverride?: null | string;
             /** Format: int32 */
-            segmentCount: number | string;
+            segmentCount: number;
             /** Format: int32 */
-            segmentLaneOverride?: null | number | string;
+            segmentLaneOverride?: null | number;
             showAsSegment?: null | boolean;
             /** Format: int32 */
-            studioCount: number | string;
+            studioCount: number;
             tagGroupColor?: null | string;
             /** Format: int32 */
-            tagGroupId?: null | number | string;
+            tagGroupId?: null | number;
             tagGroupName?: null | string;
             /** Format: int32 */
-            videoCount: number | string;
+            videoCount: number;
         };
         TagMerge: {
-            sourceIds: (number | string)[];
+            sourceIds: number[];
             /** Format: int32 */
-            targetId: number | string;
+            targetId: number;
         };
         TagProvenance: {
             appliedAt: string;
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             /** Format: int32 */
-            contextId?: null | number | string;
+            contextId?: null | number;
             contextType?: null | string;
             /** Format: double */
-            hostDurationSec?: null | number | string;
-            modelKey: null | string;
+            hostDurationSec?: null | number;
+            modelKey?: null | string;
             sourceKey: string;
-            sourceRunId: null | string;
+            sourceRunId?: null | string;
             /** Format: double */
-            totalDurationSec?: null | number | string;
+            totalDurationSec?: null | number;
         };
         TagRemoteId: {
             endpoint: string;
@@ -20741,42 +20741,42 @@ export interface components {
         };
         TagSegmentWall: {
             /** Format: float */
-            confidence: null | number | string;
+            confidence?: null | number;
             /** Format: double */
-            endSec: null | number | string;
+            endSec?: null | number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             kind: string;
             sourceKey: string;
             /** Format: double */
-            startSec: number | string;
-            title: null | string;
+            startSec: number;
+            title?: null | string;
             /** Format: int32 */
-            videoId: number | string;
+            videoId: number;
             videoTitle: string;
         };
         TagUpdate: {
-            aliases: null | string[];
-            childIds: null | (number | string)[];
+            aliases?: null | string[];
+            childIds?: null | number[];
             color?: null | string;
-            customFields: null | Record<string, never>;
-            description: null | string;
-            favorite: null | boolean;
+            customFields?: null | Record<string, never>;
+            description?: null | string;
+            favorite?: null | boolean;
             /** Format: double */
-            minOccurrencePercent?: null | number | string;
+            minOccurrencePercent?: null | number;
             /** Format: double */
-            minOccurrenceSec?: null | number | string;
-            name: null | string;
+            minOccurrenceSec?: null | number;
+            name?: null | string;
             organized?: null | boolean;
-            parentIds: null | (number | string)[];
+            parentIds?: null | number[];
             remoteIds?: null | components["schemas"]["TagRemoteId"][];
             segmentColorOverride?: null | string;
             /** Format: int32 */
-            segmentLaneOverride?: null | number | string;
+            segmentLaneOverride?: null | number;
             showAsSegment?: null | boolean;
-            sortName: null | string;
+            sortName?: null | string;
             /** Format: int32 */
-            tagGroupId?: null | number | string;
+            tagGroupId?: null | number;
         };
         TextContent: {
             content: string;
@@ -20784,53 +20784,53 @@ export interface components {
             renderMode: string;
         };
         TextDocument: {
-            code: null | string;
+            code?: null | string;
             contextTagApplications?: null | components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
-            fileCount: number | string;
+            fileCount: number;
             files: components["schemas"]["TextFile"][];
             groups: components["schemas"]["GroupSummary"][];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             imagePath?: null | string;
             /** Format: int32 */
-            maxPageCount: null | number | string;
+            maxPageCount?: null | number;
             /** Format: int32 */
-            maxWordCount: null | number | string;
+            maxWordCount?: null | number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
             /** Format: int32 */
-            studioId: null | number | string;
-            studioName: null | string;
+            studioId?: null | number;
+            studioName?: null | string;
             tags: components["schemas"]["Tag"][];
-            title: null | string;
+            title?: null | string;
             updatedAt: string;
             urls: string[];
         };
         TextDocumentCreate: {
-            code: null | string;
+            code?: null | string;
             customFields?: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            groupIds: null | components["schemas"]["VideoGroupInput"][];
+            date?: null | string;
+            details?: null | string;
+            groupIds?: null | components["schemas"]["VideoGroupInput"][];
             organized: boolean;
-            performerIds: null | (number | string)[];
+            performerIds?: null | number[];
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
-        TextDocumentFilter: {
+        TextDocumentFilter: null | {
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             contentCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: null | components["schemas"]["DateCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -20860,36 +20860,36 @@ export interface components {
             wordCountCriterion?: null | components["schemas"]["IntCriterion"];
         };
         TextDocumentUpdate: {
-            code: null | string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            groupIds: null | components["schemas"]["VideoGroupInput"][];
-            organized: null | boolean;
-            performerIds: null | (number | string)[];
+            code?: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
+            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            organized?: null | boolean;
+            performerIds?: null | number[];
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         TextFile: {
             basename: string;
-            excerptText: null | string;
+            excerptText?: null | string;
             format: string;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             /** Format: int32 */
-            pageCount: null | number | string;
+            pageCount?: null | number;
             path: string;
             /** Format: int64 */
-            size: number | string;
+            size: number;
             /** Format: int32 */
-            wordCount: null | number | string;
+            wordCount?: null | number;
         };
-        TimestampCriterion: {
-            modifier?: components["schemas"]["CriterionModifier"];
-            value?: string;
+        TimestampCriterion: null | {
+            modifier: components["schemas"]["CriterionModifier"];
+            value: string;
             value2?: null | string;
         };
         UIComponentOverride: {
@@ -20899,7 +20899,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number | string;
+            priority: number;
             targetComponent: string;
         };
         UIComponentStyleDef: {
@@ -20908,57 +20908,57 @@ export interface components {
             name: string;
         };
         UiConfig: {
-            abbreviateCounters?: boolean;
-            alwaysResumeOnPlayback?: boolean;
-            autoplayOnListClick?: boolean;
-            autostartVideo?: boolean;
-            autostartVideoOnPlaySelected?: boolean;
-            continuePlaylistDefault?: boolean;
+            abbreviateCounters: boolean;
+            alwaysResumeOnPlayback: boolean;
+            autoplayOnListClick: boolean;
+            autostartVideo: boolean;
+            autostartVideoOnPlaySelected: boolean;
+            continuePlaylistDefault: boolean;
             customCss?: null | string;
             customJs?: null | string;
             customLocalesPath?: null | string;
-            deleteFileDefault?: boolean;
-            enableCSSCustomization?: boolean;
-            enableJSCustomization?: boolean;
+            deleteFileDefault: boolean;
+            enableCSSCustomization: boolean;
+            enableJSCustomization: boolean;
             faviconPath?: null | string;
-            feedVideoSound?: boolean;
-            feedVideoSource?: string;
+            feedVideoSound: boolean;
+            feedVideoSource: string;
             /** Format: double */
-            feedVideoStartMinDuration?: number | string;
+            feedVideoStartMinDuration: number;
             /** Format: double */
-            feedVideoStartPercent?: number | string;
-            imageObjectFit?: string;
-            keybindingOverrides?: {
+            feedVideoStartPercent: number;
+            imageObjectFit: string;
+            keybindingOverrides: {
                 [key: string]: string;
             };
             logoPath?: null | string;
             /** Format: int32 */
-            maxLoopDuration?: number | string;
-            noBrowser?: boolean;
-            notificationsEnabled?: boolean;
+            maxLoopDuration: number;
+            noBrowser: boolean;
+            notificationsEnabled: boolean;
             /** Format: double */
-            playerVideoStartMinDuration?: number | string;
+            playerVideoStartMinDuration: number;
             /** Format: double */
-            playerVideoStartPercent?: number | string;
-            previewExcludeEnd?: string;
-            previewExcludeStart?: string;
+            playerVideoStartPercent: number;
+            previewExcludeEnd: string;
+            previewExcludeStart: string;
             /** Format: double */
-            previewSegmentDuration?: number | string;
+            previewSegmentDuration: number;
             /** Format: int32 */
-            previewSegments?: number | string;
-            ratingSystemOptions?: components["schemas"]["RatingSystemOptions"];
-            showAbLoopControls?: boolean;
-            showStudioAsText?: boolean;
+            previewSegments: number;
+            ratingSystemOptions: components["schemas"]["RatingSystemOptions"];
+            showAbLoopControls: boolean;
+            showStudioAsText: boolean;
             /** Format: int32 */
-            slideshowDelay?: number | string;
-            soundOnPreview?: boolean;
+            slideshowDelay: number;
+            soundOnPreview: boolean;
             title?: null | string;
-            troubleshootingModeEnabled?: boolean;
-            videoObjectFit?: string;
+            troubleshootingModeEnabled: boolean;
+            videoObjectFit: string;
             /** Format: int32 */
-            wallPlayback?: number | string;
-            wallPreviewType?: string;
-            wallShowTitle?: boolean;
+            wallPlayback: number;
+            wallPreviewType: string;
+            wallShowTitle: boolean;
         };
         UIDialogOverride: {
             componentName: string;
@@ -20968,7 +20968,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number | string;
+            priority: number;
         };
         UIFeatureDefinition: {
             extensionId: string;
@@ -20998,7 +20998,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
         };
         UIListFilterOption: {
             label: string;
@@ -21015,31 +21015,31 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             sortKey?: null | string;
         };
         UIManifest: {
-            actions?: components["schemas"]["ExtensionAction"][];
-            componentOverrides?: components["schemas"]["UIComponentOverride"][];
-            componentStyles?: components["schemas"]["UIComponentStyleDef"][];
+            actions: components["schemas"]["ExtensionAction"][];
+            componentOverrides: components["schemas"]["UIComponentOverride"][];
+            componentStyles: components["schemas"]["UIComponentStyleDef"][];
             cssBundleUrl?: null | string;
-            dialogOverrides?: components["schemas"]["UIDialogOverride"][];
-            features?: components["schemas"]["UIFeatureDefinition"][];
+            dialogOverrides: components["schemas"]["UIDialogOverride"][];
+            features: components["schemas"]["UIFeatureDefinition"][];
             frontendRuntimeVersion?: null | string;
             jsBundleUrl?: null | string;
-            layoutStyles?: components["schemas"]["UILayoutStyleDef"][];
-            listFilters?: components["schemas"]["UIListFilterContribution"][];
-            listSorts?: components["schemas"]["UIListSortContribution"][];
-            pageOverrides?: components["schemas"]["UIPageOverride"][];
-            pages?: components["schemas"]["UIPageDefinition"][];
-            panes?: components["schemas"]["UIPaneContribution"][];
-            selectorOverrides?: components["schemas"]["UISelectorOverride"][];
-            settingsPanels?: components["schemas"]["UISettingsPanel"][];
-            settingsTabs?: components["schemas"]["UISettingsTab"][];
-            slots?: components["schemas"]["UISlotContribution"][];
-            tabs?: components["schemas"]["UITabContribution"][];
-            themes?: components["schemas"]["UIThemeDefinition"][];
-            tutorialTopics?: components["schemas"]["UITutorialTopic"][];
+            layoutStyles: components["schemas"]["UILayoutStyleDef"][];
+            listFilters: components["schemas"]["UIListFilterContribution"][];
+            listSorts: components["schemas"]["UIListSortContribution"][];
+            pageOverrides: components["schemas"]["UIPageOverride"][];
+            pages: components["schemas"]["UIPageDefinition"][];
+            panes: components["schemas"]["UIPaneContribution"][];
+            selectorOverrides: components["schemas"]["UISelectorOverride"][];
+            settingsPanels: components["schemas"]["UISettingsPanel"][];
+            settingsTabs: components["schemas"]["UISettingsTab"][];
+            slots: components["schemas"]["UISlotContribution"][];
+            tabs: components["schemas"]["UITabContribution"][];
+            themes: components["schemas"]["UIThemeDefinition"][];
+            tutorialTopics: components["schemas"]["UITutorialTopic"][];
         };
         UIPageDefinition: {
             componentName?: null | string;
@@ -21051,7 +21051,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            navOrder: number | string;
+            navOrder: number;
             requiredPermission?: null | string;
             route: string;
             /** @default true */
@@ -21064,7 +21064,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number | string;
+            priority: number;
             targetPage: string;
         };
         UIPaneContribution: {
@@ -21076,7 +21076,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             pageType: string;
             zone: string;
         };
@@ -21087,7 +21087,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number | string;
+            priority: number;
             selectorKey: string;
         };
         UISettingsPanel: {
@@ -21099,7 +21099,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             targetSection?: null | string;
             targetTab?: null | string;
         };
@@ -21110,12 +21110,12 @@ export interface components {
             icon?: null | string;
             key: string;
             label: string;
-            layout?: components["schemas"]["SettingsTabLayout"];
+            layout: components["schemas"]["SettingsTabLayout"];
             /**
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             parentTabKey?: null | string;
             searchKeywords?: null | string[];
         };
@@ -21130,7 +21130,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             slot: string;
         };
         UITabContribution: {
@@ -21145,7 +21145,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             pageType: string;
         };
         UIThemeDefinition: {
@@ -21186,21 +21186,21 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number | string;
+            order: number;
             pages?: null | string[];
             parentTopicId?: null | string;
             slides?: null | components["schemas"]["UITutorialSlide"][];
             title: string;
         };
         UpdateContentRuleRequest: {
-            appliesTo: null | string;
-            effect: null | string;
-            scopeKind: null | string;
-            scopeValue: null | string;
+            appliesTo?: null | string;
+            effect?: null | string;
+            scopeKind?: null | string;
+            scopeValue?: null | string;
         };
         UpdateRoleRequest: {
-            description: null | string;
-            permissions: null | string[];
+            description?: null | string;
+            permissions?: null | string[];
         };
         UpdateUserRequest: {
             displayName?: null | string;
@@ -21208,155 +21208,155 @@ export interface components {
             isActive?: null | boolean;
             mustChangePassword?: null | boolean;
         };
-        UserPlaybackPreferences: {
+        UserPlaybackPreferences: null | {
             /** Format: int32 */
-            skipSeconds: null | number | string;
+            skipSeconds?: null | number;
         };
-        UserRatingSystemOptions: {
-            starPrecision: null | string;
-            type: null | string;
+        UserRatingSystemOptions: null | {
+            starPrecision?: null | string;
+            type?: null | string;
         };
-        UserThemePreferences: {
-            activeComponentStyles: null | string[];
-            activeLayoutStyle: null | string;
-            activeThemeId: null | string;
-            customThemeColors: null | {
+        UserThemePreferences: null | {
+            activeComponentStyles?: null | string[];
+            activeLayoutStyle?: null | string;
+            activeThemeId?: null | string;
+            customThemeColors?: null | {
                 [key: string]: string;
             };
-            styleOptions: null | {
+            styleOptions?: null | {
                 [key: string]: {
                     [key: string]: string;
                 };
             };
         };
-        UserTrackingPreferences: {
+        UserTrackingPreferences: null | {
             /** Format: int32 */
-            dwellPositiveSec?: null | number | string;
-            enabled: null | boolean;
+            dwellPositiveSec?: null | number;
+            enabled?: null | boolean;
             /** Format: int32 */
-            minDerivedLikeSessionSeconds: null | number | string;
+            minDerivedLikeSessionSeconds?: null | number;
             /** Format: int32 */
-            minImageDetailViewSeconds: null | number | string;
+            minImageDetailViewSeconds?: null | number;
             /** Format: int32 */
-            minViewSeconds: null | number | string;
+            minViewSeconds?: null | number;
             /** Format: int32 */
-            sessionIdleTimeoutSec: null | number | string;
+            sessionIdleTimeoutSec?: null | number;
             /** Format: double */
-            viewCompletionRatio: null | number | string;
+            viewCompletionRatio?: null | number;
         };
-        UserUiPreferences: {
+        UserUiPreferences: null | {
             defaultFilters?: null | {
                 [key: string]: string;
             };
             homePageContent?: null | string;
-            keybindingOverrides: null | {
+            keybindingOverrides?: null | {
                 [key: string]: string;
             };
             playback?: null | components["schemas"]["UserPlaybackPreferences"];
-            ratingSystemOptions: null | components["schemas"]["UserRatingSystemOptions"];
-            theme: null | components["schemas"]["UserThemePreferences"];
-            tracking: null | components["schemas"]["UserTrackingPreferences"];
-            videos: null | components["schemas"]["UserVideosPreferences"];
+            ratingSystemOptions?: null | components["schemas"]["UserRatingSystemOptions"];
+            theme?: null | components["schemas"]["UserThemePreferences"];
+            tracking?: null | components["schemas"]["UserTrackingPreferences"];
+            videos?: null | components["schemas"]["UserVideosPreferences"];
         };
-        UserVideosPreferences: {
-            includeCompilationGroups: null | boolean;
+        UserVideosPreferences: null | {
+            includeCompilationGroups?: null | boolean;
         };
         Video: {
-            captions: null | string;
+            captions?: null | string;
             /**
              * Format: int32
              * @default 0
              */
-            childVideoCount: number | string;
+            childVideoCount: number;
             /** Format: double */
-            clipEndSec?: null | number | string;
+            clipEndSec?: null | number;
             /** Format: double */
-            clipStartSec?: null | number | string;
-            code: null | string;
+            clipStartSec?: null | number;
+            code?: null | string;
             contextTagApplications?: null | components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            director: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
+            director?: null | string;
             fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
             files: components["schemas"]["VideoFile"][];
             galleries: components["schemas"]["GallerySummary"][];
             groups: components["schemas"]["GroupSummary"][];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             imagePath?: null | string;
             isVr: boolean;
             organized: boolean;
             /** Format: int32 */
-            parentVideoId?: null | number | string;
+            parentVideoId?: null | number;
             parentVideoTitle?: null | string;
             performers: components["schemas"]["PerformerSummary"][];
             remoteIds: components["schemas"]["VideoRemoteId"][];
             /** Format: int32 */
-            studioId: null | number | string;
-            studioName: null | string;
+            studioId?: null | number;
+            studioName?: null | string;
             tags: components["schemas"]["Tag"][];
-            title: null | string;
+            title?: null | string;
             updatedAt: string;
             urls: string[];
         };
         VideoAssignFile: {
             /** Format: int32 */
-            fileId: number | string;
+            fileId: number;
         };
         VideoCreate: {
-            captions: null | string;
+            captions?: null | string;
             /** Format: double */
-            clipEndSec?: null | number | string;
+            clipEndSec?: null | number;
             /** Format: double */
-            clipStartSec?: null | number | string;
-            code: null | string;
+            clipStartSec?: null | number;
+            code?: null | string;
             customFields?: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            director: null | string;
-            galleryIds: null | (number | string)[];
-            groups: null | components["schemas"]["VideoGroupInput"][];
+            date?: null | string;
+            details?: null | string;
+            director?: null | string;
+            galleryIds?: null | number[];
+            groups?: null | components["schemas"]["VideoGroupInput"][];
             /** @default false */
             isVr: boolean;
             organized: boolean;
             /** Format: int32 */
-            parentVideoId?: null | number | string;
-            performerIds: null | (number | string)[];
+            parentVideoId?: null | number;
+            performerIds?: null | number[];
             /** Format: int32 */
-            rating: null | number | string;
+            rating?: null | number;
             remoteIds?: null | components["schemas"]["VideoRemoteId"][];
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         VideoFile: {
             audioCodec: string;
             basename: string;
             /** Format: int64 */
-            bitRate: number | string;
+            bitRate: number;
             captions?: null | components["schemas"]["Caption"][];
             /** Format: double */
-            duration: number | string;
+            duration: number;
             fingerprints: components["schemas"]["Fingerprint"][];
             format: string;
             /** Format: double */
-            frameRate: number | string;
+            frameRate: number;
             /** Format: int32 */
-            height: number | string;
+            height: number;
             /** Format: int32 */
-            id: number | string;
+            id: number;
             path: string;
             /** Format: int64 */
-            size: number | string;
+            size: number;
             videoCodec: string;
             /** Format: int32 */
-            width: number | string;
+            width: number;
         };
-        VideoFilter: {
+        VideoFilter: null | {
             audioCodecCriterion?: null | components["schemas"]["StringCriterion"];
             bitrateInterval?: null | components["schemas"]["IntCriterion"];
             captionsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -21364,7 +21364,7 @@ export interface components {
             code?: null | string;
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: null | components["schemas"]["DateCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
@@ -21379,12 +21379,12 @@ export interface components {
             frameRateCriterion?: null | components["schemas"]["IntCriterion"];
             galleriesCriterion?: null | components["schemas"]["MultiIdCriterion"];
             /** Format: int32 */
-            galleryId?: null | number | string;
+            galleryId?: null | number;
             /** Format: int32 */
-            groupId?: null | number | string;
+            groupId?: null | number;
             groupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             hashCriterion?: null | components["schemas"]["StringCriterion"];
-            ids?: null | (number | string)[];
+            ids?: null | number[];
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             isVr?: null | boolean;
             isVrCriterion?: null | components["schemas"]["BoolCriterion"];
@@ -21398,24 +21398,24 @@ export interface components {
             performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            performerIds?: null | (number | string)[];
+            performerIds?: null | number[];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             playCountCriterion?: null | components["schemas"]["IntCriterion"];
             playDurationCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            rating?: null | number | string;
+            rating?: null | number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             resolutionCriterion?: null | components["schemas"]["IntCriterion"];
             resumeTimeCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number | string;
+            studioId?: null | number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
             tagDurationCriterion?: null | components["schemas"]["TagDurationCriterion"];
-            tagIds?: null | (number | string)[];
+            tagIds?: null | number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             title?: null | string;
             titleCriterion?: null | components["schemas"]["StringCriterion"];
@@ -21425,12 +21425,12 @@ export interface components {
         };
         VideoGroupInput: {
             /** Format: int32 */
-            groupId: number | string;
+            groupId: number;
             /**
              * Format: int32
              * @default 0
              */
-            videoIndex: number | string;
+            videoIndex: number;
         };
         VideoHistory: {
             allTimeWatchedIntervals?: null | components["schemas"]["PlaybackInterval"][];
@@ -21439,41 +21439,41 @@ export interface components {
             playHistory: string[];
             sessions?: null | components["schemas"]["VideoPlaybackSession"][];
             /** Format: double */
-            totalDistinctWatchedSec?: null | number | string;
+            totalDistinctWatchedSec?: null | number;
         };
         VideoListEntry: {
             group?: null | components["schemas"]["Group"];
             /** Format: int32 */
-            id: number | string;
+            id: number;
             kind: string;
             video?: null | components["schemas"]["Video"];
         };
         VideoMerge: {
-            sourceIds: (number | string)[];
+            sourceIds: number[];
             /** Format: int32 */
-            targetId: number | string;
+            targetId: number;
         };
         VideoPlaybackSession: {
-            endedAt: null | string;
+            endedAt?: null | string;
             intervals: components["schemas"]["PlaybackInterval"][];
             isCompleted: boolean;
             /** Format: double */
-            lastPositionSec: null | number | string;
+            lastPositionSec?: null | number;
             lastSeenAt: string;
             /** Format: double */
-            mediaDurationSec: number | string;
+            mediaDurationSec: number;
             /** Format: uuid */
             sessionId: string;
             startedAt: string;
             state: string;
             /** Format: double */
-            totalWatchedSec: number | string;
+            totalWatchedSec: number;
         };
         VideoRating: {
             /** @default overall */
             aspect: string;
             /** Format: int32 */
-            value: null | number | string;
+            value?: null | number;
         };
         VideoRemoteId: {
             endpoint: string;
@@ -21481,39 +21481,39 @@ export interface components {
         };
         VideoResolvedSpans: {
             /** Format: int32 */
-            profileId: number | string;
+            profileId: number;
             /** Format: int32 */
-            profileVersion: number | string;
+            profileVersion: number;
             spans: components["schemas"]["ResolvedSpan"][];
         };
         VideoUpdate: {
-            captions: null | string;
+            captions?: null | string;
             /** Format: double */
-            clipEndSec?: null | number | string;
+            clipEndSec?: null | number;
             /** Format: double */
-            clipStartSec?: null | number | string;
-            code: null | string;
-            customFields: null | Record<string, never>;
-            date: null | string;
-            details: null | string;
-            director: null | string;
-            galleryIds: null | (number | string)[];
-            groups: null | components["schemas"]["VideoGroupInput"][];
+            clipStartSec?: null | number;
+            code?: null | string;
+            customFields?: null | Record<string, never>;
+            date?: null | string;
+            details?: null | string;
+            director?: null | string;
+            galleryIds?: null | number[];
+            groups?: null | components["schemas"]["VideoGroupInput"][];
             isVr?: null | boolean;
-            organized: null | boolean;
-            performerIds: null | (number | string)[];
+            organized?: null | boolean;
+            performerIds?: null | number[];
             /** Format: int32 */
-            rating: null | number | string;
-            remoteIds: null | components["schemas"]["VideoRemoteId"][];
+            rating?: null | number;
+            remoteIds?: null | components["schemas"]["VideoRemoteId"][];
             /** Format: int32 */
-            studioId: null | number | string;
-            tagIds: null | (number | string)[];
-            title: null | string;
-            urls: null | string[];
+            studioId?: null | number;
+            tagIds?: null | number[];
+            title?: null | string;
+            urls?: null | string[];
         };
         WipeResult: {
             backupPath: string;
-            configBackupPath: null | string;
+            configBackupPath?: null | string;
             message: string;
             timestamp: string;
         };
