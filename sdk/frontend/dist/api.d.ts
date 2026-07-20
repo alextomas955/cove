@@ -29,8 +29,9 @@ export declare function configureCoveClientAuth(accessor: CoveClientAuthAccessor
 export type CoveClient = Client<paths>;
 /**
  * Create a Cove API client typed over the generated `paths`. Path keys already carry the `/api`
- * prefix, so `baseUrl` defaults to the empty string (same-origin relative requests). Pass a
- * `baseUrl` only to target a different origin.
+ * prefix, so `baseUrl` defaults to the empty string (same-origin relative requests). A `baseUrl`
+ * may target a different origin, but the host session (bearer / share token) is attached to
+ * same-origin requests only — cross-origin requests are sent without host credentials.
  */
 export declare function createCoveClient(options?: {
     baseUrl?: string;

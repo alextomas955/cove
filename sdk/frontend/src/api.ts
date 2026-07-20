@@ -42,8 +42,32 @@ function dispatchAuthRequired(): void {
 
 type AuthMode = "share" | "bearer" | "none";
 
-/** Apply the host credentials to an outgoing request's headers and report the resolved auth mode. */
-function applyAuthHeaders(headers: Headers): AuthMode {
+/**
+ * True when a request targets the host origin (same-origin as the running document). Host
+ * credentials are scoped to the host API: a cross-origin URL an extension supplies (e.g. a
+ * third-party service) must never receive the host bearer or share token, otherwise a `baseUrl`
+ * pointing off-origin would exfiltrate the user's live session. Outside a browser (no document
+ * origin to compare against) the SDK's same-origin default applies, so the request is treated as
+ * host-targeted.
+ */
+function isHostOrigin(url: string): boolean {
+  if (typeof location === "undefined") return true;
+  try {
+    return new URL(url, location.origin).origin === location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Apply the host credentials to an outgoing request's headers and report the resolved auth mode.
+ * Credentials are attached only when the request targets the host origin; cross-origin requests are
+ * left untouched and report `"none"`.
+ */
+function applyAuthHeaders(headers: Headers, url: string): AuthMode {
+  if (!isHostOrigin(url)) {
+    return "none";
+  }
   const token = authAccessor.getAccessToken?.();
   const shareToken = authAccessor.getShareToken?.();
   const sharePassword = authAccessor.getSharePassword?.();
@@ -66,12 +90,14 @@ const pristineRequests = new WeakMap<Request, Request>();
 
 const authMiddleware: Middleware = {
   onRequest({ request }) {
-    applyAuthHeaders(request.headers);
+    applyAuthHeaders(request.headers, request.url);
     pristineRequests.set(request, request.clone());
     return request;
   },
   async onResponse({ request, response }) {
-    if (response.status !== 401) {
+    // Only the host session drives refresh/retry; a cross-origin 401 is the third party's own and
+    // must not touch the host token or dispatch a host re-auth.
+    if (response.status !== 401 || !isHostOrigin(request.url)) {
       return response;
     }
     const token = authAccessor.getAccessToken?.();
@@ -99,8 +125,9 @@ export type CoveClient = Client<paths>;
 
 /**
  * Create a Cove API client typed over the generated `paths`. Path keys already carry the `/api`
- * prefix, so `baseUrl` defaults to the empty string (same-origin relative requests). Pass a
- * `baseUrl` only to target a different origin.
+ * prefix, so `baseUrl` defaults to the empty string (same-origin relative requests). A `baseUrl`
+ * may target a different origin, but the host session (bearer / share token) is attached to
+ * same-origin requests only — cross-origin requests are sent without host credentials.
  */
 export function createCoveClient(options?: { baseUrl?: string }): CoveClient {
   const client = createClient<paths>({ baseUrl: options?.baseUrl ?? "" });
@@ -209,7 +236,7 @@ const API_BASE = "/api";
  */
 async function authedFetch(input: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers ?? {});
-  const authMode = applyAuthHeaders(headers);
+  const authMode = applyAuthHeaders(headers, input);
   let res = await fetch(input, { ...init, headers });
   if (res.status === 401 && authMode === "bearer" && authAccessor.getRefreshToken?.()) {
     const refreshed = (await authAccessor.tryRefresh?.()) ?? false;
