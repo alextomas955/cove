@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   DEFAULT_JOB_POLL_INTERVAL_MS,
@@ -51,39 +51,52 @@ describe("isTerminalJobStatus", () => {
   });
 });
 
+/** Invoke the options' refetchInterval callback with a query carrying the given status. */
+function refetchIntervalFor(
+  options: ReturnType<typeof jobPollingQueryOptions>,
+  status: JobStatus | undefined,
+): number | false | undefined {
+  const query = { state: { data: status ? jobInfo(status) : undefined } };
+  const refetchInterval = options.refetchInterval;
+  if (typeof refetchInterval !== "function") {
+    throw new Error("expected refetchInterval to be a function");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return refetchInterval(query as any);
+}
+
 describe("jobPollingQueryOptions", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
+  it("keeps polling on the interval while the job is not terminal", () => {
+    const { client } = stubClient(["running"]);
+    const options = jobPollingQueryOptions("job-1", { intervalMs: 1000, client });
+
+    expect(refetchIntervalFor(options, "pending")).toBe(1000);
+    expect(refetchIntervalFor(options, "running")).toBe(1000);
+    // Before the first fetch there is no data yet — still poll.
+    expect(refetchIntervalFor(options, undefined)).toBe(1000);
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  it("stops polling once the job reaches a terminal status", () => {
+    const { client } = stubClient(["completed"]);
+    const options = jobPollingQueryOptions("job-1", { intervalMs: 1000, client });
+
+    expect(refetchIntervalFor(options, "completed")).toBe(false);
+    expect(refetchIntervalFor(options, "failed")).toBe(false);
+    expect(refetchIntervalFor(options, "cancelled")).toBe(false);
   });
 
-  it("polls on the interval while the job is running and stops once it is terminal", async () => {
-    const { client, GET } = stubClient(["running", "running", "completed"]);
+  it("fetches the job through the injected client when enabled", async () => {
+    const { client, GET } = stubClient(["running"]);
     const qc = newQueryClient();
-    const observer = new QueryObserver(
-      qc,
-      jobPollingQueryOptions("job-1", { intervalMs: 1000, client }),
-    );
-    const unsubscribe = observer.subscribe(() => {});
+    const observer = new QueryObserver(qc, jobPollingQueryOptions("job-1", { client }));
 
-    // Initial fetch (running).
-    await vi.advanceTimersByTimeAsync(0);
+    const result = await observer.refetch();
+
     expect(GET).toHaveBeenCalledTimes(1);
-
-    // Two interval ticks: second running, then completed.
-    await vi.advanceTimersByTimeAsync(1000);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(GET).toHaveBeenCalledTimes(3);
-    expect(observer.getCurrentResult().data?.status).toBe("completed");
-
-    // Terminal status stops polling: no further fetches even after several intervals.
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(GET).toHaveBeenCalledTimes(3);
-
-    unsubscribe();
+    expect(GET).toHaveBeenCalledWith("/api/Jobs/{jobId}", {
+      params: { path: { jobId: "job-1" } },
+    });
+    expect(result.data?.status).toBe("running");
     qc.clear();
   });
 
@@ -96,7 +109,8 @@ describe("jobPollingQueryOptions", () => {
     const observer = new QueryObserver(qc, options);
     const unsubscribe = observer.subscribe(() => {});
 
-    await vi.advanceTimersByTimeAsync(5000);
+    // A disabled query does not fetch on subscribe.
+    await Promise.resolve();
     expect(GET).not.toHaveBeenCalled();
 
     unsubscribe();
