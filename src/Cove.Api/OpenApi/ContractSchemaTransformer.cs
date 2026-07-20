@@ -186,6 +186,20 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
             concrete.Type = type;
         }
 
+        // A free-form object (a dictionary such as Dictionary<string, object>) surfaces as a bare
+        // object with no declared properties and no additional-property schema. Give it an open
+        // additional-property schema so it is a map of arbitrary values rather than an object that
+        // forbids every key.
+        if (concrete.Type == JsonSchemaType.Object
+            && (concrete.Properties is null || concrete.Properties.Count == 0)
+            && concrete.AdditionalProperties is null
+            && (concrete.AllOf is null || concrete.AllOf.Count == 0)
+            && (concrete.OneOf is null || concrete.OneOf.Count == 0)
+            && (concrete.AnyOf is null || concrete.AnyOf.Count == 0))
+        {
+            concrete.AdditionalProperties = new OpenApiSchema();
+        }
+
         RemoveNullBranches(concrete.AnyOf);
         RemoveNullBranches(concrete.OneOf);
 
