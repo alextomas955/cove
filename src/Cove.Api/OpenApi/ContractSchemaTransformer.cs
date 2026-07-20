@@ -153,12 +153,24 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
         if (members is not { Count: > 1 })
             return;
 
-        for (var i = members.Count - 1; i >= 0; i--)
+        for (var i = members.Count - 1; i >= 0 && members.Count > 1; i--)
         {
-            if (members.Count > 1 && members[i] is OpenApiSchema { Type: JsonSchemaType.Null })
+            if (members[i] is OpenApiSchema { Type: JsonSchemaType.Null } inline
+                && IsNullOnly(inline))
+            {
                 members.RemoveAt(i);
+            }
         }
     }
+
+    // Only remove a branch that is purely the null type (no other constraints), so a meaningful
+    // nullable-typed subschema is never discarded. Matches ContractDocumentTransformer's guard.
+    private static bool IsNullOnly(OpenApiSchema schema) =>
+        schema.Type == JsonSchemaType.Null
+        && (schema.OneOf is null || schema.OneOf.Count == 0)
+        && (schema.AnyOf is null || schema.AnyOf.Count == 0)
+        && (schema.AllOf is null || schema.AllOf.Count == 0)
+        && (schema.Properties is null || schema.Properties.Count == 0);
 
     private static void NormalizeAll(IList<IOpenApiSchema>? members)
     {
