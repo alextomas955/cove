@@ -19097,11 +19097,11 @@ export interface components {
             urls: string[];
         };
         MeUser: {
-            id?: string;
+            id: string;
             kind: string;
             roles: string[];
             uiPreferences?: components["schemas"]["UserUiPreferences"];
-            username?: string;
+            username: string;
         };
         MoveFiles: {
             destinationPath?: string;
