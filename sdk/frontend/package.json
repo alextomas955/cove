@@ -18,6 +18,9 @@
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
+  "dependencies": {
+    "@cove/types": "file:../types"
+  },
   "peerDependencies": {
     "react": ">=18.0.0"
   },
