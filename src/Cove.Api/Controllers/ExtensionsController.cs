@@ -12,7 +12,14 @@ namespace Cove.Api.Controllers;
 
 internal static class FrontendRuntimeContract
 {
-    public const string Version = "v1";
+    /// <summary>The runtime version assumed for an extension that declares none (backward compatible).</summary>
+    public const string DefaultVersion = "v1";
+
+    /// <summary>All runtime contract versions the host can serve.</summary>
+    public static readonly IReadOnlyList<string> SupportedVersions = new[] { "v1", "v2" };
+
+    public static bool IsSupported(string? version) =>
+        version is not null && SupportedVersions.Contains(version, StringComparer.OrdinalIgnoreCase);
 }
 
 [ApiController]
@@ -25,7 +32,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
     public ActionResult<UIManifest> GetManifest()
     {
         var manifest = extensionManager.GetAggregatedManifest();
-        manifest.FrontendRuntimeVersion = FrontendRuntimeContract.Version;
+        manifest.FrontendRuntimeVersion = ResolveFrontendRuntimeVersion();
 
         var jsBundles = extensionManager.GetEnabledJsBundles();
         if (jsBundles.Count == 1)
@@ -108,6 +115,26 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
         Response.Headers.Append("Pragma", "no-cache");
         Response.Headers.Append("Expires", "0");
         return Content(string.Join("\n", lines), "text/css");
+    }
+
+    /// <summary>
+    /// Resolve the frontend runtime version the host reports. An extension opts into a newer runtime
+    /// by declaring a supported <c>FrontendRuntimeVersion</c> (via <c>UIManifestBuilder.WithRuntimeVersion</c>);
+    /// the highest supported declared version among enabled UI extensions wins. Extensions that
+    /// declare nothing — or an unknown version — keep the default, so existing extensions are
+    /// unaffected.
+    /// </summary>
+    private string ResolveFrontendRuntimeVersion()
+    {
+        var declared = extensionManager.Extensions
+            .OfType<IUIExtension>()
+            .Where(e => extensionManager.IsEnabled(e.Id))
+            .Select(e => e.GetUIManifest().FrontendRuntimeVersion)
+            .Where(FrontendRuntimeContract.IsSupported)
+            .OrderByDescending(v => v, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        return declared ?? FrontendRuntimeContract.DefaultVersion;
     }
 
     private string BuildAssetUrl(string extensionId, string path)

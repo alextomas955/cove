@@ -1,0 +1,17 @@
+{
+  "// note": "Emits transient .d.ts declarations for the workspace-local @cove/types source so the type-rollup step can inline them. Build-time only; output is not published or committed.",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": ".types-dts",
+    "rootDir": "../types",
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "es2022",
+    "strict": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["../types/*.ts"],
+  "exclude": ["../types/dist", "../types/node_modules"]
+}

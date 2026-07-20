@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": { "@cove/types": ["./.types-dts/index.d.ts"] }
+  }
+}

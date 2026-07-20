@@ -4,29 +4,42 @@
   "description": "SDK for building Cove UI extensions. Provides types, hooks, and helpers for the Cove extension system.",
   "type": "module",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "dist/extension-sdk.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/extension-sdk.d.ts",
       "import": "./dist/index.js"
+    },
+    "./host": {
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
     }
   },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/bundle-runtime.mjs && tsc -p tsconfig.types-dts.json && api-extractor run --local",
+    "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@cove/types": "file:../types"
+    "openapi-fetch": "0.17.0"
   },
   "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
     "react": ">=18.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "@types/react": "^19.0.0"
+    "@cove/types": "file:../types",
+    "@microsoft/api-extractor": "~7.52.0",
+    "@tanstack/react-query": "^5.80.0",
+    "@types/react": "^19.0.0",
+    "esbuild": "^0.28.1",
+    "jsdom": "^25.0.0",
+    "typescript": "~5.8.0",
+    "vitest": "^4.1.0"
   },
   "license": "AGPL-3.0",
   "repository": {

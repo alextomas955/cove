@@ -12,9 +12,11 @@
  *   or would load from JS bundles (for external extensions)
  */
 import { useEffect, useState, createContext, useContext, useCallback, useMemo, type ReactNode, type FC } from "react";
+import { configureCoveClientAuth } from "@cove/extension-sdk/host";
 import { useRouteRegistry } from "../router/RouteRegistry";
 import { useAppConfig } from "../state/AppConfigContext";
 import { extensions } from "../api/client";
+import { authStore } from "../auth/authStore";
 import { useAuth } from "../auth/AuthContext";
 import { supportsServerBackedUiPreferences, updateAuthenticatedUserUiPreferences } from "../utils/userUiPreferences";
 import { Music, Puzzle, type LucideIcon } from "lucide-react";
@@ -33,6 +35,22 @@ import type {
   ExtensionListSortContribution,
   UserThemePreferences,
 } from "../api/types";
+
+// ============================================================================
+// Bind the shared extension SDK client to the live host session. Extension API calls made through
+// the SDK's typed client inherit the host's bearer / share-token credentials and its single
+// refresh-and-retry, rather than the same-origin default. Only this narrow accessor crosses the
+// runtime boundary — the host auth store itself is never exposed to extensions.
+// ============================================================================
+configureCoveClientAuth({
+  getAccessToken: () => authStore.getAccessToken(),
+  getShareToken: () => authStore.getShareToken(),
+  getSharePassword: () => authStore.getSharePassword(),
+  getRefreshToken: () => authStore.getRefreshToken(),
+  // Reuse the host client's refresh-and-retry, resolved lazily so the shared auth wiring adds no
+  // load-time coupling to the client module.
+  tryRefresh: () => import("../api/client").then((client) => client.tryRefresh()),
+});
 
 // ============================================================================
 // Icon resolver — maps manifest icon names to Lucide components

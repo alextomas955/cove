@@ -1,11 +1,18 @@
 import * as fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
-import { extensionRuntimeModules, extensionRuntimeVersion } from "./extension-runtime-contract.ts";
+import {
+  extensionRuntimeVersionDefinitions,
+  type ExtensionRuntimeModule,
+  type ExtensionRuntimeVersionDefinition,
+} from "./extension-runtime-contract.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const runtimeDir = path.resolve(__dirname, `../src/generated/extensions/runtime/${extensionRuntimeVersion}`);
 const identifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function runtimeDirFor(version: string) {
+  return path.resolve(__dirname, `../src/generated/extensions/runtime/${version}`);
+}
 
 function buildRuntimeSource(source: string, exportNames: string[], hasDefault: boolean) {
   const lines = [
@@ -53,40 +60,74 @@ function buildTypeSource(source: string, hasDefault: boolean) {
   return lines.join("\n");
 }
 
-async function generateRuntimeModule(definition: (typeof extensionRuntimeModules)[number]) {
-  const moduleNamespace = await import(definition.source);
-  const exportNames = Object.keys(moduleNamespace)
-    .filter((name) => name !== "default" && name !== "__esModule" && identifierPattern.test(name))
-    .sort();
-  const hasDefault = Object.prototype.hasOwnProperty.call(moduleNamespace, "default");
+/**
+ * Enumerate the named exports of a built ESM barrel by reading its `export { ... } from` blocks.
+ * Used for modules whose runtime cannot be loaded by the Node/tsx module loader (the SDK re-exports
+ * host-key constants from a types-only package with no runtime entry), but whose value surface is
+ * fully described by the barrel it ships.
+ */
+async function readStaticExportNames(specifier: string): Promise<string[]> {
+  const barrelPath = fileURLToPath(import.meta.resolve(specifier));
+  const source = await fs.readFile(barrelPath, "utf8");
+  const names = new Set<string>();
+  const exportBlock = /export\s*\{([^}]*)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = exportBlock.exec(source)) !== null) {
+    for (const rawEntry of match[1].split(",")) {
+      const entry = rawEntry.trim();
+      if (!entry) continue;
+      // `X as Y` re-exports the module under the alias Y.
+      const exported = (entry.includes(" as ") ? entry.split(/\s+as\s+/).pop()! : entry).trim();
+      if (exported !== "default" && identifierPattern.test(exported)) {
+        names.add(exported);
+      }
+    }
+  }
+  return [...names].sort();
+}
+
+async function generateRuntimeModule(runtimeDir: string, definition: ExtensionRuntimeModule) {
+  let exportNames: string[];
+  let hasDefault: boolean;
+
+  if (definition.staticExportsFrom) {
+    exportNames = await readStaticExportNames(definition.staticExportsFrom);
+    hasDefault = false;
+  } else {
+    const moduleNamespace = await import(definition.source as string);
+    exportNames = Object.keys(moduleNamespace)
+      .filter((name) => name !== "default" && name !== "__esModule" && identifierPattern.test(name))
+      .sort();
+    hasDefault = Object.prototype.hasOwnProperty.call(moduleNamespace, "default");
+  }
 
   await fs.writeFile(
     path.join(runtimeDir, definition.sourceFileName),
-    buildRuntimeSource(definition.source, exportNames, hasDefault),
+    buildRuntimeSource(definition.source as string, exportNames, hasDefault),
     "utf8"
   );
   await fs.writeFile(
     path.join(runtimeDir, definition.sourceFileName.replace(/\.ts$/, ".d.ts")),
-    buildTypeSource(definition.source, hasDefault),
+    buildTypeSource(definition.source as string, hasDefault),
     "utf8"
   );
 }
 
-async function generateContractModule() {
+async function generateContractModule(runtimeDir: string, def: ExtensionRuntimeVersionDefinition) {
   const contractPath = path.join(runtimeDir, "contract.ts");
   const typePath = path.join(runtimeDir, "contract.d.ts");
-  const moduleSpecifiers = extensionRuntimeModules.map((definition) => definition.specifier);
+  const moduleSpecifiers = def.modules.map((definition) => definition.specifier);
 
   const contractSource = [
     "// AUTO-GENERATED FILE. DO NOT EDIT.",
-    `export const extensionRuntimeVersion = ${JSON.stringify(extensionRuntimeVersion)};`,
+    `export const extensionRuntimeVersion = ${JSON.stringify(def.version)};`,
     `export const sharedModuleSpecifiers = ${JSON.stringify(moduleSpecifiers, null, 2)};`,
     "",
   ].join("\n");
 
   const typeSource = [
     "// AUTO-GENERATED FILE. DO NOT EDIT.",
-    `export declare const extensionRuntimeVersion: ${JSON.stringify(extensionRuntimeVersion)};`,
+    `export declare const extensionRuntimeVersion: ${JSON.stringify(def.version)};`,
     "export declare const sharedModuleSpecifiers: readonly string[];",
     "",
   ].join("\n");
@@ -95,13 +136,14 @@ async function generateContractModule() {
   await fs.writeFile(typePath, typeSource, "utf8");
 }
 
-async function main() {
+async function generateVersion(def: ExtensionRuntimeVersionDefinition) {
+  const runtimeDir = runtimeDirFor(def.version);
   await fs.rm(runtimeDir, { recursive: true, force: true });
   await fs.mkdir(runtimeDir, { recursive: true });
 
-  for (const definition of extensionRuntimeModules) {
+  for (const definition of def.modules) {
     if (definition.source) {
-      await generateRuntimeModule(definition);
+      await generateRuntimeModule(runtimeDir, definition);
     }
   }
 
@@ -120,8 +162,14 @@ async function main() {
   await fs.writeFile(path.join(runtimeDir, "components.ts"), componentsBarrel, "utf8");
   await fs.writeFile(path.join(runtimeDir, "components.d.ts"), componentsType, "utf8");
 
-  await generateContractModule();
+  await generateContractModule(runtimeDir, def);
   console.log(`Generated Cove extension runtime modules in ${runtimeDir}`);
+}
+
+async function main() {
+  for (const def of extensionRuntimeVersionDefinitions) {
+    await generateVersion(def);
+  }
 }
 
 main().catch((error) => {

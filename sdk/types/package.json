@@ -13,6 +13,7 @@
     "dist",
     "index.ts",
     "openapi.ts",
+    "contracts.g.ts",
     "client-only.ts"
   ],
   "scripts": {
