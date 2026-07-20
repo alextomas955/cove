@@ -21636,9 +21636,6 @@
         }
       },
       "BoolCriterion": {
-        "required": [
-          "value"
-        ],
         "type": "object",
         "properties": {
           "value": {
@@ -22765,7 +22762,6 @@
       "CustomFieldCriterion": {
         "required": [
           "key",
-          "modifier",
           "type",
           "value"
         ],
@@ -23023,7 +23019,6 @@
       },
       "DateCriterion": {
         "required": [
-          "modifier",
           "value"
         ],
         "type": "object",
@@ -24298,8 +24293,7 @@
           "extensionIds",
           "id",
           "kind",
-          "name",
-          "required"
+          "name"
         ],
         "type": "object",
         "properties": {
@@ -25540,11 +25534,6 @@
         }
       },
       "FindFilter": {
-        "required": [
-          "direction",
-          "page",
-          "perPage"
-        ],
         "type": "object",
         "properties": {
           "q": {
@@ -25587,7 +25576,6 @@
       },
       "FingerprintCriterion": {
         "required": [
-          "modifier",
           "type",
           "value"
         ],
@@ -28372,10 +28360,6 @@
         }
       },
       "IntCriterion": {
-        "required": [
-          "modifier",
-          "value"
-        ],
         "type": "object",
         "properties": {
           "value": {
@@ -29375,7 +29359,6 @@
       },
       "MultiIdCriterion": {
         "required": [
-          "modifier",
           "value"
         ],
         "type": "object",
@@ -31449,10 +31432,7 @@
       },
       "RegistrySearchResult": {
         "required": [
-          "items",
-          "page",
-          "pageSize",
-          "totalCount"
+          "items"
         ],
         "type": "object",
         "properties": {
@@ -33681,7 +33661,6 @@
       },
       "StringCriterion": {
         "required": [
-          "modifier",
           "value"
         ],
         "type": "object",
@@ -34700,8 +34679,6 @@
       "TagDurationClause": {
         "required": [
           "contextMode",
-          "modifier",
-          "tagId",
           "unit"
         ],
         "type": "object",
@@ -34736,8 +34713,6 @@
         "required": [
           "clauses",
           "contextMode",
-          "modifier",
-          "tagId",
           "unit"
         ],
         "type": "object",
@@ -34776,13 +34751,7 @@
       },
       "TagFilter": {
         "required": [
-          "customFieldCriteria",
-          "galleryCountIncludesChildren",
-          "groupCountIncludesChildren",
-          "imageCountIncludesChildren",
-          "performerCountIncludesChildren",
-          "studioCountIncludesChildren",
-          "videoCountIncludesChildren"
+          "customFieldCriteria"
         ],
         "type": "object",
         "properties": {
@@ -36166,7 +36135,6 @@
       },
       "TimestampCriterion": {
         "required": [
-          "modifier",
           "value"
         ],
         "type": "object",
