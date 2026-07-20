@@ -1,29 +1,60 @@
+using System.Text.Json.Serialization;
+
 namespace Cove.Core.Events;
 
+// SignalR wire contract — pinned wire names are public API; do not rename.
 public enum EventType
 {
     // Entity lifecycle
-    VideoCreated, VideoUpdated, VideoDeleted,
-    PerformerCreated, PerformerUpdated, PerformerDeleted,
-    TagCreated, TagUpdated, TagDeleted, TagMerged,
-    StudioCreated, StudioUpdated, StudioDeleted,
-    GalleryCreated, GalleryUpdated, GalleryDeleted,
-    ImageCreated, ImageUpdated, ImageDeleted,
-    AudioCreated, AudioUpdated, AudioDeleted,
-    TextCreated, TextUpdated, TextDeleted,
-    GroupCreated, GroupUpdated, GroupDeleted,
+    [JsonStringEnumMemberName("videoCreated")] VideoCreated,
+    [JsonStringEnumMemberName("videoUpdated")] VideoUpdated,
+    [JsonStringEnumMemberName("videoDeleted")] VideoDeleted,
+    [JsonStringEnumMemberName("performerCreated")] PerformerCreated,
+    [JsonStringEnumMemberName("performerUpdated")] PerformerUpdated,
+    [JsonStringEnumMemberName("performerDeleted")] PerformerDeleted,
+    [JsonStringEnumMemberName("tagCreated")] TagCreated,
+    [JsonStringEnumMemberName("tagUpdated")] TagUpdated,
+    [JsonStringEnumMemberName("tagDeleted")] TagDeleted,
+    [JsonStringEnumMemberName("tagMerged")] TagMerged,
+    [JsonStringEnumMemberName("studioCreated")] StudioCreated,
+    [JsonStringEnumMemberName("studioUpdated")] StudioUpdated,
+    [JsonStringEnumMemberName("studioDeleted")] StudioDeleted,
+    [JsonStringEnumMemberName("galleryCreated")] GalleryCreated,
+    [JsonStringEnumMemberName("galleryUpdated")] GalleryUpdated,
+    [JsonStringEnumMemberName("galleryDeleted")] GalleryDeleted,
+    [JsonStringEnumMemberName("imageCreated")] ImageCreated,
+    [JsonStringEnumMemberName("imageUpdated")] ImageUpdated,
+    [JsonStringEnumMemberName("imageDeleted")] ImageDeleted,
+    [JsonStringEnumMemberName("audioCreated")] AudioCreated,
+    [JsonStringEnumMemberName("audioUpdated")] AudioUpdated,
+    [JsonStringEnumMemberName("audioDeleted")] AudioDeleted,
+    [JsonStringEnumMemberName("textCreated")] TextCreated,
+    [JsonStringEnumMemberName("textUpdated")] TextUpdated,
+    [JsonStringEnumMemberName("textDeleted")] TextDeleted,
+    [JsonStringEnumMemberName("groupCreated")] GroupCreated,
+    [JsonStringEnumMemberName("groupUpdated")] GroupUpdated,
+    [JsonStringEnumMemberName("groupDeleted")] GroupDeleted,
 
     // User set or cleared a rating on an entity. The published EntityEvent carries a
     // Dictionary<string,object?> { userId, aspect, value } as its Entity payload (value null = cleared).
-    RatingCreated, RatingUpdated, RatingDeleted,
+    [JsonStringEnumMemberName("ratingCreated")] RatingCreated,
+    [JsonStringEnumMemberName("ratingUpdated")] RatingUpdated,
+    [JsonStringEnumMemberName("ratingDeleted")] RatingDeleted,
 
     // Jobs
-    ScanStarted, ScanProgress, ScanCompleted,
-    GenerateStarted, GenerateProgress, GenerateCompleted,
-    CleanStarted, CleanProgress, CleanCompleted,
+    [JsonStringEnumMemberName("scanStarted")] ScanStarted,
+    [JsonStringEnumMemberName("scanProgress")] ScanProgress,
+    [JsonStringEnumMemberName("scanCompleted")] ScanCompleted,
+    [JsonStringEnumMemberName("generateStarted")] GenerateStarted,
+    [JsonStringEnumMemberName("generateProgress")] GenerateProgress,
+    [JsonStringEnumMemberName("generateCompleted")] GenerateCompleted,
+    [JsonStringEnumMemberName("cleanStarted")] CleanStarted,
+    [JsonStringEnumMemberName("cleanProgress")] CleanProgress,
+    [JsonStringEnumMemberName("cleanCompleted")] CleanCompleted,
 
     // System
-    ServerStarted, ServerStopping
+    [JsonStringEnumMemberName("serverStarted")] ServerStarted,
+    [JsonStringEnumMemberName("serverStopping")] ServerStopping
 }
 
 public record CoveEvent(EventType Type, object? Data = null);

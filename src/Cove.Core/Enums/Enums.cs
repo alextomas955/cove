@@ -1,21 +1,28 @@
+using System.Text.Json.Serialization;
+
 namespace Cove.Core.Enums;
 
+// Wire names below are public API (external/consumer-visible values); pin them so a future
+// C# rename cannot change the serialized string.
 public enum GenderEnum
 {
-    Male,
-    Female,
-    TransgenderMale,
-    TransgenderFemale,
-    Intersex,
-    NonBinary
+    [JsonStringEnumMemberName("male")] Male,
+    [JsonStringEnumMemberName("female")] Female,
+    [JsonStringEnumMemberName("transgenderMale")] TransgenderMale,
+    [JsonStringEnumMemberName("transgenderFemale")] TransgenderFemale,
+    [JsonStringEnumMemberName("intersex")] Intersex,
+    [JsonStringEnumMemberName("nonBinary")] NonBinary
 }
 
 public enum CircumcisedEnum
 {
-    Cut,
-    Uncut
+    [JsonStringEnumMemberName("cut")] Cut,
+    [JsonStringEnumMemberName("uncut")] Uncut
 }
 
+// FilterMode persists as its integer value in saved_filters."Mode"; that stored integer is
+// independent of the camelCase string wire form. Members remain append-only so existing rows'
+// modes stay stable.
 public enum FilterMode
 {
     Videos,
