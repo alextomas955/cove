@@ -1801,7 +1801,12 @@ public record DownloaderBatchItemDto
     public List<VideoGroupInputDto>? GroupIds { get; init; }
 }
 
-public record DownloaderBatchStartIssueDto(string Kind, string Label, string Reason);
+public record DownloaderBatchIssueDto(string Kind, string Label, string Reason);
+
+public record DownloaderBatchStartResponseDto(
+    string? JobId,
+    int QueuedCount,
+    IReadOnlyList<DownloaderBatchIssueDto> Issues);
 
 public record DownloaderBatchFollowUpDto
 {
