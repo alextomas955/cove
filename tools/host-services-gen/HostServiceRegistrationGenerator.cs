@@ -33,7 +33,11 @@ public sealed class HostServiceRegistrationGenerator : IIncrementalGenerator
         var models = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 AttributeMetadataName,
-                predicate: static (node, _) => node is ClassDeclarationSyntax,
+                // The attribute targets AttributeTargets.Class, which C# also permits on records
+                // (a reference-type record is a class). A record's declaration node is
+                // RecordDeclarationSyntax, not ClassDeclarationSyntax, so both must be matched or a
+                // marked record would be dropped with neither a forwarding registration nor COVE0001.
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
                 transform: static (ctx, _) => Extract(ctx))
             .Collect();
 

@@ -121,6 +121,50 @@ public sealed class HostServiceRegistrationGeneratorTests
     }
 
     [Fact]
+    public void ConformingRecord_EmitsForwardingRegistration()
+    {
+        // The attribute targets AttributeTargets.Class, which also permits records; a marked record
+        // must forward exactly like a marked class rather than being silently dropped.
+        const string source = """
+            namespace Sample
+            {
+                public interface IRecordService { }
+
+                [Cove.Core.Contracts.ExposeToExtensions(typeof(IRecordService))]
+                public record RecordService : IRecordService { }
+            }
+            """;
+
+        var (generated, diagnostics) = Run(source);
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(
+            "services.AddTransient<Sample.IRecordService>(sp => sp.GetRequiredService<Sample.RecordService>());",
+            generated);
+    }
+
+    [Fact]
+    public void MarkedRecordThatDoesNotImplementInterface_ReportsCove0001Error()
+    {
+        const string source = """
+            namespace Sample
+            {
+                public interface IUnrelated { }
+
+                [Cove.Core.Contracts.ExposeToExtensions(typeof(IUnrelated))]
+                public record NotUnrelated { }
+            }
+            """;
+
+        var (generated, diagnostics) = Run(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("COVE0001", diagnostic.Id);
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.DoesNotContain("GetRequiredService<Sample.NotUnrelated>", generated);
+    }
+
+    [Fact]
     public void MultipleConformingTypes_EmitInFullyQualifiedOrdinalOrder()
     {
         // Declared Zeta-before-Alpha; output must be Alpha-before-Zeta (ordinal by concrete FQN).
