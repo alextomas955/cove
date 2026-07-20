@@ -12,9 +12,6 @@ namespace Cove.Api.Controllers;
 
 internal static class FrontendRuntimeContract
 {
-    /// <summary>The latest frontend runtime contract version the host serves.</summary>
-    public const string Version = "v2";
-
     /// <summary>The runtime version assumed for an extension that declares none (backward compatible).</summary>
     public const string DefaultVersion = "v1";
 
