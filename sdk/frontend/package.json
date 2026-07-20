@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/extension-sdk.d.ts",
       "import": "./dist/index.js"
+    },
+    "./host": {
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
     }
   },
   "sideEffects": false,
