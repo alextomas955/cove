@@ -17202,7 +17202,7 @@ export interface components {
             createGalleriesFromFolders: boolean;
             createImageClipsFromVideos: boolean;
             customFieldDefinitions: components["schemas"]["CustomFieldDefinition"][];
-            deleteGeneratedDefault?: boolean;
+            deleteGeneratedDefault: boolean;
             disabledPlugins: string[];
             downloaderPathOverrides: components["schemas"]["DownloaderPathOverride"][];
             enableFfmpegHwAccel?: boolean;
@@ -17227,9 +17227,9 @@ export interface components {
             liveTranscodeOutputArgs?: string;
             logLevel: string;
             /** Format: int32 */
-            maxConcurrentDownloads?: number;
+            maxConcurrentDownloads: number;
             /** Format: int32 */
-            maxParallelTasks?: number;
+            maxParallelTasks: number;
             /** Format: int32 */
             maxStreamingTranscodeSize: number;
             /** Format: int32 */
@@ -17240,7 +17240,7 @@ export interface components {
                 };
             };
             /** Format: int32 */
-            port?: number;
+            port: number;
             previewAudio: string;
             previewPreset: string;
             scraping: components["schemas"]["ScrapingConfig"];
@@ -17335,7 +17335,7 @@ export interface components {
             /** Format: int32 */
             displayOrder: number;
             entityTypes: string[];
-            filterable?: boolean;
+            filterable: boolean;
             /** Format: int32 */
             id: number;
             isMultiValue: boolean;
@@ -17784,7 +17784,7 @@ export interface components {
             name: string;
             nativeHint?: string;
             optional?: boolean;
-            required?: boolean;
+            required: boolean;
             settingsKey?: string;
             url?: string;
             versionRequirement?: string;
@@ -18686,9 +18686,9 @@ export interface components {
             autoApplyMaxPhashDistance?: number;
             /** Format: int32 */
             autoApplyMinFingerprintMatches?: number;
-            createPerformers?: boolean;
-            createStudios?: boolean;
-            createTags?: boolean;
+            createPerformers: boolean;
+            createStudios: boolean;
+            createTags: boolean;
         };
         IdentifyOptions: {
             createPerformers?: boolean;
@@ -18930,7 +18930,7 @@ export interface components {
             user: components["schemas"]["MeUser"];
         };
         MetadataBatchDefaultsConfig: {
-            createParentStudios?: boolean;
+            createParentStudios: boolean;
             excludeFields: string[];
             refreshAlreadyTagged: boolean;
         };
@@ -18938,7 +18938,7 @@ export interface components {
             apiKey: string;
             endpoint: string;
             /** Format: int32 */
-            maxRequestsPerMinute?: number;
+            maxRequestsPerMinute: number;
             name: string;
         };
         MetadataServerEndpoint: {
@@ -19816,9 +19816,9 @@ export interface components {
             scanGenerators?: boolean;
         };
         ScrapeApplyDefaultsConfig: {
-            createMissingPerformers?: boolean;
-            createMissingStudio?: boolean;
-            createMissingTags?: boolean;
+            createMissingPerformers: boolean;
+            createMissingStudio: boolean;
+            createMissingTags: boolean;
             hydratePerformers: boolean;
             markOrganized: boolean;
         };
@@ -19914,9 +19914,9 @@ export interface components {
             scraperPreferences: components["schemas"]["ScraperPreference"][];
         };
         SecurityConfig: {
-            allowAnonymousShareLinks?: boolean;
+            allowAnonymousShareLinks: boolean;
             enabled: boolean;
-            enforceDefaultDeny?: boolean;
+            enforceDefaultDeny: boolean;
             knownProxies?: string[];
             newPassword?: string;
             trustedHosts?: string[];
@@ -21032,10 +21032,10 @@ export interface components {
         };
         UiConfig: {
             abbreviateCounters: boolean;
-            alwaysResumeOnPlayback?: boolean;
+            alwaysResumeOnPlayback: boolean;
             autoplayOnListClick: boolean;
-            autostartVideo?: boolean;
-            autostartVideoOnPlaySelected?: boolean;
+            autostartVideo: boolean;
+            autostartVideoOnPlaySelected: boolean;
             continuePlaylistDefault: boolean;
             customCss?: string;
             customJs?: string;
@@ -21058,7 +21058,7 @@ export interface components {
             /** Format: int32 */
             maxLoopDuration: number;
             noBrowser: boolean;
-            notificationsEnabled?: boolean;
+            notificationsEnabled: boolean;
             /** Format: double */
             playerVideoStartMinDuration: number;
             /** Format: double */
@@ -21066,22 +21066,22 @@ export interface components {
             previewExcludeEnd: string;
             previewExcludeStart: string;
             /** Format: double */
-            previewSegmentDuration?: number;
+            previewSegmentDuration: number;
             /** Format: int32 */
-            previewSegments?: number;
+            previewSegments: number;
             ratingSystemOptions: components["schemas"]["RatingSystemOptions"];
-            showAbLoopControls?: boolean;
+            showAbLoopControls: boolean;
             showStudioAsText: boolean;
             /** Format: int32 */
-            slideshowDelay?: number;
+            slideshowDelay: number;
             soundOnPreview: boolean;
             title?: string;
             troubleshootingModeEnabled: boolean;
             videoObjectFit: string;
             /** Format: int32 */
-            wallPlayback?: number;
+            wallPlayback: number;
             wallPreviewType: string;
-            wallShowTitle?: boolean;
+            wallShowTitle: boolean;
         };
         UIDialogOverride: {
             componentName: string;

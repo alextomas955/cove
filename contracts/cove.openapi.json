@@ -22129,6 +22129,7 @@
           "createGalleriesFromFolders",
           "createImageClipsFromVideos",
           "customFieldDefinitions",
+          "deleteGeneratedDefault",
           "disabledPlugins",
           "downloaderPathOverrides",
           "excludeGalleryPatterns",
@@ -22142,8 +22143,11 @@
           "imageExtensions",
           "interface",
           "logLevel",
+          "maxConcurrentDownloads",
+          "maxParallelTasks",
           "maxStreamingTranscodeSize",
           "pluginConfigurations",
+          "port",
           "previewAudio",
           "previewPreset",
           "scraping",
@@ -22574,6 +22578,7 @@
         "required": [
           "displayOrder",
           "entityTypes",
+          "filterable",
           "id",
           "isMultiValue",
           "key",
@@ -23949,7 +23954,8 @@
           "extensionIds",
           "id",
           "kind",
-          "name"
+          "name",
+          "required"
         ],
         "type": "object",
         "properties": {
@@ -26873,6 +26879,11 @@
         }
       },
       "IdentifyDefaultsConfig": {
+        "required": [
+          "createPerformers",
+          "createStudios",
+          "createTags"
+        ],
         "type": "object",
         "properties": {
           "createTags": {
@@ -27793,6 +27804,7 @@
       },
       "MetadataBatchDefaultsConfig": {
         "required": [
+          "createParentStudios",
           "excludeFields",
           "refreshAlreadyTagged"
         ],
@@ -27816,6 +27828,7 @@
         "required": [
           "apiKey",
           "endpoint",
+          "maxRequestsPerMinute",
           "name"
         ],
         "type": "object",
@@ -30815,6 +30828,9 @@
       },
       "ScrapeApplyDefaultsConfig": {
         "required": [
+          "createMissingPerformers",
+          "createMissingStudio",
+          "createMissingTags",
           "hydratePerformers",
           "markOrganized"
         ],
@@ -31153,7 +31169,9 @@
       },
       "SecurityConfig": {
         "required": [
-          "enabled"
+          "allowAnonymousShareLinks",
+          "enabled",
+          "enforceDefaultDeny"
         ],
         "type": "object",
         "properties": {
@@ -34717,7 +34735,10 @@
       "UiConfig": {
         "required": [
           "abbreviateCounters",
+          "alwaysResumeOnPlayback",
           "autoplayOnListClick",
+          "autostartVideo",
+          "autostartVideoOnPlaySelected",
           "continuePlaylistDefault",
           "deleteFileDefault",
           "enableCSSCustomization",
@@ -34730,16 +34751,23 @@
           "keybindingOverrides",
           "maxLoopDuration",
           "noBrowser",
+          "notificationsEnabled",
           "playerVideoStartMinDuration",
           "playerVideoStartPercent",
           "previewExcludeEnd",
           "previewExcludeStart",
+          "previewSegmentDuration",
+          "previewSegments",
           "ratingSystemOptions",
+          "showAbLoopControls",
           "showStudioAsText",
+          "slideshowDelay",
           "soundOnPreview",
           "troubleshootingModeEnabled",
           "videoObjectFit",
-          "wallPreviewType"
+          "wallPlayback",
+          "wallPreviewType",
+          "wallShowTitle"
         ],
         "type": "object",
         "properties": {
