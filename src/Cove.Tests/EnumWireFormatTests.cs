@@ -10,7 +10,7 @@ using Cove.Core.Interfaces;
 namespace Cove.Tests;
 
 /// <summary>
-/// Locks the SER-01 wire contract: every Cove.Core enum serializes through the canonical
+/// Locks the enum wire contract: every Cove.Core enum serializes through the canonical
 /// <see cref="CoveJson.Default"/> as a camelCase named string, reads leniently from both the
 /// string and the underlying integer, and — critically — an enum on an UNREGISTERED type
 /// (reflection-fallback path) still emits a camelCase string, proving the global converter,
@@ -18,7 +18,7 @@ namespace Cove.Tests;
 /// </summary>
 public class EnumWireFormatTests
 {
-    // The full SER-01 surface: all 27 Cove.Core enums (03-RESEARCH.md §4).
+    // The full enum surface: all 27 Cove.Core enums.
     public static readonly Type[] AllCoreEnums =
     [
         typeof(GenderEnum), typeof(CircumcisedEnum), typeof(FilterMode), typeof(SortDirection),
