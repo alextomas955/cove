@@ -116,7 +116,7 @@ import { authStore } from "../auth/authStore";
 
 let refreshInFlight: Promise<boolean> | null = null;
 
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     const refresh = authStore.getRefreshToken();
