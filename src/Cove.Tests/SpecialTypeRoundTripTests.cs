@@ -5,11 +5,11 @@ using Cove.Core.Common;
 namespace Cove.Tests;
 
 /// <summary>
-/// Locks the SER-04 special-type wire policy through the canonical <see cref="CoveJson.Default"/>:
+/// Locks the special-type wire policy through the canonical <see cref="CoveJson.Default"/>:
 /// DateTime/DateTimeOffset are ISO-8601, Guid is the 36-char lowercase "D" form, and byte[] is
-/// base64 — all System.Text.Json defaults, no custom converter. Also documents that no boundary
-/// DTO field is <c>decimal</c>, so the <c>JsonNumberHandling.WriteAsString</c> opt-in list is
-/// empty this phase (verified: zero <c>decimal</c> properties in src/Cove.Core/DTOs).
+/// base64 — all System.Text.Json defaults, no custom converter. Also asserts that no boundary
+/// DTO field is <c>decimal</c>, so the <c>JsonNumberHandling.WriteAsString</c> opt-in list stays
+/// empty (no <c>decimal</c> properties exist in the Cove.Core.DTOs surface).
 /// </summary>
 public class SpecialTypeRoundTripTests
 {
@@ -79,10 +79,16 @@ public class SpecialTypeRoundTripTests
     [Fact]
     public void NoDecimalWireFields_SoWriteAsStringOptInListIsEmpty()
     {
-        // Documented invariant (03-RESEARCH.md §6): grep decimal in src/Cove.Core/DTOs → 0.
-        // No boundary DTO carries a decimal, so no field opts into JsonNumberHandling.WriteAsString
-        // this phase. Precision-sensitive numerics that cross the wire are double / float[], which
-        // are JSON numbers by default. This test is an executable note of that decision.
-        Assert.True(true);
+        // No boundary DTO carries a decimal, so no field opts into JsonNumberHandling.WriteAsString.
+        // Precision-sensitive numerics that cross the wire are double / float[], which are JSON
+        // numbers by default. Reflect over the DTO surface and fail if a decimal is ever introduced.
+        var decimalProps = typeof(CoveJson).Assembly.GetTypes()
+            .Where(t => t.Namespace == "Cove.Core.DTOs")
+            .SelectMany(t => t.GetProperties())
+            .Where(p => p.PropertyType == typeof(decimal) || p.PropertyType == typeof(decimal?))
+            .Select(p => $"{p.DeclaringType!.Name}.{p.Name}")
+            .ToList();
+
+        Assert.Empty(decimalProps);
     }
 }
