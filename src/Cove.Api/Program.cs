@@ -491,6 +491,9 @@ try
         // Drop the null branch that the framework adds around nullable reference members after schema
         // transformers run, keeping the "omit, don't null" convention consistent for those members.
         options.AddDocumentTransformer<Cove.Api.OpenApi.ContractDocumentTransformer>();
+        // Request-only shapes are authored by the caller, who may omit fields the server defaults, so
+        // relax their required set once the request/response usage of every schema is known.
+        options.AddDocumentTransformer<Cove.Api.OpenApi.RequestSchemaRelaxationTransformer>();
     });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();

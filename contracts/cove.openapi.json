@@ -20479,9 +20479,6 @@
   "components": {
     "schemas": {
       "AddSubGroup": {
-        "required": [
-          "subGroupId"
-        ],
         "type": "object",
         "properties": {
           "subGroupId": {
@@ -20498,9 +20495,6 @@
         }
       },
       "AdminPasswordRequest": {
-        "required": [
-          "newPassword"
-        ],
         "type": "object",
         "properties": {
           "newPassword": {
@@ -20945,9 +20939,6 @@
         }
       },
       "AudioCreate": {
-        "required": [
-          "organized"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -21056,9 +21047,6 @@
         }
       },
       "AudioFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "ratingCriterion": {
@@ -21417,9 +21405,6 @@
         }
       },
       "BatchDelete": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21460,10 +21445,6 @@
         }
       },
       "BookmarkBatchRequest": {
-        "required": [
-          "hostIds",
-          "hostType"
-        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -21502,11 +21483,6 @@
         }
       },
       "BookmarkToggle": {
-        "required": [
-          "hostId",
-          "hostType",
-          "saved"
-        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -21530,10 +21506,6 @@
         }
       },
       "BootstrapOwnerRequest": {
-        "required": [
-          "password",
-          "username"
-        ],
         "type": "object",
         "properties": {
           "username": {
@@ -21545,9 +21517,6 @@
         }
       },
       "BulkAudioUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21602,9 +21571,6 @@
         }
       },
       "BulkGalleryUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21666,9 +21632,6 @@
         }
       },
       "BulkGroupUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21714,9 +21677,6 @@
         }
       },
       "BulkImageUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21788,9 +21748,6 @@
         }
       },
       "BulkPerformerUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21826,9 +21783,6 @@
         }
       },
       "BulkStudioUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21870,9 +21824,6 @@
         }
       },
       "BulkTagUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21939,9 +21890,6 @@
         }
       },
       "BulkTextDocumentUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -22004,9 +21952,6 @@
         "type": "string"
       },
       "BulkVideoUpdate": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -22111,10 +22056,6 @@
         }
       },
       "ChangePasswordRequest": {
-        "required": [
-          "currentPassword",
-          "newPassword"
-        ],
         "type": "object",
         "properties": {
           "currentPassword": {
@@ -22126,9 +22067,6 @@
         }
       },
       "CleanOptions": {
-        "required": [
-          "dryRun"
-        ],
         "type": "object",
         "properties": {
           "paths": {
@@ -22412,9 +22350,6 @@
         }
       },
       "CreateApiTokenRequest": {
-        "required": [
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -22433,14 +22368,6 @@
         }
       },
       "CreateContentRuleRequest": {
-        "required": [
-          "appliesTo",
-          "effect",
-          "entityKind",
-          "roleId",
-          "scopeKind",
-          "scopeValue"
-        ],
         "type": "object",
         "properties": {
           "roleId": {
@@ -22465,13 +22392,6 @@
         }
       },
       "CreateEntityOverrideRequest": {
-        "required": [
-          "appliesTo",
-          "effect",
-          "entityId",
-          "entityKind",
-          "roleId"
-        ],
         "type": "object",
         "properties": {
           "roleId": {
@@ -22513,10 +22433,6 @@
         }
       },
       "CreateRoleRequest": {
-        "required": [
-          "name",
-          "permissions"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -22534,11 +22450,6 @@
         }
       },
       "CreateScrapeAttempt": {
-        "required": [
-          "entityType",
-          "inputKind",
-          "scraperId"
-        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -22566,10 +22477,6 @@
         }
       },
       "CreateShareLinkRequest": {
-        "required": [
-          "entityIds",
-          "entityKind"
-        ],
         "type": "object",
         "properties": {
           "entityKind": {
@@ -22591,9 +22498,6 @@
         }
       },
       "CreateUserRequest": {
-        "required": [
-          "username"
-        ],
         "type": "object",
         "properties": {
           "username": {
@@ -22624,11 +22528,6 @@
         "type": "string"
       },
       "CustomFieldCriterion": {
-        "required": [
-          "key",
-          "type",
-          "value"
-        ],
         "type": "object",
         "properties": {
           "key": {
@@ -22709,14 +22608,6 @@
         }
       },
       "CustomFieldDefinitionCreate": {
-        "required": [
-          "entityTypes",
-          "isMultiValue",
-          "label",
-          "options",
-          "sortable",
-          "type"
-        ],
         "type": "object",
         "properties": {
           "key": {
@@ -22756,15 +22647,6 @@
         }
       },
       "CustomFieldDefinitionSync": {
-        "required": [
-          "entityTypes",
-          "isMultiValue",
-          "key",
-          "label",
-          "options",
-          "sortable",
-          "type"
-        ],
         "type": "object",
         "properties": {
           "id": {
@@ -22879,9 +22761,6 @@
         }
       },
       "DateCriterion": {
-        "required": [
-          "value"
-        ],
         "type": "object",
         "properties": {
           "value": {
@@ -22896,10 +22775,6 @@
         }
       },
       "DeleteFiles": {
-        "required": [
-          "deleteFromDisk",
-          "fileIds"
-        ],
         "type": "object",
         "properties": {
           "fileIds": {
@@ -23058,16 +22933,6 @@
         }
       },
       "DetectionCreate": {
-        "required": [
-          "class",
-          "frameHeight",
-          "frameWidth",
-          "h",
-          "score",
-          "w",
-          "x",
-          "y"
-        ],
         "type": "object",
         "properties": {
           "observedAtSec": {
@@ -23138,17 +23003,6 @@
         "type": "string"
       },
       "DetectionUpdate": {
-        "required": [
-          "class",
-          "frameHeight",
-          "frameWidth",
-          "h",
-          "score",
-          "sourceKey",
-          "w",
-          "x",
-          "y"
-        ],
         "type": "object",
         "properties": {
           "observedAtSec": {
@@ -23227,15 +23081,6 @@
         }
       },
       "DownloaderBatchFollowUp": {
-        "required": [
-          "allowDuplicateDownloads",
-          "autoApplyMetadata",
-          "createMissingPerformers",
-          "createMissingStudio",
-          "createMissingTags",
-          "markOrganized",
-          "scrapeVideos"
-        ],
         "type": "object",
         "properties": {
           "scrapeVideos": {
@@ -23288,16 +23133,6 @@
         }
       },
       "DownloaderBatchItem": {
-        "required": [
-          "autoApplyMetadata",
-          "createEntityIfMissing",
-          "createMissingPerformers",
-          "createMissingStudio",
-          "createMissingTags",
-          "entity",
-          "markOrganized",
-          "url"
-        ],
         "type": "object",
         "properties": {
           "downloaderId": {
@@ -23359,10 +23194,6 @@
         }
       },
       "DownloaderBatchStartRequest": {
-        "required": [
-          "followUp",
-          "items"
-        ],
         "type": "object",
         "properties": {
           "items": {
@@ -23471,9 +23302,6 @@
         }
       },
       "DownloaderMatchRequest": {
-        "required": [
-          "url"
-        ],
         "type": "object",
         "properties": {
           "url": {
@@ -23500,10 +23328,6 @@
         }
       },
       "DownloaderPreflightRequest": {
-        "required": [
-          "entity",
-          "url"
-        ],
         "type": "object",
         "properties": {
           "url": {
@@ -23551,14 +23375,6 @@
         }
       },
       "DownloaderStartRequest": {
-        "required": [
-          "allowDuplicateDownload",
-          "autoApplyMetadata",
-          "downloaderId",
-          "entity",
-          "markOrganized",
-          "url"
-        ],
         "type": "object",
         "properties": {
           "downloaderId": {
@@ -23862,10 +23678,6 @@
         }
       },
       "EngagementInteractionWrite": {
-        "required": [
-          "hostType",
-          "kind"
-        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -23940,10 +23752,6 @@
         }
       },
       "EntityEngagementBatchRequest": {
-        "required": [
-          "hostIds",
-          "hostType"
-        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -23959,9 +23767,6 @@
         }
       },
       "EntityFavorite": {
-        "required": [
-          "isFavorite"
-        ],
         "type": "object",
         "properties": {
           "isFavorite": {
@@ -24513,9 +24318,6 @@
         }
       },
       "FaceBatchDelete": {
-        "required": [
-          "faceIds"
-        ],
         "type": "object",
         "properties": {
           "faceIds": {
@@ -24544,9 +24346,6 @@
         }
       },
       "FaceBatchLinkTopSuggestion": {
-        "required": [
-          "faceIds"
-        ],
         "type": "object",
         "properties": {
           "faceIds": {
@@ -24616,9 +24415,6 @@
         }
       },
       "FaceCreate": {
-        "required": [
-          "ignored"
-        ],
         "type": "object",
         "properties": {
           "label": {
@@ -24637,9 +24433,6 @@
         }
       },
       "FaceCreatePerformer": {
-        "required": [
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -24740,9 +24533,6 @@
         }
       },
       "FaceIgnore": {
-        "required": [
-          "ignored"
-        ],
         "type": "object",
         "properties": {
           "ignored": {
@@ -24764,9 +24554,6 @@
         }
       },
       "FaceMerge": {
-        "required": [
-          "targetFaceId"
-        ],
         "type": "object",
         "properties": {
           "targetFaceId": {
@@ -24915,10 +24702,6 @@
         }
       },
       "FaceSuggestionDecision": {
-        "required": [
-          "decision",
-          "performerId"
-        ],
         "type": "object",
         "properties": {
           "performerId": {
@@ -25011,9 +24794,6 @@
         }
       },
       "FaceUpdate": {
-        "required": [
-          "ignored"
-        ],
         "type": "object",
         "properties": {
           "label": {
@@ -25101,9 +24881,6 @@
         }
       },
       "FileBackedCreate": {
-        "required": [
-          "filePath"
-        ],
         "type": "object",
         "properties": {
           "filePath": {
@@ -25112,10 +24889,6 @@
         }
       },
       "FileSetFingerprints": {
-        "required": [
-          "fileId",
-          "fingerprints"
-        ],
         "type": "object",
         "properties": {
           "fileId": {
@@ -25343,10 +25116,6 @@
         }
       },
       "FingerprintCriterion": {
-        "required": [
-          "type",
-          "value"
-        ],
         "type": "object",
         "properties": {
           "type": {
@@ -25361,10 +25130,6 @@
         }
       },
       "FingerprintEntry": {
-        "required": [
-          "type",
-          "value"
-        ],
         "type": "object",
         "properties": {
           "type": {
@@ -25493,9 +25258,6 @@
         }
       },
       "GalleryAddImages": {
-        "required": [
-          "imageIds"
-        ],
         "type": "object",
         "properties": {
           "imageIds": {
@@ -25542,10 +25304,6 @@
         }
       },
       "GalleryChapterCreate": {
-        "required": [
-          "imageIndex",
-          "title"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -25570,9 +25328,6 @@
         }
       },
       "GalleryCreate": {
-        "required": [
-          "organized"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -25666,9 +25421,6 @@
         }
       },
       "GalleryFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -25901,9 +25653,6 @@
         }
       },
       "GalleryRemoveImages": {
-        "required": [
-          "imageIds"
-        ],
         "type": "object",
         "properties": {
           "imageIds": {
@@ -25916,9 +25665,6 @@
         }
       },
       "GallerySetCover": {
-        "required": [
-          "imageId"
-        ],
         "type": "object",
         "properties": {
           "imageId": {
@@ -26007,21 +25753,6 @@
         }
       },
       "GenerateOptions": {
-        "required": [
-          "audioPhashes",
-          "galleryThumbnails",
-          "imagePhashes",
-          "imageThumbnails",
-          "md5",
-          "overwrite",
-          "phashes",
-          "previews",
-          "segmentPreviews",
-          "segmentThumbnails",
-          "segments",
-          "sprites",
-          "textPhashes"
-        ],
         "type": "object",
         "properties": {
           "thumbnails": {
@@ -26284,9 +26015,6 @@
         }
       },
       "GroupCreate": {
-        "required": [
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -26357,9 +26085,6 @@
         }
       },
       "GroupFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -26746,10 +26471,6 @@
         }
       },
       "GroupItemCreate": {
-        "required": [
-          "kind",
-          "orderIndex"
-        ],
         "type": "object",
         "properties": {
           "orderIndex": {
@@ -26814,9 +26535,6 @@
         "type": "string"
       },
       "GroupItemsFromSpans": {
-        "required": [
-          "spans"
-        ],
         "type": "object",
         "properties": {
           "spans": {
@@ -26862,10 +26580,6 @@
         }
       },
       "GroupItemsRemoveHosts": {
-        "required": [
-          "hostIds",
-          "kind"
-        ],
         "type": "object",
         "properties": {
           "kind": {
@@ -26881,9 +26595,6 @@
         }
       },
       "GroupItemsReorder": {
-        "required": [
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -26901,10 +26612,6 @@
         }
       },
       "GroupItemUpdate": {
-        "required": [
-          "kind",
-          "orderIndex"
-        ],
         "type": "object",
         "properties": {
           "orderIndex": {
@@ -27031,9 +26738,6 @@
         }
       },
       "GroupQueryUpdate": {
-        "required": [
-          "querySourceKey"
-        ],
         "type": "object",
         "properties": {
           "querySourceKey": {
@@ -27166,10 +26870,6 @@
         }
       },
       "IdentifyOptions": {
-        "required": [
-          "markOrganized",
-          "skipMultipleMatches"
-        ],
         "type": "object",
         "properties": {
           "sources": {
@@ -27350,9 +27050,6 @@
         }
       },
       "ImageCreate": {
-        "required": [
-          "organized"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -27459,9 +27156,6 @@
         }
       },
       "ImageFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -27775,10 +27469,6 @@
         }
       },
       "ImportOptions": {
-        "required": [
-          "duplicateHandling",
-          "filePath"
-        ],
         "type": "object",
         "properties": {
           "filePath": {
@@ -27790,9 +27480,6 @@
         }
       },
       "ImportRequest": {
-        "required": [
-          "stashDbPath"
-        ],
         "type": "object",
         "properties": {
           "stashDbPath": {
@@ -27814,10 +27501,6 @@
         }
       },
       "InstallExtensionFromUrlRequest": {
-        "required": [
-          "trustUnverified",
-          "url"
-        ],
         "type": "object",
         "properties": {
           "url": {
@@ -27901,10 +27584,6 @@
         }
       },
       "InviteRedeemRequest": {
-        "required": [
-          "password",
-          "token"
-        ],
         "type": "object",
         "properties": {
           "token": {
@@ -28045,10 +27724,6 @@
         }
       },
       "LoginRequest": {
-        "required": [
-          "password",
-          "username"
-        ],
         "type": "object",
         "properties": {
           "username": {
@@ -28129,9 +27804,6 @@
         }
       },
       "MetadataServerEndpoint": {
-        "required": [
-          "endpoint"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28163,10 +27835,6 @@
         }
       },
       "MetadataServerFindByIdsRequest": {
-        "required": [
-          "endpoint",
-          "ids"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28200,11 +27868,6 @@
         }
       },
       "MetadataServerPerformerBatchTagRequest": {
-        "required": [
-          "endpoint",
-          "refreshAlreadyTagged",
-          "selectAll"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28239,10 +27902,6 @@
         }
       },
       "MetadataServerPerformerImportRequest": {
-        "required": [
-          "endpoint",
-          "performerId"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28319,11 +27978,6 @@
         }
       },
       "MetadataServerStudioBatchTagRequest": {
-        "required": [
-          "endpoint",
-          "refreshAlreadyTagged",
-          "selectAll"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28361,10 +28015,6 @@
         }
       },
       "MetadataServerStudioImportRequest": {
-        "required": [
-          "endpoint",
-          "studioId"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28425,11 +28075,6 @@
         }
       },
       "MetadataServerTagBatchTagRequest": {
-        "required": [
-          "endpoint",
-          "refreshAlreadyTagged",
-          "selectAll"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28464,10 +28109,6 @@
         }
       },
       "MetadataServerTagImportRequest": {
-        "required": [
-          "endpoint",
-          "tagId"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28530,11 +28171,6 @@
         }
       },
       "MetadataServerVideoEntityOverride": {
-        "required": [
-          "action",
-          "name",
-          "remoteId"
-        ],
         "type": "object",
         "properties": {
           "remoteId": {
@@ -28553,16 +28189,6 @@
         }
       },
       "MetadataServerVideoImportRequest": {
-        "required": [
-          "endpoint",
-          "markOrganized",
-          "onlyExistingPerformers",
-          "onlyExistingStudio",
-          "onlyExistingTags",
-          "overwriteExplicitCover",
-          "skipSingleNamePerformers",
-          "videoId"
-        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28783,10 +28409,6 @@
         }
       },
       "MoveFiles": {
-        "required": [
-          "destinationPath",
-          "fileIds"
-        ],
         "type": "object",
         "properties": {
           "fileIds": {
@@ -28802,9 +28424,6 @@
         }
       },
       "MultiIdCriterion": {
-        "required": [
-          "value"
-        ],
         "type": "object",
         "properties": {
           "value": {
@@ -29335,10 +28954,6 @@
         }
       },
       "PathMappingRequest": {
-        "required": [
-          "source",
-          "target"
-        ],
         "type": "object",
         "properties": {
           "source": {
@@ -29513,9 +29128,6 @@
         }
       },
       "PerformerApplyScrapedRequest": {
-        "required": [
-          "scraped"
-        ],
         "type": "object",
         "properties": {
           "scraped": {
@@ -29539,10 +29151,6 @@
         }
       },
       "PerformerCreate": {
-        "required": [
-          "favorite",
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -29646,9 +29254,6 @@
         }
       },
       "PerformerFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -29989,10 +29594,6 @@
         }
       },
       "PerformerMerge": {
-        "required": [
-          "sourceIds",
-          "targetId"
-        ],
         "type": "object",
         "properties": {
           "targetId": {
@@ -30256,10 +29857,6 @@
         }
       },
       "PlaybackIntervalInput": {
-        "required": [
-          "endSec",
-          "startSec"
-        ],
         "type": "object",
         "properties": {
           "startSec": {
@@ -30273,15 +29870,6 @@
         }
       },
       "PlaybackIntervalsRequest": {
-        "required": [
-          "currentPositionSec",
-          "hostId",
-          "hostType",
-          "intervals",
-          "mediaDurationSec",
-          "sessionId",
-          "state"
-        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -30417,9 +30005,6 @@
         }
       },
       "PluginSettings": {
-        "required": [
-          "enabledMap"
-        ],
         "type": "object",
         "properties": {
           "enabledMap": {
@@ -30467,9 +30052,6 @@
         }
       },
       "PreviewRequest": {
-        "required": [
-          "stashDbPath"
-        ],
         "type": "object",
         "properties": {
           "stashDbPath": {
@@ -30521,9 +30103,6 @@
         }
       },
       "RefreshRequest": {
-        "required": [
-          "refreshToken"
-        ],
         "type": "object",
         "properties": {
           "refreshToken": {
@@ -30687,11 +30266,6 @@
         }
       },
       "RegistryInstallRequest": {
-        "required": [
-          "extensionId",
-          "installDependencies",
-          "version"
-        ],
         "type": "object",
         "properties": {
           "extensionId": {
@@ -30765,10 +30339,6 @@
         }
       },
       "RegistryUninstallRequest": {
-        "required": [
-          "extensionId",
-          "uninstallDependents"
-        ],
         "type": "object",
         "properties": {
           "extensionId": {
@@ -30871,9 +30441,6 @@
         }
       },
       "ReorderSubGroups": {
-        "required": [
-          "subGroupIds"
-        ],
         "type": "object",
         "properties": {
           "subGroupIds": {
@@ -31015,10 +30582,6 @@
         }
       },
       "ResolveScrapeRelationsRequest": {
-        "required": [
-          "performers",
-          "tags"
-        ],
         "type": "object",
         "properties": {
           "performers": {
@@ -31057,9 +30620,6 @@
         }
       },
       "RestoreBackupRequest": {
-        "required": [
-          "backupPath"
-        ],
         "type": "object",
         "properties": {
           "backupPath": {
@@ -31086,10 +30646,6 @@
         }
       },
       "RunPluginTask": {
-        "required": [
-          "pluginId",
-          "taskName"
-        ],
         "type": "object",
         "properties": {
           "pluginId": {
@@ -31136,10 +30692,6 @@
         }
       },
       "SavedFilterCreate": {
-        "required": [
-          "mode",
-          "name"
-        ],
         "type": "object",
         "properties": {
           "mode": {
@@ -31180,19 +30732,6 @@
         }
       },
       "ScanOptions": {
-        "required": [
-          "rescan",
-          "scanGenerateAudioPhashes",
-          "scanGenerateCovers",
-          "scanGenerateImagePhashes",
-          "scanGenerateMd5",
-          "scanGeneratePhashes",
-          "scanGeneratePreviews",
-          "scanGenerateSprites",
-          "scanGenerateTextPhashes",
-          "scanGenerateThumbnails",
-          "scanGenerators"
-        ],
         "type": "object",
         "properties": {
           "paths": {
@@ -31404,11 +30943,6 @@
         }
       },
       "ScrapeFragmentRequest": {
-        "required": [
-          "entityType",
-          "fragment",
-          "scraperId"
-        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -31423,11 +30957,6 @@
         }
       },
       "ScrapeNameRequest": {
-        "required": [
-          "entityType",
-          "name",
-          "scraperId"
-        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -31457,9 +30986,6 @@
         }
       },
       "ScraperMatchUrlRequest": {
-        "required": [
-          "url"
-        ],
         "type": "object",
         "properties": {
           "url": {
@@ -31533,11 +31059,6 @@
         }
       },
       "ScrapeUrlRequest": {
-        "required": [
-          "entityType",
-          "scraperId",
-          "url"
-        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -31709,9 +31230,6 @@
         }
       },
       "SegmentCreate": {
-        "required": [
-          "startSec"
-        ],
         "type": "object",
         "properties": {
           "startSec": {
@@ -31803,10 +31321,6 @@
         }
       },
       "SegmentDisplayProfileCreate": {
-        "required": [
-          "isDefault",
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -31821,10 +31335,6 @@
         }
       },
       "SegmentDisplayProfilePreviewRequest": {
-        "required": [
-          "rules",
-          "videoId"
-        ],
         "type": "object",
         "properties": {
           "videoId": {
@@ -31840,9 +31350,6 @@
         }
       },
       "SegmentDisplayProfileUpdate": {
-        "required": [
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -31932,10 +31439,6 @@
         }
       },
       "SegmentDisplayRuleCreate": {
-        "required": [
-          "collapseToInstant",
-          "visible"
-        ],
         "type": "object",
         "properties": {
           "sourceKey": {
@@ -31990,10 +31493,6 @@
         }
       },
       "SegmentDisplayRuleUpdate": {
-        "required": [
-          "collapseToInstant",
-          "visible"
-        ],
         "type": "object",
         "properties": {
           "sourceKey": {
@@ -32179,10 +31678,6 @@
         }
       },
       "SegmentSpanDerivedQuery": {
-        "required": [
-          "operands",
-          "operator"
-        ],
         "type": "object",
         "properties": {
           "operator": {
@@ -32234,10 +31729,6 @@
         }
       },
       "SegmentSpanQueryRequest": {
-        "required": [
-          "operands",
-          "operator"
-        ],
         "type": "object",
         "properties": {
           "profile": {
@@ -32497,9 +31988,6 @@
         }
       },
       "SegmentTagBulkRemoveRequest": {
-        "required": [
-          "tagId"
-        ],
         "type": "object",
         "properties": {
           "tagId": {
@@ -32516,10 +32004,6 @@
         }
       },
       "SegmentUpdate": {
-        "required": [
-          "sourceKey",
-          "startSec"
-        ],
         "type": "object",
         "properties": {
           "startSec": {
@@ -32575,9 +32059,6 @@
         }
       },
       "SetRolesRequest": {
-        "required": [
-          "roles"
-        ],
         "type": "object",
         "properties": {
           "roles": {
@@ -32596,10 +32077,6 @@
         "type": "string"
       },
       "SetupTokenRedeemRequest": {
-        "required": [
-          "password",
-          "token"
-        ],
         "type": "object",
         "properties": {
           "token": {
@@ -32936,9 +32413,6 @@
         }
       },
       "StringCriterion": {
-        "required": [
-          "value"
-        ],
         "type": "object",
         "properties": {
           "value": {
@@ -33072,11 +32546,6 @@
         }
       },
       "StudioCreate": {
-        "required": [
-          "favorite",
-          "name",
-          "organized"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -33130,9 +32599,6 @@
         }
       },
       "StudioFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -33315,10 +32781,6 @@
         }
       },
       "StudioMerge": {
-        "required": [
-          "sourceIds",
-          "targetId"
-        ],
         "type": "object",
         "properties": {
           "targetId": {
@@ -33608,11 +33070,6 @@
         }
       },
       "TagApplicationCreate": {
-        "required": [
-          "hostId",
-          "hostType",
-          "tagId"
-        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -33658,10 +33115,6 @@
         }
       },
       "TagCreate": {
-        "required": [
-          "favorite",
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -33887,10 +33340,6 @@
         }
       },
       "TagDurationClause": {
-        "required": [
-          "contextMode",
-          "unit"
-        ],
         "type": "object",
         "properties": {
           "tagId": {
@@ -33920,11 +33369,6 @@
         }
       },
       "TagDurationCriterion": {
-        "required": [
-          "clauses",
-          "contextMode",
-          "unit"
-        ],
         "type": "object",
         "properties": {
           "clauses": {
@@ -33960,9 +33404,6 @@
         }
       },
       "TagFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -34345,9 +33786,6 @@
         }
       },
       "TagGroupCreate": {
-        "required": [
-          "name"
-        ],
         "type": "object",
         "properties": {
           "name": {
@@ -34487,10 +33925,6 @@
         }
       },
       "TagMerge": {
-        "required": [
-          "sourceIds",
-          "targetId"
-        ],
         "type": "object",
         "properties": {
           "targetId": {
@@ -34809,9 +34243,6 @@
         }
       },
       "TextDocumentCreate": {
-        "required": [
-          "organized"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -34865,9 +34296,6 @@
         }
       },
       "TextDocumentFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "ratingCriterion": {
@@ -35182,9 +34610,6 @@
         }
       },
       "TimestampCriterion": {
-        "required": [
-          "value"
-        ],
         "type": "object",
         "properties": {
           "value": {
@@ -36481,9 +35906,6 @@
         }
       },
       "VideoAssignFile": {
-        "required": [
-          "fileId"
-        ],
         "type": "object",
         "properties": {
           "fileId": {
@@ -36493,9 +35915,6 @@
         }
       },
       "VideoCreate": {
-        "required": [
-          "organized"
-        ],
         "type": "object",
         "properties": {
           "title": {
@@ -36663,9 +36082,6 @@
         }
       },
       "VideoFilter": {
-        "required": [
-          "customFieldCriteria"
-        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -37065,9 +36481,6 @@
         }
       },
       "VideoGroupInput": {
-        "required": [
-          "groupId"
-        ],
         "type": "object",
         "properties": {
           "groupId": {
@@ -37155,10 +36568,6 @@
         }
       },
       "VideoMerge": {
-        "required": [
-          "sourceIds",
-          "targetId"
-        ],
         "type": "object",
         "properties": {
           "targetId": {
