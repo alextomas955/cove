@@ -89,6 +89,31 @@ jobs:
         working-directory: ui
         run: npx vitest run --passWithNoTests
 
+  extension-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: sdk/frontend/package-lock.json
+
+      - name: Install
+        run: npm --prefix sdk/frontend ci
+
+      - name: Build and roll up public API
+        run: npm --prefix sdk/frontend run build
+
+      - name: Test
+        run: npm --prefix sdk/frontend test
+
+      - name: Verify public API surface is reviewed
+        run: |
+          npx --prefix sdk/frontend api-extractor run
+          git diff --exit-code sdk/frontend/etc/extension-sdk.api.md
+
   contracts:
     runs-on: ubuntu-latest
     steps:
