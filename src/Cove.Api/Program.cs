@@ -485,6 +485,9 @@ try
                 ? id[..^3]
                 : id;
         };
+        // Align emitted schemas with the real wire contract (required members, nullability, and the
+        // numeric read tolerance) so generated clients match what the API produces and accepts.
+        options.AddSchemaTransformer<Cove.Api.OpenApi.ContractSchemaTransformer>();
     });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
