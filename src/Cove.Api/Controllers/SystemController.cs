@@ -75,6 +75,7 @@ public class SystemController(
 
         return Ok(new SystemStatusDto(
             Version: Cove.Core.Common.CoveVersion.Display,
+            ContractVersion: Cove.Core.Common.CoveVersion.Numeric,
             AppDir: canSeeSensitivePaths ? AppContext.BaseDirectory : null,
             ConfigFile: canSeeSensitivePaths ? configService.ConfigPath : null,
             DatabasePath: "PostgreSQL",

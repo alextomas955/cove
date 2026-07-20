@@ -33169,12 +33169,16 @@
       },
       "SystemStatus": {
         "required": [
+          "contractVersion",
           "databasePath",
           "version"
         ],
         "type": "object",
         "properties": {
           "version": {
+            "type": "string"
+          },
+          "contractVersion": {
             "type": "string"
           },
           "appDir": {
