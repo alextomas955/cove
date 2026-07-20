@@ -58,18 +58,24 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
         var nullability = new NullabilityInfoContext();
         var required = new SortedSet<string>(StringComparer.Ordinal);
 
+        // A default instance (when the type is parameterless-constructible) reveals initializers on
+        // value-type members that the schema does not otherwise capture, e.g. `Mode Foo { get; init;
+        // } = Add`. Restricted to value types so initialized string/reference response fields, which
+        // callers read as always-present, stay required.
+        var defaultInstance = TryCreateDefault(typeInfo.Type);
+
         foreach (var property in typeInfo.Properties)
         {
             if (!schema.Properties.TryGetValue(property.Name, out var propertySchema))
                 continue;
 
-            // Required iff the member is always present: non-nullable and no default. A default
-            // (constructor default) marks it optional. A scalar with a plain setter is treated as an
-            // optional input slot too, since such properties are typically request fields left at an
-            // initializer value; collections and nested objects stay required because the API always
-            // emits them (empty at worst).
+            // Required iff the member is always present: non-nullable and never left to a default.
+            // A schema default, a value-type initializer, or a plain-setter scalar (a typical request
+            // field the caller may omit) all make it optional; collections and nested objects stay
+            // required because the API always emits them (empty at worst).
             if (!IsMemberNullable(property, nullability)
                 && propertySchema.Default is null
+                && !HasValueTypeInitializer(property, defaultInstance)
                 && !(property.PropertyType.IsValueType && HasMutableSetter(property)))
             {
                 required.Add(property.Name);
@@ -78,6 +84,53 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
 
         schema.Required = required;
         return Task.CompletedTask;
+    }
+
+    private static object? TryCreateDefault(Type type)
+    {
+        if (type.IsAbstract || type.IsInterface || type.IsGenericTypeDefinition)
+            return null;
+
+        var constructor = type.GetConstructor(Type.EmptyTypes);
+        if (constructor is null || !constructor.IsPublic)
+            return null;
+
+        try
+        {
+            return Activator.CreateInstance(type);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // True when a value-type member holds a non-default value on a freshly constructed instance — a
+    // member initializer — which means the caller can omit it (e.g. an enum defaulting to a specific
+    // value). Only value types are considered so initialized string/reference fields the API always
+    // returns are not made optional.
+    private static bool HasValueTypeInitializer(JsonPropertyInfo property, object? defaultInstance)
+    {
+        if (defaultInstance is null
+            || !property.PropertyType.IsValueType
+            || Nullable.GetUnderlyingType(property.PropertyType) is not null
+            || property.AttributeProvider is not PropertyInfo { GetMethod: not null } info)
+        {
+            return false;
+        }
+
+        object? value;
+        try
+        {
+            value = info.GetValue(defaultInstance);
+        }
+        catch
+        {
+            return false;
+        }
+
+        var clrDefault = Activator.CreateInstance(info.PropertyType);
+        return !Equals(value, clrDefault);
     }
 
     private static bool IsMemberNullable(JsonPropertyInfo property, NullabilityInfoContext nullability)

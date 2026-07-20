@@ -488,6 +488,9 @@ try
         // Align emitted schemas with the real wire contract (required members, nullability, and the
         // numeric read tolerance) so generated clients match what the API produces and accepts.
         options.AddSchemaTransformer<Cove.Api.OpenApi.ContractSchemaTransformer>();
+        // Drop the null branch that the framework adds around nullable reference members after schema
+        // transformers run, keeping the "omit, don't null" convention consistent for those members.
+        options.AddDocumentTransformer<Cove.Api.OpenApi.ContractDocumentTransformer>();
     });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();

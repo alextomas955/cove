@@ -16782,14 +16782,14 @@ export interface components {
             id: number;
             jobId?: string;
             loadPolicy?: string;
-            models?: null | components["schemas"]["JsonElement"];
-            request?: null | components["schemas"]["JsonElement"];
+            models?: components["schemas"]["JsonElement"];
+            request?: components["schemas"]["JsonElement"];
             runKey: string;
             sourceKey: string;
             /** Format: date-time */
             startedAt: string;
             status: components["schemas"]["AiRunStatus"];
-            summary?: null | components["schemas"]["JsonElement"];
+            summary?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             targetId: number;
             targetType: components["schemas"]["AiRunTargetType"];
@@ -16885,42 +16885,42 @@ export interface components {
             size: number;
         };
         AudioFilter: {
-            audioCodecCriterion?: null | components["schemas"]["StringCriterion"];
-            bitRateCriterion?: null | components["schemas"]["IntCriterion"];
-            channelsCriterion?: null | components["schemas"]["IntCriterion"];
-            codeCriterion?: null | components["schemas"]["StringCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            audioCodecCriterion?: components["schemas"]["StringCriterion"];
+            bitRateCriterion?: components["schemas"]["IntCriterion"];
+            channelsCriterion?: components["schemas"]["IntCriterion"];
+            codeCriterion?: components["schemas"]["StringCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            dateCriterion?: null | components["schemas"]["DateCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            durationCriterion?: null | components["schemas"]["IntCriterion"];
-            fileCountCriterion?: null | components["schemas"]["IntCriterion"];
-            fileModTimeCriterion?: null | components["schemas"]["TimestampCriterion"];
-            fileSizeCriterion?: null | components["schemas"]["IntCriterion"];
-            formatCriterion?: null | components["schemas"]["StringCriterion"];
-            groupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            hasCoverCriterion?: null | components["schemas"]["BoolCriterion"];
-            hasVideoFilesCriterion?: null | components["schemas"]["BoolCriterion"];
-            lastPlayedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
-            organizedCriterion?: null | components["schemas"]["BoolCriterion"];
-            pathCriterion?: null | components["schemas"]["StringCriterion"];
-            performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            playCountCriterion?: null | components["schemas"]["IntCriterion"];
-            playDurationCriterion?: null | components["schemas"]["IntCriterion"];
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            sampleRateCriterion?: null | components["schemas"]["IntCriterion"];
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            titleCriterion?: null | components["schemas"]["StringCriterion"];
-            trackCountCriterion?: null | components["schemas"]["IntCriterion"];
-            trackTitleCriterion?: null | components["schemas"]["StringCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            dateCriterion?: components["schemas"]["DateCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
+            durationCriterion?: components["schemas"]["IntCriterion"];
+            fileCountCriterion?: components["schemas"]["IntCriterion"];
+            fileModTimeCriterion?: components["schemas"]["TimestampCriterion"];
+            fileSizeCriterion?: components["schemas"]["IntCriterion"];
+            formatCriterion?: components["schemas"]["StringCriterion"];
+            groupsCriterion?: components["schemas"]["MultiIdCriterion"];
+            hasCoverCriterion?: components["schemas"]["BoolCriterion"];
+            hasVideoFilesCriterion?: components["schemas"]["BoolCriterion"];
+            lastPlayedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            likeCounterCriterion?: components["schemas"]["IntCriterion"];
+            organizedCriterion?: components["schemas"]["BoolCriterion"];
+            pathCriterion?: components["schemas"]["StringCriterion"];
+            performerCountCriterion?: components["schemas"]["IntCriterion"];
+            performersCriterion?: components["schemas"]["MultiIdCriterion"];
+            performerTagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            playCountCriterion?: components["schemas"]["IntCriterion"];
+            playDurationCriterion?: components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            sampleRateCriterion?: components["schemas"]["IntCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            titleCriterion?: components["schemas"]["StringCriterion"];
+            trackCountCriterion?: components["schemas"]["IntCriterion"];
+            trackTitleCriterion?: components["schemas"]["StringCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
         };
         AudioTrack: {
             /** Format: double */
@@ -16998,11 +16998,11 @@ export interface components {
             ids: number[];
             organized?: boolean;
             performerIds?: number[];
-            performerMode: components["schemas"]["BulkUpdateMode"];
+            performerMode?: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
             studioId?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         BulkGalleryUpdate: {
             clearFields?: string[];
@@ -17012,14 +17012,14 @@ export interface components {
             ids: number[];
             organized?: boolean;
             performerIds?: number[];
-            performerMode: components["schemas"]["BulkUpdateMode"];
+            performerMode?: components["schemas"]["BulkUpdateMode"];
             photographer?: string;
             /** Format: int32 */
             rating?: number;
             /** Format: int32 */
             studioId?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         BulkGroupUpdate: {
             clearFields?: string[];
@@ -17032,7 +17032,7 @@ export interface components {
             /** Format: int32 */
             studioId?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         BulkImageUpdate: {
             clearFields?: string[];
@@ -17040,18 +17040,18 @@ export interface components {
             date?: string;
             details?: string;
             galleryIds?: number[];
-            galleryMode: components["schemas"]["BulkUpdateMode"];
+            galleryMode?: components["schemas"]["BulkUpdateMode"];
             ids: number[];
             organized?: boolean;
             performerIds?: number[];
-            performerMode: components["schemas"]["BulkUpdateMode"];
+            performerMode?: components["schemas"]["BulkUpdateMode"];
             photographer?: string;
             /** Format: int32 */
             rating?: number;
             /** Format: int32 */
             studioId?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         BulkPerformerUpdate: {
             details?: string;
@@ -17061,7 +17061,7 @@ export interface components {
             /** Format: int32 */
             rating?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         BulkStudioUpdate: {
             clearFields?: string[];
@@ -17072,11 +17072,11 @@ export interface components {
             /** Format: int32 */
             rating?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         BulkTagUpdate: {
             childIds?: number[];
-            childMode: components["schemas"]["BulkUpdateMode"];
+            childMode?: components["schemas"]["BulkUpdateMode"];
             clearFields?: string[];
             color?: string;
             description?: string;
@@ -17088,7 +17088,7 @@ export interface components {
             minOccurrenceSec?: number;
             organized?: boolean;
             parentIds?: number[];
-            parentMode: components["schemas"]["BulkUpdateMode"];
+            parentMode?: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
             rating?: number;
             /** Format: int32 */
@@ -17102,11 +17102,11 @@ export interface components {
             ids: number[];
             organized?: boolean;
             performerIds?: number[];
-            performerMode: components["schemas"]["BulkUpdateMode"];
+            performerMode?: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
             studioId?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         /** @enum {string} */
         BulkUpdateMode: "set" | "add" | "remove";
@@ -17116,20 +17116,20 @@ export interface components {
             date?: string;
             director?: string;
             galleryIds?: number[];
-            galleryMode: components["schemas"]["BulkUpdateMode"];
+            galleryMode?: components["schemas"]["BulkUpdateMode"];
             groupIds?: components["schemas"]["VideoGroupInput"][];
-            groupMode: components["schemas"]["BulkUpdateMode"];
+            groupMode?: components["schemas"]["BulkUpdateMode"];
             ids: number[];
             isVr?: boolean;
             organized?: boolean;
             performerIds?: number[];
-            performerMode: components["schemas"]["BulkUpdateMode"];
+            performerMode?: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
             rating?: number;
             /** Format: int32 */
             studioId?: number;
             tagIds?: number[];
-            tagMode: components["schemas"]["BulkUpdateMode"];
+            tagMode?: components["schemas"]["BulkUpdateMode"];
         };
         Caption: {
             captionType: string;
@@ -17160,7 +17160,7 @@ export interface components {
             createGalleriesFromFolders: boolean;
             createImageClipsFromVideos: boolean;
             customFieldDefinitions: components["schemas"]["CustomFieldDefinition"][];
-            deleteGeneratedDefault: boolean;
+            deleteGeneratedDefault?: boolean;
             disabledPlugins: string[];
             downloaderPathOverrides: components["schemas"]["DownloaderPathOverride"][];
             enableFfmpegHwAccel?: boolean;
@@ -17185,9 +17185,9 @@ export interface components {
             liveTranscodeOutputArgs?: string;
             logLevel: string;
             /** Format: int32 */
-            maxConcurrentDownloads: number;
+            maxConcurrentDownloads?: number;
             /** Format: int32 */
-            maxParallelTasks: number;
+            maxParallelTasks?: number;
             /** Format: int32 */
             maxStreamingTranscodeSize: number;
             /** Format: int32 */
@@ -17196,7 +17196,7 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
             /** Format: int32 */
-            port: number;
+            port?: number;
             previewAudio: string;
             previewPreset: string;
             scraping: components["schemas"]["ScrapingConfig"];
@@ -17289,7 +17289,7 @@ export interface components {
             /** Format: int32 */
             displayOrder: number;
             entityTypes: string[];
-            filterable: boolean;
+            filterable?: boolean;
             /** Format: int32 */
             id: number;
             isMultiValue: boolean;
@@ -17304,7 +17304,7 @@ export interface components {
             /** Format: int32 */
             displayOrder?: number;
             entityTypes: string[];
-            filterable: boolean;
+            filterable?: boolean;
             isMultiValue: boolean;
             key?: string;
             label: string;
@@ -17316,7 +17316,7 @@ export interface components {
             /** Format: int32 */
             displayOrder?: number;
             entityTypes: string[];
-            filterable: boolean;
+            filterable?: boolean;
             /** Format: int32 */
             id?: number;
             isMultiValue: boolean;
@@ -17371,7 +17371,7 @@ export interface components {
         Detection: {
             class: string;
             createdAt: string;
-            extra?: null | components["schemas"]["JsonElement"];
+            extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             frameHeight: number;
             /** Format: int32 */
@@ -17403,7 +17403,7 @@ export interface components {
         };
         DetectionCreate: {
             class: string;
-            extra?: null | components["schemas"]["JsonElement"];
+            extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             frameHeight: number;
             /** Format: int32 */
@@ -17431,7 +17431,7 @@ export interface components {
         DetectionHostType: "video" | "image";
         DetectionUpdate: {
             class: string;
-            extra?: null | components["schemas"]["JsonElement"];
+            extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             frameHeight: number;
             /** Format: int32 */
@@ -17465,7 +17465,7 @@ export interface components {
             createMissingPerformers: boolean;
             createMissingStudio: boolean;
             createMissingTags: boolean;
-            generate?: null | components["schemas"]["GenerateOptions"];
+            generate?: components["schemas"]["GenerateOptions"];
             markOrganized: boolean;
             scrapeVideos: boolean;
         };
@@ -17496,7 +17496,7 @@ export interface components {
         DownloaderBatchStartRequest: {
             followUp: components["schemas"]["DownloaderBatchFollowUp"];
             items: components["schemas"]["DownloaderBatchItem"][];
-            preflightBeforeQueue: boolean;
+            preflightBeforeQueue?: boolean;
         };
         DownloaderBatchStartResponse: {
             issues: components["schemas"]["DownloaderBatchIssue"][];
@@ -17546,9 +17546,9 @@ export interface components {
         DownloaderStartRequest: {
             allowDuplicateDownload: boolean;
             autoApplyMetadata: boolean;
-            createMissingPerformers: boolean;
-            createMissingStudio: boolean;
-            createMissingTags: boolean;
+            createMissingPerformers?: boolean;
+            createMissingStudio?: boolean;
+            createMissingTags?: boolean;
             downloaderId: string;
             entity: string;
             /** Format: int32 */
@@ -17577,7 +17577,7 @@ export interface components {
             isSemantic: boolean;
             kind: string;
             kindFamily?: string;
-            meta?: null | components["schemas"]["JsonElement"];
+            meta?: components["schemas"]["JsonElement"];
             modality: components["schemas"]["EmbeddingModality"];
             /** Format: int32 */
             sectionIndex: number;
@@ -17596,7 +17596,7 @@ export interface components {
         EmbeddingSearchRequest: {
             /** Format: int32 */
             hostId?: number;
-            hostType?: null | components["schemas"]["EmbeddingHostType"];
+            hostType?: components["schemas"]["EmbeddingHostType"];
             isSemantic?: boolean;
             /**
              * Format: int32
@@ -17605,7 +17605,7 @@ export interface components {
             k: number;
             kind?: string;
             kindFamily?: string;
-            modality?: null | components["schemas"]["EmbeddingModality"];
+            modality?: components["schemas"]["EmbeddingModality"];
             queryText?: string;
             queryVector?: number[];
             sourceKey?: string;
@@ -17691,12 +17691,12 @@ export interface components {
             };
         };
         ExportOptions: {
-            includeGalleries: boolean;
-            includeGroups: boolean;
-            includePerformers: boolean;
-            includeStudios: boolean;
-            includeTags: boolean;
-            includeVideos: boolean;
+            includeGalleries?: boolean;
+            includeGroups?: boolean;
+            includePerformers?: boolean;
+            includeStudios?: boolean;
+            includeTags?: boolean;
+            includeVideos?: boolean;
         };
         ExtensionAction: {
             actionType: string;
@@ -17828,7 +17828,7 @@ export interface components {
             performerId?: number;
             performerName?: string;
             primarySourceKey?: string;
-            topSuggestion?: null | components["schemas"]["FaceTopSuggestion"];
+            topSuggestion?: components["schemas"]["FaceTopSuggestion"];
             /** Format: date-time */
             updatedAt: string;
             /** Format: int32 */
@@ -18049,7 +18049,7 @@ export interface components {
             modelKey?: string;
             sourceKey: string;
             sourceRunId?: string;
-            value?: null | components["schemas"]["JsonElement"];
+            value?: components["schemas"]["JsonElement"];
         };
         FileBackedCreate: {
             filePath: string;
@@ -18060,40 +18060,40 @@ export interface components {
             fingerprints: components["schemas"]["FingerprintEntry"][];
         };
         FilteredQueryRequestOfAudioFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["AudioFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["AudioFilter"];
         };
         FilteredQueryRequestOfGalleryFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["GalleryFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["GalleryFilter"];
         };
         FilteredQueryRequestOfGroupFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["GroupFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["GroupFilter"];
         };
         FilteredQueryRequestOfImageFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["ImageFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["ImageFilter"];
         };
         FilteredQueryRequestOfPerformerFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["PerformerFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["PerformerFilter"];
         };
         FilteredQueryRequestOfStudioFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["StudioFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["StudioFilter"];
         };
         FilteredQueryRequestOfTagFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["TagFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["TagFilter"];
         };
         FilteredQueryRequestOfTextDocumentFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["TextDocumentFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["TextDocumentFilter"];
         };
         FilteredQueryRequestOfVideoFilter: {
-            findFilter?: null | components["schemas"]["FindFilter"];
-            objectFilter?: null | components["schemas"]["VideoFilter"];
+            findFilter?: components["schemas"]["FindFilter"];
+            objectFilter?: components["schemas"]["VideoFilter"];
         };
         FindFilter: {
             direction?: components["schemas"]["SortDirection"];
@@ -18202,44 +18202,44 @@ export interface components {
             size: number;
         };
         GalleryFilter: {
-            checksumCriterion?: null | components["schemas"]["StringCriterion"];
-            codeCriterion?: null | components["schemas"]["StringCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            checksumCriterion?: components["schemas"]["StringCriterion"];
+            codeCriterion?: components["schemas"]["StringCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            dateCriterion?: null | components["schemas"]["DateCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            fileCountCriterion?: null | components["schemas"]["IntCriterion"];
-            fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
-            imageCountCriterion?: null | components["schemas"]["IntCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            dateCriterion?: components["schemas"]["DateCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
+            fileCountCriterion?: components["schemas"]["IntCriterion"];
+            fingerprintCriterion?: components["schemas"]["FingerprintCriterion"];
+            imageCountCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             imageId?: number;
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
             organized?: boolean;
-            organizedCriterion?: null | components["schemas"]["BoolCriterion"];
-            pathCriterion?: null | components["schemas"]["StringCriterion"];
-            performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
-            performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
+            organizedCriterion?: components["schemas"]["BoolCriterion"];
+            pathCriterion?: components["schemas"]["StringCriterion"];
+            performerAgeCriterion?: components["schemas"]["IntCriterion"];
+            performerCountCriterion?: components["schemas"]["IntCriterion"];
+            performerFavoriteCriterion?: components["schemas"]["BoolCriterion"];
             performerIds?: number[];
-            performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            photographerCriterion?: null | components["schemas"]["StringCriterion"];
+            performersCriterion?: components["schemas"]["MultiIdCriterion"];
+            performerTagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            photographerCriterion?: components["schemas"]["StringCriterion"];
             /** Format: int32 */
             rating?: number;
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             studioId?: number;
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
             tagIds?: number[];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
             title?: string;
-            titleCriterion?: null | components["schemas"]["StringCriterion"];
-            typicalResolutionCriterion?: null | components["schemas"]["IntCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
-            videosCriterion?: null | components["schemas"]["MultiIdCriterion"];
+            titleCriterion?: components["schemas"]["StringCriterion"];
+            typicalResolutionCriterion?: components["schemas"]["IntCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
+            videosCriterion?: components["schemas"]["MultiIdCriterion"];
         };
         GalleryRemoveImages: {
             imageIds: number[];
@@ -18289,7 +18289,7 @@ export interface components {
             sprites: boolean;
             textIds?: number[];
             textPhashes: boolean;
-            thumbnails: boolean;
+            thumbnails?: boolean;
             videoIds?: number[];
         };
         GenerateScreenshot: {
@@ -18391,7 +18391,7 @@ export interface components {
             date?: string;
             description?: string;
             director?: string;
-            kind?: null | components["schemas"]["GroupKind"];
+            kind?: components["schemas"]["GroupKind"];
             name: string;
             queryJson?: string;
             querySourceKey?: string;
@@ -18406,51 +18406,51 @@ export interface components {
             urls?: string[];
         };
         GroupFilter: {
-            aliasesCriterion?: null | components["schemas"]["StringCriterion"];
-            allowedHostTypesCriterion?: null | components["schemas"]["StringCriterion"];
-            audioCountCriterion?: null | components["schemas"]["IntCriterion"];
-            cachedItemCountCriterion?: null | components["schemas"]["IntCriterion"];
-            containingGroupCountCriterion?: null | components["schemas"]["IntCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            aliasesCriterion?: components["schemas"]["StringCriterion"];
+            allowedHostTypesCriterion?: components["schemas"]["StringCriterion"];
+            audioCountCriterion?: components["schemas"]["IntCriterion"];
+            cachedItemCountCriterion?: components["schemas"]["IntCriterion"];
+            containingGroupCountCriterion?: components["schemas"]["IntCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            dateCriterion?: null | components["schemas"]["DateCriterion"];
-            directorCriterion?: null | components["schemas"]["StringCriterion"];
-            durationCriterion?: null | components["schemas"]["IntCriterion"];
-            faceCountCriterion?: null | components["schemas"]["IntCriterion"];
-            galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
-            hasQueryCriterion?: null | components["schemas"]["BoolCriterion"];
-            imageCountCriterion?: null | components["schemas"]["IntCriterion"];
-            isBuiltInCriterion?: null | components["schemas"]["BoolCriterion"];
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            itemCountCriterion?: null | components["schemas"]["IntCriterion"];
-            kindCriterion?: null | components["schemas"]["StringCriterion"];
-            lastResolvedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            dateCriterion?: components["schemas"]["DateCriterion"];
+            directorCriterion?: components["schemas"]["StringCriterion"];
+            durationCriterion?: components["schemas"]["IntCriterion"];
+            faceCountCriterion?: components["schemas"]["IntCriterion"];
+            galleryCountCriterion?: components["schemas"]["IntCriterion"];
+            hasQueryCriterion?: components["schemas"]["BoolCriterion"];
+            imageCountCriterion?: components["schemas"]["IntCriterion"];
+            isBuiltInCriterion?: components["schemas"]["BoolCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
+            itemCountCriterion?: components["schemas"]["IntCriterion"];
+            kindCriterion?: components["schemas"]["StringCriterion"];
+            lastResolvedAtCriterion?: components["schemas"]["TimestampCriterion"];
             name?: string;
-            nameCriterion?: null | components["schemas"]["StringCriterion"];
-            performerItemCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            querySourceKeyCriterion?: null | components["schemas"]["StringCriterion"];
+            nameCriterion?: components["schemas"]["StringCriterion"];
+            performerItemCountCriterion?: components["schemas"]["IntCriterion"];
+            performersCriterion?: components["schemas"]["MultiIdCriterion"];
+            querySourceKeyCriterion?: components["schemas"]["StringCriterion"];
             /** Format: int32 */
             rating?: number;
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            segmentCountCriterion?: null | components["schemas"]["IntCriterion"];
-            showInVideoListsCriterion?: null | components["schemas"]["BoolCriterion"];
-            sortOrderCriterion?: null | components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            segmentCountCriterion?: components["schemas"]["IntCriterion"];
+            showInVideoListsCriterion?: components["schemas"]["BoolCriterion"];
+            sortOrderCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             studioId?: number;
-            studioItemCountCriterion?: null | components["schemas"]["IntCriterion"];
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            subGroupCountCriterion?: null | components["schemas"]["IntCriterion"];
-            synopsisCriterion?: null | components["schemas"]["StringCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
+            studioItemCountCriterion?: components["schemas"]["IntCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            subGroupCountCriterion?: components["schemas"]["IntCriterion"];
+            synopsisCriterion?: components["schemas"]["StringCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
             tagIds?: number[];
-            tagItemCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            textCountCriterion?: null | components["schemas"]["IntCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
-            videoCountCriterion?: null | components["schemas"]["IntCriterion"];
+            tagItemCountCriterion?: components["schemas"]["IntCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            textCountCriterion?: components["schemas"]["IntCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
+            videoCountCriterion?: components["schemas"]["IntCriterion"];
         };
         GroupItem: {
             /** Format: int32 */
@@ -18512,7 +18512,7 @@ export interface components {
             spans: components["schemas"]["GroupItemSpanInput"][];
         };
         GroupItemSpanInput: {
-            derivedQuery?: null | components["schemas"]["SegmentSpanDerivedQuery"];
+            derivedQuery?: components["schemas"]["SegmentSpanDerivedQuery"];
             /** Format: double */
             endSec?: number;
             /** Format: int32 */
@@ -18607,7 +18607,7 @@ export interface components {
             date?: string;
             description?: string;
             director?: string;
-            kind?: null | components["schemas"]["GroupKind"];
+            kind?: components["schemas"]["GroupKind"];
             name?: string;
             queryJson?: string;
             querySourceKey?: string;
@@ -18628,9 +18628,9 @@ export interface components {
             autoApplyMaxPhashDistance?: number;
             /** Format: int32 */
             autoApplyMinFingerprintMatches?: number;
-            createPerformers: boolean;
-            createStudios: boolean;
-            createTags: boolean;
+            createPerformers?: boolean;
+            createStudios?: boolean;
+            createTags?: boolean;
         };
         IdentifyOptions: {
             createPerformers?: boolean;
@@ -18641,12 +18641,12 @@ export interface components {
             };
             markOrganized: boolean;
             performerGenders?: string[];
-            setCoverImage: boolean;
-            setPerformers: boolean;
-            setStudio: boolean;
-            setTags: boolean;
+            setCoverImage?: boolean;
+            setPerformers?: boolean;
+            setStudio?: boolean;
+            setTags?: boolean;
             skipMultipleMatches: boolean;
-            skipSingleNamePerformers: boolean;
+            skipSingleNamePerformers?: boolean;
             sources?: string[];
             videoIds?: number[];
         };
@@ -18711,46 +18711,46 @@ export interface components {
             width: number;
         };
         ImageFilter: {
-            checksumCriterion?: null | components["schemas"]["StringCriterion"];
-            codeCriterion?: null | components["schemas"]["StringCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            checksumCriterion?: components["schemas"]["StringCriterion"];
+            codeCriterion?: components["schemas"]["StringCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            dateCriterion?: null | components["schemas"]["DateCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            fileCountCriterion?: null | components["schemas"]["IntCriterion"];
-            fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
-            galleriesCriterion?: null | components["schemas"]["MultiIdCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            dateCriterion?: components["schemas"]["DateCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
+            fileCountCriterion?: components["schemas"]["IntCriterion"];
+            fingerprintCriterion?: components["schemas"]["FingerprintCriterion"];
+            galleriesCriterion?: components["schemas"]["MultiIdCriterion"];
             /** Format: int32 */
             galleryId?: number;
             ids?: number[];
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
+            likeCounterCriterion?: components["schemas"]["IntCriterion"];
             organized?: boolean;
-            organizedCriterion?: null | components["schemas"]["BoolCriterion"];
-            orientationCriterion?: null | components["schemas"]["StringCriterion"];
-            pathCriterion?: null | components["schemas"]["StringCriterion"];
-            performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
-            performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
+            organizedCriterion?: components["schemas"]["BoolCriterion"];
+            orientationCriterion?: components["schemas"]["StringCriterion"];
+            pathCriterion?: components["schemas"]["StringCriterion"];
+            performerAgeCriterion?: components["schemas"]["IntCriterion"];
+            performerCountCriterion?: components["schemas"]["IntCriterion"];
+            performerFavoriteCriterion?: components["schemas"]["BoolCriterion"];
             performerIds?: number[];
-            performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            photographerCriterion?: null | components["schemas"]["StringCriterion"];
+            performersCriterion?: components["schemas"]["MultiIdCriterion"];
+            performerTagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            photographerCriterion?: components["schemas"]["StringCriterion"];
             /** Format: int32 */
             rating?: number;
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            resolutionCriterion?: null | components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            resolutionCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             studioId?: number;
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
             tagIds?: number[];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
             title?: string;
-            titleCriterion?: null | components["schemas"]["StringCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
+            titleCriterion?: components["schemas"]["StringCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
         };
         ImageUpdate: {
             code?: string;
@@ -18866,7 +18866,7 @@ export interface components {
             user: components["schemas"]["MeUser"];
         };
         MetadataBatchDefaultsConfig: {
-            createParentStudios: boolean;
+            createParentStudios?: boolean;
             excludeFields: string[];
             refreshAlreadyTagged: boolean;
         };
@@ -18874,7 +18874,7 @@ export interface components {
             apiKey: string;
             endpoint: string;
             /** Format: int32 */
-            maxRequestsPerMinute: number;
+            maxRequestsPerMinute?: number;
             name: string;
         };
         MetadataServerEndpoint: {
@@ -18900,7 +18900,7 @@ export interface components {
         MetadataServerPerformerBatchTagRequest: {
             endpoint: string;
             excludeFields?: string[];
-            filter?: null | components["schemas"]["PerformerFilter"];
+            filter?: components["schemas"]["PerformerFilter"];
             ids?: number[];
             refreshAlreadyTagged: boolean;
             selectAll: boolean;
@@ -18928,10 +18928,10 @@ export interface components {
             urls: string[];
         };
         MetadataServerStudioBatchTagRequest: {
-            createParentStudios: boolean;
+            createParentStudios?: boolean;
             endpoint: string;
             excludeFields?: string[];
-            filter?: null | components["schemas"]["StudioFilter"];
+            filter?: components["schemas"]["StudioFilter"];
             ids?: number[];
             refreshAlreadyTagged: boolean;
             selectAll: boolean;
@@ -18956,7 +18956,7 @@ export interface components {
         MetadataServerTagBatchTagRequest: {
             endpoint: string;
             excludeFields?: string[];
-            filter?: null | components["schemas"]["TagFilter"];
+            filter?: components["schemas"]["TagFilter"];
             ids?: number[];
             refreshAlreadyTagged: boolean;
             selectAll: boolean;
@@ -18999,12 +18999,12 @@ export interface components {
             overwriteExplicitCover: boolean;
             performerGenders?: string[];
             performerOverrides?: components["schemas"]["MetadataServerVideoEntityOverride"][];
-            setCoverImage: boolean;
-            setPerformers: boolean;
-            setStudio: boolean;
-            setTags: boolean;
+            setCoverImage?: boolean;
+            setPerformers?: boolean;
+            setStudio?: boolean;
+            setTags?: boolean;
             skipSingleNamePerformers: boolean;
-            studioOverride?: null | components["schemas"]["MetadataServerVideoEntityOverride"];
+            studioOverride?: components["schemas"]["MetadataServerVideoEntityOverride"];
             tagOverrides?: components["schemas"]["MetadataServerVideoEntityOverride"][];
             videoId: string;
         };
@@ -19025,7 +19025,7 @@ export interface components {
             metadataServerName: string;
             performerCandidates: components["schemas"]["MetadataServerEntityCandidate"][];
             performerNames: string[];
-            studioCandidate?: null | components["schemas"]["MetadataServerEntityCandidate"];
+            studioCandidate?: components["schemas"]["MetadataServerEntityCandidate"];
             studioName?: string;
             tagCandidates: components["schemas"]["MetadataServerEntityCandidate"][];
             tagNames: string[];
@@ -19036,7 +19036,7 @@ export interface components {
             id?: string;
             kind: string;
             roles: string[];
-            uiPreferences?: null | components["schemas"]["UserUiPreferences"];
+            uiPreferences?: components["schemas"]["UserUiPreferences"];
             username?: string;
         };
         MoveFiles: {
@@ -19268,7 +19268,7 @@ export interface components {
             collectionModes?: {
                 [key: string]: string;
             };
-            createMissingTags: boolean;
+            createMissingTags?: boolean;
             replaceFields?: string[];
             scraped: components["schemas"]["ScrapedPerformer"];
         };
@@ -19306,58 +19306,58 @@ export interface components {
             weight?: number;
         };
         PerformerFilter: {
-            ageCriterion?: null | components["schemas"]["IntCriterion"];
-            aliasesCriterion?: null | components["schemas"]["StringCriterion"];
-            birthdateCriterion?: null | components["schemas"]["DateCriterion"];
-            careerEndCriterion?: null | components["schemas"]["DateCriterion"];
-            careerLengthCriterion?: null | components["schemas"]["IntCriterion"];
-            careerStartCriterion?: null | components["schemas"]["DateCriterion"];
-            circumcisedCriterion?: null | components["schemas"]["StringCriterion"];
-            countryCriterion?: null | components["schemas"]["StringCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            ageCriterion?: components["schemas"]["IntCriterion"];
+            aliasesCriterion?: components["schemas"]["StringCriterion"];
+            birthdateCriterion?: components["schemas"]["DateCriterion"];
+            careerEndCriterion?: components["schemas"]["DateCriterion"];
+            careerLengthCriterion?: components["schemas"]["IntCriterion"];
+            careerStartCriterion?: components["schemas"]["DateCriterion"];
+            circumcisedCriterion?: components["schemas"]["StringCriterion"];
+            countryCriterion?: components["schemas"]["StringCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            deathDateCriterion?: null | components["schemas"]["DateCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            disambiguationCriterion?: null | components["schemas"]["StringCriterion"];
-            ethnicityCriterion?: null | components["schemas"]["StringCriterion"];
-            eyeColorCriterion?: null | components["schemas"]["StringCriterion"];
-            fakeTitsCriterion?: null | components["schemas"]["StringCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            deathDateCriterion?: components["schemas"]["DateCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
+            disambiguationCriterion?: components["schemas"]["StringCriterion"];
+            ethnicityCriterion?: components["schemas"]["StringCriterion"];
+            eyeColorCriterion?: components["schemas"]["StringCriterion"];
+            fakeTitsCriterion?: components["schemas"]["StringCriterion"];
             favorite?: boolean;
-            favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
-            genderCriterion?: null | components["schemas"]["StringCriterion"];
-            groupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            hairColorCriterion?: null | components["schemas"]["StringCriterion"];
-            heightCriterion?: null | components["schemas"]["IntCriterion"];
-            imageCountCriterion?: null | components["schemas"]["IntCriterion"];
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
-            measurementsCriterion?: null | components["schemas"]["StringCriterion"];
+            favoriteCriterion?: components["schemas"]["BoolCriterion"];
+            galleryCountCriterion?: components["schemas"]["IntCriterion"];
+            genderCriterion?: components["schemas"]["StringCriterion"];
+            groupsCriterion?: components["schemas"]["MultiIdCriterion"];
+            hairColorCriterion?: components["schemas"]["StringCriterion"];
+            heightCriterion?: components["schemas"]["IntCriterion"];
+            imageCountCriterion?: components["schemas"]["IntCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
+            likeCounterCriterion?: components["schemas"]["IntCriterion"];
+            measurementsCriterion?: components["schemas"]["StringCriterion"];
             name?: string;
-            nameCriterion?: null | components["schemas"]["StringCriterion"];
-            pathCriterion?: null | components["schemas"]["StringCriterion"];
-            penisLengthCriterion?: null | components["schemas"]["IntCriterion"];
-            piercingsCriterion?: null | components["schemas"]["StringCriterion"];
-            playCountCriterion?: null | components["schemas"]["IntCriterion"];
+            nameCriterion?: components["schemas"]["StringCriterion"];
+            pathCriterion?: components["schemas"]["StringCriterion"];
+            penisLengthCriterion?: components["schemas"]["IntCriterion"];
+            piercingsCriterion?: components["schemas"]["StringCriterion"];
+            playCountCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             rating?: number;
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
-            remoteIdValueCriterion?: null | components["schemas"]["StringCriterion"];
-            studioCountCriterion?: null | components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCountCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCriterion?: components["schemas"]["StringCriterion"];
+            remoteIdValueCriterion?: components["schemas"]["StringCriterion"];
+            studioCountCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             studioId?: number;
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
             tagIds?: number[];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tattooCriterion?: null | components["schemas"]["StringCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
-            videoCountCriterion?: null | components["schemas"]["IntCriterion"];
-            weightCriterion?: null | components["schemas"]["IntCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            tattooCriterion?: components["schemas"]["StringCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
+            videoCountCriterion?: components["schemas"]["IntCriterion"];
+            weightCriterion?: components["schemas"]["IntCriterion"];
         };
         PerformerMerge: {
             sourceIds: number[];
@@ -19595,7 +19595,7 @@ export interface components {
             version: string;
         };
         RegistryInstallResult: {
-            extension?: null | components["schemas"]["RegistryInstallExtensionRef"];
+            extension?: components["schemas"]["RegistryInstallExtensionRef"];
             installedDependencies?: string[];
             message?: string;
             missingDependencies?: components["schemas"]["DependencyInfo"][];
@@ -19617,7 +19617,7 @@ export interface components {
         };
         RegistryUninstallResult: {
             dependents?: components["schemas"]["ExtensionDependencyImpact"][];
-            extension?: null | components["schemas"]["ExtensionDependencyImpact"];
+            extension?: components["schemas"]["ExtensionDependencyImpact"];
             message?: string;
             requiresDependents?: boolean;
             uninstalledExtensions?: string[];
@@ -19746,9 +19746,9 @@ export interface components {
             scanGenerators: boolean;
         };
         ScrapeApplyDefaultsConfig: {
-            createMissingPerformers: boolean;
-            createMissingStudio: boolean;
-            createMissingTags: boolean;
+            createMissingPerformers?: boolean;
+            createMissingStudio?: boolean;
+            createMissingTags?: boolean;
             hydratePerformers: boolean;
             markOrganized: boolean;
         };
@@ -19842,9 +19842,9 @@ export interface components {
             scraperPreferences: components["schemas"]["ScraperPreference"][];
         };
         SecurityConfig: {
-            allowAnonymousShareLinks: boolean;
+            allowAnonymousShareLinks?: boolean;
             enabled: boolean;
-            enforceDefaultDeny: boolean;
+            enforceDefaultDeny?: boolean;
             knownProxies?: string[];
             newPassword?: string;
             trustedHosts?: string[];
@@ -19864,7 +19864,7 @@ export interface components {
             /** Format: int32 */
             id: number;
             kind?: string;
-            payload?: null | components["schemas"]["JsonElement"];
+            payload?: components["schemas"]["JsonElement"];
             /** Format: int64 */
             refId?: number;
             sourceKey: string;
@@ -19884,7 +19884,7 @@ export interface components {
             /** Format: double */
             endSec?: number;
             kind?: string;
-            payload?: null | components["schemas"]["JsonElement"];
+            payload?: components["schemas"]["JsonElement"];
             /** Format: int64 */
             refId?: number;
             sourceKey?: string;
@@ -19927,7 +19927,7 @@ export interface components {
             collapseToInstant: boolean;
             colorOverride?: string;
             createdAt: string;
-            hostType?: null | components["schemas"]["SegmentHostType"];
+            hostType?: components["schemas"]["SegmentHostType"];
             /** Format: int32 */
             id: number;
             kind?: string;
@@ -19954,7 +19954,7 @@ export interface components {
         SegmentDisplayRuleCreate: {
             collapseToInstant: boolean;
             colorOverride?: string;
-            hostType?: null | components["schemas"]["SegmentHostType"];
+            hostType?: components["schemas"]["SegmentHostType"];
             kind?: string;
             /** Format: int32 */
             lane?: number;
@@ -19975,7 +19975,7 @@ export interface components {
         SegmentDisplayRuleUpdate: {
             collapseToInstant: boolean;
             colorOverride?: string;
-            hostType?: null | components["schemas"]["SegmentHostType"];
+            hostType?: components["schemas"]["SegmentHostType"];
             kind?: string;
             /** Format: int32 */
             lane?: number;
@@ -20015,7 +20015,7 @@ export interface components {
             /** Format: int32 */
             id: number;
             kind?: string;
-            payload?: null | components["schemas"]["JsonElement"];
+            payload?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             performerId?: number;
             performerName?: string;
@@ -20073,7 +20073,7 @@ export interface components {
             createdAt?: string;
             createdAt2?: string;
             createdAtModifier?: string;
-            derivedQuery?: null | components["schemas"]["SegmentSpanDerivedQuery"];
+            derivedQuery?: components["schemas"]["SegmentSpanDerivedQuery"];
             direction?: string;
             durationModifier?: string;
             /** Format: double */
@@ -20152,7 +20152,7 @@ export interface components {
             /** Format: double */
             endSec?: number;
             kind?: string;
-            payload?: null | components["schemas"]["JsonElement"];
+            payload?: components["schemas"]["JsonElement"];
             /** Format: int64 */
             refId?: number;
             sourceKey: string;
@@ -20357,34 +20357,34 @@ export interface components {
             urls?: string[];
         };
         StudioFilter: {
-            aliasesCriterion?: null | components["schemas"]["StringCriterion"];
-            childCountCriterion?: null | components["schemas"]["IntCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            aliasesCriterion?: components["schemas"]["StringCriterion"];
+            childCountCriterion?: components["schemas"]["IntCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
             favorite?: boolean;
-            favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
-            groupCountCriterion?: null | components["schemas"]["IntCriterion"];
-            imageCountCriterion?: null | components["schemas"]["IntCriterion"];
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
+            favoriteCriterion?: components["schemas"]["BoolCriterion"];
+            galleryCountCriterion?: components["schemas"]["IntCriterion"];
+            groupCountCriterion?: components["schemas"]["IntCriterion"];
+            imageCountCriterion?: components["schemas"]["IntCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
             name?: string;
-            nameCriterion?: null | components["schemas"]["StringCriterion"];
-            organizedCriterion?: null | components["schemas"]["BoolCriterion"];
-            parentCountCriterion?: null | components["schemas"]["IntCriterion"];
+            nameCriterion?: components["schemas"]["StringCriterion"];
+            organizedCriterion?: components["schemas"]["BoolCriterion"];
+            parentCountCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             parentId?: number;
-            parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
+            parentsCriterion?: components["schemas"]["MultiIdCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCountCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCriterion?: components["schemas"]["StringCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
             tagIds?: number[];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
-            videoCountCriterion?: null | components["schemas"]["IntCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
+            videoCountCriterion?: components["schemas"]["IntCriterion"];
         };
         StudioMerge: {
             sourceIds: number[];
@@ -20603,40 +20603,40 @@ export interface components {
             value2?: number;
         };
         TagFilter: {
-            aliasesCriterion?: null | components["schemas"]["StringCriterion"];
-            childCountCriterion?: null | components["schemas"]["IntCriterion"];
-            childrenCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            aliasesCriterion?: components["schemas"]["StringCriterion"];
+            childCountCriterion?: components["schemas"]["IntCriterion"];
+            childrenCriterion?: components["schemas"]["MultiIdCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            descriptionCriterion?: null | components["schemas"]["StringCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            descriptionCriterion?: components["schemas"]["StringCriterion"];
             favorite?: boolean;
-            favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
+            favoriteCriterion?: components["schemas"]["BoolCriterion"];
+            galleryCountCriterion?: components["schemas"]["IntCriterion"];
             galleryCountIncludesChildren?: boolean;
-            groupCountCriterion?: null | components["schemas"]["IntCriterion"];
+            groupCountCriterion?: components["schemas"]["IntCriterion"];
             groupCountIncludesChildren?: boolean;
-            imageCountCriterion?: null | components["schemas"]["IntCriterion"];
+            imageCountCriterion?: components["schemas"]["IntCriterion"];
             imageCountIncludesChildren?: boolean;
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
             name?: string;
-            nameCriterion?: null | components["schemas"]["StringCriterion"];
-            parentCountCriterion?: null | components["schemas"]["IntCriterion"];
-            parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            performerCountCriterion?: null | components["schemas"]["IntCriterion"];
+            nameCriterion?: components["schemas"]["StringCriterion"];
+            parentCountCriterion?: components["schemas"]["IntCriterion"];
+            parentsCriterion?: components["schemas"]["MultiIdCriterion"];
+            performerCountCriterion?: components["schemas"]["IntCriterion"];
             performerCountIncludesChildren?: boolean;
             /** Format: int32 */
             rating?: number;
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
-            remoteIdValueCriterion?: null | components["schemas"]["StringCriterion"];
-            sortNameCriterion?: null | components["schemas"]["StringCriterion"];
-            studioCountCriterion?: null | components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCountCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCriterion?: components["schemas"]["StringCriterion"];
+            remoteIdValueCriterion?: components["schemas"]["StringCriterion"];
+            sortNameCriterion?: components["schemas"]["StringCriterion"];
+            studioCountCriterion?: components["schemas"]["IntCriterion"];
             studioCountIncludesChildren?: boolean;
-            tagGroupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            videoCountCriterion?: null | components["schemas"]["IntCriterion"];
+            tagGroupsCriterion?: components["schemas"]["MultiIdCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            videoCountCriterion?: components["schemas"]["IntCriterion"];
             videoCountIncludesChildren?: boolean;
         };
         TagGraphLink: {
@@ -20858,37 +20858,37 @@ export interface components {
             urls?: string[];
         };
         TextDocumentFilter: {
-            codeCriterion?: null | components["schemas"]["StringCriterion"];
-            contentCriterion?: null | components["schemas"]["StringCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            codeCriterion?: components["schemas"]["StringCriterion"];
+            contentCriterion?: components["schemas"]["StringCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            dateCriterion?: null | components["schemas"]["DateCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            fileCountCriterion?: null | components["schemas"]["IntCriterion"];
-            fileModTimeCriterion?: null | components["schemas"]["TimestampCriterion"];
-            fileSizeCriterion?: null | components["schemas"]["IntCriterion"];
-            formatCriterion?: null | components["schemas"]["StringCriterion"];
-            groupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            hasCoverCriterion?: null | components["schemas"]["BoolCriterion"];
-            lastReadAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
-            organizedCriterion?: null | components["schemas"]["BoolCriterion"];
-            pageCountCriterion?: null | components["schemas"]["IntCriterion"];
-            pathCriterion?: null | components["schemas"]["StringCriterion"];
-            performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            playCountCriterion?: null | components["schemas"]["IntCriterion"];
-            playDurationCriterion?: null | components["schemas"]["IntCriterion"];
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            titleCriterion?: null | components["schemas"]["StringCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
-            wordCountCriterion?: null | components["schemas"]["IntCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            dateCriterion?: components["schemas"]["DateCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
+            fileCountCriterion?: components["schemas"]["IntCriterion"];
+            fileModTimeCriterion?: components["schemas"]["TimestampCriterion"];
+            fileSizeCriterion?: components["schemas"]["IntCriterion"];
+            formatCriterion?: components["schemas"]["StringCriterion"];
+            groupsCriterion?: components["schemas"]["MultiIdCriterion"];
+            hasCoverCriterion?: components["schemas"]["BoolCriterion"];
+            lastReadAtCriterion?: components["schemas"]["TimestampCriterion"];
+            likeCounterCriterion?: components["schemas"]["IntCriterion"];
+            organizedCriterion?: components["schemas"]["BoolCriterion"];
+            pageCountCriterion?: components["schemas"]["IntCriterion"];
+            pathCriterion?: components["schemas"]["StringCriterion"];
+            performerCountCriterion?: components["schemas"]["IntCriterion"];
+            performersCriterion?: components["schemas"]["MultiIdCriterion"];
+            performerTagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            playCountCriterion?: components["schemas"]["IntCriterion"];
+            playDurationCriterion?: components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            titleCriterion?: components["schemas"]["StringCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
+            wordCountCriterion?: components["schemas"]["IntCriterion"];
         };
         TextDocumentUpdate: {
             code?: string;
@@ -20940,10 +20940,10 @@ export interface components {
         };
         UiConfig: {
             abbreviateCounters: boolean;
-            alwaysResumeOnPlayback: boolean;
+            alwaysResumeOnPlayback?: boolean;
             autoplayOnListClick: boolean;
-            autostartVideo: boolean;
-            autostartVideoOnPlaySelected: boolean;
+            autostartVideo?: boolean;
+            autostartVideoOnPlaySelected?: boolean;
             continuePlaylistDefault: boolean;
             customCss?: string;
             customJs?: string;
@@ -20966,7 +20966,7 @@ export interface components {
             /** Format: int32 */
             maxLoopDuration: number;
             noBrowser: boolean;
-            notificationsEnabled: boolean;
+            notificationsEnabled?: boolean;
             /** Format: double */
             playerVideoStartMinDuration: number;
             /** Format: double */
@@ -20974,22 +20974,22 @@ export interface components {
             previewExcludeEnd: string;
             previewExcludeStart: string;
             /** Format: double */
-            previewSegmentDuration: number;
+            previewSegmentDuration?: number;
             /** Format: int32 */
-            previewSegments: number;
+            previewSegments?: number;
             ratingSystemOptions: components["schemas"]["RatingSystemOptions"];
-            showAbLoopControls: boolean;
+            showAbLoopControls?: boolean;
             showStudioAsText: boolean;
             /** Format: int32 */
-            slideshowDelay: number;
+            slideshowDelay?: number;
             soundOnPreview: boolean;
             title?: string;
             troubleshootingModeEnabled: boolean;
             videoObjectFit: string;
             /** Format: int32 */
-            wallPlayback: number;
+            wallPlayback?: number;
             wallPreviewType: string;
-            wallShowTitle: boolean;
+            wallShowTitle?: boolean;
         };
         UIDialogOverride: {
             componentName: string;
@@ -21283,11 +21283,11 @@ export interface components {
             keybindingOverrides?: {
                 [key: string]: string;
             };
-            playback?: null | components["schemas"]["UserPlaybackPreferences"];
-            ratingSystemOptions?: null | components["schemas"]["UserRatingSystemOptions"];
-            theme?: null | components["schemas"]["UserThemePreferences"];
-            tracking?: null | components["schemas"]["UserTrackingPreferences"];
-            videos?: null | components["schemas"]["UserVideosPreferences"];
+            playback?: components["schemas"]["UserPlaybackPreferences"];
+            ratingSystemOptions?: components["schemas"]["UserRatingSystemOptions"];
+            theme?: components["schemas"]["UserThemePreferences"];
+            tracking?: components["schemas"]["UserTrackingPreferences"];
+            videos?: components["schemas"]["UserVideosPreferences"];
         };
         UserVideosPreferences: {
             includeCompilationGroups?: boolean;
@@ -21388,71 +21388,71 @@ export interface components {
             width: number;
         };
         VideoFilter: {
-            audioCodecCriterion?: null | components["schemas"]["StringCriterion"];
-            bitrateInterval?: null | components["schemas"]["IntCriterion"];
-            captionsCriterion?: null | components["schemas"]["StringCriterion"];
-            checksumCriterion?: null | components["schemas"]["StringCriterion"];
+            audioCodecCriterion?: components["schemas"]["StringCriterion"];
+            bitrateInterval?: components["schemas"]["IntCriterion"];
+            captionsCriterion?: components["schemas"]["StringCriterion"];
+            checksumCriterion?: components["schemas"]["StringCriterion"];
             code?: string;
-            codeCriterion?: null | components["schemas"]["StringCriterion"];
-            createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
+            codeCriterion?: components["schemas"]["StringCriterion"];
+            createdAtCriterion?: components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
-            customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
-            dateCriterion?: null | components["schemas"]["DateCriterion"];
-            detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            directorCriterion?: null | components["schemas"]["StringCriterion"];
-            duplicatedCriterion?: null | components["schemas"]["StringCriterion"];
-            duplicatedPhashCriterion?: null | components["schemas"]["BoolCriterion"];
-            duplicatedRemoteIdCriterion?: null | components["schemas"]["BoolCriterion"];
-            duplicatedTitleCriterion?: null | components["schemas"]["BoolCriterion"];
-            durationCriterion?: null | components["schemas"]["IntCriterion"];
-            fileCountCriterion?: null | components["schemas"]["IntCriterion"];
-            fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
-            frameRateCriterion?: null | components["schemas"]["IntCriterion"];
-            galleriesCriterion?: null | components["schemas"]["MultiIdCriterion"];
+            customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
+            dateCriterion?: components["schemas"]["DateCriterion"];
+            detailsCriterion?: components["schemas"]["StringCriterion"];
+            directorCriterion?: components["schemas"]["StringCriterion"];
+            duplicatedCriterion?: components["schemas"]["StringCriterion"];
+            duplicatedPhashCriterion?: components["schemas"]["BoolCriterion"];
+            duplicatedRemoteIdCriterion?: components["schemas"]["BoolCriterion"];
+            duplicatedTitleCriterion?: components["schemas"]["BoolCriterion"];
+            durationCriterion?: components["schemas"]["IntCriterion"];
+            fileCountCriterion?: components["schemas"]["IntCriterion"];
+            fingerprintCriterion?: components["schemas"]["FingerprintCriterion"];
+            frameRateCriterion?: components["schemas"]["IntCriterion"];
+            galleriesCriterion?: components["schemas"]["MultiIdCriterion"];
             /** Format: int32 */
             galleryId?: number;
             /** Format: int32 */
             groupId?: number;
-            groupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            hashCriterion?: null | components["schemas"]["StringCriterion"];
+            groupsCriterion?: components["schemas"]["MultiIdCriterion"];
+            hashCriterion?: components["schemas"]["StringCriterion"];
             ids?: number[];
-            isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
+            isMissingCriterion?: components["schemas"]["BoolCriterion"];
             isVr?: boolean;
-            isVrCriterion?: null | components["schemas"]["BoolCriterion"];
-            lastPlayedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
+            isVrCriterion?: components["schemas"]["BoolCriterion"];
+            lastPlayedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            likeCounterCriterion?: components["schemas"]["IntCriterion"];
             organized?: boolean;
-            organizedCriterion?: null | components["schemas"]["BoolCriterion"];
-            orientationCriterion?: null | components["schemas"]["StringCriterion"];
+            organizedCriterion?: components["schemas"]["BoolCriterion"];
+            orientationCriterion?: components["schemas"]["StringCriterion"];
             path?: string;
-            pathCriterion?: null | components["schemas"]["StringCriterion"];
-            performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
-            performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
+            pathCriterion?: components["schemas"]["StringCriterion"];
+            performerAgeCriterion?: components["schemas"]["IntCriterion"];
+            performerCountCriterion?: components["schemas"]["IntCriterion"];
+            performerFavoriteCriterion?: components["schemas"]["BoolCriterion"];
             performerIds?: number[];
-            performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            playCountCriterion?: null | components["schemas"]["IntCriterion"];
-            playDurationCriterion?: null | components["schemas"]["IntCriterion"];
+            performersCriterion?: components["schemas"]["MultiIdCriterion"];
+            performerTagsCriterion?: components["schemas"]["MultiIdCriterion"];
+            playCountCriterion?: components["schemas"]["IntCriterion"];
+            playDurationCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             rating?: number;
-            ratingCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
-            remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
-            resolutionCriterion?: null | components["schemas"]["IntCriterion"];
-            resumeTimeCriterion?: null | components["schemas"]["IntCriterion"];
+            ratingCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCountCriterion?: components["schemas"]["IntCriterion"];
+            remoteIdCriterion?: components["schemas"]["StringCriterion"];
+            resolutionCriterion?: components["schemas"]["IntCriterion"];
+            resumeTimeCriterion?: components["schemas"]["IntCriterion"];
             /** Format: int32 */
             studioId?: number;
-            studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagDurationCriterion?: null | components["schemas"]["TagDurationCriterion"];
+            studiosCriterion?: components["schemas"]["MultiIdCriterion"];
+            tagCountCriterion?: components["schemas"]["IntCriterion"];
+            tagDurationCriterion?: components["schemas"]["TagDurationCriterion"];
             tagIds?: number[];
-            tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
+            tagsCriterion?: components["schemas"]["MultiIdCriterion"];
             title?: string;
-            titleCriterion?: null | components["schemas"]["StringCriterion"];
-            updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            urlCriterion?: null | components["schemas"]["StringCriterion"];
-            videoCodecCriterion?: null | components["schemas"]["StringCriterion"];
+            titleCriterion?: components["schemas"]["StringCriterion"];
+            updatedAtCriterion?: components["schemas"]["TimestampCriterion"];
+            urlCriterion?: components["schemas"]["StringCriterion"];
+            videoCodecCriterion?: components["schemas"]["StringCriterion"];
         };
         VideoGroupInput: {
             /** Format: int32 */
@@ -21473,11 +21473,11 @@ export interface components {
             totalDistinctWatchedSec?: number;
         };
         VideoListEntry: {
-            group?: null | components["schemas"]["Group"];
+            group?: components["schemas"]["Group"];
             /** Format: int32 */
             id: number;
             kind: string;
-            video?: null | components["schemas"]["Video"];
+            video?: components["schemas"]["Video"];
         };
         VideoMerge: {
             sourceIds: number[];
