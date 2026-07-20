@@ -1,3 +1,4 @@
+using Cove.Core.Contracts;
 using Cove.Core.Interfaces;
 using Cove.Core.Entities;
 using Cove.Data;
@@ -15,6 +16,7 @@ namespace Cove.Api.Services;
 /// endpoint, network error, deleted remote performer) is swallowed and reported as <c>false</c> so the
 /// caller keeps the performer with just its recorded remote id.
 /// </summary>
+[ExposeToExtensions(typeof(IReferencePerformerImporter), Lifetime = ServiceForwardingLifetime.Singleton)]
 public sealed class ReferencePerformerImporter(IServiceScopeFactory scopeFactory, ILogger<ReferencePerformerImporter>? logger = null)
     : IReferencePerformerImporter
 {
