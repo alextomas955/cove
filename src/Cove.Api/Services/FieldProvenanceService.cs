@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cove.Core.Common;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Core.Interfaces;
@@ -9,7 +10,9 @@ namespace Cove.Api.Services;
 
 public sealed class FieldProvenanceService(CoveContext db) : IFieldProvenanceService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    // Dynamic audit blob (no fixed host enums); the canonical resolver's reflection fallback
+    // handles the runtime type passed to Serialize.
+    private static readonly JsonSerializerOptions JsonOptions = CoveJson.Default;
 
     public async Task RecordAsync(
         AffinityHostType hostType,
