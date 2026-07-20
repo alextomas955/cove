@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@cove/extension-sdk": "file:../sdk/frontend",
     "@cove/types": "file:../sdk/types",
     "@microsoft/signalr": "^9.0.0",
     "@tanstack/react-query": "^5.80.7",
