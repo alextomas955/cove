@@ -17,7 +17,7 @@ public sealed class SerializerWireParityTests
     [Fact]
     public async Task MvcSignalRAndHttpJson_SerializeEnum_ToIdenticalCamelCaseString()
     {
-        using var factory = new CoveWebApplicationFactory("IntegrationSerializerParity");
+        using var factory = new CoveWebApplicationFactory();
         await factory.ResetDatabaseAsync();
 
         var services = factory.Services;
@@ -45,7 +45,7 @@ public sealed class SerializerWireParityTests
     [Fact]
     public async Task HttpJsonOptions_SerializeUnregisteredDtoEnum_AsCamelCaseString()
     {
-        using var factory = new CoveWebApplicationFactory("IntegrationSerializerExtension");
+        using var factory = new CoveWebApplicationFactory();
         await factory.ResetDatabaseAsync();
 
         // The exact options object every minimal-API return value, Results.Json call, and extension
@@ -64,7 +64,7 @@ public sealed class SerializerWireParityTests
     [Fact]
     public async Task SystemConfigEndpoint_EnumField_IsCamelCaseString()
     {
-        using var factory = new CoveWebApplicationFactory("IntegrationSerializerRegression");
+        using var factory = new CoveWebApplicationFactory();
         await factory.ResetDatabaseAsync();
 
         using var client = factory.CreateAuthenticatedClient();
