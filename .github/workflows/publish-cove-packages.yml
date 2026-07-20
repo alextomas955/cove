@@ -62,6 +62,21 @@ jobs:
       - name: Build and roll up public API
         run: npm --prefix sdk/frontend run build
 
+      # The host-key constant values are inlined into dist during the build, so the shipped package
+      # has no runtime or type dependency on the workspace-local types package. Drop its build-only
+      # file: reference so the published manifest carries no unresolvable off-repo path.
+      - name: Remove workspace-only build dependency from the published manifest
+        working-directory: sdk/frontend
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            if (pkg.devDependencies) {
+              delete pkg.devDependencies["@cove/types"];
+            }
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+
       - name: Pack (tarball verification)
         run: npm --prefix sdk/frontend pack
 
