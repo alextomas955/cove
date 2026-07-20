@@ -1,3 +1,6 @@
+// @ts-nocheck — this check drives a Node child process (esbuild) and the fs/path/child_process
+// builtins, whose types are outside the browser-targeted app tsconfig. It runs under Vitest, which
+// executes it in Node; the runtime assertions below are the source of truth for the invariant.
 // Cross-bundle sharing check for the additive runtime/v2. Unlike an in-process simulation, this
 // builds the extension fixture as a genuinely SEPARATE bundle (esbuild, shared modules external),
 // then loads it with those externals provided by the host — the analogue of the browser resolving
