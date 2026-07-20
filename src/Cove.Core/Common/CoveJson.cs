@@ -34,14 +34,19 @@ public static class CoveJson
                 new DefaultJsonTypeInfoResolver()),
         };
 
-        // Order matters. (1) The global string-enum policy covers the reflection-fallback path
-        // (all extension-ALC enums and every unregistered host DTO enum); without it those enums
-        // would emit their default integer and defeat the canonical wire format. (2) The
-        // type-specific CriterionModifier converter is registered AFTER, and a typed
-        // JsonConverter<T> takes precedence, so CriterionModifier keeps its extra read leniency
-        // while every other enum flows through the global converter.
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        // Order matters. System.Text.Json evaluates the Converters collection in registration
+        // order and uses the FIRST converter whose CanConvert(type) is true (it does not rank by
+        // specificity). So the type-specific CriterionModifier converter MUST be registered before
+        // the global enum factory to win for CriterionModifier — otherwise the factory (which
+        // matches every enum) would intercept it and drop its extra read leniency
+        // (greater_than / GREATER_THAN separator-insensitive forms).
+        // (1) Type-specific converter: keeps CriterionModifier's lenient read; concrete
+        //     JsonConverter<CriterionModifier> only matches that one type.
+        // (2) Global string-enum policy: covers the reflection-fallback path (all extension-ALC
+        //     enums and every unregistered host DTO enum); without it those enums would emit their
+        //     default integer and defeat the canonical wire format.
         options.Converters.Add(new CriterionModifierJsonConverter());
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
 
         // Freeze once, after the resolver and both converters are set.
         options.MakeReadOnly();
