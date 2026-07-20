@@ -14,6 +14,7 @@ using Serilog.Core;
 using Serilog.Events;
 using Cove.Api.Hubs;
 using Cove.Api.Services;
+using Cove.Core.Common;
 using Cove.Core.Entities.Galleries;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
@@ -58,6 +59,23 @@ static bool IsWeakJwtSecret(string? secret)
 
 static string GenerateJwtSecret()
     => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
+// Copies the canonical wire configuration from CoveJson.Default onto a framework-provided options
+// object. Framework hooks (MVC, SignalR, Http.Json) each expose their OWN JsonSerializerOptions that
+// must be configured in place — the frozen CoveJson.Default cannot be assigned by reference — so the
+// naming policy, combined type-info resolver, and EVERY converter are copied across. Copying the
+// converter list is what carries the enum behavior: the global JsonStringEnumConverter(CamelCase) is
+// the string-enum mechanism on the reflection-fallback path (it does not travel via the source-gen
+// context's UseStringEnumConverter policy), and the type-specific CriterionModifierJsonConverter is
+// preserved ahead of it (first-match-wins ordering is inherited from CoveJson.Default).
+static void ApplyCanonicalJson(System.Text.Json.JsonSerializerOptions options)
+{
+    options.PropertyNamingPolicy = CoveJson.Default.PropertyNamingPolicy;
+    options.PropertyNameCaseInsensitive = CoveJson.Default.PropertyNameCaseInsensitive;
+    options.TypeInfoResolver = CoveJson.Default.TypeInfoResolver;
+    foreach (var converter in CoveJson.Default.Converters)
+        options.Converters.Add(converter);
+}
 
 static LogEventLevel ParseSerilogLogLevel(string? level)
     => level?.Trim().ToLowerInvariant() switch
@@ -391,10 +409,7 @@ try
 
     // SignalR
     builder.Services.AddSignalR()
-        .AddJsonProtocol(options =>
-        {
-            options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-        });
+        .AddJsonProtocol(options => ApplyCanonicalJson(options.PayloadSerializerOptions));
 
     // Auth
     var authConfig = coveConfig.GetSection("Auth");
@@ -438,10 +453,12 @@ try
         options.Filters.Add<Cove.Api.Middleware.PermissionAuthorizationFilter>();
         options.Filters.Add<Cove.Api.Middleware.EntityAccessActionFilter>();
     })
-        .AddJsonOptions(options =>
-        {
-            options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-        });
+        .AddJsonOptions(options => ApplyCanonicalJson(options.JsonSerializerOptions));
+
+    // Minimal-API + extension endpoint serialization. Extension MapEndpoints responses (and any
+    // extension code writing via HttpContext.Response.WriteAsJsonAsync) inherit these options; before
+    // this registration the path fell back to bare web defaults and emitted enums as integers.
+    builder.Services.ConfigureHttpJsonOptions(options => ApplyCanonicalJson(options.SerializerOptions));
     builder.Services.AddOpenApi();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();

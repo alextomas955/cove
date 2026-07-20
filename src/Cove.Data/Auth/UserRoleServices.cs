@@ -1,4 +1,5 @@
 using Cove.Core.Auth;
+using Cove.Core.Common;
 using Cove.Core.Entities.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -14,11 +15,9 @@ public sealed class UserService : IUserService
     private const string SetupPurpose = "setup";
     private static readonly TimeSpan InviteTokenTtl = TimeSpan.FromDays(7);
     private static readonly TimeSpan SetupTokenTtl = TimeSpan.FromHours(1);
-    private static readonly JsonSerializerOptions UiPreferencesJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-    };
+    // UserUiPreferencesDto is camelCase with no enum fields, so canonical output is byte-compatible
+    // with the previously-persisted UI-prefs column.
+    private static readonly JsonSerializerOptions UiPreferencesJsonOptions = CoveJson.Default;
 
     private readonly CoveContext _db;
     private readonly IAuditService _audit;

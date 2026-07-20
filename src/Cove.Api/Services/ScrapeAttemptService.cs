@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text;
+using Cove.Core.Common;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Core.Interfaces;
@@ -11,7 +12,8 @@ namespace Cove.Api.Services;
 
 public class ScrapeAttemptService(CoveContext db, ScraperService scraperService, IVideoCoverService videoCoverService, PerformerScrapeService performerScrapeService, ITagProvenanceService tagProvenanceService, IGroupMetadataApplyService groupMetadataApplyService, ILogger<ScrapeAttemptService> logger, IFieldProvenanceService? fieldProvenanceService = null)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    // Persisted scrape blobs are dynamic Dictionary<string, object?> payloads with no host enums.
+    private static readonly JsonSerializerOptions JsonOptions = CoveJson.Default;
 
     private static string BuildScraperSourceKey(string? scraperId)
         => string.IsNullOrWhiteSpace(scraperId) ? "scraper" : $"scraper:{scraperId.Trim()}";

@@ -1,24 +1,26 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Cove.Core.DTOs;
 using Cove.Core.Events;
 
 namespace Cove.Core.Interfaces;
 
+// SignalR job wire contract — pinned wire names are public API; do not rename.
 public enum JobStatus
 {
-    Pending,
-    Running,
-    Completed,
-    Failed,
-    Cancelled
+    [JsonStringEnumMemberName("pending")] Pending,
+    [JsonStringEnumMemberName("running")] Running,
+    [JsonStringEnumMemberName("completed")] Completed,
+    [JsonStringEnumMemberName("failed")] Failed,
+    [JsonStringEnumMemberName("cancelled")] Cancelled
 }
 
 public enum JobUnitOutcome
 {
-    Succeeded,
-    Failed,
-    Skipped,
+    [JsonStringEnumMemberName("succeeded")] Succeeded,
+    [JsonStringEnumMemberName("failed")] Failed,
+    [JsonStringEnumMemberName("skipped")] Skipped,
 }
 
 public record JobInfo(

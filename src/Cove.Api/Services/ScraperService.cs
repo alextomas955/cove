@@ -1,4 +1,5 @@
 using HtmlAgilityPack;
+using Cove.Core.Common;
 using Cove.Core.DTOs;
 using Cove.Core.Interfaces;
 using Cove.Plugins;
@@ -36,7 +37,7 @@ public class ScraperService
     private readonly Dictionary<string, ExtensionScraperRegistration> _extensionScraperCache = new(StringComparer.OrdinalIgnoreCase);
     private const string BuiltinScraperSourcePath = "builtin:cove.core.scrapers";
     private static readonly Regex BracketTagRegex = new(@"\[[^\[\]\r\n]{1,80}\]", RegexOptions.Compiled);
-    private static readonly JsonSerializerOptions ExtensionScrapeJsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions ExtensionScrapeJsonOptions = new(CoveJson.Default)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
