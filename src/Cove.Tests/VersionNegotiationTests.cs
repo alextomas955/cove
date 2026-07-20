@@ -97,6 +97,40 @@ public class VersionNegotiationTests
         Assert.False(manager.IsEnabled(WhisparrSyncId));
     }
 
+    [Fact]
+    public async Task ReleasedBuild_VersionDisable_LeavesPersistedEnabledFlagUntouched()
+    {
+        // A host below the floor skips the extension for this boot...
+        var manager = CreateManager("0.9.0", "0.9.0");
+        manager.Register(new StubExtension(WhisparrSyncId, minCoveVersion: "1.0.0"), "local");
+
+        await manager.EnforceDependencyCompatibilityAsync();
+
+        Assert.False(manager.IsEnabled(WhisparrSyncId)); // suppressed this boot
+
+        // ...but the installation record's Enabled flag is left untouched, so nothing writes
+        // enabled=false to the store. A "DB wins" reload on the next boot therefore cannot carry a
+        // sticky disable forward once the host is upgraded to a compatible version.
+        Assert.True(manager.Installations[WhisparrSyncId].Enabled);
+    }
+
+    [Fact]
+    public async Task VersionDisabledExtension_ReEnablesAfterHostUpgradeSatisfiesFloor()
+    {
+        // Boot 1: released host 0.9.0 is below the 1.0.0 floor -> suppressed this boot.
+        var oldHost = CreateManager("0.9.0", "0.9.0");
+        oldHost.Register(new StubExtension(WhisparrSyncId, minCoveVersion: "1.0.0"), "local");
+        await oldHost.EnforceDependencyCompatibilityAsync();
+        Assert.False(oldHost.IsEnabled(WhisparrSyncId));
+
+        // Boot 2 after the operator upgrades to host 1.1.0 (a fresh manager, as on a real restart):
+        // the floor is now satisfied, so the extension is enabled again with no manual intervention.
+        var newHost = CreateManager("1.1.0", "1.1.0");
+        newHost.Register(new StubExtension(WhisparrSyncId, minCoveVersion: "1.0.0"), "local");
+        await newHost.EnforceDependencyCompatibilityAsync();
+        Assert.True(newHost.IsEnabled(WhisparrSyncId));
+    }
+
     private sealed class StubExtension(string id, string? minCoveVersion) : IExtension
     {
         public string Id => id;
