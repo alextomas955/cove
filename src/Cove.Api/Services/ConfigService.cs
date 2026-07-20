@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Cove.Core.Common;
 using Cove.Core.DTOs;
 using Cove.Core.Interfaces;
 
@@ -15,12 +16,12 @@ public class ConfigService
     private readonly CoveConfiguration _config;
     private readonly ILogger<ConfigService> _logger;
     private readonly string _configPath;
-    private readonly JsonSerializerOptions _jsonOpts = new()
+    // Config file already stores camelCase properties and enum strings, so the canonical options
+    // produce byte-compatible output; WriteIndented preserves the on-disk file shape.
+    private readonly JsonSerializerOptions _jsonOpts = new(CoveJson.Default)
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
     private readonly SemaphoreSlim _lock = new(1, 1);
 
