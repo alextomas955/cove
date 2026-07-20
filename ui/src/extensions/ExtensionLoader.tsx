@@ -15,7 +15,7 @@ import { useEffect, useState, createContext, useContext, useCallback, useMemo, t
 import { configureCoveClientAuth } from "@cove/extension-sdk";
 import { useRouteRegistry } from "../router/RouteRegistry";
 import { useAppConfig } from "../state/AppConfigContext";
-import { extensions, tryRefresh } from "../api/client";
+import { extensions } from "../api/client";
 import { authStore } from "../auth/authStore";
 import { useAuth } from "../auth/AuthContext";
 import { supportsServerBackedUiPreferences, updateAuthenticatedUserUiPreferences } from "../utils/userUiPreferences";
@@ -47,7 +47,9 @@ configureCoveClientAuth({
   getShareToken: () => authStore.getShareToken(),
   getSharePassword: () => authStore.getSharePassword(),
   getRefreshToken: () => authStore.getRefreshToken(),
-  tryRefresh,
+  // Reuse the host client's refresh-and-retry, resolved lazily so the shared auth wiring adds no
+  // load-time coupling to the client module.
+  tryRefresh: () => import("../api/client").then((client) => client.tryRefresh()),
 });
 
 // ============================================================================
