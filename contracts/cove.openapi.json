@@ -20724,9 +20724,6 @@
           "request": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
@@ -20734,18 +20731,12 @@
           "models": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
           },
           "summary": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/JsonElement"
               }
@@ -21073,18 +21064,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "titleCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -21093,18 +21078,12 @@
           "codeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -21113,18 +21092,12 @@
           "pathCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "formatCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -21133,18 +21106,12 @@
           "audioCodecCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "urlCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -21153,18 +21120,12 @@
           "organizedCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "hasVideoFilesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -21173,18 +21134,12 @@
           "hasCoverCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "dateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/DateCriterion"
               }
@@ -21193,18 +21148,12 @@
           "durationCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "bitRateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -21213,18 +21162,12 @@
           "fileSizeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "fileModTimeCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -21233,18 +21176,12 @@
           "fileCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "trackCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -21253,18 +21190,12 @@
           "trackTitleCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "sampleRateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -21273,18 +21204,12 @@
           "channelsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "playCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -21293,18 +21218,12 @@
           "likeCounterCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "playDurationCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -21313,18 +21232,12 @@
           "lastPlayedAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "tagCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -21333,18 +21246,12 @@
           "performerCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "performerTagsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -21353,18 +21260,12 @@
           "tagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "performersCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -21373,18 +21274,12 @@
           "studiosCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "groupsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -21393,9 +21288,6 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
@@ -21403,18 +21295,12 @@
           "updatedAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -21660,9 +21546,7 @@
       },
       "BulkAudioUpdate": {
         "required": [
-          "ids",
-          "performerMode",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -21719,9 +21603,7 @@
       },
       "BulkGalleryUpdate": {
         "required": [
-          "ids",
-          "performerMode",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -21785,8 +21667,7 @@
       },
       "BulkGroupUpdate": {
         "required": [
-          "ids",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -21834,10 +21715,7 @@
       },
       "BulkImageUpdate": {
         "required": [
-          "galleryMode",
-          "ids",
-          "performerMode",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -21911,8 +21789,7 @@
       },
       "BulkPerformerUpdate": {
         "required": [
-          "ids",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -21950,8 +21827,7 @@
       },
       "BulkStudioUpdate": {
         "required": [
-          "ids",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -21995,9 +21871,7 @@
       },
       "BulkTagUpdate": {
         "required": [
-          "childMode",
-          "ids",
-          "parentMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -22066,9 +21940,7 @@
       },
       "BulkTextDocumentUpdate": {
         "required": [
-          "ids",
-          "performerMode",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -22133,11 +22005,7 @@
       },
       "BulkVideoUpdate": {
         "required": [
-          "galleryMode",
-          "groupMode",
-          "ids",
-          "performerMode",
-          "tagMode"
+          "ids"
         ],
         "type": "object",
         "properties": {
@@ -22302,7 +22170,6 @@
           "createGalleriesFromFolders",
           "createImageClipsFromVideos",
           "customFieldDefinitions",
-          "deleteGeneratedDefault",
           "disabledPlugins",
           "downloaderPathOverrides",
           "excludeGalleryPatterns",
@@ -22316,11 +22183,8 @@
           "imageExtensions",
           "interface",
           "logLevel",
-          "maxConcurrentDownloads",
-          "maxParallelTasks",
           "maxStreamingTranscodeSize",
           "pluginConfigurations",
-          "port",
           "previewAudio",
           "previewPreset",
           "scraping",
@@ -22788,7 +22652,6 @@
         "required": [
           "displayOrder",
           "entityTypes",
-          "filterable",
           "id",
           "isMultiValue",
           "key",
@@ -22848,7 +22711,6 @@
       "CustomFieldDefinitionCreate": {
         "required": [
           "entityTypes",
-          "filterable",
           "isMultiValue",
           "label",
           "options",
@@ -22896,7 +22758,6 @@
       "CustomFieldDefinitionSync": {
         "required": [
           "entityTypes",
-          "filterable",
           "isMultiValue",
           "key",
           "label",
@@ -23168,9 +23029,6 @@
           "extra": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
@@ -23249,9 +23107,6 @@
           },
           "extra": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/JsonElement"
               }
@@ -23334,9 +23189,6 @@
           "extra": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
@@ -23409,9 +23261,6 @@
           },
           "generate": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/GenerateOptions"
               }
@@ -23512,8 +23361,7 @@
       "DownloaderBatchStartRequest": {
         "required": [
           "followUp",
-          "items",
-          "preflightBeforeQueue"
+          "items"
         ],
         "type": "object",
         "properties": {
@@ -23706,9 +23554,6 @@
         "required": [
           "allowDuplicateDownload",
           "autoApplyMetadata",
-          "createMissingPerformers",
-          "createMissingStudio",
-          "createMissingTags",
           "downloaderId",
           "entity",
           "markOrganized",
@@ -23842,9 +23687,6 @@
           "meta": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
@@ -23901,9 +23743,6 @@
           "hostType": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/EmbeddingHostType"
               }
             ]
@@ -23914,9 +23753,6 @@
           },
           "modality": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/EmbeddingModality"
               }
@@ -24167,14 +24003,6 @@
         }
       },
       "ExportOptions": {
-        "required": [
-          "includeGalleries",
-          "includeGroups",
-          "includePerformers",
-          "includeStudios",
-          "includeTags",
-          "includeVideos"
-        ],
         "type": "object",
         "properties": {
           "includeVideos": {
@@ -24605,9 +24433,6 @@
           },
           "topSuggestion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/FaceTopSuggestion"
               }
@@ -25262,9 +25087,6 @@
           "value": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
@@ -25314,18 +25136,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/AudioFilter"
               }
@@ -25339,18 +25155,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/GalleryFilter"
               }
@@ -25364,18 +25174,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/GroupFilter"
               }
@@ -25389,18 +25193,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/ImageFilter"
               }
@@ -25414,18 +25212,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/PerformerFilter"
               }
@@ -25439,18 +25231,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StudioFilter"
               }
@@ -25464,18 +25250,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TagFilter"
               }
@@ -25489,18 +25269,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TextDocumentFilter"
               }
@@ -25514,18 +25288,12 @@
           "findFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FindFilter"
               }
             ]
           },
           "objectFilter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/VideoFilter"
               }
@@ -25938,18 +25706,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "organizedCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -25958,18 +25720,12 @@
           "tagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "performersCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -25978,18 +25734,12 @@
           "studiosCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "imageCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -25998,18 +25748,12 @@
           "titleCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "dateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/DateCriterion"
               }
@@ -26018,18 +25762,12 @@
           "pathCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "fingerprintCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/FingerprintCriterion"
               }
@@ -26038,18 +25776,12 @@
           "checksumCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "urlCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -26058,18 +25790,12 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "updatedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -26078,18 +25804,12 @@
           "performerFavoriteCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "isMissingCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -26098,18 +25818,12 @@
           "codeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -26118,18 +25832,12 @@
           "photographerCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "fileCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26138,18 +25846,12 @@
           "tagCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "performerCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26158,18 +25860,12 @@
           "performerAgeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "typicalResolutionCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26178,9 +25874,6 @@
           "videosCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
@@ -26188,18 +25881,12 @@
           "performerTagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -26333,8 +26020,7 @@
           "segmentThumbnails",
           "segments",
           "sprites",
-          "textPhashes",
-          "thumbnails"
+          "textPhashes"
         ],
         "type": "object",
         "properties": {
@@ -26645,9 +26331,6 @@
           "kind": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GroupKind"
               }
             ]
@@ -26700,18 +26383,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "durationCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26720,18 +26397,12 @@
           "nameCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "studiosCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -26740,18 +26411,12 @@
           "tagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "dateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/DateCriterion"
               }
@@ -26760,18 +26425,12 @@
           "urlCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "createdAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -26780,18 +26439,12 @@
           "updatedAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "isMissingCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -26800,18 +26453,12 @@
           "directorCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "synopsisCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -26820,18 +26467,12 @@
           "kindCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "aliasesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -26840,18 +26481,12 @@
           "querySourceKeyCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "allowedHostTypesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -26860,18 +26495,12 @@
           "hasQueryCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "isBuiltInCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -26880,18 +26509,12 @@
           "showInVideoListsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "lastResolvedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -26900,18 +26523,12 @@
           "sortOrderCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "cachedItemCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26920,18 +26537,12 @@
           "performersCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "itemCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26940,18 +26551,12 @@
           "videoCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "imageCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26960,18 +26565,12 @@
           "audioCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "textCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -26980,18 +26579,12 @@
           "galleryCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "performerItemCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -27000,18 +26593,12 @@
           "studioItemCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "tagItemCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -27020,18 +26607,12 @@
           "faceCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "segmentCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -27040,18 +26621,12 @@
           "subGroupCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "containingGroupCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -27060,18 +26635,12 @@
           "tagCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -27285,9 +26854,6 @@
           },
           "derivedQuery": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/SegmentSpanDerivedQuery"
               }
@@ -27548,9 +27114,6 @@
           "kind": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GroupKind"
               }
             ]
@@ -27577,11 +27140,6 @@
         }
       },
       "IdentifyDefaultsConfig": {
-        "required": [
-          "createPerformers",
-          "createStudios",
-          "createTags"
-        ],
         "type": "object",
         "properties": {
           "createTags": {
@@ -27610,12 +27168,7 @@
       "IdentifyOptions": {
         "required": [
           "markOrganized",
-          "setCoverImage",
-          "setPerformers",
-          "setStudio",
-          "setTags",
-          "skipMultipleMatches",
-          "skipSingleNamePerformers"
+          "skipMultipleMatches"
         ],
         "type": "object",
         "properties": {
@@ -27953,18 +27506,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "organizedCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -27973,18 +27520,12 @@
           "tagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "performersCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -27993,18 +27534,12 @@
           "studiosCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "galleriesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -28013,18 +27548,12 @@
           "titleCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "likeCounterCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -28033,18 +27562,12 @@
           "resolutionCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "pathCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -28053,18 +27576,12 @@
           "fingerprintCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FingerprintCriterion"
               }
             ]
           },
           "checksumCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -28073,18 +27590,12 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "updatedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -28093,18 +27604,12 @@
           "performerFavoriteCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "isMissingCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -28113,18 +27618,12 @@
           "codeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -28133,18 +27632,12 @@
           "photographerCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "urlCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -28153,18 +27646,12 @@
           "dateCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DateCriterion"
               }
             ]
           },
           "fileCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -28173,18 +27660,12 @@
           "tagCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "performerCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -28193,18 +27674,12 @@
           "performerAgeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "orientationCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -28213,18 +27688,12 @@
           "performerTagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -28617,7 +28086,6 @@
       },
       "MetadataBatchDefaultsConfig": {
         "required": [
-          "createParentStudios",
           "excludeFields",
           "refreshAlreadyTagged"
         ],
@@ -28641,7 +28109,6 @@
         "required": [
           "apiKey",
           "endpoint",
-          "maxRequestsPerMinute",
           "name"
         ],
         "type": "object",
@@ -28753,9 +28220,6 @@
           "filter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PerformerFilter"
               }
             ]
@@ -28856,7 +28320,6 @@
       },
       "MetadataServerStudioBatchTagRequest": {
         "required": [
-          "createParentStudios",
           "endpoint",
           "refreshAlreadyTagged",
           "selectAll"
@@ -28875,9 +28338,6 @@
           },
           "filter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StudioFilter"
               }
@@ -28984,9 +28444,6 @@
           },
           "filter": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TagFilter"
               }
@@ -29103,10 +28560,6 @@
           "onlyExistingStudio",
           "onlyExistingTags",
           "overwriteExplicitCover",
-          "setCoverImage",
-          "setPerformers",
-          "setStudio",
-          "setTags",
           "skipSingleNamePerformers",
           "videoId"
         ],
@@ -29159,9 +28612,6 @@
           },
           "studioOverride": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MetadataServerVideoEntityOverride"
               }
@@ -29283,9 +28733,6 @@
           "studioCandidate": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MetadataServerEntityCandidate"
               }
             ]
@@ -29328,9 +28775,6 @@
           },
           "uiPreferences": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/UserUiPreferences"
               }
@@ -30070,7 +29514,6 @@
       },
       "PerformerApplyScrapedRequest": {
         "required": [
-          "createMissingTags",
           "scraped"
         ],
         "type": "object",
@@ -30232,18 +29675,12 @@
           "nameCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "ratingCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -30252,18 +29689,12 @@
           "ageCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "genderCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30272,18 +29703,12 @@
           "ethnicityCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "countryCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30292,18 +29717,12 @@
           "favoriteCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "tagsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -30312,18 +29731,12 @@
           "studiosCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "videoCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -30332,18 +29745,12 @@
           "studioCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "imageCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -30352,18 +29759,12 @@
           "galleryCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "birthdateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/DateCriterion"
               }
@@ -30372,18 +29773,12 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "updatedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -30392,18 +29787,12 @@
           "pathCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "urlCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30412,18 +29801,12 @@
           "weightCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "heightCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -30432,18 +29815,12 @@
           "isMissingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "remoteIdCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30452,18 +29829,12 @@
           "remoteIdValueCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "remoteIdCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -30472,18 +29843,12 @@
           "disambiguationCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30492,18 +29857,12 @@
           "eyeColorCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "hairColorCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30512,18 +29871,12 @@
           "measurementsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "fakeTitsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30532,18 +29885,12 @@
           "penisLengthCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "circumcisedCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30552,18 +29899,12 @@
           "careerStartCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DateCriterion"
               }
             ]
           },
           "careerEndCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/DateCriterion"
               }
@@ -30572,18 +29913,12 @@
           "careerLengthCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "tattooCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30592,18 +29927,12 @@
           "piercingsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "aliasesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -30612,18 +29941,12 @@
           "deathDateCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DateCriterion"
               }
             ]
           },
           "playCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -30632,18 +29955,12 @@
           "likeCounterCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "groupsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -30652,18 +29969,12 @@
           "tagCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -31409,9 +30720,6 @@
           "extension": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/RegistryInstallExtensionRef"
               }
             ]
@@ -31482,9 +30790,6 @@
           },
           "extension": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/ExtensionDependencyImpact"
               }
@@ -31933,9 +31238,6 @@
       },
       "ScrapeApplyDefaultsConfig": {
         "required": [
-          "createMissingPerformers",
-          "createMissingStudio",
-          "createMissingTags",
           "hydratePerformers",
           "markOrganized"
         ],
@@ -32291,9 +31593,7 @@
       },
       "SecurityConfig": {
         "required": [
-          "allowAnonymousShareLinks",
-          "enabled",
-          "enforceDefaultDeny"
+          "enabled"
         ],
         "type": "object",
         "properties": {
@@ -32374,9 +31674,6 @@
           "payload": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
@@ -32438,9 +31735,6 @@
           },
           "payload": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/JsonElement"
               }
@@ -32592,9 +31886,6 @@
           "hostType": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SegmentHostType"
               }
             ]
@@ -32663,9 +31954,6 @@
           "hostType": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SegmentHostType"
               }
             ]
@@ -32723,9 +32011,6 @@
           },
           "hostType": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/SegmentHostType"
               }
@@ -32846,9 +32131,6 @@
           },
           "payload": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/JsonElement"
               }
@@ -32990,9 +32272,6 @@
           },
           "derivedQuery": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/SegmentSpanDerivedQuery"
               }
@@ -33264,9 +32543,6 @@
           },
           "payload": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/JsonElement"
               }
@@ -33879,18 +33155,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "favoriteCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -33899,18 +33169,12 @@
           "tagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "videoCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -33919,18 +33183,12 @@
           "galleryCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "imageCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -33939,18 +33197,12 @@
           "urlCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "remoteIdCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -33959,18 +33211,12 @@
           "remoteIdCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "isMissingCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -33979,18 +33225,12 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "updatedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -33999,18 +33239,12 @@
           "nameCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -34019,18 +33253,12 @@
           "aliasesCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "parentsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -34039,18 +33267,12 @@
           "parentCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "childCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -34059,18 +33281,12 @@
           "tagCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "groupCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -34079,18 +33295,12 @@
           "organizedCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -34768,9 +33978,6 @@
           "favoriteCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
@@ -34778,18 +33985,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "videoCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -34801,9 +34002,6 @@
           "performerCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
@@ -34814,18 +34012,12 @@
           "parentsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "childrenCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -34834,18 +34026,12 @@
           "tagGroupsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "isMissingCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -34854,18 +34040,12 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "updatedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -34874,18 +34054,12 @@
           "nameCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "sortNameCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -34894,18 +34068,12 @@
           "remoteIdCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "remoteIdValueCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -34914,18 +34082,12 @@
           "remoteIdCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "aliasesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -34934,18 +34096,12 @@
           "descriptionCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "imageCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -34957,9 +34113,6 @@
           "galleryCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
@@ -34969,9 +34122,6 @@
           },
           "studioCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -34983,9 +34133,6 @@
           "groupCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
@@ -34996,9 +34143,6 @@
           "parentCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
@@ -35006,18 +34150,12 @@
           "childCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -35735,18 +34873,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "titleCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -35755,18 +34887,12 @@
           "codeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -35775,18 +34901,12 @@
           "contentCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "pathCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -35795,18 +34915,12 @@
           "formatCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "urlCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -35815,18 +34929,12 @@
           "organizedCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "hasCoverCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -35835,18 +34943,12 @@
           "dateCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DateCriterion"
               }
             ]
           },
           "wordCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -35855,18 +34957,12 @@
           "pageCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "fileSizeCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -35875,18 +34971,12 @@
           "fileModTimeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "fileCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -35895,18 +34985,12 @@
           "playCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "likeCounterCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -35915,18 +34999,12 @@
           "playDurationCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "lastReadAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -35935,18 +35013,12 @@
           "tagCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "performerCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -35955,18 +35027,12 @@
           "performerTagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "tagsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -35975,18 +35041,12 @@
           "performersCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "studiosCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -35995,18 +35055,12 @@
           "groupsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "createdAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -36015,18 +35069,12 @@
           "updatedAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -36195,10 +35243,7 @@
       "UiConfig": {
         "required": [
           "abbreviateCounters",
-          "alwaysResumeOnPlayback",
           "autoplayOnListClick",
-          "autostartVideo",
-          "autostartVideoOnPlaySelected",
           "continuePlaylistDefault",
           "deleteFileDefault",
           "enableCSSCustomization",
@@ -36211,23 +35256,16 @@
           "keybindingOverrides",
           "maxLoopDuration",
           "noBrowser",
-          "notificationsEnabled",
           "playerVideoStartMinDuration",
           "playerVideoStartPercent",
           "previewExcludeEnd",
           "previewExcludeStart",
-          "previewSegmentDuration",
-          "previewSegments",
           "ratingSystemOptions",
-          "showAbLoopControls",
           "showStudioAsText",
-          "slideshowDelay",
           "soundOnPreview",
           "troubleshootingModeEnabled",
           "videoObjectFit",
-          "wallPlayback",
-          "wallPreviewType",
-          "wallShowTitle"
+          "wallPreviewType"
         ],
         "type": "object",
         "properties": {
@@ -37245,18 +36283,12 @@
           "theme": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/UserThemePreferences"
               }
             ]
           },
           "ratingSystemOptions": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/UserRatingSystemOptions"
               }
@@ -37265,18 +36297,12 @@
           "tracking": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/UserTrackingPreferences"
               }
             ]
           },
           "videos": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/UserVideosPreferences"
               }
@@ -37290,9 +36316,6 @@
           },
           "playback": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/UserPlaybackPreferences"
               }
@@ -37700,18 +36723,12 @@
           "ratingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "likeCounterCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -37720,18 +36737,12 @@
           "durationCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "resolutionCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -37740,18 +36751,12 @@
           "playCountCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "performerCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -37760,18 +36765,12 @@
           "tagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "tagDurationCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TagDurationCriterion"
               }
@@ -37780,18 +36779,12 @@
           "performersCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "studiosCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -37800,18 +36793,12 @@
           "groupsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "organizedCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -37820,18 +36807,12 @@
           "isVrCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "pathCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -37840,18 +36821,12 @@
           "fingerprintCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/FingerprintCriterion"
               }
             ]
           },
           "hashCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -37860,18 +36835,12 @@
           "checksumCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "duplicatedPhashCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -37880,18 +36849,12 @@
           "duplicatedTitleCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "duplicatedRemoteIdCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
@@ -37900,18 +36863,12 @@
           "urlCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "dateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/DateCriterion"
               }
@@ -37920,18 +36877,12 @@
           "createdAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "updatedAtCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
@@ -37940,18 +36891,12 @@
           "performerFavoriteCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "videoCodecCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -37960,18 +36905,12 @@
           "audioCodecCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "frameRateCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -37980,18 +36919,12 @@
           "bitrateInterval": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "fileCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -38000,18 +36933,12 @@
           "remoteIdCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "remoteIdCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -38020,18 +36947,12 @@
           "isMissingCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/BoolCriterion"
               }
             ]
           },
           "duplicatedCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -38040,18 +36961,12 @@
           "orientationCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "titleCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -38060,18 +36975,12 @@
           "codeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "detailsCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/StringCriterion"
               }
@@ -38080,18 +36989,12 @@
           "directorCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "tagCountCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -38100,18 +37003,12 @@
           "resumeTimeCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IntCriterion"
               }
             ]
           },
           "playDurationCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -38120,18 +37017,12 @@
           "lastPlayedAtCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimestampCriterion"
               }
             ]
           },
           "galleriesCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
@@ -38140,18 +37031,12 @@
           "performerTagsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MultiIdCriterion"
               }
             ]
           },
           "performerAgeCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/IntCriterion"
               }
@@ -38160,18 +37045,12 @@
           "captionsCriterion": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StringCriterion"
               }
             ]
           },
           "customFieldCriterion": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/CustomFieldCriterion"
               }
@@ -38262,18 +37141,12 @@
           "video": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Video"
               }
             ]
           },
           "group": {
             "oneOf": [
-              {
-                "type": "null"
-              },
               {
                 "$ref": "#/components/schemas/Group"
               }
