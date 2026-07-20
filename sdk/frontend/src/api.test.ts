@@ -38,7 +38,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     configureCoveClientAuth({ getAccessToken: () => "access-1" });
     fetchMock.mockResolvedValueOnce(okResponse());
 
-    const client = createCoveClient({ baseUrl: "http://localhost" });
+    const client = createCoveClient({ baseUrl: location.origin });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -53,13 +53,31 @@ describe("createCoveClient auth middleware (host parity)", () => {
     });
     fetchMock.mockResolvedValueOnce(okResponse());
 
-    const client = createCoveClient({ baseUrl: "http://localhost" });
+    const client = createCoveClient({ baseUrl: location.origin });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     const req = requestAt(fetchMock, 0);
     expect(req.headers.get("X-Share-Token")).toBe("share-1");
     expect(req.headers.get("X-Share-Password")).toBe("pw-1");
     expect(req.headers.get("Authorization")).toBeNull();
+  });
+
+  it("never attaches host credentials to a cross-origin request", async () => {
+    configureCoveClientAuth({
+      getAccessToken: () => "access-1",
+      getShareToken: () => "share-1",
+      getSharePassword: () => "pw-1",
+    });
+    fetchMock.mockResolvedValueOnce(okResponse());
+
+    const client = createCoveClient({ baseUrl: "https://third-party.example" });
+    await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
+
+    const req = requestAt(fetchMock, 0);
+    expect(new URL(req.url).origin).toBe("https://third-party.example");
+    expect(req.headers.get("Authorization")).toBeNull();
+    expect(req.headers.get("X-Share-Token")).toBeNull();
+    expect(req.headers.get("X-Share-Password")).toBeNull();
   });
 
   it("on 401 with a bearer + refresh, refreshes once and retries with the new token", async () => {
@@ -77,7 +95,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
       .mockResolvedValueOnce(unauthorizedResponse())
       .mockResolvedValueOnce(okResponse());
 
-    const client = createCoveClient({ baseUrl: "http://localhost" });
+    const client = createCoveClient({ baseUrl: location.origin });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(tryRefresh).toHaveBeenCalledTimes(1);
@@ -96,7 +114,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     const dispatched = vi.fn();
     window.addEventListener("cove-auth-required", dispatched);
 
-    const client = createCoveClient({ baseUrl: "http://localhost" });
+    const client = createCoveClient({ baseUrl: location.origin });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(tryRefresh).toHaveBeenCalledTimes(1);
@@ -111,7 +129,7 @@ describe("createCoveClient auth middleware (host parity)", () => {
     const dispatched = vi.fn();
     window.addEventListener("cove-auth-required", dispatched);
 
-    const client = createCoveClient({ baseUrl: "http://localhost" });
+    const client = createCoveClient({ baseUrl: location.origin });
     await client.GET(DATA_PATH, { params: { path: { id: "ext-1" } } });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
