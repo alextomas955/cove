@@ -28424,8 +28424,10 @@
       },
       "MeUser": {
         "required": [
+          "id",
           "kind",
-          "roles"
+          "roles",
+          "username"
         ],
         "type": "object",
         "properties": {

@@ -214,8 +214,8 @@ public sealed record MeResponse(
     IReadOnlyList<string> ReadGrantedEntityKinds);
 
 public sealed record MeUser(
-    string? Id,
-    string? Username,
+    string Id,
+    string Username,
     IReadOnlyList<string> Roles,
     string Kind,
     UserUiPreferencesDto? UiPreferences);
