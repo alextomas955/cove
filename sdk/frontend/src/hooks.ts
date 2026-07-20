@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { queryOptions, useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { request, createExtensionStore, getCoveClient } from "./api";
+import { request, createExtensionStore, getCoveClient, ApiError } from "./api";
 import type { CoveClient } from "./api";
 import type { FindFilter, JobInfo, JobStatus } from "./types";
 
@@ -116,13 +116,21 @@ export function jobPollingQueryOptions(jobId: string | null, options?: UseJobPol
       const { data, error, response } = await client.GET("/api/Jobs/{jobId}", {
         params: { path: { jobId: jobId as string } },
       });
-      if (error || !data) {
-        throw new Error(`Failed to fetch job ${jobId} (status ${response.status})`);
+      if (error) {
+        // This endpoint declares no error schema, so `error`/`response` are typed `never` even
+        // though the client populates them on a non-2xx response — launder `response` back to
+        // the concrete Response to read the status.
+        const res = response as Response;
+        const body = typeof error === "string" ? error : JSON.stringify(error);
+        throw new ApiError(res.status, body, `/api/Jobs/${jobId}`);
       }
-      return data;
+      return data as JobInfo;
     },
     // Stop polling as soon as the job is terminal; otherwise re-poll on the interval.
-    refetchInterval: (query) => (isTerminalJobStatus(query.state.data?.status) ? false : intervalMs),
+    refetchInterval: (query) => {
+      const status = (query.state.data as JobInfo | undefined)?.status;
+      return isTerminalJobStatus(status) ? false : intervalMs;
+    },
   });
 }
 
