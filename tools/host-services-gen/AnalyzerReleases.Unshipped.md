@@ -6,3 +6,4 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 COVE0001 | Cove.HostServices | Error | Exposed service must implement its declared interface
+COVE0002 | Cove.HostServices | Warning | Interface exposed by more than one concrete type

@@ -165,6 +165,29 @@ public sealed class HostServiceRegistrationGeneratorTests
     }
 
     [Fact]
+    public void SameInterfaceExposedByTwoConcreteTypes_ReportsCove0002Warning()
+    {
+        const string source = """
+            namespace Sample
+            {
+                public interface IShared { }
+
+                [Cove.Core.Contracts.ExposeToExtensions(typeof(IShared))]
+                public class FirstService : IShared { }
+
+                [Cove.Core.Contracts.ExposeToExtensions(typeof(IShared))]
+                public class SecondService : IShared { }
+            }
+            """;
+
+        var (_, diagnostics) = Run(source);
+
+        var warnings = diagnostics.Where(d => d.Id == "COVE0002").ToImmutableArray();
+        Assert.NotEmpty(warnings);
+        Assert.All(warnings, d => Assert.Equal(DiagnosticSeverity.Warning, d.Severity));
+    }
+
+    [Fact]
     public void MultipleConformingTypes_EmitInFullyQualifiedOrdinalOrder()
     {
         // Declared Zeta-before-Alpha; output must be Alpha-before-Zeta (ordinal by concrete FQN).
