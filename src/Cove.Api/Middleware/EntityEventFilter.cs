@@ -1,3 +1,4 @@
+using Cove.Core.Contracts;
 using Cove.Core.Events;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -11,15 +12,17 @@ namespace Cove.Api.Middleware;
 /// </summary>
 public sealed class EntityEventFilter : IAsyncActionFilter
 {
+    // Entity discriminators come from the shared Cove.Core.Contracts.EntityKinds catalog so this
+    // producer and the extension event bridge agree on the tokens by construction.
     private static readonly Dictionary<string, string> ControllerEntityMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Videos"] = "video",
-        ["Performers"] = "performer",
-        ["Studios"] = "studio",
-        ["Tags"] = "tag",
-        ["Galleries"] = "gallery",
-        ["Images"] = "image",
-        ["Groups"] = "group",
+        ["Videos"] = EntityKinds.Video,
+        ["Performers"] = EntityKinds.Performer,
+        ["Studios"] = EntityKinds.Studio,
+        ["Tags"] = EntityKinds.Tag,
+        ["Galleries"] = EntityKinds.Gallery,
+        ["Images"] = EntityKinds.Image,
+        ["Groups"] = EntityKinds.Group,
     };
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -80,27 +83,27 @@ public sealed class EntityEventFilter : IAsyncActionFilter
     private static EventType? GetEventType(string entityType, string operation) =>
         (entityType, operation) switch
         {
-            ("video", "created") => EventType.VideoCreated,
-            ("video", "updated") => EventType.VideoUpdated,
-            ("video", "deleted") => EventType.VideoDeleted,
-            ("performer", "created") => EventType.PerformerCreated,
-            ("performer", "updated") => EventType.PerformerUpdated,
-            ("performer", "deleted") => EventType.PerformerDeleted,
-            ("studio", "created") => EventType.StudioCreated,
-            ("studio", "updated") => EventType.StudioUpdated,
-            ("studio", "deleted") => EventType.StudioDeleted,
-            ("tag", "created") => EventType.TagCreated,
-            ("tag", "updated") => EventType.TagUpdated,
-            ("tag", "deleted") => EventType.TagDeleted,
-            ("gallery", "created") => EventType.GalleryCreated,
-            ("gallery", "updated") => EventType.GalleryUpdated,
-            ("gallery", "deleted") => EventType.GalleryDeleted,
-            ("image", "created") => EventType.ImageCreated,
-            ("image", "updated") => EventType.ImageUpdated,
-            ("image", "deleted") => EventType.ImageDeleted,
-            ("group", "created") => EventType.GroupCreated,
-            ("group", "updated") => EventType.GroupUpdated,
-            ("group", "deleted") => EventType.GroupDeleted,
+            (EntityKinds.Video, "created") => EventType.VideoCreated,
+            (EntityKinds.Video, "updated") => EventType.VideoUpdated,
+            (EntityKinds.Video, "deleted") => EventType.VideoDeleted,
+            (EntityKinds.Performer, "created") => EventType.PerformerCreated,
+            (EntityKinds.Performer, "updated") => EventType.PerformerUpdated,
+            (EntityKinds.Performer, "deleted") => EventType.PerformerDeleted,
+            (EntityKinds.Studio, "created") => EventType.StudioCreated,
+            (EntityKinds.Studio, "updated") => EventType.StudioUpdated,
+            (EntityKinds.Studio, "deleted") => EventType.StudioDeleted,
+            (EntityKinds.Tag, "created") => EventType.TagCreated,
+            (EntityKinds.Tag, "updated") => EventType.TagUpdated,
+            (EntityKinds.Tag, "deleted") => EventType.TagDeleted,
+            (EntityKinds.Gallery, "created") => EventType.GalleryCreated,
+            (EntityKinds.Gallery, "updated") => EventType.GalleryUpdated,
+            (EntityKinds.Gallery, "deleted") => EventType.GalleryDeleted,
+            (EntityKinds.Image, "created") => EventType.ImageCreated,
+            (EntityKinds.Image, "updated") => EventType.ImageUpdated,
+            (EntityKinds.Image, "deleted") => EventType.ImageDeleted,
+            (EntityKinds.Group, "created") => EventType.GroupCreated,
+            (EntityKinds.Group, "updated") => EventType.GroupUpdated,
+            (EntityKinds.Group, "deleted") => EventType.GroupDeleted,
             _ => null,
         };
 }
