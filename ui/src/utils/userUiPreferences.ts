@@ -10,9 +10,9 @@ let pendingSaveTimer: number | null = null;
 let pendingPreferences: UserUiPreferences | null = null;
 let pendingUserId: string | null = null;
 
-function normalizeKeybindingOverrides(overrides: Record<string, string> | null | undefined): Record<string, string> | null {
+function normalizeKeybindingOverrides(overrides: Record<string, string> | null | undefined): Record<string, string> | undefined {
   if (!overrides) {
-    return null;
+    return undefined;
   }
 
   const normalized = Object.fromEntries(
@@ -21,20 +21,20 @@ function normalizeKeybindingOverrides(overrides: Record<string, string> | null |
       .filter(([key, value]) => key.length > 0 && value.length > 0),
   );
 
-  return Object.keys(normalized).length > 0 ? normalized : null;
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
-function normalizeThemePreferences(theme: UserThemePreferences | null | undefined): UserThemePreferences | null {
+function normalizeThemePreferences(theme: UserThemePreferences | null | undefined): UserThemePreferences | undefined {
   if (!theme) {
-    return null;
+    return undefined;
   }
 
-  const activeThemeId = theme.activeThemeId?.trim() || null;
-  const activeComponentStyles = theme.activeComponentStyles?.map((style) => style.trim()).filter(Boolean) ?? null;
-  const activeLayoutStyle = theme.activeLayoutStyle?.trim() || null;
+  const activeThemeId = theme.activeThemeId?.trim() || undefined;
+  const activeComponentStyles = theme.activeComponentStyles?.map((style) => style.trim()).filter(Boolean) ?? undefined;
+  const activeLayoutStyle = theme.activeLayoutStyle?.trim() || undefined;
   const customThemeColors = theme.customThemeColors
     ? Object.fromEntries(Object.entries(theme.customThemeColors).filter(([key, value]) => key.trim() && value.trim()))
-    : null;
+    : undefined;
   const styleOptions = theme.styleOptions
     ? Object.fromEntries(
       Object.entries(theme.styleOptions)
@@ -44,14 +44,14 @@ function normalizeThemePreferences(theme: UserThemePreferences | null | undefine
         ])
         .filter(([styleId, options]) => styleId.length > 0 && Object.keys(options).length > 0),
     )
-    : null;
+    : undefined;
 
   if (!activeThemeId
     && (!activeComponentStyles || activeComponentStyles.length === 0)
     && !activeLayoutStyle
     && (!customThemeColors || Object.keys(customThemeColors).length === 0)
     && (!styleOptions || Object.keys(styleOptions).length === 0)) {
-    return null;
+    return undefined;
   }
 
   return {
@@ -63,14 +63,14 @@ function normalizeThemePreferences(theme: UserThemePreferences | null | undefine
   };
 }
 
-function normalizeRatingSystemOptions(options: RatingSystemOptions | null | undefined): RatingSystemOptions | null {
+function normalizeRatingSystemOptions(options: { type?: string | null; starPrecision?: string | null } | null | undefined): RatingSystemOptions | undefined {
   if (!options) {
-    return null;
+    return undefined;
   }
 
   const type = options.type === "decimal" ? "decimal" : options.type === "stars" ? "stars" : null;
   if (!type) {
-    return null;
+    return undefined;
   }
 
   const starPrecision = options.starPrecision === "half"
@@ -83,9 +83,9 @@ function normalizeRatingSystemOptions(options: RatingSystemOptions | null | unde
   return { type, starPrecision };
 }
 
-function clampNumber(value: number | null | undefined, min: number, max: number): number | null {
+function clampNumber(value: number | null | undefined, min: number, max: number): number | undefined {
   if (typeof value !== "number" || Number.isNaN(value)) {
-    return null;
+    return undefined;
   }
 
   return Math.min(max, Math.max(min, value));
@@ -94,12 +94,12 @@ function clampNumber(value: number | null | undefined, min: number, max: number)
 function normalizeTrackingPreferences(
   tracking: UserTrackingPreferences | null | undefined,
   legacyTrackingEnabled?: unknown,
-): UserTrackingPreferences | null {
+): UserTrackingPreferences | undefined {
   const enabled = typeof tracking?.enabled === "boolean"
     ? tracking.enabled
     : typeof legacyTrackingEnabled === "boolean"
       ? legacyTrackingEnabled
-      : null;
+      : undefined;
   const minViewSeconds = clampNumber(tracking?.minViewSeconds, 0, 86_400);
   const viewCompletionRatio = clampNumber(tracking?.viewCompletionRatio, 0.01, 1);
   const minImageDetailViewSeconds = clampNumber(tracking?.minImageDetailViewSeconds, 0, 86_400);
@@ -114,7 +114,7 @@ function normalizeTrackingPreferences(
     && minDerivedLikeSessionSeconds == null
     && sessionIdleTimeoutSec == null
     && dwellPositiveSec == null) {
-    return null;
+    return undefined;
   }
 
   return {
@@ -128,9 +128,9 @@ function normalizeTrackingPreferences(
   };
 }
 
-function normalizePlaybackPreferences(preferences: UserPlaybackPreferences | null | undefined): UserPlaybackPreferences | null {
+function normalizePlaybackPreferences(preferences: UserPlaybackPreferences | null | undefined): UserPlaybackPreferences | undefined {
   const skipSeconds = clampNumber(preferences?.skipSeconds, 1, 300);
-  return skipSeconds == null ? null : { skipSeconds: Math.round(skipSeconds) };
+  return skipSeconds == null ? undefined : { skipSeconds: Math.round(skipSeconds) };
 }
 
 function normalizeUiPreferences(preferences: UserUiPreferences | null | undefined): UserUiPreferences | null {
@@ -146,10 +146,10 @@ function normalizeUiPreferences(preferences: UserUiPreferences | null | undefine
     ? {
         ...(typeof includeCompilationGroups === "boolean" ? { includeCompilationGroups } : {}),
       }
-    : null;
+    : undefined;
   const playback = normalizePlaybackPreferences(preferences?.playback);
   const keybindingOverrides = normalizeKeybindingOverrides(preferences?.keybindingOverrides);
-  const homePageContent = preferences?.homePageContent?.trim() ? preferences.homePageContent : null;
+  const homePageContent = preferences?.homePageContent?.trim() ? preferences.homePageContent : undefined;
   const defaultFilters = normalizeDefaultFilters(preferences?.defaultFilters);
   if (!theme && !ratingSystemOptions && !tracking && !videos && !playback && !keybindingOverrides && !homePageContent && !defaultFilters) {
     return null;
@@ -167,9 +167,9 @@ function normalizeUiPreferences(preferences: UserUiPreferences | null | undefine
   };
 }
 
-function normalizeDefaultFilters(defaultFilters: Record<string, string> | null | undefined): Record<string, string> | null {
+function normalizeDefaultFilters(defaultFilters: Record<string, string> | null | undefined): Record<string, string> | undefined {
   if (!defaultFilters) {
-    return null;
+    return undefined;
   }
 
   const normalized = Object.fromEntries(
@@ -178,7 +178,7 @@ function normalizeDefaultFilters(defaultFilters: Record<string, string> | null |
       .filter(([key, value]) => key.length > 0 && value.length > 0),
   );
 
-  return Object.keys(normalized).length > 0 ? normalized : null;
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 export function supportsServerBackedUiPreferences(user: AuthUser | null | undefined): user is AuthUser & { kind: "user" | "system" } {
@@ -191,7 +191,7 @@ export function readAuthenticatedUserThemePreferences(): UserThemePreferences | 
     return null;
   }
 
-  return normalizeThemePreferences(user.uiPreferences?.theme);
+  return normalizeThemePreferences(user.uiPreferences?.theme) ?? null;
 }
 
 export function readAuthenticatedUserRatingOptions(): RatingSystemOptions | null {
@@ -200,7 +200,7 @@ export function readAuthenticatedUserRatingOptions(): RatingSystemOptions | null
     return null;
   }
 
-  return normalizeRatingSystemOptions(user.uiPreferences?.ratingSystemOptions);
+  return normalizeRatingSystemOptions(user.uiPreferences?.ratingSystemOptions) ?? null;
 }
 
 /** The user's server-stored home page content JSON, or null when not signed in / unset. */

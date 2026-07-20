@@ -803,7 +803,7 @@ function PerformerFacesPanel({ performerId, canReadFaces, onNavigate }: { perfor
         case "images": return dir * (left.imageCount - right.imageCount);
         case "created_at": return dir * (new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
         case "updated_at": return dir * (new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime());
-        default: return dir * (left.appearanceCount - right.appearanceCount);
+        default: return dir * ((left.appearanceCount ?? 0) - (right.appearanceCount ?? 0));
       }
     });
   }, [linkedFaces, filter.sort, filter.direction]);

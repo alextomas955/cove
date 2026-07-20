@@ -85,9 +85,9 @@ describe("BulkEditDialog", () => {
 
     expect(onApply).toHaveBeenCalledWith({
       tagIds: [1],
-      tagMode: "SET",
+      tagMode: "set",
       groupIds: [{ groupId: 5, videoIndex: 0 }],
-      groupMode: "SET",
+      groupMode: "set",
     });
   });
 

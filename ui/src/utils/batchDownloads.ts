@@ -223,13 +223,14 @@ export function formatBatchDownloadSummary(entityLabel: string, result: BatchDow
   return parts.join("\n");
 }
 
-function normalizeResponseIssues(issues?: BatchDownloadIssue[] | null): BatchDownloadIssue[] {
+function normalizeResponseIssues(issues?: { kind?: string; label?: string; reason?: string }[] | null): BatchDownloadIssue[] {
   if (!Array.isArray(issues)) {
     return [];
   }
 
   return issues
-    .filter((issue) => issue.kind === "skipped" || issue.kind === "failed")
+    .filter((issue): issue is { kind: "skipped" | "failed"; label?: string; reason?: string } =>
+      issue.kind === "skipped" || issue.kind === "failed")
     .map((issue) => ({
       kind: issue.kind,
       label: issue.label?.trim() || "Batch item",

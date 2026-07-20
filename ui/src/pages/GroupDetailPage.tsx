@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { audios, entityEngagement, entityImages, groups, images, videos, segmentLibrary, texts } from "../api/client";
-import type { AffinityHostType, Audio, BoolCriterion, DateCriterion, EntityEngagement, FindFilter, Group, GroupItem, GroupItemKind, Image, IntCriterion, MultiIdCriterion, Video, VideoFilterCriteria, SegmentDerivedQueryDescriptor, SegmentRecord, SegmentSpanDerivedQuery, StringCriterion, TextDocument, TimestampCriterion } from "../api/types";
+import type { AffinityHostType, Audio, BoolCriterion, DateCriterion, EntityEngagement, FindFilter, Group, GroupItem, GroupItemKind, Image, IntCriterion, MultiIdCriterion, Video, VideoFilterCriteria, SegmentDerivedQueryDescriptor, SegmentRecord, SegmentSpanOperator, SegmentSpanDerivedQuery, StringCriterion, TextDocument, TimestampCriterion } from "../api/types";
 import { formatDate, formatDuration, TagBadge, CustomFieldsDisplay, FieldProvenanceHover, resolveTagProvenance } from "../components/shared";
 import { Building2, ExternalLink, FileText, Film, Fingerprint, FolderOpen, GripVertical, Headphones, Images, Layers, Link as LinkIcon, Loader2, Merge, MoreVertical, Pencil, Play, Plus, Tag, Trash2, Unlink, User, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2221,7 +2221,7 @@ function parseGroupItemDerivedQueryDescriptor(sourceQueryJson?: string): Segment
     }
 
     return {
-      operator: parsed.operator,
+      operator: parsed.operator as SegmentSpanOperator,
       mergeGapSec: typeof parsed.mergeGapSec === "number" ? parsed.mergeGapSec : undefined,
       minDurationSec: typeof parsed.minDurationSec === "number" ? parsed.minDurationSec : undefined,
       operands: parsed.operands

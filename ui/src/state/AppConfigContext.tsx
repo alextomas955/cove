@@ -115,7 +115,7 @@ function normalizeConfig(config: CoveConfig, userKeybindingOverrides?: Record<st
       metadataServers: config.scraping.metadataServers ?? [],
       scraperPreferences: (config.scraping.scraperPreferences ?? [])
         .map((preference) => ({
-          entityType: preference.entityType?.trim().toLowerCase() || undefined,
+          entityType: preference.entityType?.trim().toLowerCase() || "",
           site: preference.site?.trim().toLowerCase() ?? "",
           scraperId: preference.scraperId?.trim() ?? "",
         }))

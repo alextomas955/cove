@@ -179,7 +179,7 @@ function toScraperVideoMatch(attempt: ScrapeAttempt, result: Record<string, unkn
     selectedCandidateIndex: index,
     rawResult: result,
     endpoint: scraper.id,
-    serverName: scraper.name,
+    metadataServerName: scraper.name,
     id: `${attempt.id}:${index}`,
     title,
     code: pickString(result, "Code"),
