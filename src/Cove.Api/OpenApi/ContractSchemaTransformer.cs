@@ -7,24 +7,27 @@ namespace Cove.Api.OpenApi;
 
 /// <summary>
 /// Aligns the emitted OpenAPI schema with the server's actual wire contract so that generated
-/// clients match the shapes the API really produces and accepts. Three adjustments are applied,
-/// all sourced from the CLR type metadata (nullable-reference annotations and value-type nullability)
-/// rather than from any hand-maintained list:
+/// clients match the shapes the API really produces and accepts. Adjustments are all sourced from
+/// the CLR type metadata (nullable-reference annotations and value-type nullability) rather than
+/// from any hand-maintained list:
 /// <list type="bullet">
 ///   <item><description><b>Required members.</b> A property is marked required when its member is
-///   non-nullable and carries no schema default. This reflects that the serializer always writes
-///   such members and that nullable / defaulted members are genuinely optional on the wire.</description></item>
-///   <item><description><b>Nullability.</b> The JSON <c>null</c> type is stripped from members the CLR
-///   reports as non-nullable and added to members it reports as nullable, keeping the two directions in
-///   sync with the C# declarations.</description></item>
+///   non-nullable and carries no default, i.e. the API always emits it. Nullable or defaulted members
+///   are optional, which is how the contract expresses "may be absent". Nullability is read from
+///   <see cref="NullabilityInfo.ReadState"/> — the value the API returns — which avoids treating
+///   get-only members as nullable.</description></item>
+///   <item><description><b>Optional-not-null modelling.</b> The contract expresses an absent value by
+///   omitting the property, not by sending an explicit JSON <c>null</c>. The <c>null</c> type is
+///   therefore removed from every schema (and from the union branches that carry it), so a member is
+///   either present with a value or absent. This keeps the emitted types aligned with how the client
+///   consumes them.</description></item>
 ///   <item><description><b>Numeric read tolerance.</b> Numeric members accept a string form on read
 ///   (a lenient input convenience), which surfaces as an <c>["integer","string"]</c> union plus a
 ///   validation pattern. That string alternative is not part of the response contract, so it is
-///   removed from the schema, leaving the plain numeric type.</description></item>
+///   removed, leaving the plain numeric type.</description></item>
 /// </list>
-/// Member nullability is read from <see cref="NullabilityInfo.ReadState"/> (the value the API returns),
-/// which avoids treating get-only members as nullable. Required and enum orderings are emitted in a
-/// stable ordinal sort so the committed document is deterministic across builds.
+/// Required members are emitted in a stable ordinal sort so the committed document is deterministic
+/// across builds.
 /// </summary>
 internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
 {
@@ -33,9 +36,9 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
         OpenApiSchemaTransformerContext context,
         CancellationToken cancellationToken)
     {
-        // The lenient numeric string form is an input convenience, never part of the emitted
-        // contract. Strip it wherever it appears in this schema subtree.
-        NormalizeNumericStringUnion(schema);
+        // Remove the lenient numeric string form and the null type from this schema subtree. Absence
+        // is modelled by optionality (the required set), not by an explicit null.
+        Normalize(schema);
 
         var typeInfo = context.JsonTypeInfo;
 
@@ -60,13 +63,17 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
             if (!schema.Properties.TryGetValue(property.Name, out var propertySchema))
                 continue;
 
-            var isNullable = IsMemberNullable(property, nullability);
-
-            // Required iff the member is always present on the wire: non-nullable with no default.
-            if (!isNullable && propertySchema.Default is null)
+            // Required iff the member is always present: non-nullable and no default. A default
+            // (constructor default) marks it optional. A scalar with a plain setter is treated as an
+            // optional input slot too, since such properties are typically request fields left at an
+            // initializer value; collections and nested objects stay required because the API always
+            // emits them (empty at worst).
+            if (!IsMemberNullable(property, nullability)
+                && propertySchema.Default is null
+                && !(property.PropertyType.IsValueType && HasMutableSetter(property)))
+            {
                 required.Add(property.Name);
-
-            ApplyNullability(schema, property.Name, propertySchema, isNullable);
+            }
         }
 
         schema.Required = required;
@@ -89,74 +96,79 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
         };
     }
 
-    private static void ApplyNullability(
-        OpenApiSchema owner,
-        string propertyName,
-        IOpenApiSchema propertySchema,
-        bool isNullable)
+    // A property with a plain setter is a mutable input slot (request/filter shapes). Init-only
+    // setters (immutable records the API returns) and get-only members are not mutable, so their
+    // non-nullable form is always present and can be required. Init-only setters are distinguished
+    // by the IsExternalInit required modifier the compiler emits on them.
+    private static bool HasMutableSetter(JsonPropertyInfo property)
     {
-        switch (propertySchema)
-        {
-            // Leaf schema with a concrete type set: toggle the null bit in place.
-            case OpenApiSchema inline when inline.Type is JsonSchemaType type
-                && IsSimpleTyped(inline):
-                inline.Type = isNullable ? type | JsonSchemaType.Null : type & ~JsonSchemaType.Null;
-                break;
+        if (property.AttributeProvider is not PropertyInfo { SetMethod: { } setter })
+            return false;
 
-            // Reference to a named schema (e.g. an enum or nested type). The reference cannot carry a
-            // null type directly, so a nullable member is expressed as a union with the null type.
-            case OpenApiSchemaReference reference when isNullable:
-                owner.Properties![propertyName] = new OpenApiSchema
-                {
-                    AnyOf = new List<IOpenApiSchema>
-                    {
-                        reference,
-                        new OpenApiSchema { Type = JsonSchemaType.Null },
-                    },
-                };
-                break;
-        }
+        return !setter.ReturnParameter
+            .GetRequiredCustomModifiers()
+            .Any(modifier => modifier.Name == "IsExternalInit");
     }
 
-    // A "simple typed" schema is a leaf (no composition keywords) whose null bit we can safely flip.
-    private static bool IsSimpleTyped(OpenApiSchema schema) =>
-        (schema.AnyOf is null || schema.AnyOf.Count == 0)
-        && (schema.OneOf is null || schema.OneOf.Count == 0)
-        && (schema.AllOf is null || schema.AllOf.Count == 0);
-
-    private static void NormalizeNumericStringUnion(IOpenApiSchema? schema)
+    private static void Normalize(IOpenApiSchema? schema)
     {
         if (schema is not OpenApiSchema concrete)
             return;
 
-        if (concrete.Type is JsonSchemaType type
-            && (type.HasFlag(JsonSchemaType.Integer) || type.HasFlag(JsonSchemaType.Number))
-            && type.HasFlag(JsonSchemaType.String))
+        if (concrete.Type is JsonSchemaType type)
         {
-            concrete.Type = type & ~JsonSchemaType.String;
-            // The pattern only validated the string form that was just removed.
-            concrete.Pattern = null;
+            // Drop the lenient numeric string alternative (and the pattern that validated it).
+            if ((type.HasFlag(JsonSchemaType.Integer) || type.HasFlag(JsonSchemaType.Number))
+                && type.HasFlag(JsonSchemaType.String))
+            {
+                type &= ~JsonSchemaType.String;
+                concrete.Pattern = null;
+            }
+
+            // Drop the null alternative unless the schema is the standalone null branch of a union
+            // (that branch is removed from its parent union below).
+            if (type.HasFlag(JsonSchemaType.Null) && type != JsonSchemaType.Null)
+                type &= ~JsonSchemaType.Null;
+
+            concrete.Type = type;
         }
+
+        RemoveNullBranches(concrete.AnyOf);
+        RemoveNullBranches(concrete.OneOf);
 
         if (concrete.Properties is { Count: > 0 })
         {
             foreach (var child in concrete.Properties.Values)
-                NormalizeNumericStringUnion(child);
+                Normalize(child);
         }
 
-        NormalizeNumericStringUnion(concrete.Items);
-        NormalizeNumericStringUnion(concrete.AdditionalProperties);
-        NormalizeComposition(concrete.AnyOf);
-        NormalizeComposition(concrete.OneOf);
-        NormalizeComposition(concrete.AllOf);
+        Normalize(concrete.Items);
+        Normalize(concrete.AdditionalProperties);
+        NormalizeAll(concrete.AnyOf);
+        NormalizeAll(concrete.OneOf);
+        NormalizeAll(concrete.AllOf);
     }
 
-    private static void NormalizeComposition(IList<IOpenApiSchema>? members)
+    // Removes the explicit null branch from a union (e.g. oneOf: [ {type:null}, {$ref} ]) so a
+    // nullable reference becomes the referenced type, with absence carried by optionality.
+    private static void RemoveNullBranches(IList<IOpenApiSchema>? members)
+    {
+        if (members is not { Count: > 1 })
+            return;
+
+        for (var i = members.Count - 1; i >= 0; i--)
+        {
+            if (members.Count > 1 && members[i] is OpenApiSchema { Type: JsonSchemaType.Null })
+                members.RemoveAt(i);
+        }
+    }
+
+    private static void NormalizeAll(IList<IOpenApiSchema>? members)
     {
         if (members is null)
             return;
 
         foreach (var member in members)
-            NormalizeNumericStringUnion(member);
+            Normalize(member);
     }
 }

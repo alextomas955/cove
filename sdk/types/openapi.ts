@@ -16984,7 +16984,7 @@ export interface components {
             saved: boolean;
         };
         BoolCriterion: {
-            value: boolean;
+            value?: boolean;
         };
         BootstrapOwnerRequest: {
             password: string;
@@ -17279,7 +17279,7 @@ export interface components {
         CriterionModifier: string;
         CustomFieldCriterion: {
             key: string;
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             type: string;
             value: string;
             value2?: string;
@@ -17346,7 +17346,7 @@ export interface components {
             preMigrationBackupPath?: string;
         };
         DateCriterion: {
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             value: string;
             value2?: string;
         };
@@ -17738,7 +17738,7 @@ export interface components {
             name: string;
             nativeHint?: string;
             optional?: boolean;
-            required: boolean;
+            required?: boolean;
             settingsKey?: string;
             url?: string;
             versionRequirement?: string;
@@ -18096,11 +18096,11 @@ export interface components {
             objectFilter?: null | components["schemas"]["VideoFilter"];
         };
         FindFilter: {
-            direction: components["schemas"]["SortDirection"];
+            direction?: components["schemas"]["SortDirection"];
             /** Format: int32 */
-            page: number;
+            page?: number;
             /** Format: int32 */
-            perPage: number;
+            perPage?: number;
             q?: string;
             /** Format: int32 */
             seed?: number;
@@ -18111,7 +18111,7 @@ export interface components {
             value: string;
         };
         FingerprintCriterion: {
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             type: string;
             value: string;
         };
@@ -18786,9 +18786,9 @@ export interface components {
             url: string;
         };
         IntCriterion: {
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
-            value: number;
+            value?: number;
             /** Format: int32 */
             value2?: number;
         };
@@ -19047,7 +19047,7 @@ export interface components {
             /** Format: int32 */
             depth?: number;
             excludes?: number[];
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             requiredIds?: number[];
             /** Format: int32 */
             requiredIdsDepth?: number;
@@ -19605,11 +19605,11 @@ export interface components {
         RegistrySearchResult: {
             items: components["schemas"]["RegistryExtensionSummary"][];
             /** Format: int32 */
-            page: number;
+            page?: number;
             /** Format: int32 */
-            pageSize: number;
+            pageSize?: number;
             /** Format: int32 */
-            totalCount: number;
+            totalCount?: number;
         };
         RegistryUninstallRequest: {
             extensionId: string;
@@ -20302,7 +20302,7 @@ export interface components {
             videoPlayCount: number;
         };
         StringCriterion: {
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             value: string;
         };
         Studio: {
@@ -20580,9 +20580,9 @@ export interface components {
         TagDurationClause: {
             contextMode: string;
             contextType?: string;
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
-            tagId: number;
+            tagId?: number;
             unit: string;
             /** Format: double */
             value?: number;
@@ -20593,9 +20593,9 @@ export interface components {
             clauses: components["schemas"]["TagDurationClause"][];
             contextMode: string;
             contextType?: string;
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
-            tagId: number;
+            tagId?: number;
             unit: string;
             /** Format: double */
             value?: number;
@@ -20613,18 +20613,18 @@ export interface components {
             favorite?: boolean;
             favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
             galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
-            galleryCountIncludesChildren: boolean;
+            galleryCountIncludesChildren?: boolean;
             groupCountCriterion?: null | components["schemas"]["IntCriterion"];
-            groupCountIncludesChildren: boolean;
+            groupCountIncludesChildren?: boolean;
             imageCountCriterion?: null | components["schemas"]["IntCriterion"];
-            imageCountIncludesChildren: boolean;
+            imageCountIncludesChildren?: boolean;
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             name?: string;
             nameCriterion?: null | components["schemas"]["StringCriterion"];
             parentCountCriterion?: null | components["schemas"]["IntCriterion"];
             parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
-            performerCountIncludesChildren: boolean;
+            performerCountIncludesChildren?: boolean;
             /** Format: int32 */
             rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
@@ -20633,11 +20633,11 @@ export interface components {
             remoteIdValueCriterion?: null | components["schemas"]["StringCriterion"];
             sortNameCriterion?: null | components["schemas"]["StringCriterion"];
             studioCountCriterion?: null | components["schemas"]["IntCriterion"];
-            studioCountIncludesChildren: boolean;
+            studioCountIncludesChildren?: boolean;
             tagGroupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             videoCountCriterion?: null | components["schemas"]["IntCriterion"];
-            videoCountIncludesChildren: boolean;
+            videoCountIncludesChildren?: boolean;
         };
         TagGraphLink: {
             /** Format: int32 */
@@ -20919,7 +20919,7 @@ export interface components {
             wordCount?: number;
         };
         TimestampCriterion: {
-            modifier: components["schemas"]["CriterionModifier"];
+            modifier?: components["schemas"]["CriterionModifier"];
             value: string;
             value2?: string;
         };
