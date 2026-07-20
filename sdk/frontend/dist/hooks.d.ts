@@ -13,10 +13,9 @@ export declare function useFetch<T>(url: string | null, deps?: unknown[]): {
  * Hook for extension key-value store operations.
  */
 export declare function useExtensionStore(extensionId: string): {
+    getAll: () => Promise<Record<string, string>>;
     get: (key: string) => Promise<string | null>;
     set: (key: string, value: string) => Promise<void>;
-    delete: (key: string) => Promise<void>;
-    getAll: () => Promise<Record<string, string>>;
 };
 /**
  * Hook for managing paginated/filterable entity lists.
@@ -27,8 +26,22 @@ export declare function useEntityList<T>(basePath: string, defaultFilter?: FindF
     totalCount: number;
     isLoading: boolean;
     error: Error | null;
-    filter: FindFilter;
-    setFilter: import("react").Dispatch<import("react").SetStateAction<FindFilter>>;
+    filter: {
+        direction?: import("@cove/types").components["schemas"]["SortDirection"];
+        page?: number;
+        perPage?: number;
+        q?: string;
+        seed?: number;
+        sort?: string;
+    };
+    setFilter: import("react").Dispatch<import("react").SetStateAction<{
+        direction?: import("@cove/types").components["schemas"]["SortDirection"];
+        page?: number;
+        perPage?: number;
+        q?: string;
+        seed?: number;
+        sort?: string;
+    }>>;
     setPage: (page: number) => void;
     setSort: (sort: string, direction?: "asc" | "desc") => void;
     setQuery: (query: string) => void;

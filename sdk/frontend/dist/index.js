@@ -5,12 +5,14 @@
  *
  * @example
  * ```tsx
- * import { defineExtension, request, useEntityList } from "@cove/extension-sdk";
+ * import { defineExtension, createCoveClient, useEntityList } from "@cove/extension-sdk";
  * ```
  */
+// Generated host-key constants (referenced instead of magic strings). Values plus their unions.
+export { EntityKinds, EventKinds, ExtensionActionKinds, UiComponentKeys, UiPageKeys, UiSlotKeys, UiZoneKeys, } from "@cove/types";
 // Extension definition helper
 export { defineExtension } from "./define";
-// API utilities
-export { request, ApiError, createExtensionStore, runExtensionJob } from "./api";
+// Typed API client + host-session accessor, plus the extension helpers.
+export { createCoveClient, configureCoveClientAuth, ApiError, createExtensionStore, runExtensionJob, } from "./api";
 // Hooks
 export { useFetch, useExtensionStore, useEntityList } from "./hooks";

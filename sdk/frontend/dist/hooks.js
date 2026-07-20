@@ -46,15 +46,15 @@ export function useEntityList(basePath, defaultFilter = { page: 1, perPage: 40, 
             params.set("sort", filter.sort);
         if (filter.direction)
             params.set("direction", filter.direction);
-        if (filter.query)
-            params.set("q", filter.query);
+        if (filter.q)
+            params.set("q", filter.q);
         return params.toString();
     }, [filter]);
     const url = `${basePath}?${queryParams}`;
     const { data, isLoading, error, refetch } = useFetch(url, [queryParams]);
     const setPage = useCallback((page) => setFilter(f => ({ ...f, page })), []);
     const setSort = useCallback((sort, direction) => setFilter(f => ({ ...f, sort, direction: direction ?? f.direction, page: 1 })), []);
-    const setQuery = useCallback((query) => setFilter(f => ({ ...f, query, page: 1 })), []);
+    const setQuery = useCallback((query) => setFilter(f => ({ ...f, q: query, page: 1 })), []);
     return {
         items: data?.items ?? [],
         totalCount: data?.totalCount ?? 0,
