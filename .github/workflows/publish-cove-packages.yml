@@ -1,0 +1,73 @@
+name: Publish Extension SDK
+
+# Publishes the @cove/extension-sdk npm package. The publish step is opt-in: tag builds and
+# dispatch runs produce and validate the tarball, but the registry publish only runs when a
+# maintainer explicitly requests it (workflow_dispatch with publish=true) and an npm token is
+# configured. See the release notes in the SDK for the one-command manual release.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (semver). If omitted on tag runs, uses the tag without leading v.'
+        required: false
+      publish:
+        description: 'Set to "true" to publish to the npm registry. Leave as "false" to build and pack only.'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-extension-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: sdk/frontend/package-lock.json
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            echo "No version provided" >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using package version ${VERSION}"
+
+      - name: Set package version
+        working-directory: sdk/frontend
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Install
+        run: npm --prefix sdk/frontend ci
+
+      - name: Build and roll up public API
+        run: npm --prefix sdk/frontend run build
+
+      - name: Pack (tarball verification)
+        run: npm --prefix sdk/frontend pack
+
+      - name: Publish to npm
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true' }}
+        working-directory: sdk/frontend
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
