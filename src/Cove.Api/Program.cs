@@ -374,7 +374,8 @@ try
     {
         Configuration = builder.Configuration,
         DataDirectory = extensionsDataDir,
-        CoveVersion = coveVersion
+        CoveVersion = coveVersion,
+        CoveVersionDisplay = Cove.Core.Common.CoveVersion.Display
     };
     var extensionManager = new ExtensionManager(extensionContext);
     // Discover .NET plugin DLLs from extensions directory
