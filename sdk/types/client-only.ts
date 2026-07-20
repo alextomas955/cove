@@ -14,10 +14,20 @@
 import type {
   AffinityHostType,
   ApplyVideoScrapeAttempt,
+  CustomFieldCriterion as CustomFieldCriterionWire,
+  CustomFieldDefinition as CustomFieldDefinitionWire,
+  DownloaderBatchItem as DownloaderBatchItemWire,
+  DownloaderStartRequest as DownloaderStartRequestWire,
+  EngagementInteraction as EngagementInteractionWire,
+  EngagementInteractionWrite as EngagementInteractionWriteWire,
   FaceAppearance,
   FindFilter,
   Image,
+  Segment as SegmentWire,
+  Tag as TagWire,
+  TagList,
   Video,
+  VideoFilter as VideoFilterWire,
 } from "./openapi";
 
 // ===== Client-side unions (no wire enum) =====
@@ -137,6 +147,68 @@ export interface FaceAppearancesResponse {
   totalVideos: number;
   totalImages: number;
 }
+
+// ===== Client views over wire types (base wire shape plus UI-held fields) =====
+// Each of these is the generated wire type plus a few fields the UI carries but no single wire
+// schema declares on that type. The added fields are all optional and either come from a sibling
+// list schema (Tag counts) or are enrichments the UI attaches; they reference the generated types
+// so field types stay in sync. These are client views, not DTO mirrors, and never re-declare the
+// wire shape.
+
+// Views whose name matches a wire type are suffixed here and re-exported under the public name by
+// the client barrel, so the generated wire type keeps its own name in the package.
+
+/** A tag as the UI holds it: the base tag plus the aggregate counts and image path that the
+ *  list endpoints add (sourced from the tag-list wire schema). */
+export type TagView = TagWire &
+  Partial<
+    Pick<
+      TagList,
+      | "videoCount"
+      | "segmentCount"
+      | "imageCount"
+      | "galleryCount"
+      | "groupCount"
+      | "performerCount"
+      | "studioCount"
+      | "imagePath"
+    >
+  >;
+
+/** A segment plus the reference/performer labels the UI resolves for display. */
+export type SegmentView = SegmentWire & {
+  refLabel?: string;
+  performerId?: number;
+  performerName?: string;
+};
+
+/** An engagement interaction plus the playback position/duration/session the UI tracks. */
+export type EngagementInteractionView = EngagementInteractionWire & {
+  positionSec?: number;
+  durationSec?: number;
+  sessionId?: string;
+};
+
+export type EngagementInteractionWriteView = EngagementInteractionWriteWire & {
+  positionSec?: number;
+  durationSec?: number;
+  sessionId?: string;
+};
+
+/** Download requests the UI can flag to also hydrate performer metadata. */
+export type DownloaderStartRequestView = DownloaderStartRequestWire & { hydratePerformers?: boolean };
+
+export type DownloaderBatchItemView = DownloaderBatchItemWire & { hydratePerformers?: boolean };
+
+/** The video filter plus the UI-only toggle for including compilation groups. */
+export type VideoFilterCriteria = VideoFilterWire & { includeCompilationGroups?: boolean };
+
+/** A custom-field definition whose `type` is narrowed to the known field kinds the UI switches on
+ *  (the wire carries it as an open string). */
+export type CustomFieldDefinitionView = Omit<CustomFieldDefinitionWire, "type"> & { type: CustomFieldType };
+
+/** A custom-field filter criterion plus the display labels the UI resolves for reference values. */
+export type CustomFieldCriterionView = CustomFieldCriterionWire & { displayValue?: string; displayValue2?: string };
 
 // ===== Structural generics =====
 // The generated surface carries monomorphized instantiations (PaginatedResponseOfVideo,
