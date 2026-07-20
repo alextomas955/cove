@@ -26,6 +26,10 @@ async function main() {
     rootTypesNoSchemaPrefix: true,
     // Keep enums as string unions rather than TypeScript `enum` values.
     enum: false,
+    // Let the schema's `required` array decide which members are optional. Without this, a member
+    // that documents a server-side default is emitted as always-present, which would force callers
+    // to supply values the API fills in.
+    defaultNonNullable: false,
   });
 
   const output = `${BANNER}\n${astToString(ast)}`;

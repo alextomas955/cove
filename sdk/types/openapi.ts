@@ -16763,7 +16763,7 @@ export interface components {
         AffinityHostType: "video" | "image" | "performer" | "face" | "tag" | "studio" | "gallery" | "group" | "audio" | "text" | "segment";
         AiDataPurgeRequest: {
             /** @default false */
-            dryRun: boolean;
+            dryRun?: boolean;
             /** Format: int32 */
             hostId?: number;
             hostType?: string;
@@ -16843,15 +16843,15 @@ export interface components {
                 [key: string]: string;
             };
             /** @default true */
-            createMissingPerformers: boolean;
+            createMissingPerformers?: boolean;
             /** @default true */
-            createMissingStudio: boolean;
+            createMissingStudio?: boolean;
             /** @default true */
-            createMissingTags: boolean;
+            createMissingTags?: boolean;
             /** @default false */
-            hydratePerformers: boolean;
+            hydratePerformers?: boolean;
             /** @default false */
-            markOrganized: boolean;
+            markOrganized?: boolean;
             performerSelections?: components["schemas"]["ScrapeCollectionItemSelection"][];
             replaceFields?: string[];
             /** Format: int32 */
@@ -16997,9 +16997,9 @@ export interface components {
         };
         BatchDelete: {
             /** @default false */
-            deleteFiles: boolean;
+            deleteFiles?: boolean;
             /** @default false */
-            deleteGenerated: boolean;
+            deleteGenerated?: boolean;
             ids?: number[];
         };
         Bookmark: {
@@ -17317,7 +17317,7 @@ export interface components {
             displayName?: string;
             email?: string;
             /** @default false */
-            mustChangePassword: boolean;
+            mustChangePassword?: boolean;
             password?: string;
             roles?: string[];
             username?: string;
@@ -17404,7 +17404,7 @@ export interface components {
             available: boolean;
             id: string;
             /** @default false */
-            installed: boolean;
+            installed?: boolean;
             name?: string;
             resolvedVersion?: string;
             versionConstraint: string;
@@ -17648,7 +17648,7 @@ export interface components {
              * Format: int32
              * @default 20
              */
-            k: number;
+            k?: number;
             kind?: string;
             kindFamily?: string;
             modality?: components["schemas"]["EmbeddingModality"];
@@ -17757,11 +17757,11 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             pages?: string[];
             requiredPermission?: string;
             /** @default false */
-            suppressSuccessAlert: boolean;
+            suppressSuccessAlert?: boolean;
         };
         ExtensionDependencyImpact: {
             enabled: boolean;
@@ -17840,7 +17840,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            appearanceCount: number;
+            appearanceCount?: number;
             coverImageUrl?: string;
             /** Format: date-time */
             createdAt: string;
@@ -17851,7 +17851,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            frameSampleCount: number;
+            frameSampleCount?: number;
             /** Format: int32 */
             id: number;
             ignored: boolean;
@@ -17864,12 +17864,12 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            performerFaceCount: number;
+            performerFaceCount?: number;
             /**
              * Format: int32
              * @default 0
              */
-            performerFaceIndex: number;
+            performerFaceIndex?: number;
             /** Format: int32 */
             performerId?: number;
             performerName?: string;
@@ -17911,12 +17911,12 @@ export interface components {
         };
         FaceBatchLinkTopSuggestion: {
             /** @default false */
-            createFromReference: boolean;
+            createFromReference?: boolean;
             faceIds?: number[];
             /** @default false */
-            linkConflicting: boolean;
+            linkConflicting?: boolean;
             /** @default false */
-            mergeConflicting: boolean;
+            mergeConflicting?: boolean;
         };
         FaceBatchOperationResult: {
             failed: components["schemas"]["FaceBatchFailed"][];
@@ -17938,7 +17938,7 @@ export interface components {
         FaceCreatePerformer: {
             name?: string;
             /** @default true */
-            setPerformerImage: boolean;
+            setPerformerImage?: boolean;
         };
         FaceDeleteImpact: {
             /** Format: int32 */
@@ -17981,7 +17981,7 @@ export interface components {
             /** Format: int32 */
             performerId?: number;
             /** @default false */
-            setPerformerImage: boolean;
+            setPerformerImage?: boolean;
         };
         FaceMerge: {
             /** Format: int32 */
@@ -18024,18 +18024,18 @@ export interface components {
             evidence: components["schemas"]["FaceSuggestionEvidence"][];
             externalUrl?: string;
             /** @default false */
-            localPerformerHasImage: boolean;
+            localPerformerHasImage?: boolean;
             /** Format: int32 */
             localPerformerId?: number;
             /** @default false */
-            localPerformerIsLocalOnly: boolean;
+            localPerformerIsLocalOnly?: boolean;
             /** Format: int32 */
             performerId: number;
             performerName: string;
             referenceEndpoint?: string;
             referenceExternalId?: string;
             /** @default false */
-            referenceWillRefreshFromMetadata: boolean;
+            referenceWillRefreshFromMetadata?: boolean;
             why: string;
         };
         FaceSuggestionDecision: {
@@ -18045,10 +18045,10 @@ export interface components {
             referenceEndpoint?: string;
             referenceExternalId?: string;
             /** @default false */
-            referenceUpdateMetadata: boolean;
+            referenceUpdateMetadata?: boolean;
             secondaryPerformerIds?: number[];
             /** @default false */
-            setPerformerImage: boolean;
+            setPerformerImage?: boolean;
         };
         FaceSuggestionEvidence: {
             /** Format: int32 */
@@ -18063,11 +18063,11 @@ export interface components {
             coverImageUrl?: string;
             externalUrl?: string;
             /** @default false */
-            localPerformerHasImage: boolean;
+            localPerformerHasImage?: boolean;
             /** Format: int32 */
             localPerformerId?: number;
             /** @default false */
-            localPerformerIsLocalOnly: boolean;
+            localPerformerIsLocalOnly?: boolean;
             /** Format: int32 */
             performerId: number;
             performerName: string;
@@ -18355,7 +18355,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            audioCount: number;
+            audioCount?: number;
             backImagePath?: string;
             /** Format: int32 */
             cachedItemCount?: number;
@@ -18372,21 +18372,21 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            faceCount: number;
+            faceCount?: number;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
             frontImagePath?: string;
             /**
              * Format: int32
              * @default 0
              */
-            galleryCount: number;
+            galleryCount?: number;
             /** Format: int32 */
             id: number;
             /**
              * Format: int32
              * @default 0
              */
-            imageCount: number;
+            imageCount?: number;
             isCompilation: boolean;
             /** Format: int32 */
             itemCount: number;
@@ -18397,26 +18397,26 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            performerCount: number;
+            performerCount?: number;
             queryJson?: string;
             querySourceKey?: string;
             /**
              * Format: int32
              * @default 0
              */
-            segmentCount: number;
+            segmentCount?: number;
             /** @default false */
-            showInVideoLists: boolean;
+            showInVideoLists?: boolean;
             /**
              * Format: int32
              * @default 0
              */
-            sortOrder: number;
+            sortOrder?: number;
             /**
              * Format: int32
              * @default 0
              */
-            studioCount: number;
+            studioCount?: number;
             /** Format: int32 */
             studioId?: number;
             studioName?: string;
@@ -18426,13 +18426,13 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            tagItemCount: number;
+            tagItemCount?: number;
             tags: components["schemas"]["Tag"][];
             /**
              * Format: int32
              * @default 0
              */
-            textCount: number;
+            textCount?: number;
             updatedAt: string;
             urls: string[];
             /** Format: int32 */
@@ -18590,7 +18590,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            startIndex: number;
+            startIndex?: number;
         };
         GroupItemUpdate: {
             /** Format: double */
@@ -18624,7 +18624,7 @@ export interface components {
             /** Format: int32 */
             groupItemId: number;
             /** @default false */
-            hasVideoTrack: boolean;
+            hasVideoTrack?: boolean;
             /** Format: int32 */
             hostId: number;
             hostType: string;
@@ -18841,7 +18841,7 @@ export interface components {
         ImportRequest: {
             generatedPath?: string;
             /** @default true */
-            migrateGeneratedContent: boolean;
+            migrateGeneratedContent?: boolean;
             pathMappings?: components["schemas"]["PathMappingRequest"][];
             stashDbPath?: string;
         };
@@ -19296,7 +19296,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            faceCount: number;
+            faceCount?: number;
             fakeTits?: string;
             favorite: boolean;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
@@ -19443,7 +19443,7 @@ export interface components {
         };
         PerformerScrapeRequest: {
             /** @default true */
-            createMissingTags: boolean;
+            createMissingTags?: boolean;
             inputKind?: string;
             name?: string;
             scraperId?: string;
@@ -19451,7 +19451,7 @@ export interface components {
         };
         PerformerScrapeUrlRequest: {
             /** @default true */
-            createMissingTags: boolean;
+            createMissingTags?: boolean;
             url?: string;
         };
         PerformerSummary: {
@@ -19459,7 +19459,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            audioCount: number;
+            audioCount?: number;
             birthdate?: string;
             disambiguation?: string;
             favorite: boolean;
@@ -19467,7 +19467,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            galleryCount: number;
+            galleryCount?: number;
             gender?: string;
             /** Format: int32 */
             id: number;
@@ -19475,19 +19475,19 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            imageCount: number;
+            imageCount?: number;
             imagePath?: string;
             name: string;
             /**
              * Format: int32
              * @default 0
              */
-            textCount: number;
+            textCount?: number;
             /**
              * Format: int32
              * @default 0
              */
-            videoCount: number;
+            videoCount?: number;
         };
         PerformerUpdate: {
             aliases?: string[];
@@ -20194,7 +20194,7 @@ export interface components {
         };
         SegmentSpanSearchResponse: {
             /** @default false */
-            hasMore: boolean;
+            hasMore?: boolean;
             items: components["schemas"]["SegmentSpanSearchResultItem"][];
             /** Format: int32 */
             page: number;
@@ -20271,7 +20271,7 @@ export interface components {
             /** Format: int32 */
             galleries: number;
             /** @default false */
-            generatedContentFound: boolean;
+            generatedContentFound?: boolean;
             generatedPath?: string;
             /** Format: int32 */
             groups: number;
@@ -20495,23 +20495,23 @@ export interface components {
         SystemStatus: {
             appDir?: string;
             /** @default false */
-            authEnabled: boolean;
+            authEnabled?: boolean;
             configFile?: string;
             databasePath: string;
             /** @default false */
-            migrationRequired: boolean;
+            migrationRequired?: boolean;
             migrationStatusError?: string;
             /** @default false */
-            migrationStatusUnknown: boolean;
+            migrationStatusUnknown?: boolean;
             pendingMigrations?: string[];
             version: string;
         };
         Tag: {
             aliases: string[];
             /** @default true */
-            canRemove: boolean;
+            canRemove?: boolean;
             /** @default false */
-            canReportIncorrect: boolean;
+            canReportIncorrect?: boolean;
             color?: string;
             customFields?: {
                 [key: string]: unknown;
@@ -20525,14 +20525,14 @@ export interface components {
             /** Format: int32 */
             id: number;
             /** @default false */
-            isDerived: boolean;
+            isDerived?: boolean;
             /** Format: double */
             minOccurrencePercent?: number;
             /** Format: double */
             minOccurrenceSec?: number;
             name: string;
             /** @default false */
-            organized: boolean;
+            organized?: boolean;
             provenance?: components["schemas"]["TagProvenance"][];
             segmentColorOverride?: string;
             /** Format: int32 */
@@ -20577,7 +20577,7 @@ export interface components {
             hostType?: string;
             modelKey?: string;
             /** @default user */
-            sourceKey: string;
+            sourceKey?: string;
             sourceRunId?: string;
             /** Format: int32 */
             tagId?: number;
@@ -20599,7 +20599,7 @@ export interface components {
             minOccurrenceSec?: number;
             name?: string;
             /** @default false */
-            organized: boolean;
+            organized?: boolean;
             parentIds?: number[];
             remoteIds?: components["schemas"]["TagRemoteId"][];
             segmentColorOverride?: string;
@@ -20637,7 +20637,7 @@ export interface components {
             minOccurrenceSec?: number;
             name: string;
             /** @default false */
-            organized: boolean;
+            organized?: boolean;
             parents: components["schemas"]["Tag"][];
             /** Format: int32 */
             performerCount: number;
@@ -20812,7 +20812,7 @@ export interface components {
             minOccurrenceSec?: number;
             name: string;
             /** @default false */
-            organized: boolean;
+            organized?: boolean;
             /** Format: int32 */
             performerCount: number;
             segmentColorOverride?: string;
@@ -21022,7 +21022,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number;
+            priority?: number;
             targetComponent: string;
         };
         UIComponentStyleDef: {
@@ -21091,7 +21091,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number;
+            priority?: number;
         };
         UIFeatureDefinition: {
             extensionId: string;
@@ -21121,7 +21121,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
         };
         UIListFilterOption: {
             label: string;
@@ -21138,7 +21138,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             sortKey?: string;
         };
         UIManifest: {
@@ -21174,11 +21174,11 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            navOrder: number;
+            navOrder?: number;
             requiredPermission?: string;
             route: string;
             /** @default true */
-            showInNav: boolean;
+            showInNav?: boolean;
         };
         UIPageOverride: {
             componentName: string;
@@ -21187,7 +21187,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number;
+            priority?: number;
             targetPage: string;
         };
         UIPaneContribution: {
@@ -21199,7 +21199,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             pageType: string;
             zone: string;
         };
@@ -21210,7 +21210,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            priority: number;
+            priority?: number;
             selectorKey: string;
         };
         UISettingsPanel: {
@@ -21222,7 +21222,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             targetSection?: string;
             targetTab?: string;
         };
@@ -21238,14 +21238,14 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             parentTabKey?: string;
             searchKeywords?: string[];
         };
         UISlotContribution: {
             componentName?: string;
             /** @default component */
-            contentType: string;
+            contentType?: string;
             extensionId: string;
             html?: string;
             id: string;
@@ -21253,7 +21253,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             slot: string;
         };
         UITabContribution: {
@@ -21268,7 +21268,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             pageType: string;
         };
         UIThemeDefinition: {
@@ -21309,7 +21309,7 @@ export interface components {
              * Format: int32
              * @default 100
              */
-            order: number;
+            order?: number;
             pages?: string[];
             parentTopicId?: string;
             slides?: components["schemas"]["UITutorialSlide"][];
@@ -21390,7 +21390,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            childVideoCount: number;
+            childVideoCount?: number;
             /** Format: double */
             clipEndSec?: number;
             /** Format: double */
@@ -21446,7 +21446,7 @@ export interface components {
             galleryIds?: number[];
             groups?: components["schemas"]["VideoGroupInput"][];
             /** @default false */
-            isVr: boolean;
+            isVr?: boolean;
             organized?: boolean;
             /** Format: int32 */
             parentVideoId?: number;
@@ -21557,7 +21557,7 @@ export interface components {
              * Format: int32
              * @default 0
              */
-            videoIndex: number;
+            videoIndex?: number;
         };
         VideoHistory: {
             allTimeWatchedIntervals?: components["schemas"]["PlaybackInterval"][];
@@ -21598,7 +21598,7 @@ export interface components {
         };
         VideoRating: {
             /** @default overall */
-            aspect: string;
+            aspect?: string;
             /** Format: int32 */
             value?: number;
         };
