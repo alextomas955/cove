@@ -1268,7 +1268,7 @@ function getEditableTagDurationClauses(value?: TagDurationCriterion): TagDuratio
 
 function TagDurationEditor({ value, onChange, modifiers }: { value?: TagDurationCriterion; onChange: (v: unknown) => void; modifiers: CriterionModifier[] }) {
   const clauses = getEditableTagDurationClauses(value);
-  const existingNames: Record<string, string> = value?._names ?? {};
+  const existingNames: Record<string, string> = (value as { _names?: Record<string, string> } | undefined)?._names ?? {};
 
   const commit = (nextClauses: TagDurationClause[], nextNames: Record<string, string> = existingNames) => {
     const cleanedClauses = nextClauses.map((clause) => ({

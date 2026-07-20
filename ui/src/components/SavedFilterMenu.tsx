@@ -62,7 +62,7 @@ function clearDefaultFilter(mode: string) {
     if (!current?.defaultFilters || !(key in current.defaultFilters)) return current;
     const next = { ...current.defaultFilters };
     delete next[key];
-    return { ...current, defaultFilters: Object.keys(next).length > 0 ? next : null };
+    return { ...current, defaultFilters: Object.keys(next).length > 0 ? next : undefined };
   });
 }
 

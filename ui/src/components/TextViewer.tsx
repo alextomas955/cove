@@ -80,7 +80,7 @@ export function TextViewer({
   className = "",
 }: {
   content?: string;
-  renderMode?: "text" | "markdown" | "html";
+  renderMode?: string;
   className?: string;
 }) {
   const plainBlocks = renderMode === "markdown" || renderMode === "html" || !content?.trim() ? [] : toPlainTextBlocks(content);

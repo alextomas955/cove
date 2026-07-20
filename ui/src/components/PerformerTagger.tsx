@@ -75,7 +75,7 @@ function mapScrapedPerformer(scraped: ScrapedPerformer, scraper: ScraperSummary)
     sourceKind: "scraper",
     scraped,
     endpoint: scraper.id,
-    serverName: scraper.name,
+    metadataServerName: scraper.name,
     id: scraper.id,
     name: scraped.name || "Untitled performer",
     disambiguation: scraped.disambiguation,

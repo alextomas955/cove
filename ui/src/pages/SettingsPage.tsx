@@ -1079,6 +1079,7 @@ function normalizeConfig(config: CoveConfig): CoveConfig {
       newPassword: config.security.newPassword?.trim() || undefined,
     },
     scraping: {
+      scrapeApplyDefaults: config.scraping.scrapeApplyDefaults,
       scraperDirectories: config.scraping.scraperDirectories.map((value) => value.trim()).filter(Boolean),
       metadataServers: config.scraping.metadataServers
         .map((box) => ({
@@ -1090,7 +1091,7 @@ function normalizeConfig(config: CoveConfig): CoveConfig {
         .filter((box) => box.endpoint !== ""),
       scraperPreferences: (config.scraping.scraperPreferences ?? [])
         .map((preference) => ({
-          entityType: preference.entityType?.trim().toLowerCase() || undefined,
+          entityType: preference.entityType?.trim().toLowerCase() || "",
           site: preference.site.trim().toLowerCase(),
           scraperId: preference.scraperId.trim(),
         }))
@@ -1680,7 +1681,7 @@ export function SettingsPage() {
 
     const persistedToAccount = updateAuthenticatedUserUiPreferences((current) => ({
       ...(current ?? {}),
-      keybindingOverrides: Object.keys(normalizedOverrides).length > 0 ? normalizedOverrides : null,
+      keybindingOverrides: Object.keys(normalizedOverrides).length > 0 ? normalizedOverrides : undefined,
     }));
 
     if (!persistedToAccount) {
@@ -1855,6 +1856,7 @@ export function SettingsPage() {
     setCustomFieldDraft((current) => ([
       ...(current ?? []),
       {
+        id: 0,
         key: "",
         label: "",
         type: "text",
@@ -1863,6 +1865,9 @@ export function SettingsPage() {
         filterable: true,
         sortable: false,
         isMultiValue: false,
+        displayOrder: (current ?? []).length,
+        createdAt: "",
+        updatedAt: "",
       },
     ]));
   };

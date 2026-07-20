@@ -1981,7 +1981,7 @@ function formatFaceAppearanceTime(totalSeconds: number) {
 
 interface SegmentTileItem {
   id: number | string;
-  hostType: string;
+  hostType: string | null;
   hostId: number;
   startSec: number;
   endSec?: number;

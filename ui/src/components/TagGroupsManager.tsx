@@ -18,9 +18,9 @@ export function TagGroupsManager({ title = "Tag Groups", description = "Organize
     mutationFn: async () => {
       const payload = {
         name: draft.name.trim(),
-        description: draft.description.trim() || null,
-        color: draft.color.trim() || null,
-        sortOrder: draft.sortOrder ?? null,
+        description: draft.description.trim() || undefined,
+        color: draft.color.trim() || undefined,
+        sortOrder: draft.sortOrder ?? undefined,
       };
       return editingId == null ? tagGroups.create(payload) : tagGroups.update(editingId, payload);
     },

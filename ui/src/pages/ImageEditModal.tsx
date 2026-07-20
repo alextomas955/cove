@@ -309,7 +309,7 @@ function ImageMetadataModal({ title, open, onClose, initialState, onSubmit, isPe
             );
           })}
         </div>
-        <EntityReferenceMultiSelector entityType="group" values={form.selectedGroups.map((group) => group.groupId)} onChange={setSelectedGroupIds} placeholder="Search groups..." />
+        <EntityReferenceMultiSelector entityType="group" values={form.selectedGroups.map((group) => group.groupId).filter((id): id is number => id !== undefined)} onChange={setSelectedGroupIds} placeholder="Search groups..." />
       </Field>
 
       <Field label="Custom Fields" fieldProvenance={image?.fieldProvenance} fieldKey="customFields">

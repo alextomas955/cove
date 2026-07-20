@@ -140,8 +140,8 @@ function applyTargetContext(batch: PlaybackTrackingBatch, target: PlaybackTracki
   assign("itemHostId", target.itemHostId);
   assign("groupItemId", target.groupItemId);
   assign("segmentId", target.segmentId);
-  assign("clipStartSec", target.clipStartSec);
-  assign("clipEndSec", target.clipEndSec);
+  assign("clipStartSec", target.clipStartSec ?? undefined);
+  assign("clipEndSec", target.clipEndSec ?? undefined);
   assign("autoplay", target.autoplay);
   assign("muted", target.muted);
   assign("fullscreen", target.fullscreen);

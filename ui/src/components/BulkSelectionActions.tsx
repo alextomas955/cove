@@ -129,14 +129,14 @@ function getRemoveFromParentAction(entityType: BulkSelectionEntityType, parent?:
   if (parent.type === "tag") {
     const run = (ids: number[]) => {
       switch (entityType) {
-        case "videos": return videosApi.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "images": return images.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "galleries": return galleries.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "performers": return performers.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "groups": return groups.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "studios": return studios.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "audios": return audios.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
-        case "texts": return texts.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "REMOVE" });
+        case "videos": return videosApi.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "images": return images.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "galleries": return galleries.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "performers": return performers.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "groups": return groups.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "studios": return studios.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "audios": return audios.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
+        case "texts": return texts.bulkUpdate({ ids, tagIds: [parent.id], tagMode: "remove" });
         default: return Promise.reject(new Error("This nested removal is not supported."));
       }
     };
@@ -146,11 +146,11 @@ function getRemoveFromParentAction(entityType: BulkSelectionEntityType, parent?:
   if (parent.type === "performer") {
     const run = (ids: number[]) => {
       switch (entityType) {
-        case "videos": return videosApi.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "REMOVE" });
-        case "images": return images.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "REMOVE" });
-        case "galleries": return galleries.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "REMOVE" });
-        case "audios": return audios.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "REMOVE" });
-        case "texts": return texts.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "REMOVE" });
+        case "videos": return videosApi.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "remove" });
+        case "images": return images.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "remove" });
+        case "galleries": return galleries.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "remove" });
+        case "audios": return audios.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "remove" });
+        case "texts": return texts.bulkUpdate({ ids, performerIds: [parent.id], performerMode: "remove" });
         default: return Promise.reject(new Error("This nested removal is not supported."));
       }
     };
@@ -177,7 +177,7 @@ function getRemoveFromParentAction(entityType: BulkSelectionEntityType, parent?:
     const run = (ids: number[]) => {
       switch (entityType) {
         case "images": return galleries.removeImages(parent.id, ids);
-        case "videos": return videosApi.bulkUpdate({ ids, galleryIds: [parent.id], galleryMode: "REMOVE" });
+        case "videos": return videosApi.bulkUpdate({ ids, galleryIds: [parent.id], galleryMode: "remove" });
         default: return Promise.reject(new Error("This nested removal is not supported."));
       }
     };
@@ -187,7 +187,7 @@ function getRemoveFromParentAction(entityType: BulkSelectionEntityType, parent?:
   if (parent.type === "group") {
     const run = (ids: number[]) => {
       switch (entityType) {
-        case "videos": return videosApi.bulkUpdate({ ids, groupIds: [{ groupId: parent.id, videoIndex: 0 }], groupMode: "REMOVE" });
+        case "videos": return videosApi.bulkUpdate({ ids, groupIds: [{ groupId: parent.id, videoIndex: 0 }], groupMode: "remove" });
         case "images": return groups.items.removeHosts(parent.id, { kind: "image", hostIds: ids });
         case "galleries": return groups.items.removeHosts(parent.id, { kind: "gallery", hostIds: ids });
         case "audios": return groups.items.removeHosts(parent.id, { kind: "audio", hostIds: ids });

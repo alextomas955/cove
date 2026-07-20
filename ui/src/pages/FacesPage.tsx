@@ -184,7 +184,7 @@ function readSuggestionConfidenceLowerBound(value: unknown) {
   }
 
   if (criterion.modifier === "BETWEEN" || criterion.modifier === "NOT_BETWEEN") {
-    return Math.min(criterion.value, criterion.value2 ?? criterion.value);
+    return Math.min(criterion.value ?? 0, criterion.value2 ?? criterion.value ?? 0);
   }
 
   return undefined;

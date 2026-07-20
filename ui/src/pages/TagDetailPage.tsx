@@ -219,7 +219,7 @@ export function TagDetailPage({ id, onNavigate }: Props) {
     return <div className="py-16 text-center text-secondary">Tag not found</div>;
   }
 
-  const tagImageUrl = tag.imagePath || entityImages.tagImageUrl(tag.id, tag.updatedAt);
+  const tagImageUrl = (tag as { imagePath?: string | null }).imagePath || entityImages.tagImageUrl(tag.id, tag.updatedAt);
   const handleCoverChanged = () => {
     queryClient.invalidateQueries({ queryKey: ["tag", tag.id] });
     queryClient.invalidateQueries({ queryKey: ["tags"] });
