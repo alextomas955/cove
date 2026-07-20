@@ -1,0 +1,29 @@
+{
+  "name": "@cove/types",
+  "version": "0.1.0",
+  "description": "Shared TypeScript types for the Cove API contract, derived from the committed OpenAPI document.",
+  "type": "module",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "index.ts",
+    "openapi.ts",
+    "client-only.ts"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  },
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourcove/cove"
+  }
+}
