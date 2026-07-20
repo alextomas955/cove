@@ -20,7 +20,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.types-dts.json && api-extractor run --local",
+    "build": "tsc && node scripts/bundle-runtime.mjs && tsc -p tsconfig.types-dts.json && api-extractor run --local",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
@@ -36,6 +36,7 @@
     "@microsoft/api-extractor": "~7.52.0",
     "@tanstack/react-query": "^5.80.0",
     "@types/react": "^19.0.0",
+    "esbuild": "^0.28.1",
     "jsdom": "^25.0.0",
     "typescript": "~5.8.0",
     "vitest": "^4.1.0"

@@ -32,6 +32,8 @@ export type {
 } from "./types";
 
 // Generated host-key constants (referenced instead of magic strings). Values plus their unions.
+// The runtime values come from ./contracts, which the build inlines so the published bundle carries
+// them directly instead of importing the types-only @cove/types package at runtime.
 export {
   EntityKinds,
   EventKinds,
@@ -40,7 +42,7 @@ export {
   UiPageKeys,
   UiSlotKeys,
   UiZoneKeys,
-} from "@cove/types";
+} from "./contracts";
 export type {
   EntityKind,
   EventKind,
