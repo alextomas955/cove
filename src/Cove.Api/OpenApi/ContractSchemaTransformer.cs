@@ -70,13 +70,12 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
                 continue;
 
             // Required iff the member is always present: non-nullable and never left to a default.
-            // A schema default, a value-type initializer, or a plain-setter scalar (a typical request
-            // field the caller may omit) all make it optional; collections and nested objects stay
-            // required because the API always emits them (empty at worst).
+            // A schema default or a value-type initializer (e.g. an enum defaulting to a value) marks
+            // it optional. Request shapes get a broader relaxation applied later once request/response
+            // usage is known.
             if (!IsMemberNullable(property, nullability)
                 && propertySchema.Default is null
-                && !HasValueTypeInitializer(property, defaultInstance)
-                && !(property.PropertyType.IsValueType && HasMutableSetter(property)))
+                && !HasValueTypeInitializer(property, defaultInstance))
             {
                 required.Add(property.Name);
             }
@@ -147,20 +146,6 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
             // over-constraining the contract.
             _ => true,
         };
-    }
-
-    // A property with a plain setter is a mutable input slot (request/filter shapes). Init-only
-    // setters (immutable records the API returns) and get-only members are not mutable, so their
-    // non-nullable form is always present and can be required. Init-only setters are distinguished
-    // by the IsExternalInit required modifier the compiler emits on them.
-    private static bool HasMutableSetter(JsonPropertyInfo property)
-    {
-        if (property.AttributeProvider is not PropertyInfo { SetMethod: { } setter })
-            return false;
-
-        return !setter.ReturnParameter
-            .GetRequiredCustomModifiers()
-            .Any(modifier => modifier.Name == "IsExternalInit");
     }
 
     private static void Normalize(IOpenApiSchema? schema)
