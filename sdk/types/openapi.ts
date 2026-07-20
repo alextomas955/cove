@@ -20497,6 +20497,7 @@ export interface components {
             /** @default false */
             authEnabled?: boolean;
             configFile?: string;
+            contractVersion: string;
             databasePath: string;
             /** @default false */
             migrationRequired?: boolean;
