@@ -1247,7 +1247,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -4963,7 +4980,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrySearchResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrySearchResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrySearchResult"
+                }
+              }
+            }
           }
         }
       }
@@ -4985,7 +5019,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryExtensionDetail"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryExtensionDetail"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryExtensionDetail"
+                }
+              }
+            }
           }
         }
       }
@@ -4997,7 +5048,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegistryUpdateInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegistryUpdateInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegistryUpdateInfo"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -5041,7 +5118,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryInstallResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryInstallResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryInstallResult"
+                }
+              }
+            }
           }
         }
       }
@@ -5063,7 +5157,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DependencyInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DependencyInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DependencyInfo"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -5095,7 +5215,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryUninstallResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryUninstallResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryUninstallResult"
+                }
+              }
+            }
           }
         }
       }
@@ -16253,8 +16390,25 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloaderBatchStartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloaderBatchStartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloaderBatchStartResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -24391,6 +24545,43 @@
           }
         }
       },
+      "DependencyInfo": {
+        "required": [
+          "id",
+          "versionConstraint",
+          "name",
+          "resolvedVersion",
+          "available"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "versionConstraint": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resolvedVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "installed": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
       "DependencyProblem": {
         "required": [
           "extensionId",
@@ -24893,6 +25084,25 @@
           }
         }
       },
+      "DownloaderBatchIssue": {
+        "required": [
+          "kind",
+          "label",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
       "DownloaderBatchItem": {
         "type": "object",
         "properties": {
@@ -24998,6 +25208,36 @@
           },
           "preflightBeforeQueue": {
             "type": "boolean"
+          }
+        }
+      },
+      "DownloaderBatchStartResponse": {
+        "required": [
+          "jobId",
+          "queuedCount",
+          "issues"
+        ],
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "queuedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DownloaderBatchIssue"
+            }
           }
         }
       },
@@ -25921,6 +26161,37 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ExtensionDependencyImpact": {
+        "required": [
+          "id",
+          "name",
+          "version",
+          "enabled",
+          "kind",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
           }
         }
       },
@@ -31774,6 +32045,31 @@
           }
         }
       },
+      "MeResponse": {
+        "required": [
+          "user",
+          "permissions",
+          "readGrantedEntityKinds"
+        ],
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/MeUser"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "readGrantedEntityKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "MetadataBatchDefaultsConfig": {
         "type": "object",
         "properties": {
@@ -32560,6 +32856,49 @@
             "items": {
               "$ref": "#/components/schemas/MetadataServerEntityCandidate"
             }
+          }
+        }
+      },
+      "MeUser": {
+        "required": [
+          "id",
+          "username",
+          "roles",
+          "kind",
+          "uiPreferences"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "string"
+          },
+          "uiPreferences": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserUiPreferences"
+              }
+            ]
           }
         }
       },
@@ -35238,6 +35577,191 @@
           }
         }
       },
+      "RegistryExtensionDetail": {
+        "required": [
+          "id",
+          "name",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "readme": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "changelog": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "screenshots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "externalDependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtensionExternalDependency"
+            }
+          },
+          "settings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtensionSettingManifest"
+            }
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistryVersionInfo"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iconUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "minCoveVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RegistryExtensionSummary": {
+        "required": [
+          "id",
+          "name",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iconUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "minCoveVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RegistryInstallExtensionRef": {
+        "required": [
+          "id",
+          "name",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
       "RegistryInstallRequest": {
         "required": [
           "extensionId",
@@ -35256,6 +35780,92 @@
           }
         }
       },
+      "RegistryInstallResult": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requiresDependencies": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "extension": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RegistryInstallExtensionRef"
+              }
+            ]
+          },
+          "missingDependencies": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DependencyInfo"
+            }
+          },
+          "installedDependencies": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RegistrySearchResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistryExtensionSummary"
+            }
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "RegistryUninstallRequest": {
         "required": [
           "extensionId"
@@ -35267,6 +35877,118 @@
           },
           "uninstallDependents": {
             "type": "boolean"
+          }
+        }
+      },
+      "RegistryUninstallResult": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requiresDependents": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "extension": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExtensionDependencyImpact"
+              }
+            ]
+          },
+          "dependents": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ExtensionDependencyImpact"
+            }
+          },
+          "uninstalledExtensions": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RegistryUpdateInfo": {
+        "required": [
+          "extensionId",
+          "currentVersion",
+          "latestVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "extensionId": {
+            "type": "string"
+          },
+          "currentVersion": {
+            "type": "string"
+          },
+          "latestVersion": {
+            "type": "string"
+          },
+          "changelog": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RegistryVersionInfo": {
+        "required": [
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "releasedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "changelog": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "minCoveVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "checksum": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
