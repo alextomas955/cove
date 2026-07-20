@@ -105,7 +105,21 @@ public class ExtensionContext
 {
     public required IConfiguration Configuration { get; init; }
     public required string DataDirectory { get; init; }
+
+    /// <summary>
+    /// Semver-clean host contract version (major.minor.patch) used for compatibility checks
+    /// such as an extension's minimum-host-version requirement.
+    /// </summary>
     public required string CoveVersion { get; init; }
+
+    /// <summary>
+    /// Full host version string including any prerelease suffix (e.g. "0.9.0-dev"). A "-dev"
+    /// suffix marks a non-release build, on which compatibility problems are reported as
+    /// warnings rather than disabling the extension. Optional; falls back to the numeric
+    /// contract version when unset.
+    /// </summary>
+    public string? CoveVersionDisplay { get; init; }
+
     public UIRegistry UI { get; } = new();
 }
 

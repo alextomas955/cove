@@ -271,7 +271,9 @@ public class ExtensionManager
             // Check core version requirement
             if (ext.MinCoveVersion != null && !SemverSatisfies(_context.CoveVersion, $">={ext.MinCoveVersion}"))
             {
-                problems.Add(new DependencyProblem(ext.Id, null, $"Requires Cove >={ext.MinCoveVersion} but running {_context.CoveVersion}"));
+                problems.Add(new DependencyProblem(ext.Id, null,
+                    $"Extension '{ext.Id}' requires Cove >={ext.MinCoveVersion} but this host is {_context.CoveVersion}. " +
+                    $"Update Cove to {ext.MinCoveVersion} or newer, or install a build of the extension compatible with host {_context.CoveVersion}."));
             }
 
             // Check extension dependencies
@@ -288,6 +290,88 @@ public class ExtensionManager
             }
         }
         return problems;
+    }
+
+    /// <summary>
+    /// Validates dependencies and enforces host contract-version compatibility.
+    /// A core-version problem (an extension whose minimum host version exceeds this host's
+    /// contract version) disables the offending extension on a released build so it never
+    /// initializes; on a development build it is reported as a warning only. Other dependency
+    /// problems (missing or mismatched sibling extensions) remain warnings.
+    /// </summary>
+    internal async Task EnforceDependencyCompatibilityAsync(CancellationToken ct = default)
+    {
+        var problems = ValidateDependencies();
+        var isDevBuild = IsDevelopmentBuild();
+
+        foreach (var problem in problems)
+        {
+            // Core-version problems are emitted with a null DependencyId.
+            var isCoreVersionProblem = problem.DependencyId == null;
+
+            if (isCoreVersionProblem && !isDevBuild)
+            {
+                DisableExtensionForVersionIncompatibility(problem.ExtensionId, problem.Message);
+                await PersistInstallationStateAsync(problem.ExtensionId, ct);
+            }
+            else if (isCoreVersionProblem)
+            {
+                _logger?.LogWarning(
+                    "Extension compatibility warning (development build, not enforced): {Problem}",
+                    problem.Message);
+            }
+            else
+            {
+                _logger?.LogWarning("Extension dependency issue: {Problem}", problem.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when this host is a non-release build. Detected authoritatively by the "-dev"
+    /// prerelease suffix on the display version, plus the no-git fallback where the numeric
+    /// contract version is "0.0.0". Compatibility problems are not enforced on such builds so
+    /// local development against a not-yet-released host is never blocked.
+    /// </summary>
+    private bool IsDevelopmentBuild()
+    {
+        if (string.Equals(_context.CoveVersion, "0.0.0", StringComparison.Ordinal))
+            return true;
+
+        var display = _context.CoveVersionDisplay;
+        return !string.IsNullOrWhiteSpace(display)
+            && display.Contains("-dev", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Disables an extension that is incompatible with the host contract version, mirroring the
+    /// startup-failure disable path: flips the installation record's Enabled flag (creating a
+    /// disabled record if none exists) so the initialization loop's IsEnabled gate skips it.
+    /// </summary>
+    private void DisableExtensionForVersionIncompatibility(string extensionId, string message)
+    {
+        if (string.IsNullOrWhiteSpace(extensionId))
+            return;
+
+        if (_installations.TryGetValue(extensionId, out var install))
+        {
+            install.Enabled = false;
+        }
+        else
+        {
+            _installations[extensionId] = new ExtensionInstallation
+            {
+                ExtensionId = extensionId,
+                Version = _extensionMap.TryGetValue(extensionId, out var ext) ? ext.Version : "0.0.0",
+                Enabled = false,
+                Source = "local",
+            };
+        }
+
+        _startupDisabledExtensions.Add(extensionId);
+        _initializedExtensions.Remove(extensionId);
+        _extensionFailureReasons[extensionId] = message;
+        _logger?.LogError("Extension {Id} disabled: {Message}", extensionId, message);
     }
 
     /// <summary>
@@ -714,10 +798,8 @@ public class ExtensionManager
         foreach (var extensionId in _startupDisabledExtensions)
             await PersistInstallationStateAsync(extensionId, ct);
 
-        // Validate dependencies
-        var problems = ValidateDependencies();
-        foreach (var p in problems)
-            _logger?.LogWarning("Extension dependency issue: {Problem}", p.Message);
+        // Validate dependencies and enforce host contract-version compatibility
+        await EnforceDependencyCompatibilityAsync(ct);
 
         // Wire stateful extensions with their DB-backed stores
         WireStatefulExtensions(services);
