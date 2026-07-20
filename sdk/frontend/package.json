@@ -4,13 +4,14 @@
   "description": "SDK for building Cove UI extensions. Provides types, hooks, and helpers for the Cove extension system.",
   "type": "module",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "dist/extension-sdk.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/extension-sdk.d.ts",
       "import": "./dist/index.js"
     }
   },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -20,7 +21,6 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@cove/types": "file:../types",
     "openapi-fetch": "0.17.0"
   },
   "peerDependencies": {
@@ -28,6 +28,7 @@
     "react": ">=18.0.0"
   },
   "devDependencies": {
+    "@cove/types": "file:../types",
     "@microsoft/api-extractor": "~7.52.0",
     "@tanstack/react-query": "^5.80.0",
     "@types/react": "^19.0.0",
