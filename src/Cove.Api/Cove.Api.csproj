@@ -52,14 +52,11 @@
     <Copy SourceFiles="@(WwwrootFiles)" DestinationFolder="$(OutputPath)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 
-  <Target Name="EmbedBundledPgvectorPayload"
-          BeforeTargets="AssignTargetPaths"
-          Condition="'$(SkipPgvectorPayloadStage)' != 'true' and '$(PublishSingleFile)' == 'true' and '$(RuntimeIdentifier)' != '' and Exists('$(PgvectorStagingScript)')">
+  <Target Name="EmbedBundledPgvectorPayload" BeforeTargets="AssignTargetPaths" Condition="'$(SkipPgvectorPayloadStage)' != 'true' and '$(PublishSingleFile)' == 'true' and '$(RuntimeIdentifier)' != '' and Exists('$(PgvectorStagingScript)')">
     <Message Text="Embedding bundled pgvector payload for $(RuntimeIdentifier) from $(PgvectorEmbeddedPayloadDir)" Importance="high" />
     <RemoveDir Directories="$(PgvectorEmbeddedPayloadDir)" Condition="Exists('$(PgvectorEmbeddedPayloadDir)')" />
     <MakeDir Directories="$(PgvectorEmbeddedPayloadDir)" />
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\..\.."
-          Command="&quot;$(PgvectorShellExecutable)&quot; $(PgvectorShellArguments) &quot;$(PgvectorStagingScript)&quot; -Rid &quot;$(RuntimeIdentifier)&quot; -OutputDir &quot;$(PgvectorEmbeddedPayloadDir)&quot; -PayloadRepository &quot;$(PgvectorPayloadRepository)&quot;" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\..\.." Command="&quot;$(PgvectorShellExecutable)&quot; $(PgvectorShellArguments) &quot;$(PgvectorStagingScript)&quot; -Rid &quot;$(RuntimeIdentifier)&quot; -OutputDir &quot;$(PgvectorEmbeddedPayloadDir)&quot; -PayloadRepository &quot;$(PgvectorPayloadRepository)&quot;" />
     <ItemGroup>
       <PgvectorPayloadResource Include="$(PgvectorEmbeddedPayloadDir)\**\*" />
       <EmbeddedResource Include="@(PgvectorPayloadResource)">
@@ -73,11 +70,8 @@
   </ItemGroup>
 
   <!-- Normalize the emitted contract document name to cove.openapi.json. -->
-  <Target Name="RenameOpenApiDocument" AfterTargets="GenerateOpenApiDocuments"
-          Condition="Exists('$(OpenApiDocumentsDirectory)/cove.json')">
-    <Move SourceFiles="$(OpenApiDocumentsDirectory)/cove.json"
-          DestinationFiles="$(OpenApiDocumentsDirectory)/cove.openapi.json"
-          OverwriteReadOnlyFiles="true" />
+  <Target Name="RenameOpenApiDocument" AfterTargets="GenerateOpenApiDocuments" Condition="Exists('$(OpenApiDocumentsDirectory)/cove.json')">
+    <Move SourceFiles="$(OpenApiDocumentsDirectory)/cove.json" DestinationFiles="$(OpenApiDocumentsDirectory)/cove.openapi.json" OverwriteReadOnlyFiles="true" />
   </Target>
 
   <ItemGroup>
