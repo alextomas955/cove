@@ -114,6 +114,15 @@ function getClient(): CoveClient {
   return (sharedClient ??= createCoveClient());
 }
 
+/**
+ * Return the shared same-origin client — created once and reused, so every call inherits the
+ * configured host session. The hooks use this to fetch through the typed client; pass an explicit
+ * client to {@link createCoveClient} instead when you need to target another origin.
+ */
+export function getCoveClient(): CoveClient {
+  return getClient();
+}
+
 /** Error thrown by the extension helpers when the API returns a non-success response. */
 export class ApiError extends Error {
   constructor(

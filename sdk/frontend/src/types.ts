@@ -14,6 +14,8 @@ export type {
   CriterionModifier,
   CustomFieldType,
   FindFilter,
+  JobInfo,
+  JobStatus,
   UiListFilterOption as ListFilterOption,
   UiListFilterContribution as ListFilterContribution,
   UiListSortContribution as ListSortContribution,
