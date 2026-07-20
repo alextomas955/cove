@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.6" />
@@ -26,6 +27,7 @@
     <ProjectReference Include="..\Cove.Api\Cove.Api.csproj" />
     <ProjectReference Include="..\Cove.Core\Cove.Core.csproj" />
     <ProjectReference Include="..\Cove.Data\Cove.Data.csproj" />
+    <ProjectReference Include="..\..\tools\host-services-gen\host-services-gen.csproj" ReferenceOutputAssembly="true" />
   </ItemGroup>
 
 </Project>
