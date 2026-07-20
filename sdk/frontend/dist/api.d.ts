@@ -35,6 +35,12 @@ export type CoveClient = Client<paths>;
 export declare function createCoveClient(options?: {
     baseUrl?: string;
 }): CoveClient;
+/**
+ * Return the shared same-origin client — created once and reused, so every call inherits the
+ * configured host session. The hooks use this to fetch through the typed client; pass an explicit
+ * client to {@link createCoveClient} instead when you need to target another origin.
+ */
+export declare function getCoveClient(): CoveClient;
 /** Error thrown by the extension helpers when the API returns a non-success response. */
 export declare class ApiError extends Error {
     readonly status: number;
