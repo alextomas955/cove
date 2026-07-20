@@ -1,12 +1,196 @@
 /**
- * API client helpers for Cove extensions.
- * Extensions should use these instead of raw fetch() for consistency.
+ * Typed API client for Cove extensions.
+ *
+ * Extensions call the Cove API through this client rather than raw fetch(): it is typed over the
+ * generated `@cove/types` `paths` tree (wrong paths or params are compile errors) and reproduces the
+ * host's authentication behaviour — bearer / share-token header injection and a single
+ * refresh-and-retry on a 401 — so extension requests inherit the host session without weakening it.
  */
-const BASE_URL = "/api";
-/** Make a typed JSON request to the Cove API. */
+import createClient from "openapi-fetch";
+let authAccessor = {};
+/**
+ * Configure the accessor the auth middleware reads. Called by the host once at startup with a
+ * setter bound to the live host session; extension authors do not call this directly.
+ */
+export function configureCoveClientAuth(accessor) {
+    authAccessor = accessor ?? {};
+}
+function dispatchAuthRequired() {
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("cove-auth-required"));
+    }
+}
+/** Apply the host credentials to an outgoing request's headers and report the resolved auth mode. */
+function applyAuthHeaders(headers) {
+    const token = authAccessor.getAccessToken?.();
+    const shareToken = authAccessor.getShareToken?.();
+    const sharePassword = authAccessor.getSharePassword?.();
+    if (shareToken) {
+        headers.set("X-Share-Token", shareToken);
+        if (sharePassword) {
+            headers.set("X-Share-Password", sharePassword);
+        }
+        return "share";
+    }
+    if (token && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${token}`);
+    }
+    return token ? "bearer" : "none";
+}
+// Keep a pristine clone of each outgoing request so a refreshed retry can re-send the original body
+// and headers (a Request body is a one-shot stream consumed by the first fetch).
+const pristineRequests = new WeakMap();
+const authMiddleware = {
+    onRequest({ request }) {
+        applyAuthHeaders(request.headers);
+        pristineRequests.set(request, request.clone());
+        return request;
+    },
+    async onResponse({ request, response }) {
+        if (response.status !== 401) {
+            return response;
+        }
+        const token = authAccessor.getAccessToken?.();
+        const authMode = authAccessor.getShareToken?.() ? "share" : token ? "bearer" : "none";
+        if (authMode === "bearer" && token && authAccessor.getRefreshToken?.()) {
+            const refreshed = (await authAccessor.tryRefresh?.()) ?? false;
+            if (refreshed) {
+                const retryToken = authAccessor.getAccessToken?.();
+                const pristine = pristineRequests.get(request);
+                const retry = pristine ? pristine.clone() : request.clone();
+                if (retryToken) {
+                    retry.headers.set("Authorization", `Bearer ${retryToken}`);
+                }
+                return fetch(retry);
+            }
+            dispatchAuthRequired();
+        }
+        else if (authMode === "none") {
+            dispatchAuthRequired();
+        }
+        return response;
+    },
+};
+/**
+ * Create a Cove API client typed over the generated `paths`. Path keys already carry the `/api`
+ * prefix, so `baseUrl` defaults to the empty string (same-origin relative requests). Pass a
+ * `baseUrl` only to target a different origin.
+ */
+export function createCoveClient(options) {
+    const client = createClient({ baseUrl: options?.baseUrl ?? "" });
+    client.use(authMiddleware);
+    return client;
+}
+let sharedClient = null;
+function getClient() {
+    return (sharedClient ??= createCoveClient());
+}
+/** Error thrown by the extension helpers when the API returns a non-success response. */
+export class ApiError extends Error {
+    status;
+    body;
+    path;
+    constructor(status, body, path) {
+        super(`API ${status} ${path}: ${body}`);
+        this.status = status;
+        this.body = body;
+        this.path = path;
+        this.name = "ApiError";
+    }
+}
+function toApiError(error, response, path) {
+    const body = typeof error === "string" ? error : error != null ? JSON.stringify(error) : response.statusText;
+    return new ApiError(response.status, body, path);
+}
+/**
+ * Extension data store — scoped key/value storage for your extension, backed by the host's
+ * `/api/Extensions/{id}/data` endpoints.
+ */
+export function createExtensionStore(extensionId) {
+    const client = getClient();
+    return {
+        /** Read the extension's full key/value map. */
+        getAll: async () => {
+            const { data, error, response } = await client.GET("/api/Extensions/{id}/data", {
+                params: { path: { id: extensionId } },
+            });
+            if (error) {
+                throw toApiError(error, response, `/api/Extensions/${extensionId}/data`);
+            }
+            return data ?? {};
+        },
+        /** Read a single stored value, or null if it is not set. */
+        get: async (key) => {
+            const { data, error, response } = await client.GET("/api/Extensions/{id}/data", {
+                params: { path: { id: extensionId } },
+            });
+            if (error) {
+                throw toApiError(error, response, `/api/Extensions/${extensionId}/data`);
+            }
+            const map = data ?? {};
+            return key in map ? map[key] : null;
+        },
+        /** Store a value under a key. */
+        set: async (key, value) => {
+            const { error, response } = await client.PUT("/api/Extensions/{id}/data/{key}", {
+                params: { path: { id: extensionId, key } },
+                body: value,
+            });
+            if (error) {
+                throw toApiError(error, response, `/api/Extensions/${extensionId}/data/${key}`);
+            }
+        },
+    };
+}
+/**
+ * Run a job defined by your extension.
+ */
+export async function runExtensionJob(extensionId, jobId, parameters) {
+    const client = getClient();
+    const { error, response } = await client.POST("/api/Extensions/{id}/jobs/{jobId}/run", {
+        params: { path: { id: extensionId, jobId } },
+        body: parameters ?? null,
+    });
+    if (error) {
+        throw toApiError(error, response, `/api/Extensions/${extensionId}/jobs/${jobId}/run`);
+    }
+}
+const API_BASE = "/api";
+/**
+ * Free-form authenticated fetch for the generic data hooks, where the caller supplies the path.
+ * It shares the same host credentials and single refresh-and-retry as the typed client. Endpoint
+ * calls made by the SDK itself go through the typed client above; this helper carries only
+ * caller-owned paths and is not part of the public SDK surface.
+ */
+async function authedFetch(input, init) {
+    const headers = new Headers(init?.headers ?? {});
+    const authMode = applyAuthHeaders(headers);
+    let res = await fetch(input, { ...init, headers });
+    if (res.status === 401 && authMode === "bearer" && authAccessor.getRefreshToken?.()) {
+        const refreshed = (await authAccessor.tryRefresh?.()) ?? false;
+        if (refreshed) {
+            const retryHeaders = new Headers(init?.headers ?? {});
+            const retryToken = authAccessor.getAccessToken?.();
+            if (retryToken) {
+                retryHeaders.set("Authorization", `Bearer ${retryToken}`);
+            }
+            res = await fetch(input, { ...init, headers: retryHeaders });
+        }
+        else {
+            dispatchAuthRequired();
+        }
+    }
+    else if (res.status === 401 && authMode === "none") {
+        dispatchAuthRequired();
+    }
+    return res;
+}
+/**
+ * Make an authenticated JSON request to a caller-supplied API path (relative to the API root).
+ * Used by the data hooks; the typed `createCoveClient` is the preferred surface for known endpoints.
+ */
 export async function request(path, options = {}) {
-    const url = `${BASE_URL}${path}`;
-    const res = await fetch(url, {
+    const res = await authedFetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
             "Content-Type": "application/json",
@@ -20,38 +204,4 @@ export async function request(path, options = {}) {
     if (res.status === 204)
         return undefined;
     return res.json();
-}
-export class ApiError extends Error {
-    status;
-    body;
-    path;
-    constructor(status, body, path) {
-        super(`API ${status} ${path}: ${body}`);
-        this.status = status;
-        this.body = body;
-        this.path = path;
-        this.name = "ApiError";
-    }
-}
-/**
- * Extension data store — scoped key-value storage for your extension.
- * Backed by the /api/extensions/{id}/data endpoints.
- */
-export function createExtensionStore(extensionId) {
-    const base = `/extensions/${extensionId}/data`;
-    return {
-        get: (key) => request(`${base}/${encodeURIComponent(key)}`).then(r => r.value),
-        set: (key, value) => request(base, { method: "POST", body: JSON.stringify({ key, value }) }),
-        delete: (key) => request(`${base}/${encodeURIComponent(key)}`, { method: "DELETE" }),
-        getAll: () => request(`${base}`),
-    };
-}
-/**
- * Run a job defined by your extension.
- */
-export function runExtensionJob(extensionId, jobId, parameters) {
-    return request(`/extensions/${extensionId}/jobs/${jobId}/run`, {
-        method: "POST",
-        body: parameters ? JSON.stringify(parameters) : undefined,
-    });
 }
