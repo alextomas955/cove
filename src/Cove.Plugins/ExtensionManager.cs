@@ -26,6 +26,11 @@ public class ExtensionManager
     private readonly Dictionary<string, ExtensionInstallation> _installations = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _initializedExtensions = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _startupDisabledExtensions = new(StringComparer.OrdinalIgnoreCase);
+    // Extensions skipped this boot because the host does not meet their minimum contract version.
+    // Kept in memory only and re-evaluated on every boot, so an extension initializes normally once
+    // the host is upgraded to a compatible version. Distinct from a deliberate user disable, which
+    // is persisted via the installation record's Enabled flag.
+    private readonly HashSet<string> _versionSkippedExtensions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _extensionFailureReasons = new(StringComparer.OrdinalIgnoreCase);
     private IServiceScopeFactory? _scopeFactory;
     private IServiceProvider? _rootServices;
@@ -299,7 +304,7 @@ public class ExtensionManager
     /// initializes; on a development build it is reported as a warning only. Other dependency
     /// problems (missing or mismatched sibling extensions) remain warnings.
     /// </summary>
-    internal async Task EnforceDependencyCompatibilityAsync(CancellationToken ct = default)
+    internal Task EnforceDependencyCompatibilityAsync(CancellationToken ct = default)
     {
         var problems = ValidateDependencies();
         var isDevBuild = IsDevelopmentBuild();
@@ -311,8 +316,11 @@ public class ExtensionManager
 
             if (isCoreVersionProblem && !isDevBuild)
             {
+                // In-memory skip only, re-evaluated every boot. The disable is deliberately not
+                // persisted: writing enabled=false here would leave the extension switched off even
+                // after the host is upgraded to a compatible version, and would be indistinguishable
+                // from a deliberate user disable on the next boot's "DB wins" reload.
                 DisableExtensionForVersionIncompatibility(problem.ExtensionId, problem.Message);
-                await PersistInstallationStateAsync(problem.ExtensionId, ct);
             }
             else if (isCoreVersionProblem)
             {
@@ -325,6 +333,8 @@ public class ExtensionManager
                 _logger?.LogWarning("Extension dependency issue: {Problem}", problem.Message);
             }
         }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -344,31 +354,19 @@ public class ExtensionManager
     }
 
     /// <summary>
-    /// Disables an extension that is incompatible with the host contract version, mirroring the
-    /// startup-failure disable path: flips the installation record's Enabled flag (creating a
-    /// disabled record if none exists) so the initialization loop's IsEnabled gate skips it.
+    /// Skips an extension that is incompatible with the host contract version for the current boot
+    /// only. Records the id in an in-memory set consulted by the IsEnabled gate rather than flipping
+    /// (and persisting) the installation record's Enabled flag, so the compatibility floor is
+    /// re-evaluated on every boot: once the host is upgraded to satisfy the floor the extension
+    /// initializes normally, with no operator action required. A deliberate user disable, by
+    /// contrast, mutates and persists the Enabled flag and is unaffected by this path.
     /// </summary>
     private void DisableExtensionForVersionIncompatibility(string extensionId, string message)
     {
         if (string.IsNullOrWhiteSpace(extensionId))
             return;
 
-        if (_installations.TryGetValue(extensionId, out var install))
-        {
-            install.Enabled = false;
-        }
-        else
-        {
-            _installations[extensionId] = new ExtensionInstallation
-            {
-                ExtensionId = extensionId,
-                Version = _extensionMap.TryGetValue(extensionId, out var ext) ? ext.Version : "0.0.0",
-                Enabled = false,
-                Source = "local",
-            };
-        }
-
-        _startupDisabledExtensions.Add(extensionId);
+        _versionSkippedExtensions.Add(extensionId);
         _initializedExtensions.Remove(extensionId);
         _extensionFailureReasons[extensionId] = message;
         _logger?.LogError("Extension {Id} disabled: {Message}", extensionId, message);
@@ -1200,7 +1198,14 @@ public class ExtensionManager
     // ========================================================================
 
     /// <summary>Check if an extension is enabled.</summary>
-    public bool IsEnabled(string id) => _installations.TryGetValue(id, out var inst) ? inst.Enabled : true;
+    public bool IsEnabled(string id)
+    {
+        // A version-incompatibility skip suppresses the extension for this boot only, without
+        // altering the persisted Enabled flag, so it re-activates once the host satisfies the floor.
+        if (_versionSkippedExtensions.Contains(id))
+            return false;
+        return _installations.TryGetValue(id, out var inst) ? inst.Enabled : true;
+    }
 
     /// <summary>Enable an extension and any installed extensions it depends on. Persists the state to DB.</summary>
     public async Task<IReadOnlyList<string>> EnableExtensionAsync(string id, CancellationToken ct = default)
