@@ -172,7 +172,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
                     manifest?.Kind ?? "extension",
                     install?.Source ?? "unknown",
                     install?.InstalledAt,
-                    e is IJobExtension je ? je.Jobs.Select(j => new JobInfo(j.Id, j.Name, j.Description)).ToList() : []);
+                    e is IJobExtension je ? je.Jobs.Select(j => new ExtensionJobInfo(j.Id, j.Name, j.Description)).ToList() : []);
             })
                 .Where(info => info != null)
                 .Cast<ExtensionInfo>()
@@ -1111,9 +1111,9 @@ public record ExtensionInfo(
     string Kind,
     string Source,
     DateTime? InstalledAt,
-    List<JobInfo> Jobs);
+    List<ExtensionJobInfo> Jobs);
 
-public record JobInfo(string Id, string Name, string? Description);
+public record ExtensionJobInfo(string Id, string Name, string? Description);
 
 public record RegistryInstallRequest
 {

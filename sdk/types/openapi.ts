@@ -15705,9 +15705,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": null | number;
-                        "text/json": null | number;
-                        "text/plain": null | number;
+                        "application/json": number;
+                        "text/json": number;
+                        "text/plain": number;
                     };
                 };
             };
@@ -16714,9 +16714,9 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AddSubGroup: {
-            description?: null | string;
+            description?: string;
             /** Format: int32 */
-            orderIndex?: null | number;
+            orderIndex?: number;
             /** Format: int32 */
             subGroupId: number;
         };
@@ -16729,13 +16729,13 @@ export interface components {
             /** @default false */
             dryRun: boolean;
             /** Format: int32 */
-            hostId?: null | number;
-            hostType?: null | string;
-            kinds?: null | string[];
-            modality?: null | string;
-            model?: null | string;
-            sourceKey?: null | string;
-            sourceRunId?: null | string;
+            hostId?: number;
+            hostType?: string;
+            kinds?: string[];
+            modality?: string;
+            model?: string;
+            sourceKey?: string;
+            sourceRunId?: string;
         };
         AiDataPurgeResult: {
             removedCounts: {
@@ -16744,13 +16744,13 @@ export interface components {
         };
         AiDataSelector: {
             /** Format: int32 */
-            hostId?: null | number;
-            hostType?: null | string;
-            kinds?: null | string[];
-            modality?: null | string;
-            model?: null | string;
-            sourceKey?: null | string;
-            sourceRunId?: null | string;
+            hostId?: number;
+            hostType?: string;
+            kinds?: string[];
+            modality?: string;
+            model?: string;
+            sourceKey?: string;
+            sourceRunId?: string;
         };
         AiDataSummary: {
             items: components["schemas"]["AiDataSummaryItem"][];
@@ -16763,25 +16763,25 @@ export interface components {
         AiDataSummaryItem: {
             /** Format: int32 */
             count: number;
-            detail?: null | string;
+            detail?: string;
             hostType: string;
             kind: string;
-            model?: null | string;
+            model?: string;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
         };
         AiRun: {
             /** Format: date-time */
-            completedAt?: null | string;
+            completedAt?: string;
             /** Format: date-time */
             createdAt: string;
-            error?: null | string;
+            error?: string;
             /** Format: double */
-            frameIntervalSec?: null | number;
+            frameIntervalSec?: number;
             /** Format: int32 */
             id: number;
-            jobId?: null | string;
-            loadPolicy?: null | string;
+            jobId?: string;
+            loadPolicy?: string;
             models?: null | components["schemas"]["JsonElement"];
             request?: null | components["schemas"]["JsonElement"];
             runKey: string;
@@ -16793,17 +16793,17 @@ export interface components {
             /** Format: int32 */
             targetId: number;
             targetType: components["schemas"]["AiRunTargetType"];
-            trigger?: null | string;
+            trigger?: string;
             /** Format: date-time */
             updatedAt: string;
-            vr?: null | boolean;
+            vr?: boolean;
         };
         /** @enum {string} */
         AiRunStatus: "pending" | "running" | "completed" | "failed" | "cancelled";
         /** @enum {string} */
         AiRunTargetType: "video" | "image" | "performer" | "face";
         ApplyVideoScrapeAttempt: {
-            collectionModes?: null | {
+            collectionModes?: {
                 [key: string]: string;
             };
             /** @default true */
@@ -16816,20 +16816,20 @@ export interface components {
             hydratePerformers: boolean;
             /** @default false */
             markOrganized: boolean;
-            performerSelections?: null | components["schemas"]["ScrapeCollectionItemSelection"][];
-            replaceFields?: null | string[];
+            performerSelections?: components["schemas"]["ScrapeCollectionItemSelection"][];
+            replaceFields?: string[];
             /** Format: int32 */
-            selectedCandidateIndex?: null | number;
-            tagSelections?: null | components["schemas"]["ScrapeCollectionItemSelection"][];
+            selectedCandidateIndex?: number;
+            tagSelections?: components["schemas"]["ScrapeCollectionItemSelection"][];
         };
         Audio: {
-            code?: null | string;
-            contextTagApplications?: null | components["schemas"]["TagApplication"][];
+            code?: string;
+            contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             fileCount: number;
             files: components["schemas"]["AudioFile"][];
@@ -16837,33 +16837,33 @@ export interface components {
             hasVideoFiles: boolean;
             /** Format: int32 */
             id: number;
-            imagePath?: null | string;
+            imagePath?: string;
             /** Format: double */
             maxDuration: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
             /** Format: int32 */
-            studioId?: null | number;
-            studioName?: null | string;
+            studioId?: number;
+            studioName?: string;
             tags: components["schemas"]["Tag"][];
-            title?: null | string;
+            title?: string;
             tracks: components["schemas"]["AudioTrack"][];
             updatedAt: string;
             urls: string[];
         };
         AudioCreate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            groupIds?: components["schemas"]["VideoGroupInput"][];
             organized: boolean;
-            performerIds?: null | number[];
+            performerIds?: number[];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         AudioFile: {
             audioCodec: string;
@@ -16871,7 +16871,7 @@ export interface components {
             /** Format: int64 */
             bitRate: number;
             /** Format: int32 */
-            channels?: null | number;
+            channels?: number;
             /** Format: double */
             duration: number;
             format: string;
@@ -16880,11 +16880,11 @@ export interface components {
             id: number;
             path: string;
             /** Format: int32 */
-            sampleRate?: null | number;
+            sampleRate?: number;
             /** Format: int64 */
             size: number;
         };
-        AudioFilter: null | {
+        AudioFilter: {
             audioCodecCriterion?: null | components["schemas"]["StringCriterion"];
             bitRateCriterion?: null | components["schemas"]["IntCriterion"];
             channelsCriterion?: null | components["schemas"]["IntCriterion"];
@@ -16924,28 +16924,28 @@ export interface components {
         };
         AudioTrack: {
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
             id: number;
             /** Format: int32 */
             orderIndex: number;
             /** Format: double */
             startSec: number;
-            title?: null | string;
+            title?: string;
         };
         AudioUpdate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            groupIds?: components["schemas"]["VideoGroupInput"][];
+            organized?: boolean;
+            performerIds?: number[];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         BackupResult: {
             backupPath: string;
@@ -16971,7 +16971,7 @@ export interface components {
             hostType: components["schemas"]["AffinityHostType"];
         };
         BookmarkState: {
-            createdAt?: null | string;
+            createdAt?: string;
             /** Format: int32 */
             hostId: number;
             hostType: components["schemas"]["AffinityHostType"];
@@ -16983,7 +16983,7 @@ export interface components {
             hostType: components["schemas"]["AffinityHostType"];
             saved: boolean;
         };
-        BoolCriterion: null | {
+        BoolCriterion: {
             value: boolean;
         };
         BootstrapOwnerRequest: {
@@ -16991,144 +16991,144 @@ export interface components {
             username: string;
         };
         BulkAudioUpdate: {
-            clearFields?: null | string[];
-            code?: null | string;
-            date?: null | string;
-            details?: null | string;
+            clearFields?: string[];
+            code?: string;
+            date?: string;
+            details?: string;
             ids: number[];
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            organized?: boolean;
+            performerIds?: number[];
             performerMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkGalleryUpdate: {
-            clearFields?: null | string[];
-            code?: null | string;
-            date?: null | string;
-            details?: null | string;
+            clearFields?: string[];
+            code?: string;
+            date?: string;
+            details?: string;
             ids: number[];
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            organized?: boolean;
+            performerIds?: number[];
             performerMode: components["schemas"]["BulkUpdateMode"];
-            photographer?: null | string;
+            photographer?: string;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkGroupUpdate: {
-            clearFields?: null | string[];
-            date?: null | string;
-            description?: null | string;
-            director?: null | string;
+            clearFields?: string[];
+            date?: string;
+            description?: string;
+            director?: string;
             ids: number[];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkImageUpdate: {
-            clearFields?: null | string[];
-            code?: null | string;
-            date?: null | string;
-            details?: null | string;
-            galleryIds?: null | number[];
+            clearFields?: string[];
+            code?: string;
+            date?: string;
+            details?: string;
+            galleryIds?: number[];
             galleryMode: components["schemas"]["BulkUpdateMode"];
             ids: number[];
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            organized?: boolean;
+            performerIds?: number[];
             performerMode: components["schemas"]["BulkUpdateMode"];
-            photographer?: null | string;
+            photographer?: string;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkPerformerUpdate: {
-            details?: null | string;
-            favorite?: null | boolean;
-            gender?: null | string;
+            details?: string;
+            favorite?: boolean;
+            gender?: string;
             ids: number[];
             /** Format: int32 */
-            rating?: null | number;
-            tagIds?: null | number[];
+            rating?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkStudioUpdate: {
-            clearFields?: null | string[];
-            details?: null | string;
-            favorite?: null | boolean;
+            clearFields?: string[];
+            details?: string;
+            favorite?: boolean;
             ids: number[];
-            organized?: null | boolean;
+            organized?: boolean;
             /** Format: int32 */
-            rating?: null | number;
-            tagIds?: null | number[];
+            rating?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         BulkTagUpdate: {
-            childIds?: null | number[];
+            childIds?: number[];
             childMode: components["schemas"]["BulkUpdateMode"];
-            clearFields?: null | string[];
-            color?: null | string;
-            description?: null | string;
-            favorite?: null | boolean;
+            clearFields?: string[];
+            color?: string;
+            description?: string;
+            favorite?: boolean;
             ids: number[];
             /** Format: double */
-            minOccurrencePercent?: null | number;
+            minOccurrencePercent?: number;
             /** Format: double */
-            minOccurrenceSec?: null | number;
-            organized?: null | boolean;
-            parentIds?: null | number[];
+            minOccurrenceSec?: number;
+            organized?: boolean;
+            parentIds?: number[];
             parentMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            tagGroupId?: null | number;
+            tagGroupId?: number;
         };
         BulkTextDocumentUpdate: {
-            clearFields?: null | string[];
-            code?: null | string;
-            date?: null | string;
-            details?: null | string;
+            clearFields?: string[];
+            code?: string;
+            date?: string;
+            details?: string;
             ids: number[];
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            organized?: boolean;
+            performerIds?: number[];
             performerMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         /** @enum {string} */
         BulkUpdateMode: "set" | "add" | "remove";
         BulkVideoUpdate: {
-            clearFields?: null | string[];
-            code?: null | string;
-            date?: null | string;
-            director?: null | string;
-            galleryIds?: null | number[];
+            clearFields?: string[];
+            code?: string;
+            date?: string;
+            director?: string;
+            galleryIds?: number[];
             galleryMode: components["schemas"]["BulkUpdateMode"];
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            groupIds?: components["schemas"]["VideoGroupInput"][];
             groupMode: components["schemas"]["BulkUpdateMode"];
             ids: number[];
-            isVr?: null | boolean;
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            isVr?: boolean;
+            organized?: boolean;
+            performerIds?: number[];
             performerMode: components["schemas"]["BulkUpdateMode"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
             tagMode: components["schemas"]["BulkUpdateMode"];
         };
         Caption: {
@@ -17144,7 +17144,7 @@ export interface components {
         };
         CleanOptions: {
             dryRun: boolean;
-            paths?: null | string[];
+            paths?: string[];
         };
         ConfigBackupResult: {
             backupPath: string;
@@ -17154,7 +17154,7 @@ export interface components {
         };
         CoveConfig: {
             audioExtensions: string[];
-            cachePath?: null | string;
+            cachePath?: string;
             calculateMd5: boolean;
             covePaths: components["schemas"]["CovePath"][];
             createGalleriesFromFolders: boolean;
@@ -17163,26 +17163,26 @@ export interface components {
             deleteGeneratedDefault: boolean;
             disabledPlugins: string[];
             downloaderPathOverrides: components["schemas"]["DownloaderPathOverride"][];
-            enableFfmpegHwAccel?: null | boolean;
+            enableFfmpegHwAccel?: boolean;
             excludeGalleryPatterns: string[];
             excludeImagePatterns: string[];
             excludePatterns: string[];
-            ffmpegInputArgs?: null | string;
-            ffmpegOutputArgs?: null | string;
-            ffmpegPath?: null | string;
-            ffprobePath?: null | string;
+            ffmpegInputArgs?: string;
+            ffmpegOutputArgs?: string;
+            ffmpegPath?: string;
+            ffprobePath?: string;
             frameExtractionMode: string;
             galleryCoverRegex: string;
             galleryExtensions: string[];
-            generatedPath?: null | string;
-            hardwareAcceleration?: null | string;
+            generatedPath?: string;
+            hardwareAcceleration?: string;
             /** Format: int32 */
             hardwareEncodeSessionLimit: number;
             host: string;
             imageExtensions: string[];
             interface: components["schemas"]["InterfaceConfig"];
-            liveTranscodeInputArgs?: null | string;
-            liveTranscodeOutputArgs?: null | string;
+            liveTranscodeInputArgs?: string;
+            liveTranscodeOutputArgs?: string;
             logLevel: string;
             /** Format: int32 */
             maxConcurrentDownloads: number;
@@ -17191,7 +17191,7 @@ export interface components {
             /** Format: int32 */
             maxStreamingTranscodeSize: number;
             /** Format: int32 */
-            maxTranscodeSize?: null | number;
+            maxTranscodeSize?: number;
             pluginConfigurations: {
                 [key: string]: Record<string, never>;
             };
@@ -17202,9 +17202,9 @@ export interface components {
             scraping: components["schemas"]["ScrapingConfig"];
             security: components["schemas"]["SecurityConfig"];
             textExtensions: string[];
-            transcodeHardwareAcceleration?: null | string;
-            transcodeInputArgs?: null | string;
-            transcodeOutputArgs?: null | string;
+            transcodeHardwareAcceleration?: string;
+            transcodeInputArgs?: string;
+            transcodeOutputArgs?: string;
             ui: components["schemas"]["UiConfig"];
             videoExtensions: string[];
             writeImageThumbnails: boolean;
@@ -17218,9 +17218,9 @@ export interface components {
         };
         CreateApiTokenRequest: {
             /** Format: date-time */
-            expiresAt?: null | string;
+            expiresAt?: string;
             name: string;
-            scope?: null | string[];
+            scope?: string[];
         };
         CreateContentRuleRequest: {
             appliesTo: string;
@@ -17240,52 +17240,52 @@ export interface components {
             roleId: number;
         };
         CreateInviteRequest: {
-            displayName?: null | string;
-            email?: null | string;
-            roles?: null | string[];
-            username?: null | string;
+            displayName?: string;
+            email?: string;
+            roles?: string[];
+            username?: string;
         };
         CreateRoleRequest: {
-            description?: null | string;
+            description?: string;
             name: string;
             permissions: string[];
         };
         CreateScrapeAttempt: {
             /** Format: int32 */
-            entityId?: null | number;
+            entityId?: number;
             entityType: string;
-            fragment?: null | Record<string, never>;
+            fragment?: Record<string, never>;
             inputKind: string;
-            name?: null | string;
+            name?: string;
             scraperId: string;
-            url?: null | string;
+            url?: string;
         };
         CreateShareLinkRequest: {
             entityIds: string[];
             entityKind: string;
             /** Format: date-time */
-            expiresAt?: null | string;
-            password?: null | string;
+            expiresAt?: string;
+            password?: string;
         };
         CreateUserRequest: {
-            displayName?: null | string;
-            email?: null | string;
+            displayName?: string;
+            email?: string;
             /** @default false */
             mustChangePassword: boolean;
-            password?: null | string;
-            roles?: null | string[];
+            password?: string;
+            roles?: string[];
             username: string;
         };
         CriterionModifier: string;
-        CustomFieldCriterion: null | {
+        CustomFieldCriterion: {
             key: string;
             modifier: components["schemas"]["CriterionModifier"];
             type: string;
             value: string;
-            value2?: null | string;
+            value2?: string;
         };
         CustomFieldDefinition: {
-            createdAt?: null | string;
+            createdAt?: string;
             /** Format: int32 */
             displayOrder: number;
             entityTypes: string[];
@@ -17298,15 +17298,15 @@ export interface components {
             options: string[];
             sortable: boolean;
             type: string;
-            updatedAt?: null | string;
+            updatedAt?: string;
         };
         CustomFieldDefinitionCreate: {
             /** Format: int32 */
-            displayOrder?: null | number;
+            displayOrder?: number;
             entityTypes: string[];
             filterable: boolean;
             isMultiValue: boolean;
-            key?: null | string;
+            key?: string;
             label: string;
             options: string[];
             sortable: boolean;
@@ -17314,11 +17314,11 @@ export interface components {
         };
         CustomFieldDefinitionSync: {
             /** Format: int32 */
-            displayOrder?: null | number;
+            displayOrder?: number;
             entityTypes: string[];
             filterable: boolean;
             /** Format: int32 */
-            id?: null | number;
+            id?: number;
             isMultiValue: boolean;
             key: string;
             label: string;
@@ -17328,27 +17328,27 @@ export interface components {
         };
         CustomFieldDefinitionUpdate: {
             /** Format: int32 */
-            displayOrder?: null | number;
-            entityTypes?: null | string[];
-            filterable?: null | boolean;
-            isMultiValue?: null | boolean;
-            key?: null | string;
-            label?: null | string;
-            options?: null | string[];
-            sortable?: null | boolean;
-            type?: null | string;
+            displayOrder?: number;
+            entityTypes?: string[];
+            filterable?: boolean;
+            isMultiValue?: boolean;
+            key?: string;
+            label?: string;
+            options?: string[];
+            sortable?: boolean;
+            type?: string;
         };
         DatabaseMigrationResult: {
             appliedMigrations: string[];
             message: string;
             migrationRequired: boolean;
             pendingMigrations: string[];
-            preMigrationBackupPath?: null | string;
+            preMigrationBackupPath?: string;
         };
-        DateCriterion: null | {
+        DateCriterion: {
             modifier: components["schemas"]["CriterionModifier"];
             value: string;
-            value2?: null | string;
+            value2?: string;
         };
         DeleteFiles: {
             deleteFromDisk: boolean;
@@ -17359,12 +17359,12 @@ export interface components {
             id: string;
             /** @default false */
             installed: boolean;
-            name?: null | string;
-            resolvedVersion?: null | string;
+            name?: string;
+            resolvedVersion?: string;
             versionConstraint: string;
         };
         DependencyProblem: {
-            dependencyId?: null | string;
+            dependencyId?: string;
             extensionId: string;
             message: string;
         };
@@ -17376,7 +17376,7 @@ export interface components {
             frameHeight: number;
             /** Format: int32 */
             frameWidth: number;
-            groupKey?: null | string;
+            groupKey?: string;
             /** Format: float */
             h: number;
             /** Format: int32 */
@@ -17385,14 +17385,14 @@ export interface components {
             /** Format: int32 */
             id: number;
             /** Format: double */
-            observedAtSec?: null | number;
+            observedAtSec?: number;
             /** Format: int64 */
-            refId?: null | number;
-            refKind?: null | string;
+            refId?: number;
+            refKind?: string;
             /** Format: float */
             score: number;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             updatedAt: string;
             /** Format: float */
             w: number;
@@ -17408,18 +17408,18 @@ export interface components {
             frameHeight: number;
             /** Format: int32 */
             frameWidth: number;
-            groupKey?: null | string;
+            groupKey?: string;
             /** Format: float */
             h: number;
             /** Format: double */
-            observedAtSec?: null | number;
+            observedAtSec?: number;
             /** Format: int64 */
-            refId?: null | number;
-            refKind?: null | string;
+            refId?: number;
+            refKind?: string;
             /** Format: float */
             score: number;
-            sourceKey?: null | string;
-            sourceRunId?: null | string;
+            sourceKey?: string;
+            sourceRunId?: string;
             /** Format: float */
             w: number;
             /** Format: float */
@@ -17436,18 +17436,18 @@ export interface components {
             frameHeight: number;
             /** Format: int32 */
             frameWidth: number;
-            groupKey?: null | string;
+            groupKey?: string;
             /** Format: float */
             h: number;
             /** Format: double */
-            observedAtSec?: null | number;
+            observedAtSec?: number;
             /** Format: int64 */
-            refId?: null | number;
-            refKind?: null | string;
+            refId?: number;
+            refKind?: string;
             /** Format: float */
             score: number;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: float */
             w: number;
             /** Format: float */
@@ -17480,17 +17480,17 @@ export interface components {
             createMissingPerformers: boolean;
             createMissingStudio: boolean;
             createMissingTags: boolean;
-            downloaderId?: null | string;
+            downloaderId?: string;
             entity: string;
             /** Format: int32 */
-            entityId?: null | number;
-            galleryIds?: null | number[];
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
-            label?: null | string;
+            entityId?: number;
+            galleryIds?: number[];
+            groupIds?: components["schemas"]["VideoGroupInput"][];
+            label?: string;
             markOrganized: boolean;
-            qualityId?: null | string;
-            sourceUrl?: null | string;
-            title?: null | string;
+            qualityId?: string;
+            sourceUrl?: string;
+            title?: string;
             url: string;
         };
         DownloaderBatchStartRequest: {
@@ -17500,7 +17500,7 @@ export interface components {
         };
         DownloaderBatchStartResponse: {
             issues: components["schemas"]["DownloaderBatchIssue"][];
-            jobId?: null | string;
+            jobId?: string;
             /** Format: int32 */
             queuedCount: number;
         };
@@ -17514,10 +17514,10 @@ export interface components {
         DownloaderMatch: {
             downloaderId: string;
             downloaderName: string;
-            label?: null | string;
+            label?: string;
             normalizedUrl: string;
             qualityOptions: components["schemas"]["DownloaderQualityOption"][];
-            sourceUrl?: null | string;
+            sourceUrl?: string;
             supportedEntity: string;
         };
         DownloaderMatchRequest: {
@@ -17526,20 +17526,20 @@ export interface components {
         DownloaderPathOverride: {
             downloaderId: string;
             path: string;
-            site?: null | string;
+            site?: string;
         };
         DownloaderPreflightRequest: {
             entity: string;
             /** Format: int32 */
-            entityId?: null | number;
+            entityId?: number;
             url: string;
         };
         DownloaderPreflightResponse: {
-            duplicateReason?: null | string;
+            duplicateReason?: string;
             isDuplicate: boolean;
         };
         DownloaderQualityOption: {
-            description?: null | string;
+            description?: string;
             id: string;
             label: string;
         };
@@ -17552,10 +17552,10 @@ export interface components {
             downloaderId: string;
             entity: string;
             /** Format: int32 */
-            entityId?: null | number;
+            entityId?: number;
             markOrganized: boolean;
-            qualityId?: null | string;
-            sourceUrl?: null | string;
+            qualityId?: string;
+            sourceUrl?: string;
             url: string;
         };
         DynamicGroupSource: {
@@ -17568,7 +17568,7 @@ export interface components {
             /** Format: int32 */
             dim: number;
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
             hostId: number;
             hostType: components["schemas"]["EmbeddingHostType"];
@@ -17576,15 +17576,15 @@ export interface components {
             id: number;
             isSemantic: boolean;
             kind: string;
-            kindFamily?: null | string;
+            kindFamily?: string;
             meta?: null | components["schemas"]["JsonElement"];
             modality: components["schemas"]["EmbeddingModality"];
             /** Format: int32 */
             sectionIndex: number;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: double */
-            startSec?: null | number;
+            startSec?: number;
             /** Format: date-time */
             updatedAt: string;
             vector: number[];
@@ -17595,20 +17595,20 @@ export interface components {
         EmbeddingModality: "visual" | "audio" | "face" | "text" | "other";
         EmbeddingSearchRequest: {
             /** Format: int32 */
-            hostId?: null | number;
+            hostId?: number;
             hostType?: null | components["schemas"]["EmbeddingHostType"];
-            isSemantic?: null | boolean;
+            isSemantic?: boolean;
             /**
              * Format: int32
              * @default 20
              */
             k: number;
-            kind?: null | string;
-            kindFamily?: null | string;
+            kind?: string;
+            kindFamily?: string;
             modality?: null | components["schemas"]["EmbeddingModality"];
-            queryText?: null | string;
-            queryVector?: null | number[];
-            sourceKey?: null | string;
+            queryText?: string;
+            queryVector?: number[];
+            sourceKey?: string;
         };
         EmbeddingSearchResult: {
             /** Format: float */
@@ -17616,25 +17616,25 @@ export interface components {
             /** Format: int32 */
             embeddingId: number;
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
             hostId: number;
             hostType: components["schemas"]["EmbeddingHostType"];
             isSemantic: boolean;
             kind: string;
-            kindFamily?: null | string;
+            kindFamily?: string;
             modality: components["schemas"]["EmbeddingModality"];
             /** Format: int32 */
             sectionIndex: number;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: double */
-            startSec?: null | number;
+            startSec?: number;
         };
         EngagementInteraction: {
             at: string;
             /** Format: int32 */
-            hostId?: null | number;
+            hostId?: number;
             hostType: string;
             /** Format: int32 */
             id: number;
@@ -17643,7 +17643,7 @@ export interface components {
         };
         EngagementInteractionWrite: {
             /** Format: int32 */
-            hostId?: null | number;
+            hostId?: number;
             hostType: string;
             kind: string;
             meta?: unknown;
@@ -17656,7 +17656,7 @@ export interface components {
             /** Format: int32 */
             hostId: number;
             isFavorite: boolean;
-            lastPlayedAt?: null | string;
+            lastPlayedAt?: string;
             /** Format: int32 */
             likeCount: number;
             /** Format: int32 */
@@ -17666,7 +17666,7 @@ export interface components {
             /** Format: double */
             playDuration: number;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: double */
             resumeTime: number;
         };
@@ -17679,9 +17679,9 @@ export interface components {
         };
         EntityImageCoverSource: {
             /** Format: int32 */
-            imageId?: null | number;
+            imageId?: number;
             /** Format: int32 */
-            videoId?: null | number;
+            videoId?: number;
         };
         EntityRatings: {
             /** Format: int32 */
@@ -17700,11 +17700,11 @@ export interface components {
         };
         ExtensionAction: {
             actionType: string;
-            apiEndpoint?: null | string;
+            apiEndpoint?: string;
             entityTypes: string[];
             extensionId: string;
-            handlerName?: null | string;
-            icon?: null | string;
+            handlerName?: string;
+            icon?: string;
             id: string;
             label: string;
             /**
@@ -17712,12 +17712,12 @@ export interface components {
              * @default 100
              */
             order: number;
-            pages?: null | string[];
-            requiredPermission?: null | string;
+            pages?: string[];
+            requiredPermission?: string;
             /** @default false */
             suppressSuccessAlert: boolean;
         };
-        ExtensionDependencyImpact: null | {
+        ExtensionDependencyImpact: {
             enabled: boolean;
             id: string;
             kind: string;
@@ -17727,29 +17727,29 @@ export interface components {
         };
         ExtensionExternalDependency: {
             configurationKeys: string[];
-            description?: null | string;
-            dockerHint?: null | string;
+            description?: string;
+            dockerHint?: string;
             environmentVariables: string[];
             executables: string[];
             extensionIds: string[];
             id: string;
-            installHint?: null | string;
+            installHint?: string;
             kind: string;
             name: string;
-            nativeHint?: null | string;
-            optional?: null | boolean;
+            nativeHint?: string;
+            optional?: boolean;
             required: boolean;
-            settingsKey?: null | string;
-            url?: null | string;
-            versionRequirement?: null | string;
+            settingsKey?: string;
+            url?: string;
+            versionRequirement?: string;
         };
         ExtensionInfo: {
-            author?: null | string;
+            author?: string;
             categories: string[];
             dependencies: {
                 [key: string]: string;
             };
-            description?: null | string;
+            description?: string;
             enabled: boolean;
             externalDependencies: components["schemas"]["ExtensionExternalDependency"][];
             hasActions: boolean;
@@ -17760,28 +17760,33 @@ export interface components {
             hasMiddleware: boolean;
             hasState: boolean;
             hasUI: boolean;
-            iconUrl?: null | string;
+            iconUrl?: string;
             id: string;
             /** Format: date-time */
-            installedAt?: null | string;
-            jobs: components["schemas"]["JobInfo"][];
+            installedAt?: string;
+            jobs: components["schemas"]["ExtensionJobInfo"][];
             kind: string;
-            minCoveVersion?: null | string;
+            minCoveVersion?: string;
             name: string;
             settings: components["schemas"]["ExtensionSettingManifest"][];
             source: string;
-            url?: null | string;
+            url?: string;
             version: string;
         };
-        ExtensionSettingManifest: {
-            defaultValue?: null | string;
-            description?: null | string;
-            displayName?: null | string;
-            extensionIds: string[];
-            key?: null | string;
-            label?: null | string;
+        ExtensionJobInfo: {
+            description?: string;
+            id: string;
             name: string;
-            scope?: null | string;
+        };
+        ExtensionSettingManifest: {
+            defaultValue?: string;
+            description?: string;
+            displayName?: string;
+            extensionIds: string[];
+            key?: string;
+            label?: string;
+            name: string;
+            scope?: string;
             type: string;
         };
         Face: {
@@ -17790,12 +17795,12 @@ export interface components {
              * @default 0
              */
             appearanceCount: number;
-            coverImageUrl?: null | string;
+            coverImageUrl?: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: int32 */
             detectionCount: number;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /**
              * Format: int32
              * @default 0
@@ -17806,9 +17811,9 @@ export interface components {
             ignored: boolean;
             /** Format: int32 */
             imageCount: number;
-            label?: null | string;
+            label?: string;
             /** Format: int32 */
-            mergedIntoFaceId?: null | number;
+            mergedIntoFaceId?: number;
             /**
              * Format: int32
              * @default 0
@@ -17820,9 +17825,9 @@ export interface components {
              */
             performerFaceIndex: number;
             /** Format: int32 */
-            performerId?: null | number;
-            performerName?: null | string;
-            primarySourceKey?: null | string;
+            performerId?: number;
+            performerName?: string;
+            primarySourceKey?: string;
             topSuggestion?: null | components["schemas"]["FaceTopSuggestion"];
             /** Format: date-time */
             updatedAt: string;
@@ -17833,14 +17838,14 @@ export interface components {
             /** Format: int32 */
             appearanceId: number;
             /** Format: double */
-            firstSeenAtSec?: null | number;
+            firstSeenAtSec?: number;
             /** Format: int32 */
             frameSampleCount: number;
             /** Format: int32 */
             hostId: number;
             hostType: string;
             /** Format: double */
-            lastSeenAtSec?: null | number;
+            lastSeenAtSec?: number;
             /** Format: int32 */
             retainedSpatialSampleCount: number;
             /** Format: int32 */
@@ -17848,7 +17853,7 @@ export interface components {
             thumbnailUrl: string;
             title: string;
             /** Format: float */
-            topConfidence?: null | number;
+            topConfidence?: number;
         };
         FaceBatchDelete: {
             faceIds: number[];
@@ -17879,10 +17884,10 @@ export interface components {
         };
         FaceCreate: {
             ignored: boolean;
-            label?: null | string;
+            label?: string;
             /** Format: int32 */
-            performerId?: null | number;
-            primarySourceKey?: null | string;
+            performerId?: number;
+            primarySourceKey?: string;
         };
         FaceCreatePerformer: {
             name: string;
@@ -17903,23 +17908,23 @@ export interface components {
         FaceHostFace: {
             /** Format: int32 */
             appearanceCount: number;
-            coverImageUrl?: null | string;
+            coverImageUrl?: string;
             /** Format: double */
-            firstSeenAtSec?: null | number;
+            firstSeenAtSec?: number;
             /** Format: int32 */
             frameSampleCount: number;
             /** Format: int32 */
             id: number;
             /** Format: int32 */
             imageCount: number;
-            label?: null | string;
+            label?: string;
             /** Format: double */
-            lastSeenAtSec?: null | number;
+            lastSeenAtSec?: number;
             /** Format: int32 */
-            performerId?: null | number;
-            performerName?: null | string;
+            performerId?: number;
+            performerName?: string;
             /** Format: float */
-            topConfidence?: null | number;
+            topConfidence?: number;
             /** Format: int32 */
             videoCount: number;
         };
@@ -17928,7 +17933,7 @@ export interface components {
         };
         FaceLink: {
             /** Format: int32 */
-            performerId?: null | number;
+            performerId?: number;
             /** @default false */
             setPerformerImage: boolean;
         };
@@ -17939,7 +17944,7 @@ export interface components {
         FaceSimilar: {
             /** Format: int32 */
             appearanceCount: number;
-            coverImageUrl?: null | string;
+            coverImageUrl?: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: int32 */
@@ -17953,13 +17958,13 @@ export interface components {
             ignored: boolean;
             /** Format: int32 */
             imageCount: number;
-            label?: null | string;
+            label?: string;
             /** Format: int32 */
-            mergedIntoFaceId?: null | number;
+            mergedIntoFaceId?: number;
             /** Format: int32 */
-            performerId?: null | number;
-            performerName?: null | string;
-            primarySourceKey?: null | string;
+            performerId?: number;
+            performerName?: string;
+            primarySourceKey?: string;
             /** Format: date-time */
             updatedAt: string;
             /** Format: int32 */
@@ -17968,21 +17973,21 @@ export interface components {
         FaceSuggestion: {
             /** Format: float */
             confidence: number;
-            conflictGroupId?: null | string;
-            coverImageUrl?: null | string;
+            conflictGroupId?: string;
+            coverImageUrl?: string;
             evidence: components["schemas"]["FaceSuggestionEvidence"][];
-            externalUrl?: null | string;
+            externalUrl?: string;
             /** @default false */
             localPerformerHasImage: boolean;
             /** Format: int32 */
-            localPerformerId?: null | number;
+            localPerformerId?: number;
             /** @default false */
             localPerformerIsLocalOnly: boolean;
             /** Format: int32 */
             performerId: number;
             performerName: string;
-            referenceEndpoint?: null | string;
-            referenceExternalId?: null | string;
+            referenceEndpoint?: string;
+            referenceExternalId?: string;
             /** @default false */
             referenceWillRefreshFromMetadata: boolean;
             why: string;
@@ -17991,11 +17996,11 @@ export interface components {
             decision: string;
             /** Format: int32 */
             performerId: number;
-            referenceEndpoint?: null | string;
-            referenceExternalId?: null | string;
+            referenceEndpoint?: string;
+            referenceExternalId?: string;
             /** @default false */
             referenceUpdateMetadata: boolean;
-            secondaryPerformerIds?: null | number[];
+            secondaryPerformerIds?: number[];
             /** @default false */
             setPerformerImage: boolean;
         };
@@ -18004,17 +18009,17 @@ export interface components {
             faceId: number;
             /** Format: float */
             similarity: number;
-            thumbnailUrl?: null | string;
+            thumbnailUrl?: string;
         };
-        FaceTopSuggestion: null | {
+        FaceTopSuggestion: {
             /** Format: float */
             confidence: number;
-            coverImageUrl?: null | string;
-            externalUrl?: null | string;
+            coverImageUrl?: string;
+            externalUrl?: string;
             /** @default false */
             localPerformerHasImage: boolean;
             /** Format: int32 */
-            localPerformerId?: null | number;
+            localPerformerId?: number;
             /** @default false */
             localPerformerIsLocalOnly: boolean;
             /** Format: int32 */
@@ -18023,27 +18028,27 @@ export interface components {
         };
         FaceUpdate: {
             ignored: boolean;
-            label?: null | string;
+            label?: string;
             /** Format: int32 */
-            performerId?: null | number;
-            primarySourceKey?: null | string;
+            performerId?: number;
+            primarySourceKey?: string;
         };
         FfmpegCapabilities: {
             accelerators: string[];
             decoders: string[];
             ffmpegFound: boolean;
-            ffmpegPath?: null | string;
+            ffmpegPath?: string;
             /** Format: date-time */
             probedAtUtc: string;
         };
         FieldProvenance: {
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             createdAt: string;
             fieldKey: string;
-            modelKey?: null | string;
+            modelKey?: string;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             value?: null | components["schemas"]["JsonElement"];
         };
         FileBackedCreate: {
@@ -18090,22 +18095,22 @@ export interface components {
             findFilter?: null | components["schemas"]["FindFilter"];
             objectFilter?: null | components["schemas"]["VideoFilter"];
         };
-        FindFilter: null | {
+        FindFilter: {
             direction: components["schemas"]["SortDirection"];
             /** Format: int32 */
             page: number;
             /** Format: int32 */
             perPage: number;
-            q?: null | string;
+            q?: string;
             /** Format: int32 */
-            seed?: null | number;
-            sort?: null | string;
+            seed?: number;
+            sort?: string;
         };
         Fingerprint: {
             type: string;
             value: string;
         };
-        FingerprintCriterion: null | {
+        FingerprintCriterion: {
             modifier: components["schemas"]["CriterionModifier"];
             type: string;
             value: string;
@@ -18115,31 +18120,31 @@ export interface components {
             value: string;
         };
         Gallery: {
-            backCoverPath?: null | string;
-            code?: null | string;
+            backCoverPath?: string;
+            code?: string;
             /** Format: int32 */
-            coverImageId?: null | number;
-            coverPath?: null | string;
+            coverImageId?: number;
+            coverPath?: string;
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            displayName?: null | string;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            displayName?: string;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             files: components["schemas"]["GalleryFileInfo"][];
-            folderPath?: null | string;
+            folderPath?: string;
             /** Format: int32 */
             id: number;
             /** Format: int32 */
             imageCount: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
-            photographer?: null | string;
+            photographer?: string;
             /** Format: int32 */
-            studioId?: null | number;
-            studioName?: null | string;
+            studioId?: number;
+            studioName?: string;
             tags: components["schemas"]["Tag"][];
-            title?: null | string;
+            title?: string;
             updatedAt: string;
             urls: string[];
             /** Format: int32 */
@@ -18167,25 +18172,25 @@ export interface components {
         };
         GalleryChapterUpdate: {
             /** Format: int32 */
-            imageIndex?: null | number;
-            title?: null | string;
+            imageIndex?: number;
+            title?: string;
         };
         GalleryCreate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
             organized: boolean;
-            performerIds?: null | number[];
-            photographer?: null | string;
+            performerIds?: number[];
+            photographer?: string;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
-            videoIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
+            videoIds?: number[];
         };
         GalleryFileInfo: {
             fingerprints: components["schemas"]["Fingerprint"][];
@@ -18196,7 +18201,7 @@ export interface components {
             /** Format: int64 */
             size: number;
         };
-        GalleryFilter: null | {
+        GalleryFilter: {
             checksumCriterion?: null | components["schemas"]["StringCriterion"];
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
@@ -18208,28 +18213,28 @@ export interface components {
             fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
             imageCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            imageId?: null | number;
+            imageId?: number;
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            organized?: null | boolean;
+            organized?: boolean;
             organizedCriterion?: null | components["schemas"]["BoolCriterion"];
             pathCriterion?: null | components["schemas"]["StringCriterion"];
             performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            performerIds?: null | number[];
+            performerIds?: number[];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             photographerCriterion?: null | components["schemas"]["StringCriterion"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number;
+            studioId?: number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | number[];
+            tagIds?: number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            title?: null | string;
+            title?: string;
             titleCriterion?: null | components["schemas"]["StringCriterion"];
             typicalResolutionCriterion?: null | components["schemas"]["IntCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
@@ -18244,78 +18249,78 @@ export interface components {
             imageId: number;
         };
         GallerySummary: {
-            date?: null | string;
+            date?: string;
             /** Format: int32 */
             id: number;
-            title?: null | string;
+            title?: string;
         };
         GalleryUpdate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            organized?: null | boolean;
-            performerIds?: null | number[];
-            photographer?: null | string;
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            organized?: boolean;
+            performerIds?: number[];
+            photographer?: string;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
-            videoIds?: null | number[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
+            videoIds?: number[];
         };
         GenerateOptions: {
-            audioIds?: null | number[];
+            audioIds?: number[];
             audioPhashes: boolean;
             galleryThumbnails: boolean;
-            imageIds?: null | number[];
+            imageIds?: number[];
             imagePhashes: boolean;
             imageThumbnails: boolean;
             md5: boolean;
             overwrite: boolean;
-            paths?: null | string[];
+            paths?: string[];
             phashes: boolean;
             previews: boolean;
             segmentPreviews: boolean;
             segments: boolean;
             segmentThumbnails: boolean;
             sprites: boolean;
-            textIds?: null | number[];
+            textIds?: number[];
             textPhashes: boolean;
             thumbnails: boolean;
-            videoIds?: null | number[];
+            videoIds?: number[];
         };
         GenerateScreenshot: {
             /** Format: double */
-            atSeconds?: null | number;
+            atSeconds?: number;
         };
         Group: {
-            aliases?: null | string;
-            allowedHostTypes?: null | string[];
+            aliases?: string;
+            allowedHostTypes?: string[];
             /**
              * Format: int32
              * @default 0
              */
             audioCount: number;
-            backImagePath?: null | string;
+            backImagePath?: string;
             /** Format: int32 */
-            cachedItemCount?: null | number;
+            cachedItemCount?: number;
             /** Format: int32 */
             containingGroupCount: number;
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            description?: null | string;
-            director?: null | string;
+            customFields?: Record<string, never>;
+            date?: string;
+            description?: string;
+            director?: string;
             /**
              * Format: int32
              * @default 0
              */
             faceCount: number;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
-            frontImagePath?: null | string;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
+            frontImagePath?: string;
             /**
              * Format: int32
              * @default 0
@@ -18332,15 +18337,15 @@ export interface components {
             /** Format: int32 */
             itemCount: number;
             kind?: components["schemas"]["GroupKind"];
-            lastResolvedAt?: null | string;
+            lastResolvedAt?: string;
             name: string;
             /**
              * Format: int32
              * @default 0
              */
             performerCount: number;
-            queryJson?: null | string;
-            querySourceKey?: null | string;
+            queryJson?: string;
+            querySourceKey?: string;
             /**
              * Format: int32
              * @default 0
@@ -18359,8 +18364,8 @@ export interface components {
              */
             studioCount: number;
             /** Format: int32 */
-            studioId?: null | number;
-            studioName?: null | string;
+            studioId?: number;
+            studioName?: string;
             /** Format: int32 */
             subGroupCount: number;
             /**
@@ -18380,27 +18385,27 @@ export interface components {
             videoCount: number;
         };
         GroupCreate: {
-            aliases?: null | string;
-            allowedHostTypes?: null | string[];
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            description?: null | string;
-            director?: null | string;
+            aliases?: string;
+            allowedHostTypes?: string[];
+            customFields?: Record<string, never>;
+            date?: string;
+            description?: string;
+            director?: string;
             kind?: null | components["schemas"]["GroupKind"];
             name: string;
-            queryJson?: null | string;
-            querySourceKey?: null | string;
+            queryJson?: string;
+            querySourceKey?: string;
             /** Format: int32 */
-            rating?: null | number;
-            showInVideoLists?: null | boolean;
+            rating?: number;
+            showInVideoLists?: boolean;
             /** Format: int32 */
-            sortOrder?: null | number;
+            sortOrder?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            urls?: string[];
         };
-        GroupFilter: null | {
+        GroupFilter: {
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             allowedHostTypesCriterion?: null | components["schemas"]["StringCriterion"];
             audioCountCriterion?: null | components["schemas"]["IntCriterion"];
@@ -18421,25 +18426,25 @@ export interface components {
             itemCountCriterion?: null | components["schemas"]["IntCriterion"];
             kindCriterion?: null | components["schemas"]["StringCriterion"];
             lastResolvedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
-            name?: null | string;
+            name?: string;
             nameCriterion?: null | components["schemas"]["StringCriterion"];
             performerItemCountCriterion?: null | components["schemas"]["IntCriterion"];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             querySourceKeyCriterion?: null | components["schemas"]["StringCriterion"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             segmentCountCriterion?: null | components["schemas"]["IntCriterion"];
             showInVideoListsCriterion?: null | components["schemas"]["BoolCriterion"];
             sortOrderCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number;
+            studioId?: number;
             studioItemCountCriterion?: null | components["schemas"]["IntCriterion"];
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             subGroupCountCriterion?: null | components["schemas"]["IntCriterion"];
             synopsisCriterion?: null | components["schemas"]["StringCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | number[];
+            tagIds?: number[];
             tagItemCountCriterion?: null | components["schemas"]["IntCriterion"];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             textCountCriterion?: null | components["schemas"]["IntCriterion"];
@@ -18449,11 +18454,11 @@ export interface components {
         };
         GroupItem: {
             /** Format: int32 */
-            childGroupId?: null | number;
-            childGroupName?: null | string;
+            childGroupId?: number;
+            childGroupName?: string;
             createdAt: string;
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
             groupId: number;
             /** Format: int32 */
@@ -18462,44 +18467,44 @@ export interface components {
             /** Format: int32 */
             id: number;
             /** Format: int32 */
-            imageId?: null | number;
-            imageTitle?: null | string;
+            imageId?: number;
+            imageTitle?: string;
             kind: components["schemas"]["GroupItemKind"];
-            notes?: null | string;
+            notes?: string;
             /** Format: int32 */
             orderIndex: number;
-            snapshotAt?: null | string;
+            snapshotAt?: string;
             /** Format: int32 */
-            sourceProfileId?: null | number;
-            sourceQueryJson?: null | string;
-            sourceSpanKey?: null | string;
+            sourceProfileId?: number;
+            sourceQueryJson?: string;
+            sourceSpanKey?: string;
             /** Format: double */
-            startSec?: null | number;
-            title?: null | string;
+            startSec?: number;
+            title?: string;
             updatedAt: string;
             /** Format: int32 */
-            videoId?: null | number;
-            videoTitle?: null | string;
+            videoId?: number;
+            videoTitle?: string;
         };
         GroupItemCreate: {
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
-            hostId?: null | number;
-            hostType?: null | string;
+            hostId?: number;
+            hostType?: string;
             kind: components["schemas"]["GroupItemKind"];
-            notes?: null | string;
+            notes?: string;
             /** Format: int32 */
             orderIndex: number;
             /** Format: int32 */
-            sourceProfileId?: null | number;
-            sourceQueryJson?: null | string;
-            sourceSpanKey?: null | string;
+            sourceProfileId?: number;
+            sourceQueryJson?: string;
+            sourceSpanKey?: string;
             /** Format: double */
-            startSec?: null | number;
-            title?: null | string;
+            startSec?: number;
+            title?: string;
             /** Format: int32 */
-            videoId?: null | number;
+            videoId?: number;
         };
         /** @enum {string} */
         GroupItemKind: "video" | "videoRange" | "image" | "audio" | "text" | "group" | "performer" | "studio" | "tag" | "gallery" | "face" | "segment";
@@ -18509,15 +18514,15 @@ export interface components {
         GroupItemSpanInput: {
             derivedQuery?: null | components["schemas"]["SegmentSpanDerivedQuery"];
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
-            profileId?: null | number;
-            spanKey?: null | string;
+            profileId?: number;
+            spanKey?: string;
             /** Format: double */
-            startSec?: null | number;
-            title?: null | string;
+            startSec?: number;
+            title?: string;
             /** Format: int32 */
-            videoId?: null | number;
+            videoId?: number;
         };
         GroupItemsRemoveHosts: {
             hostIds: number[];
@@ -18533,14 +18538,14 @@ export interface components {
         };
         GroupItemUpdate: {
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             kind: components["schemas"]["GroupItemKind"];
-            notes?: null | string;
+            notes?: string;
             /** Format: int32 */
             orderIndex: number;
             /** Format: double */
-            startSec?: null | number;
-            title?: null | string;
+            startSec?: number;
+            title?: string;
         };
         /**
          * @default static
@@ -18552,14 +18557,14 @@ export interface components {
         };
         GroupPlaybackManifestItem: {
             /** Format: int32 */
-            audioId?: null | number;
+            audioId?: number;
             /** Format: double */
-            displayDurationSec?: null | number;
+            displayDurationSec?: number;
             /** Format: double */
-            durationSec?: null | number;
+            durationSec?: number;
             /** Format: double */
-            endSec?: null | number;
-            format?: null | string;
+            endSec?: number;
+            format?: string;
             /** Format: int32 */
             groupItemId: number;
             /** @default false */
@@ -18568,24 +18573,24 @@ export interface components {
             hostId: number;
             hostType: string;
             /** Format: int32 */
-            imageId?: null | number;
-            posterPath?: null | string;
+            imageId?: number;
+            posterPath?: string;
             /** Format: int32 */
-            segmentId?: null | number;
+            segmentId?: number;
             src: string;
             /** Format: double */
             startSec: number;
             /** Format: int32 */
-            textId?: null | number;
-            title?: null | string;
+            textId?: number;
+            title?: string;
             /** Format: int32 */
-            videoId?: null | number;
-            videoTitle?: null | string;
+            videoId?: number;
+            videoTitle?: string;
         };
         GroupQueryUpdate: {
             /** Format: int32 */
-            cacheTtlSec?: null | number;
-            queryJson?: null | string;
+            cacheTtlSec?: number;
+            queryJson?: string;
             querySourceKey: string;
         };
         GroupSummary: {
@@ -18596,65 +18601,65 @@ export interface components {
             videoIndex: number;
         };
         GroupUpdate: {
-            aliases?: null | string;
-            allowedHostTypes?: null | string[];
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            description?: null | string;
-            director?: null | string;
+            aliases?: string;
+            allowedHostTypes?: string[];
+            customFields?: Record<string, never>;
+            date?: string;
+            description?: string;
+            director?: string;
             kind?: null | components["schemas"]["GroupKind"];
-            name?: null | string;
-            queryJson?: null | string;
-            querySourceKey?: null | string;
+            name?: string;
+            queryJson?: string;
+            querySourceKey?: string;
             /** Format: int32 */
-            rating?: null | number;
-            showInVideoLists?: null | boolean;
+            rating?: number;
+            showInVideoLists?: boolean;
             /** Format: int32 */
-            sortOrder?: null | number;
+            sortOrder?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            urls?: string[];
         };
         IdentifyDefaultsConfig: {
             /** Format: int32 */
-            autoApplyMaxDurationDifferenceSeconds?: null | number;
+            autoApplyMaxDurationDifferenceSeconds?: number;
             /** Format: int32 */
-            autoApplyMaxPhashDistance?: null | number;
+            autoApplyMaxPhashDistance?: number;
             /** Format: int32 */
-            autoApplyMinFingerprintMatches?: null | number;
+            autoApplyMinFingerprintMatches?: number;
             createPerformers: boolean;
             createStudios: boolean;
             createTags: boolean;
         };
         IdentifyOptions: {
-            createPerformers?: null | boolean;
-            createStudios?: null | boolean;
-            createTags?: null | boolean;
-            fieldStrategies?: null | {
+            createPerformers?: boolean;
+            createStudios?: boolean;
+            createTags?: boolean;
+            fieldStrategies?: {
                 [key: string]: string;
             };
             markOrganized: boolean;
-            performerGenders?: null | string[];
+            performerGenders?: string[];
             setCoverImage: boolean;
             setPerformers: boolean;
             setStudio: boolean;
             setTags: boolean;
             skipMultipleMatches: boolean;
             skipSingleNamePerformers: boolean;
-            sources?: null | string[];
-            videoIds?: null | number[];
+            sources?: string[];
+            videoIds?: number[];
         };
         /** Format: binary */
         IFormFile: string;
         Image: {
-            code?: null | string;
-            contextTagApplications?: null | components["schemas"]["TagApplication"][];
+            code?: string;
+            contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             files: components["schemas"]["ImageFile"][];
             galleries: components["schemas"]["GallerySummary"][];
             /** Format: int32 */
@@ -18665,32 +18670,32 @@ export interface components {
             id: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
-            photographer?: null | string;
+            photographer?: string;
             /** Format: int32 */
-            studioId?: null | number;
-            studioName?: null | string;
+            studioId?: number;
+            studioName?: string;
             tags: components["schemas"]["Tag"][];
-            title?: null | string;
+            title?: string;
             updatedAt: string;
             urls: string[];
         };
         ImageCreate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            galleryIds?: null | number[];
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            galleryIds?: number[];
+            groupIds?: components["schemas"]["VideoGroupInput"][];
             organized: boolean;
-            performerIds?: null | number[];
-            photographer?: null | string;
+            performerIds?: number[];
+            photographer?: string;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         ImageFile: {
             basename: string;
@@ -18705,7 +18710,7 @@ export interface components {
             /** Format: int32 */
             width: number;
         };
-        ImageFilter: null | {
+        ImageFilter: {
             checksumCriterion?: null | components["schemas"]["StringCriterion"];
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
@@ -18717,75 +18722,75 @@ export interface components {
             fingerprintCriterion?: null | components["schemas"]["FingerprintCriterion"];
             galleriesCriterion?: null | components["schemas"]["MultiIdCriterion"];
             /** Format: int32 */
-            galleryId?: null | number;
-            ids?: null | number[];
+            galleryId?: number;
+            ids?: number[];
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
-            organized?: null | boolean;
+            organized?: boolean;
             organizedCriterion?: null | components["schemas"]["BoolCriterion"];
             orientationCriterion?: null | components["schemas"]["StringCriterion"];
             pathCriterion?: null | components["schemas"]["StringCriterion"];
             performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            performerIds?: null | number[];
+            performerIds?: number[];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             photographerCriterion?: null | components["schemas"]["StringCriterion"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             resolutionCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number;
+            studioId?: number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | number[];
+            tagIds?: number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            title?: null | string;
+            title?: string;
             titleCriterion?: null | components["schemas"]["StringCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             urlCriterion?: null | components["schemas"]["StringCriterion"];
         };
         ImageUpdate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            galleryIds?: null | number[];
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
-            organized?: null | boolean;
-            performerIds?: null | number[];
-            photographer?: null | string;
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            galleryIds?: number[];
+            groupIds?: components["schemas"]["VideoGroupInput"][];
+            organized?: boolean;
+            performerIds?: number[];
+            photographer?: string;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         ImportOptions: {
             duplicateHandling: boolean;
             filePath: string;
         };
         ImportRequest: {
-            generatedPath?: null | string;
+            generatedPath?: string;
             /** @default true */
             migrateGeneratedContent: boolean;
-            pathMappings?: null | components["schemas"]["PathMappingRequest"][];
+            pathMappings?: components["schemas"]["PathMappingRequest"][];
             stashDbPath: string;
         };
         InstallExtensionFromUrlRequest: {
             trustUnverified: boolean;
             url: string;
         };
-        IntCriterion: null | {
+        IntCriterion: {
             modifier: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
             value: number;
             /** Format: int32 */
-            value2?: null | number;
+            value2?: number;
         };
         InteractionEvent: {
             at: string;
@@ -18794,25 +18799,51 @@ export interface components {
         };
         InterfaceConfig: {
             /** Format: int32 */
-            defaultDurationForImages?: null | number;
+            defaultDurationForImages?: number;
             disableDropdownCreatePerformer: boolean;
             disableDropdownCreateStudio: boolean;
             disableDropdownCreateTag: boolean;
             handyConnectionEnabled: boolean;
-            handyKey?: null | string;
-            language?: null | string;
+            handyKey?: string;
+            language?: string;
             menuItems: string[];
         };
         InviteRedeemRequest: {
             password: string;
             token: string;
-            username?: null | string;
+            username?: string;
         };
         JobInfo: {
-            description?: null | string;
+            /** Format: date-time */
+            completedAt?: string;
+            description: string;
+            error?: string;
+            /** Format: double */
+            etaSeconds?: number;
             id: string;
-            name: string;
+            /** Format: double */
+            progress: number;
+            /** Format: date-time */
+            startedAt: string;
+            status: components["schemas"]["JobStatus"];
+            subTask?: string;
+            summary?: string;
+            type: string;
+            /** Format: int32 */
+            unitsCompleted?: number;
+            /** Format: int32 */
+            unitsFailed?: number;
+            /** Format: int32 */
+            unitsSkipped?: number;
+            /** Format: int32 */
+            unitsSucceeded?: number;
+            /** Format: int32 */
+            unitsTotal?: number;
+            /** Format: date-time */
+            updatedAt?: string;
         };
+        /** @enum {string} */
+        JobStatus: "pending" | "running" | "completed" | "failed" | "cancelled";
         JsonElement: unknown;
         LibraryFolder: {
             hasChildren: boolean;
@@ -18820,7 +18851,7 @@ export interface components {
             path: string;
         };
         LogEntry: {
-            exception?: null | string;
+            exception?: string;
             level: string;
             message: string;
             timestamp: string;
@@ -18849,10 +18880,10 @@ export interface components {
         MetadataServerEndpoint: {
             endpoint: string;
         };
-        MetadataServerEntityCandidate: null | {
+        MetadataServerEntityCandidate: {
             existsLocally: boolean;
             /** Format: int32 */
-            localId?: null | number;
+            localId?: number;
             name: string;
             remoteId: string;
         };
@@ -18863,35 +18894,35 @@ export interface components {
         MetadataServerFingerprint: {
             algorithm: string;
             /** Format: int32 */
-            duration?: null | number;
+            duration?: number;
             hash: string;
         };
         MetadataServerPerformerBatchTagRequest: {
             endpoint: string;
-            excludeFields?: null | string[];
+            excludeFields?: string[];
             filter?: null | components["schemas"]["PerformerFilter"];
-            ids?: null | number[];
+            ids?: number[];
             refreshAlreadyTagged: boolean;
             selectAll: boolean;
         };
         MetadataServerPerformerImportRequest: {
             endpoint: string;
-            fieldStrategies?: null | {
+            fieldStrategies?: {
                 [key: string]: string;
             };
             performerId: string;
         };
         MetadataServerPerformerMatch: {
             aliases: string[];
-            birthDate?: null | string;
-            country?: null | string;
+            birthDate?: string;
+            country?: string;
             deleted: boolean;
-            disambiguation?: null | string;
+            disambiguation?: string;
             endpoint: string;
-            gender?: null | string;
+            gender?: string;
             id: string;
-            imageUrl?: null | string;
-            mergedIntoId?: null | string;
+            imageUrl?: string;
+            mergedIntoId?: string;
             metadataServerName: string;
             name: string;
             urls: string[];
@@ -18899,15 +18930,15 @@ export interface components {
         MetadataServerStudioBatchTagRequest: {
             createParentStudios: boolean;
             endpoint: string;
-            excludeFields?: null | string[];
+            excludeFields?: string[];
             filter?: null | components["schemas"]["StudioFilter"];
-            ids?: null | number[];
+            ids?: number[];
             refreshAlreadyTagged: boolean;
             selectAll: boolean;
         };
         MetadataServerStudioImportRequest: {
             endpoint: string;
-            fieldStrategies?: null | {
+            fieldStrategies?: {
                 [key: string]: string;
             };
             studioId: string;
@@ -18916,17 +18947,17 @@ export interface components {
             aliases: string[];
             endpoint: string;
             id: string;
-            imageUrl?: null | string;
+            imageUrl?: string;
             metadataServerName: string;
             name: string;
-            parentName?: null | string;
+            parentName?: string;
             urls: string[];
         };
         MetadataServerTagBatchTagRequest: {
             endpoint: string;
-            excludeFields?: null | string[];
+            excludeFields?: string[];
             filter?: null | components["schemas"]["TagFilter"];
-            ids?: null | number[];
+            ids?: number[];
             refreshAlreadyTagged: boolean;
             selectAll: boolean;
         };
@@ -18936,7 +18967,7 @@ export interface components {
         };
         MetadataServerTagMatch: {
             aliases: string[];
-            description?: null | string;
+            description?: string;
             endpoint: string;
             id: string;
             metadataServerName: string;
@@ -18944,21 +18975,21 @@ export interface components {
         };
         MetadataServerValidationResult: {
             status: string;
-            username?: null | string;
+            username?: string;
             valid: boolean;
         };
-        MetadataServerVideoEntityOverride: null | {
+        MetadataServerVideoEntityOverride: {
             action: string;
             /** Format: int32 */
-            localId?: null | number;
+            localId?: number;
             name: string;
             remoteId: string;
         };
         MetadataServerVideoImportRequest: {
             endpoint: string;
-            excludedPerformerNames?: null | string[];
-            excludedTagNames?: null | string[];
-            fieldStrategies?: null | {
+            excludedPerformerNames?: string[];
+            excludedTagNames?: string[];
+            fieldStrategies?: {
                 [key: string]: string;
             };
             markOrganized: boolean;
@@ -18966,60 +18997,60 @@ export interface components {
             onlyExistingStudio: boolean;
             onlyExistingTags: boolean;
             overwriteExplicitCover: boolean;
-            performerGenders?: null | string[];
-            performerOverrides?: null | components["schemas"]["MetadataServerVideoEntityOverride"][];
+            performerGenders?: string[];
+            performerOverrides?: components["schemas"]["MetadataServerVideoEntityOverride"][];
             setCoverImage: boolean;
             setPerformers: boolean;
             setStudio: boolean;
             setTags: boolean;
             skipSingleNamePerformers: boolean;
             studioOverride?: null | components["schemas"]["MetadataServerVideoEntityOverride"];
-            tagOverrides?: null | components["schemas"]["MetadataServerVideoEntityOverride"][];
+            tagOverrides?: components["schemas"]["MetadataServerVideoEntityOverride"][];
             videoId: string;
         };
         MetadataServerVideoMatch: {
-            code?: null | string;
-            date?: null | string;
-            details?: null | string;
-            director?: null | string;
+            code?: string;
+            date?: string;
+            details?: string;
+            director?: string;
             /** Format: int32 */
-            duration?: null | number;
+            duration?: number;
             endpoint: string;
             fingerprintAlgorithms: string[];
             fingerprints: components["schemas"]["MetadataServerFingerprint"][];
             id: string;
-            imageUrl?: null | string;
+            imageUrl?: string;
             /** Format: int32 */
             matchCount: number;
             metadataServerName: string;
             performerCandidates: components["schemas"]["MetadataServerEntityCandidate"][];
             performerNames: string[];
             studioCandidate?: null | components["schemas"]["MetadataServerEntityCandidate"];
-            studioName?: null | string;
+            studioName?: string;
             tagCandidates: components["schemas"]["MetadataServerEntityCandidate"][];
             tagNames: string[];
-            title?: null | string;
+            title?: string;
             urls: string[];
         };
         MeUser: {
-            id?: null | string;
+            id?: string;
             kind: string;
             roles: string[];
             uiPreferences?: null | components["schemas"]["UserUiPreferences"];
-            username?: null | string;
+            username?: string;
         };
         MoveFiles: {
             destinationPath: string;
             fileIds: number[];
         };
-        MultiIdCriterion: null | {
+        MultiIdCriterion: {
             /** Format: int32 */
-            depth?: null | number;
-            excludes?: null | number[];
+            depth?: number;
+            excludes?: number[];
             modifier: components["schemas"]["CriterionModifier"];
-            requiredIds?: null | number[];
+            requiredIds?: number[];
             /** Format: int32 */
-            requiredIdsDepth?: null | number;
+            requiredIdsDepth?: number;
             value: number[];
         };
         PaginatedResponseOfAiRun: {
@@ -19183,47 +19214,47 @@ export interface components {
             aliases: string[];
             /** Format: int32 */
             audioCount: number;
-            birthdate?: null | string;
-            careerEnd?: null | string;
-            careerStart?: null | string;
-            circumcised?: null | string;
-            country?: null | string;
+            birthdate?: string;
+            careerEnd?: string;
+            careerStart?: string;
+            circumcised?: string;
+            country?: string;
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            deathDate?: null | string;
-            details?: null | string;
-            disambiguation?: null | string;
-            ethnicity?: null | string;
-            eyeColor?: null | string;
+            customFields?: Record<string, never>;
+            deathDate?: string;
+            details?: string;
+            disambiguation?: string;
+            ethnicity?: string;
+            eyeColor?: string;
             /**
              * Format: int32
              * @default 0
              */
             faceCount: number;
-            fakeTits?: null | string;
+            fakeTits?: string;
             favorite: boolean;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             galleryCount: number;
-            gender?: null | string;
+            gender?: string;
             /** Format: int32 */
             groupCount: number;
-            hairColor?: null | string;
+            hairColor?: string;
             /** Format: int32 */
-            heightCm?: null | number;
+            heightCm?: number;
             /** Format: int32 */
             id: number;
             /** Format: int32 */
             imageCount: number;
-            imagePath?: null | string;
-            measurements?: null | string;
+            imagePath?: string;
+            measurements?: string;
             name: string;
             /** Format: double */
-            penisLength?: null | number;
-            piercings?: null | string;
+            penisLength?: number;
+            piercings?: string;
             remoteIds: components["schemas"]["PerformerRemoteId"][];
             tags: components["schemas"]["Tag"][];
-            tattoos?: null | string;
+            tattoos?: string;
             /** Format: int32 */
             textCount: number;
             updatedAt: string;
@@ -19231,50 +19262,50 @@ export interface components {
             /** Format: int32 */
             videoCount: number;
             /** Format: int32 */
-            weight?: null | number;
+            weight?: number;
         };
         PerformerApplyScrapedRequest: {
-            collectionModes?: null | {
+            collectionModes?: {
                 [key: string]: string;
             };
             createMissingTags: boolean;
-            replaceFields?: null | string[];
+            replaceFields?: string[];
             scraped: components["schemas"]["ScrapedPerformer"];
         };
         PerformerCreate: {
-            aliases?: null | string[];
-            birthdate?: null | string;
-            careerEnd?: null | string;
-            careerStart?: null | string;
-            circumcised?: null | string;
-            country?: null | string;
-            customFields?: null | Record<string, never>;
-            deathDate?: null | string;
-            details?: null | string;
-            disambiguation?: null | string;
-            ethnicity?: null | string;
-            eyeColor?: null | string;
-            fakeTits?: null | string;
+            aliases?: string[];
+            birthdate?: string;
+            careerEnd?: string;
+            careerStart?: string;
+            circumcised?: string;
+            country?: string;
+            customFields?: Record<string, never>;
+            deathDate?: string;
+            details?: string;
+            disambiguation?: string;
+            ethnicity?: string;
+            eyeColor?: string;
+            fakeTits?: string;
             favorite: boolean;
-            gender?: null | string;
-            hairColor?: null | string;
+            gender?: string;
+            hairColor?: string;
             /** Format: int32 */
-            heightCm?: null | number;
-            measurements?: null | string;
+            heightCm?: number;
+            measurements?: string;
             name: string;
             /** Format: double */
-            penisLength?: null | number;
-            piercings?: null | string;
+            penisLength?: number;
+            piercings?: string;
             /** Format: int32 */
-            rating?: null | number;
-            remoteIds?: null | components["schemas"]["PerformerRemoteId"][];
-            tagIds?: null | number[];
-            tattoos?: null | string;
-            urls?: null | string[];
+            rating?: number;
+            remoteIds?: components["schemas"]["PerformerRemoteId"][];
+            tagIds?: number[];
+            tattoos?: string;
+            urls?: string[];
             /** Format: int32 */
-            weight?: null | number;
+            weight?: number;
         };
-        PerformerFilter: null | {
+        PerformerFilter: {
             ageCriterion?: null | components["schemas"]["IntCriterion"];
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             birthdateCriterion?: null | components["schemas"]["DateCriterion"];
@@ -19292,7 +19323,7 @@ export interface components {
             ethnicityCriterion?: null | components["schemas"]["StringCriterion"];
             eyeColorCriterion?: null | components["schemas"]["StringCriterion"];
             fakeTitsCriterion?: null | components["schemas"]["StringCriterion"];
-            favorite?: null | boolean;
+            favorite?: boolean;
             favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
             galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
             genderCriterion?: null | components["schemas"]["StringCriterion"];
@@ -19303,24 +19334,24 @@ export interface components {
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
             likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
             measurementsCriterion?: null | components["schemas"]["StringCriterion"];
-            name?: null | string;
+            name?: string;
             nameCriterion?: null | components["schemas"]["StringCriterion"];
             pathCriterion?: null | components["schemas"]["StringCriterion"];
             penisLengthCriterion?: null | components["schemas"]["IntCriterion"];
             piercingsCriterion?: null | components["schemas"]["StringCriterion"];
             playCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             remoteIdValueCriterion?: null | components["schemas"]["StringCriterion"];
             studioCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number;
+            studioId?: number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | number[];
+            tagIds?: number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tattooCriterion?: null | components["schemas"]["StringCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
@@ -19340,20 +19371,20 @@ export interface components {
         PerformerScrapePreview: {
             inputKind: string;
             scraped: components["schemas"]["ScrapedPerformer"];
-            sourceValue?: null | string;
+            sourceValue?: string;
         };
         PerformerScrapeRequest: {
             /** @default true */
             createMissingTags: boolean;
-            inputKind?: null | string;
-            name?: null | string;
-            scraperId?: null | string;
-            url?: null | string;
+            inputKind?: string;
+            name?: string;
+            scraperId?: string;
+            url?: string;
         };
         PerformerScrapeUrlRequest: {
             /** @default true */
             createMissingTags: boolean;
-            url?: null | string;
+            url?: string;
         };
         PerformerSummary: {
             /**
@@ -19361,15 +19392,15 @@ export interface components {
              * @default 0
              */
             audioCount: number;
-            birthdate?: null | string;
-            disambiguation?: null | string;
+            birthdate?: string;
+            disambiguation?: string;
             favorite: boolean;
             /**
              * Format: int32
              * @default 0
              */
             galleryCount: number;
-            gender?: null | string;
+            gender?: string;
             /** Format: int32 */
             id: number;
             /**
@@ -19377,7 +19408,7 @@ export interface components {
              * @default 0
              */
             imageCount: number;
-            imagePath?: null | string;
+            imagePath?: string;
             name: string;
             /**
              * Format: int32
@@ -19391,37 +19422,37 @@ export interface components {
             videoCount: number;
         };
         PerformerUpdate: {
-            aliases?: null | string[];
-            birthdate?: null | string;
-            careerEnd?: null | string;
-            careerStart?: null | string;
-            circumcised?: null | string;
-            country?: null | string;
-            customFields?: null | Record<string, never>;
-            deathDate?: null | string;
-            details?: null | string;
-            disambiguation?: null | string;
-            ethnicity?: null | string;
-            eyeColor?: null | string;
-            fakeTits?: null | string;
-            favorite?: null | boolean;
-            gender?: null | string;
-            hairColor?: null | string;
+            aliases?: string[];
+            birthdate?: string;
+            careerEnd?: string;
+            careerStart?: string;
+            circumcised?: string;
+            country?: string;
+            customFields?: Record<string, never>;
+            deathDate?: string;
+            details?: string;
+            disambiguation?: string;
+            ethnicity?: string;
+            eyeColor?: string;
+            fakeTits?: string;
+            favorite?: boolean;
+            gender?: string;
+            hairColor?: string;
             /** Format: int32 */
-            heightCm?: null | number;
-            measurements?: null | string;
-            name?: null | string;
+            heightCm?: number;
+            measurements?: string;
+            name?: string;
             /** Format: double */
-            penisLength?: null | number;
-            piercings?: null | string;
+            penisLength?: number;
+            piercings?: string;
             /** Format: int32 */
-            rating?: null | number;
-            remoteIds?: null | components["schemas"]["PerformerRemoteId"][];
-            tagIds?: null | number[];
-            tattoos?: null | string;
-            urls?: null | string[];
+            rating?: number;
+            remoteIds?: components["schemas"]["PerformerRemoteId"][];
+            tagIds?: number[];
+            tattoos?: string;
+            urls?: string[];
             /** Format: int32 */
-            weight?: null | number;
+            weight?: number;
         };
         PlaybackInterval: {
             /** Format: double */
@@ -19437,51 +19468,51 @@ export interface components {
             startSec: number;
         };
         PlaybackIntervalsRequest: {
-            autoplay?: null | boolean;
+            autoplay?: boolean;
             /** Format: double */
-            clipEndSec?: null | number;
+            clipEndSec?: number;
             /** Format: double */
-            clipStartSec?: null | number;
+            clipStartSec?: number;
             context?: unknown;
             /** Format: double */
             currentPositionSec: number;
-            fullscreen?: null | boolean;
+            fullscreen?: boolean;
             /** Format: int32 */
-            groupItemId?: null | number;
+            groupItemId?: number;
             /** Format: int32 */
             hostId: number;
             hostType: string;
             intervals: components["schemas"]["PlaybackIntervalInput"][];
             /** Format: int32 */
-            itemHostId?: null | number;
-            itemHostType?: null | string;
+            itemHostId?: number;
+            itemHostType?: string;
             /** Format: double */
             mediaDurationSec: number;
-            muted?: null | boolean;
+            muted?: boolean;
             /** Format: int32 */
-            parentHostId?: null | number;
-            parentHostType?: null | string;
+            parentHostId?: number;
+            parentHostType?: string;
             /** Format: double */
-            playbackRate?: null | number;
-            recommendationSource?: null | string;
-            referrer?: null | string;
-            route?: null | string;
-            scopeKey?: null | string;
+            playbackRate?: number;
+            recommendationSource?: string;
+            referrer?: string;
+            route?: string;
+            scopeKey?: string;
             /** Format: int32 */
-            segmentId?: null | number;
+            segmentId?: number;
             /** Format: uuid */
             sessionId: string;
             state: string;
-            surface?: null | string;
+            surface?: string;
         };
         Plugin: {
             description: string;
             enabled: boolean;
             id: string;
             name: string;
-            settings?: null | components["schemas"]["PluginSettingSchema"][];
+            settings?: components["schemas"]["PluginSettingSchema"][];
             tasks: components["schemas"]["PluginTask"][];
-            url?: null | string;
+            url?: string;
             version: string;
         };
         PluginSettings: {
@@ -19490,8 +19521,8 @@ export interface components {
             };
         };
         PluginSettingSchema: {
-            description?: null | string;
-            displayName?: null | string;
+            description?: string;
+            displayName?: string;
             name: string;
             type: string;
         };
@@ -19518,42 +19549,42 @@ export interface components {
             refreshToken: string;
         };
         RegistryExtensionDetail: {
-            author?: null | string;
+            author?: string;
             categories: string[];
-            changelog?: null | string;
+            changelog?: string;
             dependencies: {
                 [key: string]: string;
             };
-            description?: null | string;
+            description?: string;
             externalDependencies: components["schemas"]["ExtensionExternalDependency"][];
-            iconUrl?: null | string;
+            iconUrl?: string;
             id: string;
             kind: string;
-            minCoveVersion?: null | string;
+            minCoveVersion?: string;
             name: string;
-            readme?: null | string;
+            readme?: string;
             screenshots: string[];
             settings: components["schemas"]["ExtensionSettingManifest"][];
             /** Format: date-time */
-            updatedAt?: null | string;
-            url?: null | string;
+            updatedAt?: string;
+            url?: string;
             version: string;
             versions: components["schemas"]["RegistryVersionInfo"][];
         };
         RegistryExtensionSummary: {
-            author?: null | string;
+            author?: string;
             categories: string[];
-            description?: null | string;
-            iconUrl?: null | string;
+            description?: string;
+            iconUrl?: string;
             id: string;
             kind: string;
-            minCoveVersion?: null | string;
+            minCoveVersion?: string;
             name: string;
             /** Format: date-time */
-            updatedAt?: null | string;
+            updatedAt?: string;
             version: string;
         };
-        RegistryInstallExtensionRef: null | {
+        RegistryInstallExtensionRef: {
             id: string;
             name: string;
             version: string;
@@ -19565,11 +19596,11 @@ export interface components {
         };
         RegistryInstallResult: {
             extension?: null | components["schemas"]["RegistryInstallExtensionRef"];
-            installedDependencies?: null | string[];
-            message?: null | string;
-            missingDependencies?: null | components["schemas"]["DependencyInfo"][];
-            path?: null | string;
-            requiresDependencies?: null | boolean;
+            installedDependencies?: string[];
+            message?: string;
+            missingDependencies?: components["schemas"]["DependencyInfo"][];
+            path?: string;
+            requiresDependencies?: boolean;
         };
         RegistrySearchResult: {
             items: components["schemas"]["RegistryExtensionSummary"][];
@@ -19585,54 +19616,54 @@ export interface components {
             uninstallDependents: boolean;
         };
         RegistryUninstallResult: {
-            dependents?: null | components["schemas"]["ExtensionDependencyImpact"][];
+            dependents?: components["schemas"]["ExtensionDependencyImpact"][];
             extension?: null | components["schemas"]["ExtensionDependencyImpact"];
-            message?: null | string;
-            requiresDependents?: null | boolean;
-            uninstalledExtensions?: null | string[];
+            message?: string;
+            requiresDependents?: boolean;
+            uninstalledExtensions?: string[];
         };
         RegistryUpdateInfo: {
-            changelog?: null | string;
+            changelog?: string;
             currentVersion: string;
             extensionId: string;
             latestVersion: string;
         };
         RegistryVersionInfo: {
-            changelog?: null | string;
-            checksum?: null | string;
+            changelog?: string;
+            checksum?: string;
             dependencies: {
                 [key: string]: string;
             };
-            minCoveVersion?: null | string;
+            minCoveVersion?: string;
             /** Format: date-time */
-            releasedAt?: null | string;
+            releasedAt?: string;
             version: string;
         };
         ReorderJobRequest: {
-            beforeJobId?: null | string;
+            beforeJobId?: string;
         };
         ReorderSubGroups: {
             subGroupIds: number[];
         };
         ResolvedSpan: {
             collapsedToInstant: boolean;
-            colorHint?: null | string;
+            colorHint?: string;
             /** Format: double */
             endSec: number;
             /** Format: int32 */
             hostId: number;
             hostType: components["schemas"]["SegmentHostType"];
-            kind?: null | string;
+            kind?: string;
             /** Format: int32 */
-            lane?: null | number;
+            lane?: number;
             segmentIds: number[];
-            sourceKey?: null | string;
+            sourceKey?: string;
             spanKey: string;
             /** Format: double */
             startSec: number;
             /** Format: int32 */
-            tagId?: null | number;
-            tagName?: null | string;
+            tagId?: number;
+            tagName?: string;
         };
         ResolvedSpanDetail: {
             intervals: components["schemas"]["ResolvedSpanInterval"][];
@@ -19643,7 +19674,7 @@ export interface components {
             span: components["schemas"]["ResolvedSpan"];
             /** Format: int32 */
             videoId: number;
-            videoTitle?: null | string;
+            videoTitle?: string;
         };
         ResolvedSpanInterval: {
             /** Format: double */
@@ -19668,40 +19699,40 @@ export interface components {
         RestoreBackupResult: {
             backupPath: string;
             message: string;
-            preRestoreBackupPath?: null | string;
+            preRestoreBackupPath?: string;
         };
         RunPluginTask: {
-            args?: null | {
+            args?: {
                 [key: string]: string;
             };
             pluginId: string;
             taskName: string;
         };
         SavedFilter: {
-            findFilter?: null | string;
+            findFilter?: string;
             /** Format: int32 */
             id: number;
             mode: string;
             name: string;
-            objectFilter?: null | string;
-            uiOptions?: null | string;
+            objectFilter?: string;
+            uiOptions?: string;
         };
         SavedFilterCreate: {
-            findFilter?: null | string;
+            findFilter?: string;
             mode: string;
             name: string;
-            objectFilter?: null | string;
-            uiOptions?: null | string;
+            objectFilter?: string;
+            uiOptions?: string;
         };
         SavedFilterUpdate: {
-            findFilter?: null | string;
-            mode?: null | string;
-            name?: null | string;
-            objectFilter?: null | string;
-            uiOptions?: null | string;
+            findFilter?: string;
+            mode?: string;
+            name?: string;
+            objectFilter?: string;
+            uiOptions?: string;
         };
         ScanOptions: {
-            paths?: null | string[];
+            paths?: string[];
             rescan: boolean;
             scanGenerateAudioPhashes: boolean;
             scanGenerateCovers: boolean;
@@ -19722,48 +19753,48 @@ export interface components {
             markOrganized: boolean;
         };
         ScrapeAttempt: {
-            appliedAt?: null | string;
-            candidateResultsJson?: null | string;
+            appliedAt?: string;
+            candidateResultsJson?: string;
             createdAt: string;
             /** Format: int32 */
-            entityId?: null | number;
-            entitySnapshotJson?: null | string;
+            entityId?: number;
+            entitySnapshotJson?: string;
             entityType: string;
-            error?: null | string;
+            error?: string;
             /** Format: uuid */
             id: string;
-            inputJson?: null | string;
+            inputJson?: string;
             inputKind: string;
-            resultJson?: null | string;
+            resultJson?: string;
             scraperId: string;
             status: string;
         };
         ScrapeCollectionItemSelection: {
-            action?: null | string;
-            name?: null | string;
+            action?: string;
+            name?: string;
         };
         ScrapedPerformer: {
             aliases: string[];
-            birthdate?: null | string;
-            country?: null | string;
-            details?: null | string;
-            disambiguation?: null | string;
-            ethnicity?: null | string;
-            eyeColor?: null | string;
-            gender?: null | string;
-            hairColor?: null | string;
+            birthdate?: string;
+            country?: string;
+            details?: string;
+            disambiguation?: string;
+            ethnicity?: string;
+            eyeColor?: string;
+            gender?: string;
+            hairColor?: string;
             /** Format: int32 */
-            heightCm?: null | number;
-            imageUrl?: null | string;
-            measurements?: null | string;
-            name?: null | string;
-            piercings?: null | string;
-            sourceScraperId?: null | string;
+            heightCm?: number;
+            imageUrl?: string;
+            measurements?: string;
+            name?: string;
+            piercings?: string;
+            sourceScraperId?: string;
             tagNames: string[];
-            tattoos?: null | string;
+            tattoos?: string;
             urls: string[];
             /** Format: int32 */
-            weight?: null | number;
+            weight?: number;
         };
         ScrapeFragmentRequest: {
             entityType: string;
@@ -19780,7 +19811,7 @@ export interface components {
             matchedName: string;
         };
         ScraperMatchUrlRequest: {
-            entityType?: null | string;
+            entityType?: string;
             url: string;
         };
         ScraperPreference: {
@@ -19792,7 +19823,7 @@ export interface components {
             entityType: string;
             id: string;
             name: string;
-            preferenceSites?: null | string[];
+            preferenceSites?: string[];
             sourcePath: string;
             supportedScrapes: string[];
             urls: string[];
@@ -19814,59 +19845,59 @@ export interface components {
             allowAnonymousShareLinks: boolean;
             enabled: boolean;
             enforceDefaultDeny: boolean;
-            knownProxies?: null | string[];
-            newPassword?: null | string;
-            trustedHosts?: null | string[];
-            username?: null | string;
+            knownProxies?: string[];
+            newPassword?: string;
+            trustedHosts?: string[];
+            username?: string;
         };
         Segment: {
-            colorHint?: null | string;
+            colorHint?: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             createdAt: string;
             /** Format: double */
-            endSec?: null | number;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            endSec?: number;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             hostId: number;
             hostType: components["schemas"]["SegmentHostType"];
             /** Format: int32 */
             id: number;
-            kind?: null | string;
+            kind?: string;
             payload?: null | components["schemas"]["JsonElement"];
             /** Format: int64 */
-            refId?: null | number;
+            refId?: number;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: double */
             startSec: number;
             /** Format: int32 */
-            tagId?: null | number;
-            tagName?: null | string;
-            title?: null | string;
+            tagId?: number;
+            tagName?: string;
+            title?: string;
             updatedAt: string;
         };
         SegmentCreate: {
-            colorHint?: null | string;
+            colorHint?: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: double */
-            endSec?: null | number;
-            kind?: null | string;
+            endSec?: number;
+            kind?: string;
             payload?: null | components["schemas"]["JsonElement"];
             /** Format: int64 */
-            refId?: null | number;
-            sourceKey?: null | string;
-            sourceRunId?: null | string;
+            refId?: number;
+            sourceKey?: string;
+            sourceRunId?: string;
             /** Format: double */
             startSec: number;
             /** Format: int32 */
-            tagId?: null | number;
-            title?: null | string;
+            tagId?: number;
+            title?: string;
         };
         SegmentDisplayProfile: {
             createdAt: string;
-            description?: null | string;
+            description?: string;
             /** Format: int32 */
             id: number;
             isDefault: boolean;
@@ -19874,12 +19905,12 @@ export interface components {
             name: string;
             updatedAt: string;
             /** Format: int32 */
-            userId?: null | number;
+            userId?: number;
             /** Format: int32 */
             version: number;
         };
         SegmentDisplayProfileCreate: {
-            description?: null | string;
+            description?: string;
             isDefault: boolean;
             name: string;
         };
@@ -19889,77 +19920,77 @@ export interface components {
             videoId: number;
         };
         SegmentDisplayProfileUpdate: {
-            description?: null | string;
+            description?: string;
             name: string;
         };
         SegmentDisplayRule: {
             collapseToInstant: boolean;
-            colorOverride?: null | string;
+            colorOverride?: string;
             createdAt: string;
             hostType?: null | components["schemas"]["SegmentHostType"];
             /** Format: int32 */
             id: number;
-            kind?: null | string;
+            kind?: string;
             /** Format: int32 */
-            lane?: null | number;
+            lane?: number;
             /** Format: double */
-            mergeGapSec?: null | number;
+            mergeGapSec?: number;
             /** Format: float */
-            minConfidence?: null | number;
+            minConfidence?: number;
             /** Format: double */
-            minDurationSec?: null | number;
+            minDurationSec?: number;
             /** Format: int32 */
-            priority?: null | number;
-            sourceKey?: null | string;
-            tagCategory?: null | string;
+            priority?: number;
+            sourceKey?: string;
+            tagCategory?: string;
             /** Format: int32 */
-            tagId?: null | number;
-            tagName?: null | string;
+            tagId?: number;
+            tagName?: string;
             updatedAt: string;
             /** Format: int32 */
-            userId?: null | number;
+            userId?: number;
             visible: boolean;
         };
         SegmentDisplayRuleCreate: {
             collapseToInstant: boolean;
-            colorOverride?: null | string;
+            colorOverride?: string;
             hostType?: null | components["schemas"]["SegmentHostType"];
-            kind?: null | string;
+            kind?: string;
             /** Format: int32 */
-            lane?: null | number;
+            lane?: number;
             /** Format: double */
-            mergeGapSec?: null | number;
+            mergeGapSec?: number;
             /** Format: float */
-            minConfidence?: null | number;
+            minConfidence?: number;
             /** Format: double */
-            minDurationSec?: null | number;
+            minDurationSec?: number;
             /** Format: int32 */
-            priority?: null | number;
-            sourceKey?: null | string;
-            tagCategory?: null | string;
+            priority?: number;
+            sourceKey?: string;
+            tagCategory?: string;
             /** Format: int32 */
-            tagId?: null | number;
+            tagId?: number;
             visible: boolean;
         };
         SegmentDisplayRuleUpdate: {
             collapseToInstant: boolean;
-            colorOverride?: null | string;
+            colorOverride?: string;
             hostType?: null | components["schemas"]["SegmentHostType"];
-            kind?: null | string;
+            kind?: string;
             /** Format: int32 */
-            lane?: null | number;
+            lane?: number;
             /** Format: double */
-            mergeGapSec?: null | number;
+            mergeGapSec?: number;
             /** Format: float */
-            minConfidence?: null | number;
+            minConfidence?: number;
             /** Format: double */
-            minDurationSec?: null | number;
+            minDurationSec?: number;
             /** Format: int32 */
-            priority?: null | number;
-            sourceKey?: null | string;
-            tagCategory?: null | string;
+            priority?: number;
+            sourceKey?: string;
+            tagCategory?: string;
             /** Format: int32 */
-            tagId?: null | number;
+            tagId?: number;
             visible: boolean;
         };
         SegmentDistinctValue: {
@@ -19970,124 +20001,124 @@ export interface components {
         /** @enum {unknown} */
         SegmentHostType: "video" | "image" | "audio" | null;
         SegmentRecord: {
-            colorHint?: null | string;
+            colorHint?: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             createdAt: string;
             /** Format: double */
-            endSec?: null | number;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            endSec?: number;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             hostId: number;
-            hostTitle?: null | string;
+            hostTitle?: string;
             hostType: components["schemas"]["SegmentHostType"];
             /** Format: int32 */
             id: number;
-            kind?: null | string;
+            kind?: string;
             payload?: null | components["schemas"]["JsonElement"];
             /** Format: int32 */
-            performerId?: null | number;
-            performerName?: null | string;
+            performerId?: number;
+            performerName?: string;
             /** Format: int64 */
-            refId?: null | number;
-            refLabel?: null | string;
+            refId?: number;
+            refLabel?: string;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: double */
             startSec: number;
             /** Format: int32 */
-            tagId?: null | number;
-            tagName?: null | string;
-            title?: null | string;
+            tagId?: number;
+            tagName?: string;
+            title?: string;
             updatedAt: string;
         };
         SegmentSpanCountResponse: {
             /** Format: int32 */
             totalCount: number;
         };
-        SegmentSpanDerivedQuery: null | {
+        SegmentSpanDerivedQuery: {
             /** Format: double */
-            mergeGapSec?: null | number;
+            mergeGapSec?: number;
             /** Format: double */
-            minDurationSec?: null | number;
+            minDurationSec?: number;
             operands: components["schemas"]["SegmentSpanOperand"][];
             operator: string;
         };
         SegmentSpanOperand: {
-            kind?: null | string;
+            kind?: string;
             /** Format: float */
-            minConfidence?: null | number;
-            refIds?: null | number[];
-            sourceKey?: null | string;
-            tagIds?: null | number[];
+            minConfidence?: number;
+            refIds?: number[];
+            sourceKey?: string;
+            tagIds?: number[];
         };
         SegmentSpanQueryRequest: {
             /** Format: double */
-            mergeGapSec?: null | number;
+            mergeGapSec?: number;
             /** Format: double */
-            minDurationSec?: null | number;
+            minDurationSec?: number;
             operands: components["schemas"]["SegmentSpanOperand"][];
             operator: string;
             /** Format: int32 */
-            profile?: null | number;
+            profile?: number;
         };
         SegmentSpanSearchRequest: {
-            colorHint?: null | string;
-            colorHintModifier?: null | string;
+            colorHint?: string;
+            colorHintModifier?: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: float */
-            confidence2?: null | number;
-            confidenceModifier?: null | string;
-            createdAt?: null | string;
-            createdAt2?: null | string;
-            createdAtModifier?: null | string;
+            confidence2?: number;
+            confidenceModifier?: string;
+            createdAt?: string;
+            createdAt2?: string;
+            createdAtModifier?: string;
             derivedQuery?: null | components["schemas"]["SegmentSpanDerivedQuery"];
-            direction?: null | string;
-            durationModifier?: null | string;
+            direction?: string;
+            durationModifier?: string;
             /** Format: double */
-            durationSec?: null | number;
+            durationSec?: number;
             /** Format: double */
-            durationSec2?: null | number;
+            durationSec2?: number;
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: double */
-            endSec2?: null | number;
-            endSecModifier?: null | string;
-            excludeVideoIds?: null | number[];
-            hasImage?: null | boolean;
-            hasPayload?: null | boolean;
-            hostType?: null | string;
-            kind?: null | string;
+            endSec2?: number;
+            endSecModifier?: string;
+            excludeVideoIds?: number[];
+            hasImage?: boolean;
+            hasPayload?: boolean;
+            hostType?: string;
+            kind?: string;
             /** Format: int32 */
-            page?: null | number;
-            performerIds?: null | number[];
+            page?: number;
+            performerIds?: number[];
             /** Format: int32 */
-            perPage?: null | number;
+            perPage?: number;
             /** Format: int32 */
-            profile?: null | number;
-            q?: null | string;
-            refIds?: null | number[];
+            profile?: number;
+            q?: string;
+            refIds?: number[];
             /** Format: int32 */
-            seed?: null | number;
-            sort?: null | string;
-            sourceCategory?: null | string;
-            sourceKey?: null | string;
-            sourceRunId?: null | string;
-            sourceRunIdModifier?: null | string;
+            seed?: number;
+            sort?: string;
+            sourceCategory?: string;
+            sourceKey?: string;
+            sourceRunId?: string;
+            sourceRunIdModifier?: string;
             /** Format: double */
-            startSec?: null | number;
+            startSec?: number;
             /** Format: double */
-            startSec2?: null | number;
-            startSecModifier?: null | string;
-            tagIds?: null | number[];
-            title?: null | string;
-            titleModifier?: null | string;
-            updatedAt?: null | string;
-            updatedAt2?: null | string;
-            updatedAtModifier?: null | string;
-            videoIds?: null | number[];
-            videoTitle?: null | string;
+            startSec2?: number;
+            startSecModifier?: string;
+            tagIds?: number[];
+            title?: string;
+            titleModifier?: string;
+            updatedAt?: string;
+            updatedAt2?: string;
+            updatedAtModifier?: string;
+            videoIds?: number[];
+            videoTitle?: string;
         };
         SegmentSpanSearchResponse: {
             /** @default false */
@@ -20106,34 +20137,34 @@ export interface components {
             span: components["schemas"]["ResolvedSpan"];
             /** Format: int32 */
             videoId: number;
-            videoTitle?: null | string;
-            videoUpdatedAt?: null | string;
+            videoTitle?: string;
+            videoUpdatedAt?: string;
         };
         SegmentTagBulkRemoveRequest: {
-            ids?: null | number[];
+            ids?: number[];
             /** Format: int32 */
             tagId: number;
         };
         SegmentUpdate: {
-            colorHint?: null | string;
+            colorHint?: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: double */
-            endSec?: null | number;
-            kind?: null | string;
+            endSec?: number;
+            kind?: string;
             payload?: null | components["schemas"]["JsonElement"];
             /** Format: int64 */
-            refId?: null | number;
+            refId?: number;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: double */
             startSec: number;
             /** Format: int32 */
-            tagId?: null | number;
-            title?: null | string;
+            tagId?: number;
+            title?: string;
         };
         SetLogLevelRequest: {
-            level?: null | string;
+            level?: string;
         };
         SetRolesRequest: {
             roles: string[];
@@ -20143,7 +20174,7 @@ export interface components {
         SetupTokenRedeemRequest: {
             password: string;
             token: string;
-            username?: null | string;
+            username?: string;
         };
         /** @enum {string} */
         SortDirection: "asc" | "desc";
@@ -20164,12 +20195,12 @@ export interface components {
             videos: number;
         };
         StashPreviewResult: {
-            error?: null | string;
+            error?: string;
             /** Format: int32 */
             galleries: number;
             /** @default false */
             generatedContentFound: boolean;
-            generatedPath?: null | string;
+            generatedPath?: string;
             /** Format: int32 */
             groups: number;
             /** Format: int32 */
@@ -20270,7 +20301,7 @@ export interface components {
             /** Format: int64 */
             videoPlayCount: number;
         };
-        StringCriterion: null | {
+        StringCriterion: {
             modifier: components["schemas"]["CriterionModifier"];
             value: string;
         };
@@ -20281,10 +20312,10 @@ export interface components {
             /** Format: int32 */
             childStudioCount: number;
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            details?: null | string;
+            customFields?: Record<string, never>;
+            details?: string;
             favorite: boolean;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             galleryCount: number;
             /** Format: int32 */
@@ -20293,12 +20324,12 @@ export interface components {
             id: number;
             /** Format: int32 */
             imageCount: number;
-            imagePath?: null | string;
+            imagePath?: string;
             name: string;
             organized: boolean;
             /** Format: int32 */
-            parentId?: null | number;
-            parentName?: null | string;
+            parentId?: number;
+            parentName?: string;
             /** Format: int32 */
             performerCount: number;
             remoteIds: components["schemas"]["StudioRemoteId"][];
@@ -20311,45 +20342,45 @@ export interface components {
             videoCount: number;
         };
         StudioCreate: {
-            aliases?: null | string[];
-            customFields?: null | Record<string, never>;
-            details?: null | string;
+            aliases?: string[];
+            customFields?: Record<string, never>;
+            details?: string;
             favorite: boolean;
             name: string;
             organized: boolean;
             /** Format: int32 */
-            parentId?: null | number;
+            parentId?: number;
             /** Format: int32 */
-            rating?: null | number;
-            remoteIds?: null | components["schemas"]["StudioRemoteId"][];
-            tagIds?: null | number[];
-            urls?: null | string[];
+            rating?: number;
+            remoteIds?: components["schemas"]["StudioRemoteId"][];
+            tagIds?: number[];
+            urls?: string[];
         };
-        StudioFilter: null | {
+        StudioFilter: {
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             childCountCriterion?: null | components["schemas"]["IntCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             detailsCriterion?: null | components["schemas"]["StringCriterion"];
-            favorite?: null | boolean;
+            favorite?: boolean;
             favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
             galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
             groupCountCriterion?: null | components["schemas"]["IntCriterion"];
             imageCountCriterion?: null | components["schemas"]["IntCriterion"];
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            name?: null | string;
+            name?: string;
             nameCriterion?: null | components["schemas"]["StringCriterion"];
             organizedCriterion?: null | components["schemas"]["BoolCriterion"];
             parentCountCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            parentId?: null | number;
+            parentId?: number;
             parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
-            tagIds?: null | number[];
+            tagIds?: number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             urlCriterion?: null | components["schemas"]["StringCriterion"];
@@ -20365,36 +20396,36 @@ export interface components {
             remoteId: string;
         };
         StudioUpdate: {
-            aliases?: null | string[];
-            customFields?: null | Record<string, never>;
-            details?: null | string;
-            favorite?: null | boolean;
-            name?: null | string;
-            organized?: null | boolean;
+            aliases?: string[];
+            customFields?: Record<string, never>;
+            details?: string;
+            favorite?: boolean;
+            name?: string;
+            organized?: boolean;
             /** Format: int32 */
-            parentId?: null | number;
+            parentId?: number;
             /** Format: int32 */
-            rating?: null | number;
-            remoteIds?: null | components["schemas"]["StudioRemoteId"][];
-            tagIds?: null | number[];
-            urls?: null | string[];
+            rating?: number;
+            remoteIds?: components["schemas"]["StudioRemoteId"][];
+            tagIds?: number[];
+            urls?: string[];
         };
         SyncFingerprintsOptions: {
-            apiKey?: null | string;
-            sourceUrl?: null | string;
+            apiKey?: string;
+            sourceUrl?: string;
         };
         SystemStatus: {
-            appDir?: null | string;
+            appDir?: string;
             /** @default false */
             authEnabled: boolean;
-            configFile?: null | string;
+            configFile?: string;
             databasePath: string;
             /** @default false */
             migrationRequired: boolean;
-            migrationStatusError?: null | string;
+            migrationStatusError?: string;
             /** @default false */
             migrationStatusUnknown: boolean;
-            pendingMigrations?: null | string[];
+            pendingMigrations?: string[];
             version: string;
         };
         Tag: {
@@ -20403,111 +20434,111 @@ export interface components {
             canRemove: boolean;
             /** @default false */
             canReportIncorrect: boolean;
-            color?: null | string;
-            customFields?: null | Record<string, never>;
-            description?: null | string;
+            color?: string;
+            customFields?: Record<string, never>;
+            description?: string;
             /** Format: double */
-            effectiveDurationPercent?: null | number;
+            effectiveDurationPercent?: number;
             /** Format: double */
-            effectiveDurationSec?: null | number;
+            effectiveDurationSec?: number;
             favorite: boolean;
             /** Format: int32 */
             id: number;
             /** @default false */
             isDerived: boolean;
             /** Format: double */
-            minOccurrencePercent?: null | number;
+            minOccurrencePercent?: number;
             /** Format: double */
-            minOccurrenceSec?: null | number;
+            minOccurrenceSec?: number;
             name: string;
             /** @default false */
             organized: boolean;
-            provenance?: null | components["schemas"]["TagProvenance"][];
-            segmentColorOverride?: null | string;
+            provenance?: components["schemas"]["TagProvenance"][];
+            segmentColorOverride?: string;
             /** Format: int32 */
-            segmentLaneOverride?: null | number;
-            showAsSegment?: null | boolean;
-            tagGroupColor?: null | string;
+            segmentLaneOverride?: number;
+            showAsSegment?: boolean;
+            tagGroupColor?: string;
             /** Format: int32 */
-            tagGroupId?: null | number;
-            tagGroupName?: null | string;
+            tagGroupId?: number;
+            tagGroupName?: string;
         };
         TagApplication: {
             appliedAt: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: int32 */
-            contextId?: null | number;
-            contextType?: null | string;
+            contextId?: number;
+            contextType?: string;
             /** Format: double */
-            hostDurationSec?: null | number;
+            hostDurationSec?: number;
             /** Format: int32 */
             hostId: number;
             hostType: string;
             /** Format: int32 */
             id: number;
-            modelKey?: null | string;
+            modelKey?: string;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             tag: components["schemas"]["Tag"];
             /** Format: double */
-            totalDurationSec?: null | number;
+            totalDurationSec?: number;
         };
         TagApplicationCreate: {
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: int32 */
-            contextId?: null | number;
-            contextType?: null | string;
+            contextId?: number;
+            contextType?: string;
             /** Format: double */
-            hostDurationSec?: null | number;
+            hostDurationSec?: number;
             /** Format: int32 */
             hostId: number;
             hostType: string;
-            modelKey?: null | string;
+            modelKey?: string;
             /** @default user */
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: int32 */
             tagId: number;
             /** Format: double */
-            totalDurationSec?: null | number;
+            totalDurationSec?: number;
         };
         TagCreate: {
-            aliases?: null | string[];
-            childIds?: null | number[];
-            color?: null | string;
-            customFields?: null | Record<string, never>;
-            description?: null | string;
+            aliases?: string[];
+            childIds?: number[];
+            color?: string;
+            customFields?: Record<string, never>;
+            description?: string;
             favorite: boolean;
             /** Format: double */
-            minOccurrencePercent?: null | number;
+            minOccurrencePercent?: number;
             /** Format: double */
-            minOccurrenceSec?: null | number;
+            minOccurrenceSec?: number;
             name: string;
             /** @default false */
             organized: boolean;
-            parentIds?: null | number[];
-            remoteIds?: null | components["schemas"]["TagRemoteId"][];
-            segmentColorOverride?: null | string;
+            parentIds?: number[];
+            remoteIds?: components["schemas"]["TagRemoteId"][];
+            segmentColorOverride?: string;
             /** Format: int32 */
-            segmentLaneOverride?: null | number;
-            showAsSegment?: null | boolean;
-            sortName?: null | string;
+            segmentLaneOverride?: number;
+            showAsSegment?: boolean;
+            sortName?: string;
             /** Format: int32 */
-            tagGroupId?: null | number;
+            tagGroupId?: number;
         };
         TagDetail: {
             aliases: string[];
             /** Format: int32 */
             audioCount: number;
             children: components["schemas"]["Tag"][];
-            color?: null | string;
+            color?: string;
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            description?: null | string;
+            customFields?: Record<string, never>;
+            description?: string;
             favorite: boolean;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             galleryCount: number;
             /** Format: int32 */
@@ -20517,29 +20548,29 @@ export interface components {
             /** Format: int32 */
             imageCount: number;
             /** Format: double */
-            minOccurrencePercent?: null | number;
+            minOccurrencePercent?: number;
             /** Format: double */
-            minOccurrenceSec?: null | number;
+            minOccurrenceSec?: number;
             name: string;
             /** @default false */
             organized: boolean;
             parents: components["schemas"]["Tag"][];
             /** Format: int32 */
             performerCount: number;
-            remoteIds?: null | components["schemas"]["TagRemoteId"][];
-            segmentColorOverride?: null | string;
+            remoteIds?: components["schemas"]["TagRemoteId"][];
+            segmentColorOverride?: string;
             /** Format: int32 */
             segmentCount: number;
             /** Format: int32 */
-            segmentLaneOverride?: null | number;
-            showAsSegment?: null | boolean;
-            sortName?: null | string;
+            segmentLaneOverride?: number;
+            showAsSegment?: boolean;
+            sortName?: string;
             /** Format: int32 */
             studioCount: number;
-            tagGroupColor?: null | string;
+            tagGroupColor?: string;
             /** Format: int32 */
-            tagGroupId?: null | number;
-            tagGroupName?: null | string;
+            tagGroupId?: number;
+            tagGroupName?: string;
             /** Format: int32 */
             textCount: number;
             updatedAt: string;
@@ -20548,30 +20579,30 @@ export interface components {
         };
         TagDurationClause: {
             contextMode: string;
-            contextType?: null | string;
+            contextType?: string;
             modifier: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
             tagId: number;
             unit: string;
             /** Format: double */
-            value?: null | number;
+            value?: number;
             /** Format: double */
-            value2?: null | number;
+            value2?: number;
         };
-        TagDurationCriterion: null | {
+        TagDurationCriterion: {
             clauses: components["schemas"]["TagDurationClause"][];
             contextMode: string;
-            contextType?: null | string;
+            contextType?: string;
             modifier: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
             tagId: number;
             unit: string;
             /** Format: double */
-            value?: null | number;
+            value?: number;
             /** Format: double */
-            value2?: null | number;
+            value2?: number;
         };
-        TagFilter: null | {
+        TagFilter: {
             aliasesCriterion?: null | components["schemas"]["StringCriterion"];
             childCountCriterion?: null | components["schemas"]["IntCriterion"];
             childrenCriterion?: null | components["schemas"]["MultiIdCriterion"];
@@ -20579,7 +20610,7 @@ export interface components {
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: null | components["schemas"]["CustomFieldCriterion"];
             descriptionCriterion?: null | components["schemas"]["StringCriterion"];
-            favorite?: null | boolean;
+            favorite?: boolean;
             favoriteCriterion?: null | components["schemas"]["BoolCriterion"];
             galleryCountCriterion?: null | components["schemas"]["IntCriterion"];
             galleryCountIncludesChildren: boolean;
@@ -20588,14 +20619,14 @@ export interface components {
             imageCountCriterion?: null | components["schemas"]["IntCriterion"];
             imageCountIncludesChildren: boolean;
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            name?: null | string;
+            name?: string;
             nameCriterion?: null | components["schemas"]["StringCriterion"];
             parentCountCriterion?: null | components["schemas"]["IntCriterion"];
             parentsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountIncludesChildren: boolean;
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
@@ -20616,7 +20647,7 @@ export interface components {
         };
         TagGraphNode: {
             childIds: number[];
-            description?: null | string;
+            description?: string;
             favorite: boolean;
             /** Format: int32 */
             galleryCount: number;
@@ -20626,7 +20657,7 @@ export interface components {
             id: number;
             /** Format: int32 */
             imageCount: number;
-            imagePath?: null | string;
+            imagePath?: string;
             name: string;
             parentIds: number[];
             /** Format: int32 */
@@ -20635,10 +20666,10 @@ export interface components {
             segmentCount: number;
             /** Format: int32 */
             studioCount: number;
-            tagGroupColor?: null | string;
+            tagGroupColor?: string;
             /** Format: int32 */
-            tagGroupId?: null | number;
-            tagGroupName?: null | string;
+            tagGroupId?: number;
+            tagGroupName?: string;
             /** Format: int32 */
             totalUsageCount: number;
             /** Format: int32 */
@@ -20651,9 +20682,9 @@ export interface components {
             totalCount: number;
         };
         TagGroup: {
-            color?: null | string;
+            color?: string;
             createdAt: string;
-            description?: null | string;
+            description?: string;
             /** Format: int32 */
             id: number;
             name: string;
@@ -20664,23 +20695,23 @@ export interface components {
             updatedAt: string;
         };
         TagGroupCreate: {
-            color?: null | string;
-            description?: null | string;
+            color?: string;
+            description?: string;
             name: string;
             /** Format: int32 */
-            sortOrder?: null | number;
+            sortOrder?: number;
         };
         TagGroupUpdate: {
-            color?: null | string;
-            description?: null | string;
-            name?: null | string;
+            color?: string;
+            description?: string;
+            name?: string;
             /** Format: int32 */
-            sortOrder?: null | number;
+            sortOrder?: number;
         };
         TagList: {
             aliases: string[];
-            color?: null | string;
-            description?: null | string;
+            color?: string;
+            description?: string;
             favorite: boolean;
             /** Format: int32 */
             galleryCount: number;
@@ -20690,28 +20721,28 @@ export interface components {
             id: number;
             /** Format: int32 */
             imageCount: number;
-            imagePath?: null | string;
+            imagePath?: string;
             /** Format: double */
-            minOccurrencePercent?: null | number;
+            minOccurrencePercent?: number;
             /** Format: double */
-            minOccurrenceSec?: null | number;
+            minOccurrenceSec?: number;
             name: string;
             /** @default false */
             organized: boolean;
             /** Format: int32 */
             performerCount: number;
-            segmentColorOverride?: null | string;
+            segmentColorOverride?: string;
             /** Format: int32 */
             segmentCount: number;
             /** Format: int32 */
-            segmentLaneOverride?: null | number;
-            showAsSegment?: null | boolean;
+            segmentLaneOverride?: number;
+            showAsSegment?: boolean;
             /** Format: int32 */
             studioCount: number;
-            tagGroupColor?: null | string;
+            tagGroupColor?: string;
             /** Format: int32 */
-            tagGroupId?: null | number;
-            tagGroupName?: null | string;
+            tagGroupId?: number;
+            tagGroupName?: string;
             /** Format: int32 */
             videoCount: number;
         };
@@ -20723,17 +20754,17 @@ export interface components {
         TagProvenance: {
             appliedAt: string;
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: int32 */
-            contextId?: null | number;
-            contextType?: null | string;
+            contextId?: number;
+            contextType?: string;
             /** Format: double */
-            hostDurationSec?: null | number;
-            modelKey?: null | string;
+            hostDurationSec?: number;
+            modelKey?: string;
             sourceKey: string;
-            sourceRunId?: null | string;
+            sourceRunId?: string;
             /** Format: double */
-            totalDurationSec?: null | number;
+            totalDurationSec?: number;
         };
         TagRemoteId: {
             endpoint: string;
@@ -20741,42 +20772,42 @@ export interface components {
         };
         TagSegmentWall: {
             /** Format: float */
-            confidence?: null | number;
+            confidence?: number;
             /** Format: double */
-            endSec?: null | number;
+            endSec?: number;
             /** Format: int32 */
             id: number;
             kind: string;
             sourceKey: string;
             /** Format: double */
             startSec: number;
-            title?: null | string;
+            title?: string;
             /** Format: int32 */
             videoId: number;
             videoTitle: string;
         };
         TagUpdate: {
-            aliases?: null | string[];
-            childIds?: null | number[];
-            color?: null | string;
-            customFields?: null | Record<string, never>;
-            description?: null | string;
-            favorite?: null | boolean;
+            aliases?: string[];
+            childIds?: number[];
+            color?: string;
+            customFields?: Record<string, never>;
+            description?: string;
+            favorite?: boolean;
             /** Format: double */
-            minOccurrencePercent?: null | number;
+            minOccurrencePercent?: number;
             /** Format: double */
-            minOccurrenceSec?: null | number;
-            name?: null | string;
-            organized?: null | boolean;
-            parentIds?: null | number[];
-            remoteIds?: null | components["schemas"]["TagRemoteId"][];
-            segmentColorOverride?: null | string;
+            minOccurrenceSec?: number;
+            name?: string;
+            organized?: boolean;
+            parentIds?: number[];
+            remoteIds?: components["schemas"]["TagRemoteId"][];
+            segmentColorOverride?: string;
             /** Format: int32 */
-            segmentLaneOverride?: null | number;
-            showAsSegment?: null | boolean;
-            sortName?: null | string;
+            segmentLaneOverride?: number;
+            showAsSegment?: boolean;
+            sortName?: string;
             /** Format: int32 */
-            tagGroupId?: null | number;
+            tagGroupId?: number;
         };
         TextContent: {
             content: string;
@@ -20784,49 +20815,49 @@ export interface components {
             renderMode: string;
         };
         TextDocument: {
-            code?: null | string;
-            contextTagApplications?: null | components["schemas"]["TagApplication"][];
+            code?: string;
+            contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             /** Format: int32 */
             fileCount: number;
             files: components["schemas"]["TextFile"][];
             groups: components["schemas"]["GroupSummary"][];
             /** Format: int32 */
             id: number;
-            imagePath?: null | string;
+            imagePath?: string;
             /** Format: int32 */
-            maxPageCount?: null | number;
+            maxPageCount?: number;
             /** Format: int32 */
-            maxWordCount?: null | number;
+            maxWordCount?: number;
             organized: boolean;
             performers: components["schemas"]["PerformerSummary"][];
             /** Format: int32 */
-            studioId?: null | number;
-            studioName?: null | string;
+            studioId?: number;
+            studioName?: string;
             tags: components["schemas"]["Tag"][];
-            title?: null | string;
+            title?: string;
             updatedAt: string;
             urls: string[];
         };
         TextDocumentCreate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            groupIds?: components["schemas"]["VideoGroupInput"][];
             organized: boolean;
-            performerIds?: null | number[];
+            performerIds?: number[];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
-        TextDocumentFilter: null | {
+        TextDocumentFilter: {
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             contentCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
@@ -20860,37 +20891,37 @@ export interface components {
             wordCountCriterion?: null | components["schemas"]["IntCriterion"];
         };
         TextDocumentUpdate: {
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            groupIds?: null | components["schemas"]["VideoGroupInput"][];
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            groupIds?: components["schemas"]["VideoGroupInput"][];
+            organized?: boolean;
+            performerIds?: number[];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         TextFile: {
             basename: string;
-            excerptText?: null | string;
+            excerptText?: string;
             format: string;
             /** Format: int32 */
             id: number;
             /** Format: int32 */
-            pageCount?: null | number;
+            pageCount?: number;
             path: string;
             /** Format: int64 */
             size: number;
             /** Format: int32 */
-            wordCount?: null | number;
+            wordCount?: number;
         };
-        TimestampCriterion: null | {
+        TimestampCriterion: {
             modifier: components["schemas"]["CriterionModifier"];
             value: string;
-            value2?: null | string;
+            value2?: string;
         };
         UIComponentOverride: {
             componentName: string;
@@ -20903,7 +20934,7 @@ export interface components {
             targetComponent: string;
         };
         UIComponentStyleDef: {
-            description?: null | string;
+            description?: string;
             id: string;
             name: string;
         };
@@ -20914,13 +20945,13 @@ export interface components {
             autostartVideo: boolean;
             autostartVideoOnPlaySelected: boolean;
             continuePlaylistDefault: boolean;
-            customCss?: null | string;
-            customJs?: null | string;
-            customLocalesPath?: null | string;
+            customCss?: string;
+            customJs?: string;
+            customLocalesPath?: string;
             deleteFileDefault: boolean;
             enableCSSCustomization: boolean;
             enableJSCustomization: boolean;
-            faviconPath?: null | string;
+            faviconPath?: string;
             feedVideoSound: boolean;
             feedVideoSource: string;
             /** Format: double */
@@ -20931,7 +20962,7 @@ export interface components {
             keybindingOverrides: {
                 [key: string]: string;
             };
-            logoPath?: null | string;
+            logoPath?: string;
             /** Format: int32 */
             maxLoopDuration: number;
             noBrowser: boolean;
@@ -20952,7 +20983,7 @@ export interface components {
             /** Format: int32 */
             slideshowDelay: number;
             soundOnPreview: boolean;
-            title?: null | string;
+            title?: string;
             troubleshootingModeEnabled: boolean;
             videoObjectFit: string;
             /** Format: int32 */
@@ -20973,27 +21004,27 @@ export interface components {
         UIFeatureDefinition: {
             extensionId: string;
             key: string;
-            options?: null | {
+            options?: {
                 [key: string]: string;
             };
         };
         UILayoutStyleDef: {
-            description?: null | string;
+            description?: string;
             id: string;
             name: string;
         };
         UIListFilterContribution: {
             criterionType: string;
-            customFieldKey?: null | string;
-            customFieldType?: null | string;
-            entityReferenceType?: null | string;
+            customFieldKey?: string;
+            customFieldType?: string;
+            entityReferenceType?: string;
             entityType: string;
             extensionId: string;
-            filterKey?: null | string;
+            filterKey?: string;
             id: string;
             label: string;
-            modifiers?: null | string[];
-            options?: null | components["schemas"]["UIListFilterOption"][];
+            modifiers?: string[];
+            options?: components["schemas"]["UIListFilterOption"][];
             /**
              * Format: int32
              * @default 100
@@ -21005,8 +21036,8 @@ export interface components {
             value: string;
         };
         UIListSortContribution: {
-            customFieldKey?: null | string;
-            customFieldType?: null | string;
+            customFieldKey?: string;
+            customFieldType?: string;
             entityType: string;
             extensionId: string;
             id: string;
@@ -21016,17 +21047,17 @@ export interface components {
              * @default 100
              */
             order: number;
-            sortKey?: null | string;
+            sortKey?: string;
         };
         UIManifest: {
             actions: components["schemas"]["ExtensionAction"][];
             componentOverrides: components["schemas"]["UIComponentOverride"][];
             componentStyles: components["schemas"]["UIComponentStyleDef"][];
-            cssBundleUrl?: null | string;
+            cssBundleUrl?: string;
             dialogOverrides: components["schemas"]["UIDialogOverride"][];
             features: components["schemas"]["UIFeatureDefinition"][];
-            frontendRuntimeVersion?: null | string;
-            jsBundleUrl?: null | string;
+            frontendRuntimeVersion?: string;
+            jsBundleUrl?: string;
             layoutStyles: components["schemas"]["UILayoutStyleDef"][];
             listFilters: components["schemas"]["UIListFilterContribution"][];
             listSorts: components["schemas"]["UIListSortContribution"][];
@@ -21042,17 +21073,17 @@ export interface components {
             tutorialTopics: components["schemas"]["UITutorialTopic"][];
         };
         UIPageDefinition: {
-            componentName?: null | string;
-            detailRoute?: null | string;
-            extensionId?: null | string;
-            icon?: null | string;
+            componentName?: string;
+            detailRoute?: string;
+            extensionId?: string;
+            icon?: string;
             label: string;
             /**
              * Format: int32
              * @default 100
              */
             navOrder: number;
-            requiredPermission?: null | string;
+            requiredPermission?: string;
             route: string;
             /** @default true */
             showInNav: boolean;
@@ -21071,7 +21102,7 @@ export interface components {
             componentName: string;
             extensionId: string;
             id: string;
-            label?: null | string;
+            label?: string;
             /**
              * Format: int32
              * @default 100
@@ -21100,14 +21131,14 @@ export interface components {
              * @default 100
              */
             order: number;
-            targetSection?: null | string;
-            targetTab?: null | string;
+            targetSection?: string;
+            targetTab?: string;
         };
         UISettingsTab: {
-            aliases?: null | string[];
-            description?: null | string;
+            aliases?: string[];
+            description?: string;
             extensionId: string;
-            icon?: null | string;
+            icon?: string;
             key: string;
             label: string;
             layout: components["schemas"]["SettingsTabLayout"];
@@ -21116,15 +21147,15 @@ export interface components {
              * @default 100
              */
             order: number;
-            parentTabKey?: null | string;
-            searchKeywords?: null | string[];
+            parentTabKey?: string;
+            searchKeywords?: string[];
         };
         UISlotContribution: {
-            componentName?: null | string;
+            componentName?: string;
             /** @default component */
             contentType: string;
             extensionId: string;
-            html?: null | string;
+            html?: string;
             id: string;
             /**
              * Format: int32
@@ -21135,12 +21166,12 @@ export interface components {
         };
         UITabContribution: {
             componentName: string;
-            countEndpoint?: null | string;
+            countEndpoint?: string;
             extensionId: string;
-            icon?: null | string;
+            icon?: string;
             key: string;
             label: string;
-            manualContexts?: null | string[];
+            manualContexts?: string[];
             /**
              * Format: int32
              * @default 100
@@ -21149,16 +21180,16 @@ export interface components {
             pageType: string;
         };
         UIThemeDefinition: {
-            backgroundAnimation?: null | string;
-            colorScheme?: null | string;
-            componentStyle?: null | string;
-            cssUrl?: null | string;
-            cssVariables?: null | {
+            backgroundAnimation?: string;
+            colorScheme?: string;
+            componentStyle?: string;
+            cssUrl?: string;
+            cssVariables?: {
                 [key: string]: string;
             };
-            description?: null | string;
+            description?: string;
             id: string;
-            layoutStyle?: null | string;
+            layoutStyle?: string;
             name: string;
         };
         UITutorialLink: {
@@ -21166,90 +21197,90 @@ export interface components {
             url: string;
         };
         UITutorialSlide: {
-            bodyMarkdown?: null | string;
-            caption?: null | string;
+            bodyMarkdown?: string;
+            caption?: string;
             id: string;
-            imageAlt?: null | string;
-            imageSrc?: null | string;
-            links?: null | components["schemas"]["UITutorialLink"][];
-            mockKind?: null | string;
-            points?: null | string[];
+            imageAlt?: string;
+            imageSrc?: string;
+            links?: components["schemas"]["UITutorialLink"][];
+            mockKind?: string;
+            points?: string[];
             title: string;
         };
         UITutorialTopic: {
-            contexts?: null | string[];
-            description?: null | string;
-            extensionId?: null | string;
+            contexts?: string[];
+            description?: string;
+            extensionId?: string;
             id: string;
-            kind?: null | string;
+            kind?: string;
             /**
              * Format: int32
              * @default 100
              */
             order: number;
-            pages?: null | string[];
-            parentTopicId?: null | string;
-            slides?: null | components["schemas"]["UITutorialSlide"][];
+            pages?: string[];
+            parentTopicId?: string;
+            slides?: components["schemas"]["UITutorialSlide"][];
             title: string;
         };
         UpdateContentRuleRequest: {
-            appliesTo?: null | string;
-            effect?: null | string;
-            scopeKind?: null | string;
-            scopeValue?: null | string;
+            appliesTo?: string;
+            effect?: string;
+            scopeKind?: string;
+            scopeValue?: string;
         };
         UpdateRoleRequest: {
-            description?: null | string;
-            permissions?: null | string[];
+            description?: string;
+            permissions?: string[];
         };
         UpdateUserRequest: {
-            displayName?: null | string;
-            email?: null | string;
-            isActive?: null | boolean;
-            mustChangePassword?: null | boolean;
+            displayName?: string;
+            email?: string;
+            isActive?: boolean;
+            mustChangePassword?: boolean;
         };
-        UserPlaybackPreferences: null | {
+        UserPlaybackPreferences: {
             /** Format: int32 */
-            skipSeconds?: null | number;
+            skipSeconds?: number;
         };
-        UserRatingSystemOptions: null | {
-            starPrecision?: null | string;
-            type?: null | string;
+        UserRatingSystemOptions: {
+            starPrecision?: string;
+            type?: string;
         };
-        UserThemePreferences: null | {
-            activeComponentStyles?: null | string[];
-            activeLayoutStyle?: null | string;
-            activeThemeId?: null | string;
-            customThemeColors?: null | {
+        UserThemePreferences: {
+            activeComponentStyles?: string[];
+            activeLayoutStyle?: string;
+            activeThemeId?: string;
+            customThemeColors?: {
                 [key: string]: string;
             };
-            styleOptions?: null | {
+            styleOptions?: {
                 [key: string]: {
                     [key: string]: string;
                 };
             };
         };
-        UserTrackingPreferences: null | {
+        UserTrackingPreferences: {
             /** Format: int32 */
-            dwellPositiveSec?: null | number;
-            enabled?: null | boolean;
+            dwellPositiveSec?: number;
+            enabled?: boolean;
             /** Format: int32 */
-            minDerivedLikeSessionSeconds?: null | number;
+            minDerivedLikeSessionSeconds?: number;
             /** Format: int32 */
-            minImageDetailViewSeconds?: null | number;
+            minImageDetailViewSeconds?: number;
             /** Format: int32 */
-            minViewSeconds?: null | number;
+            minViewSeconds?: number;
             /** Format: int32 */
-            sessionIdleTimeoutSec?: null | number;
+            sessionIdleTimeoutSec?: number;
             /** Format: double */
-            viewCompletionRatio?: null | number;
+            viewCompletionRatio?: number;
         };
-        UserUiPreferences: null | {
-            defaultFilters?: null | {
+        UserUiPreferences: {
+            defaultFilters?: {
                 [key: string]: string;
             };
-            homePageContent?: null | string;
-            keybindingOverrides?: null | {
+            homePageContent?: string;
+            keybindingOverrides?: {
                 [key: string]: string;
             };
             playback?: null | components["schemas"]["UserPlaybackPreferences"];
@@ -21258,46 +21289,46 @@ export interface components {
             tracking?: null | components["schemas"]["UserTrackingPreferences"];
             videos?: null | components["schemas"]["UserVideosPreferences"];
         };
-        UserVideosPreferences: null | {
-            includeCompilationGroups?: null | boolean;
+        UserVideosPreferences: {
+            includeCompilationGroups?: boolean;
         };
         Video: {
-            captions?: null | string;
+            captions?: string;
             /**
              * Format: int32
              * @default 0
              */
             childVideoCount: number;
             /** Format: double */
-            clipEndSec?: null | number;
+            clipEndSec?: number;
             /** Format: double */
-            clipStartSec?: null | number;
-            code?: null | string;
-            contextTagApplications?: null | components["schemas"]["TagApplication"][];
+            clipStartSec?: number;
+            code?: string;
+            contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            director?: null | string;
-            fieldProvenance?: null | components["schemas"]["FieldProvenance"][];
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            director?: string;
+            fieldProvenance?: components["schemas"]["FieldProvenance"][];
             files: components["schemas"]["VideoFile"][];
             galleries: components["schemas"]["GallerySummary"][];
             groups: components["schemas"]["GroupSummary"][];
             /** Format: int32 */
             id: number;
-            imagePath?: null | string;
+            imagePath?: string;
             isVr: boolean;
             organized: boolean;
             /** Format: int32 */
-            parentVideoId?: null | number;
-            parentVideoTitle?: null | string;
+            parentVideoId?: number;
+            parentVideoTitle?: string;
             performers: components["schemas"]["PerformerSummary"][];
             remoteIds: components["schemas"]["VideoRemoteId"][];
             /** Format: int32 */
-            studioId?: null | number;
-            studioName?: null | string;
+            studioId?: number;
+            studioName?: string;
             tags: components["schemas"]["Tag"][];
-            title?: null | string;
+            title?: string;
             updatedAt: string;
             urls: string[];
         };
@@ -21306,39 +21337,39 @@ export interface components {
             fileId: number;
         };
         VideoCreate: {
-            captions?: null | string;
+            captions?: string;
             /** Format: double */
-            clipEndSec?: null | number;
+            clipEndSec?: number;
             /** Format: double */
-            clipStartSec?: null | number;
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            director?: null | string;
-            galleryIds?: null | number[];
-            groups?: null | components["schemas"]["VideoGroupInput"][];
+            clipStartSec?: number;
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            director?: string;
+            galleryIds?: number[];
+            groups?: components["schemas"]["VideoGroupInput"][];
             /** @default false */
             isVr: boolean;
             organized: boolean;
             /** Format: int32 */
-            parentVideoId?: null | number;
-            performerIds?: null | number[];
+            parentVideoId?: number;
+            performerIds?: number[];
             /** Format: int32 */
-            rating?: null | number;
-            remoteIds?: null | components["schemas"]["VideoRemoteId"][];
+            rating?: number;
+            remoteIds?: components["schemas"]["VideoRemoteId"][];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         VideoFile: {
             audioCodec: string;
             basename: string;
             /** Format: int64 */
             bitRate: number;
-            captions?: null | components["schemas"]["Caption"][];
+            captions?: components["schemas"]["Caption"][];
             /** Format: double */
             duration: number;
             fingerprints: components["schemas"]["Fingerprint"][];
@@ -21356,12 +21387,12 @@ export interface components {
             /** Format: int32 */
             width: number;
         };
-        VideoFilter: null | {
+        VideoFilter: {
             audioCodecCriterion?: null | components["schemas"]["StringCriterion"];
             bitrateInterval?: null | components["schemas"]["IntCriterion"];
             captionsCriterion?: null | components["schemas"]["StringCriterion"];
             checksumCriterion?: null | components["schemas"]["StringCriterion"];
-            code?: null | string;
+            code?: string;
             codeCriterion?: null | components["schemas"]["StringCriterion"];
             createdAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
@@ -21379,45 +21410,45 @@ export interface components {
             frameRateCriterion?: null | components["schemas"]["IntCriterion"];
             galleriesCriterion?: null | components["schemas"]["MultiIdCriterion"];
             /** Format: int32 */
-            galleryId?: null | number;
+            galleryId?: number;
             /** Format: int32 */
-            groupId?: null | number;
+            groupId?: number;
             groupsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             hashCriterion?: null | components["schemas"]["StringCriterion"];
-            ids?: null | number[];
+            ids?: number[];
             isMissingCriterion?: null | components["schemas"]["BoolCriterion"];
-            isVr?: null | boolean;
+            isVr?: boolean;
             isVrCriterion?: null | components["schemas"]["BoolCriterion"];
             lastPlayedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             likeCounterCriterion?: null | components["schemas"]["IntCriterion"];
-            organized?: null | boolean;
+            organized?: boolean;
             organizedCriterion?: null | components["schemas"]["BoolCriterion"];
             orientationCriterion?: null | components["schemas"]["StringCriterion"];
-            path?: null | string;
+            path?: string;
             pathCriterion?: null | components["schemas"]["StringCriterion"];
             performerAgeCriterion?: null | components["schemas"]["IntCriterion"];
             performerCountCriterion?: null | components["schemas"]["IntCriterion"];
             performerFavoriteCriterion?: null | components["schemas"]["BoolCriterion"];
-            performerIds?: null | number[];
+            performerIds?: number[];
             performersCriterion?: null | components["schemas"]["MultiIdCriterion"];
             performerTagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
             playCountCriterion?: null | components["schemas"]["IntCriterion"];
             playDurationCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            rating?: null | number;
+            rating?: number;
             ratingCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCountCriterion?: null | components["schemas"]["IntCriterion"];
             remoteIdCriterion?: null | components["schemas"]["StringCriterion"];
             resolutionCriterion?: null | components["schemas"]["IntCriterion"];
             resumeTimeCriterion?: null | components["schemas"]["IntCriterion"];
             /** Format: int32 */
-            studioId?: null | number;
+            studioId?: number;
             studiosCriterion?: null | components["schemas"]["MultiIdCriterion"];
             tagCountCriterion?: null | components["schemas"]["IntCriterion"];
             tagDurationCriterion?: null | components["schemas"]["TagDurationCriterion"];
-            tagIds?: null | number[];
+            tagIds?: number[];
             tagsCriterion?: null | components["schemas"]["MultiIdCriterion"];
-            title?: null | string;
+            title?: string;
             titleCriterion?: null | components["schemas"]["StringCriterion"];
             updatedAtCriterion?: null | components["schemas"]["TimestampCriterion"];
             urlCriterion?: null | components["schemas"]["StringCriterion"];
@@ -21433,13 +21464,13 @@ export interface components {
             videoIndex: number;
         };
         VideoHistory: {
-            allTimeWatchedIntervals?: null | components["schemas"]["PlaybackInterval"][];
-            events?: null | components["schemas"]["InteractionEvent"][];
+            allTimeWatchedIntervals?: components["schemas"]["PlaybackInterval"][];
+            events?: components["schemas"]["InteractionEvent"][];
             likeHistory: string[];
             playHistory: string[];
-            sessions?: null | components["schemas"]["VideoPlaybackSession"][];
+            sessions?: components["schemas"]["VideoPlaybackSession"][];
             /** Format: double */
-            totalDistinctWatchedSec?: null | number;
+            totalDistinctWatchedSec?: number;
         };
         VideoListEntry: {
             group?: null | components["schemas"]["Group"];
@@ -21454,11 +21485,11 @@ export interface components {
             targetId: number;
         };
         VideoPlaybackSession: {
-            endedAt?: null | string;
+            endedAt?: string;
             intervals: components["schemas"]["PlaybackInterval"][];
             isCompleted: boolean;
             /** Format: double */
-            lastPositionSec?: null | number;
+            lastPositionSec?: number;
             lastSeenAt: string;
             /** Format: double */
             mediaDurationSec: number;
@@ -21473,7 +21504,7 @@ export interface components {
             /** @default overall */
             aspect: string;
             /** Format: int32 */
-            value?: null | number;
+            value?: number;
         };
         VideoRemoteId: {
             endpoint: string;
@@ -21487,33 +21518,33 @@ export interface components {
             spans: components["schemas"]["ResolvedSpan"][];
         };
         VideoUpdate: {
-            captions?: null | string;
+            captions?: string;
             /** Format: double */
-            clipEndSec?: null | number;
+            clipEndSec?: number;
             /** Format: double */
-            clipStartSec?: null | number;
-            code?: null | string;
-            customFields?: null | Record<string, never>;
-            date?: null | string;
-            details?: null | string;
-            director?: null | string;
-            galleryIds?: null | number[];
-            groups?: null | components["schemas"]["VideoGroupInput"][];
-            isVr?: null | boolean;
-            organized?: null | boolean;
-            performerIds?: null | number[];
+            clipStartSec?: number;
+            code?: string;
+            customFields?: Record<string, never>;
+            date?: string;
+            details?: string;
+            director?: string;
+            galleryIds?: number[];
+            groups?: components["schemas"]["VideoGroupInput"][];
+            isVr?: boolean;
+            organized?: boolean;
+            performerIds?: number[];
             /** Format: int32 */
-            rating?: null | number;
-            remoteIds?: null | components["schemas"]["VideoRemoteId"][];
+            rating?: number;
+            remoteIds?: components["schemas"]["VideoRemoteId"][];
             /** Format: int32 */
-            studioId?: null | number;
-            tagIds?: null | number[];
-            title?: null | string;
-            urls?: null | string[];
+            studioId?: number;
+            tagIds?: number[];
+            title?: string;
+            urls?: string[];
         };
         WipeResult: {
             backupPath: string;
-            configBackupPath?: null | string;
+            configBackupPath?: string;
             message: string;
             timestamp: string;
         };
@@ -21621,6 +21652,7 @@ export type ExtensionAction = components['schemas']['ExtensionAction'];
 export type ExtensionDependencyImpact = components['schemas']['ExtensionDependencyImpact'];
 export type ExtensionExternalDependency = components['schemas']['ExtensionExternalDependency'];
 export type ExtensionInfo = components['schemas']['ExtensionInfo'];
+export type ExtensionJobInfo = components['schemas']['ExtensionJobInfo'];
 export type ExtensionSettingManifest = components['schemas']['ExtensionSettingManifest'];
 export type Face = components['schemas']['Face'];
 export type FaceAppearance = components['schemas']['FaceAppearance'];
@@ -21706,6 +21738,7 @@ export type InteractionEvent = components['schemas']['InteractionEvent'];
 export type InterfaceConfig = components['schemas']['InterfaceConfig'];
 export type InviteRedeemRequest = components['schemas']['InviteRedeemRequest'];
 export type JobInfo = components['schemas']['JobInfo'];
+export type JobStatus = components['schemas']['JobStatus'];
 export type JsonElement = components['schemas']['JsonElement'];
 export type LibraryFolder = components['schemas']['LibraryFolder'];
 export type LogEntry = components['schemas']['LogEntry'];
