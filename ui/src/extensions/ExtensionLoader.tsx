@@ -12,7 +12,7 @@
  *   or would load from JS bundles (for external extensions)
  */
 import { useEffect, useState, createContext, useContext, useCallback, useMemo, type ReactNode, type FC } from "react";
-import { configureCoveClientAuth } from "@cove/extension-sdk";
+import { configureCoveClientAuth } from "@cove/extension-sdk/host";
 import { useRouteRegistry } from "../router/RouteRegistry";
 import { useAppConfig } from "../state/AppConfigContext";
 import { extensions } from "../api/client";

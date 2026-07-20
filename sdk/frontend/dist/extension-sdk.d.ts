@@ -4919,27 +4919,7 @@ declare interface components {
     pathItems: never;
 }
 
-/**
- * Configure the accessor the auth middleware reads. Called by the host once at startup with a
- * setter bound to the live host session; extension authors do not call this directly.
- */
-export declare function configureCoveClientAuth(accessor: CoveClientAuthAccessor): void;
-
 export declare type CoveClient = Client<paths>;
-
-/**
- * Accessor over the live host session. The host wires this so the SDK reads the single host token
- * source rather than bundling or copying it; until configured the client sends no credentials and
- * relies on the same-origin cookie. The accessor is intentionally narrow — it never exposes the
- * host auth store itself.
- */
-export declare interface CoveClientAuthAccessor {
-    getAccessToken?: () => string | null | undefined;
-    getShareToken?: () => string | null | undefined;
-    getSharePassword?: () => string | null | undefined;
-    getRefreshToken?: () => string | null | undefined;
-    tryRefresh?: () => Promise<boolean>;
-}
 
 /**
  * Create a Cove API client typed over the generated `paths`. Path keys already carry the `/api`

@@ -54,15 +54,15 @@ export type {
 // Extension definition helper
 export { defineExtension } from "./define";
 
-// Typed API client + host-session accessor, plus the extension helpers.
+// Typed API client plus the extension helpers. The host-session accessor is bound by the host
+// through the separate host-internal entry (./host), not this author-facing barrel.
 export {
   createCoveClient,
-  configureCoveClientAuth,
   ApiError,
   createExtensionStore,
   runExtensionJob,
 } from "./api";
-export type { CoveClient, CoveClientAuthAccessor } from "./api";
+export type { CoveClient } from "./api";
 
 // Hooks
 export {

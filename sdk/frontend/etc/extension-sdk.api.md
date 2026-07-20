@@ -21,27 +21,10 @@ export class ApiError extends Error {
     readonly status: number;
 }
 
-// @public
-export function configureCoveClientAuth(accessor: CoveClientAuthAccessor): void;
-
 // Warning: (ae-forgotten-export) The symbol "paths" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export type CoveClient = Client<paths>;
-
-// @public
-export interface CoveClientAuthAccessor {
-    // (undocumented)
-    getAccessToken?: () => string | null | undefined;
-    // (undocumented)
-    getRefreshToken?: () => string | null | undefined;
-    // (undocumented)
-    getSharePassword?: () => string | null | undefined;
-    // (undocumented)
-    getShareToken?: () => string | null | undefined;
-    // (undocumented)
-    tryRefresh?: () => Promise<boolean>;
-}
 
 // @public
 export function createCoveClient(options?: {
