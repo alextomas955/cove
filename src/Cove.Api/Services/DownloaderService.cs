@@ -20,7 +20,7 @@ public sealed record DownloaderBatchExecutionSummary(
 
 public sealed record DownloaderBatchPreflightResult(
     IReadOnlyList<DownloaderBatchItemDto> ItemsToQueue,
-    IReadOnlyList<DownloaderBatchStartIssueDto> Issues);
+    IReadOnlyList<DownloaderBatchIssueDto> Issues);
 
 public sealed record DownloaderMetadataApplyOptions(
     bool CreateMissingTags = false,
@@ -425,7 +425,7 @@ public class DownloaderService(
                 && downloadedEntityIds.TryGetValue(entity, out var downloadedIds)
                 && downloadedIds.Contains(item.EntityId.Value))
             {
-                issues.Add(new DownloaderBatchStartIssueDto("skipped", label, $"{entity} {item.EntityId.Value} already has downloaded files."));
+                issues.Add(new DownloaderBatchIssueDto("skipped", label, $"{entity} {item.EntityId.Value} already has downloaded files."));
                 continue;
             }
 
@@ -435,14 +435,14 @@ public class DownloaderService(
                 && entityLookup.TryGetValue(normalizedUrl, out var duplicateTargets)
                 && duplicateTargets.FirstOrDefault(target => !item.EntityId.HasValue || target.EntityId != item.EntityId.Value) is { } duplicate)
             {
-                issues.Add(new DownloaderBatchStartIssueDto("skipped", label, $"This URL is already downloaded for {duplicate.Label}."));
+                issues.Add(new DownloaderBatchIssueDto("skipped", label, $"This URL is already downloaded for {duplicate.Label}."));
                 continue;
             }
 
             var reservationKey = $"{entity}:{normalizedUrl}";
             if (!string.IsNullOrWhiteSpace(normalizedUrl) && !reservedDownloads.Add(reservationKey))
             {
-                issues.Add(new DownloaderBatchStartIssueDto("skipped", label, "This URL is already queued elsewhere in this batch."));
+                issues.Add(new DownloaderBatchIssueDto("skipped", label, "This URL is already queued elsewhere in this batch."));
                 continue;
             }
 
@@ -455,7 +455,7 @@ public class DownloaderService(
     private async Task<DownloaderBatchPreflightResult> ExpandBatchItemsAsync(IReadOnlyList<DownloaderBatchItemDto> items, CancellationToken ct)
     {
         var expandedItems = new List<DownloaderBatchItemDto>();
-        var issues = new List<DownloaderBatchStartIssueDto>();
+        var issues = new List<DownloaderBatchIssueDto>();
 
         for (var index = 0; index < items.Count; index++)
         {

@@ -242,7 +242,7 @@ public class AuthController : ControllerBase
 
     [HttpGet("me")]
     [AllowWithoutPermission]
-    public async Task<IActionResult> Me(CancellationToken ct)
+    public async Task<ActionResult<MeResponse>> Me(CancellationToken ct)
     {
         var p = _principalAccessor.Current;
         if (p is null || p.Kind == PrincipalKind.Anonymous)
@@ -265,19 +265,15 @@ public class AuthController : ControllerBase
             }
         }
 
-        return Ok(new
-        {
-            user = new
-            {
-                id = userId,
+        return Ok(new MeResponse(
+            new MeUser(
+                userId,
                 username,
-                roles = p.Roles.ToArray(),
-                kind = ToClientUserKind(p.Kind),
-                uiPreferences,
-            },
-            permissions = p.Permissions.ToArray(),
-            readGrantedEntityKinds = p.ReadGrantedEntityKinds.ToArray(),
-        });
+                p.Roles.ToArray(),
+                ToClientUserKind(p.Kind),
+                uiPreferences),
+            p.Permissions.ToArray(),
+            p.ReadGrantedEntityKinds.ToArray()));
     }
 
     [HttpPut("me/ui-preferences")]

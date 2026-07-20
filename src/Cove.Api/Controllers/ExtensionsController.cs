@@ -6,6 +6,7 @@ using Cove.Api.Services;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Cove.Api.Controllers;
 
@@ -510,7 +511,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
 
     /// <summary>Search the extension registry.</summary>
     [HttpGet("registry/search")]
-    public async Task<IActionResult> RegistrySearch(
+    public async Task<ActionResult<RegistrySearchResult>> RegistrySearch(
         [FromQuery] string? q,
         [FromQuery] string? category,
         [FromQuery] string? type,
@@ -534,7 +535,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
 
     /// <summary>Get details for a specific registry extension.</summary>
     [HttpGet("registry/{extensionId}")]
-    public async Task<IActionResult> RegistryGetExtension(
+    public async Task<ActionResult<RegistryExtensionDetail>> RegistryGetExtension(
         string extensionId,
         [FromServices] IExtensionRegistry registry = null!,
         CancellationToken ct = default)
@@ -546,7 +547,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
 
     /// <summary>Check for updates for all installed extensions.</summary>
     [HttpGet("registry/updates")]
-    public async Task<IActionResult> RegistryCheckUpdates(
+    public async Task<ActionResult<List<RegistryUpdateInfo>>> RegistryCheckUpdates(
         [FromServices] IExtensionRegistry registry = null!,
         CancellationToken ct = default)
     {
@@ -568,7 +569,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
     /// <summary>Install an extension from the registry.</summary>
     [HttpPost("registry/install")]
     [RequiresPermission(Permissions.ExtensionsInstall)]
-    public async Task<IActionResult> RegistryInstall(
+    public async Task<ActionResult<RegistryInstallResult>> RegistryInstall(
         [FromBody] RegistryInstallRequest request,
         [FromServices] IExtensionRegistry registry = null!,
         CancellationToken ct = default)
@@ -616,11 +617,11 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
         // If there are missing deps and the client didn't opt in to auto-install, return them
         if (dependencyInfos.Count > 0 && !installDependencies)
         {
-            return Ok(new
+            return Ok(new RegistryInstallResult
             {
-                requiresDependencies = true,
-                extension = new { detail.Id, detail.Name, Version = selectedVersion.Version },
-                missingDependencies = dependencyInfos,
+                RequiresDependencies = true,
+                Extension = new RegistryInstallExtensionRef(detail.Id, detail.Name, selectedVersion.Version),
+                MissingDependencies = dependencyInfos,
             });
         }
 
@@ -676,17 +677,17 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
         await extensionManager.SetInstallationMetadataAsync(request.ExtensionId, "registry", selectedVersion.Version, ct);
         scraperService.ReloadScrapers();
 
-        return Ok(new
+        return Ok(new RegistryInstallResult
         {
-            message = $"Extension '{request.ExtensionId}' v{selectedVersion.Version} installed.",
-            path = installPath,
-            installedDependencies = installedExtensions,
+            Message = $"Extension '{request.ExtensionId}' v{selectedVersion.Version} installed.",
+            Path = installPath,
+            InstalledDependencies = installedExtensions,
         });
     }
 
     /// <summary>Resolve dependencies for an extension without installing.</summary>
     [HttpGet("registry/{extensionId}/dependencies")]
-    public async Task<IActionResult> RegistryResolveDependencies(
+    public async Task<ActionResult<List<DependencyInfo>>> RegistryResolveDependencies(
         string extensionId,
         [FromServices] IExtensionRegistry registry = null!,
         CancellationToken ct = default)
@@ -722,7 +723,7 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
     /// <summary>Uninstall an extension by removing its directory.</summary>
     [HttpPost("registry/uninstall")]
     [RequiresPermission(Permissions.ExtensionsUninstall)]
-    public async Task<IActionResult> RegistryUninstall(
+    public async Task<ActionResult<RegistryUninstallResult>> RegistryUninstall(
         [FromBody] RegistryUninstallRequest request,
         CancellationToken ct = default)
     {
@@ -738,11 +739,11 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
 
         if (dependents.Count > 0 && !request.UninstallDependents)
         {
-            return Ok(new
+            return Ok(new RegistryUninstallResult
             {
-                requiresDependents = true,
-                extension = CreateDependencyImpact(request.ExtensionId),
-                dependents,
+                RequiresDependents = true,
+                Extension = CreateDependencyImpact(request.ExtensionId),
+                Dependents = dependents,
             });
         }
 
@@ -786,13 +787,13 @@ public class ExtensionsController(ExtensionManager extensionManager, ScraperServ
         }
 
         scraperService.ReloadScrapers();
-        return Ok(new
+        return Ok(new RegistryUninstallResult
         {
-            message = dependents.Count > 0
+            Message = dependents.Count > 0
                 ? $"Extension '{request.ExtensionId}' and {dependents.Count} dependent extension{(dependents.Count == 1 ? string.Empty : "s")} uninstalled."
                 : $"Extension '{request.ExtensionId}' uninstalled.",
-            requiresDependents = false,
-            uninstalledExtensions,
+            RequiresDependents = false,
+            UninstalledExtensions = uninstalledExtensions,
         });
     }
 
@@ -1151,6 +1152,61 @@ public record DependencyInfo(
     bool Available,
     bool Installed = false
 );
+
+/// <summary>Compact identity of the extension being installed, echoed back on a dependency prompt.</summary>
+public sealed record RegistryInstallExtensionRef(string Id, string Name, string Version);
+
+/// <summary>Result of a registry install request. Absent members are omitted from the response.</summary>
+public sealed record RegistryInstallResult
+{
+    /// <summary>Human-readable outcome message (present on a completed install).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; init; }
+
+    /// <summary>Filesystem path of the installed extension (present on a completed install).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Path { get; init; }
+
+    /// <summary>True when the install paused because unmet dependencies require confirmation.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? RequiresDependencies { get; init; }
+
+    /// <summary>The extension awaiting a dependency decision.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RegistryInstallExtensionRef? Extension { get; init; }
+
+    /// <summary>Dependencies that must be installed before the extension can load.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<DependencyInfo>? MissingDependencies { get; init; }
+
+    /// <summary>Ids of dependencies installed alongside the requested extension.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? InstalledDependencies { get; init; }
+}
+
+/// <summary>Result of a registry uninstall request. Absent members are omitted from the response.</summary>
+public sealed record RegistryUninstallResult
+{
+    /// <summary>Human-readable outcome message (present on a completed uninstall).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; init; }
+
+    /// <summary>True when the uninstall paused because dependent extensions require confirmation.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? RequiresDependents { get; init; }
+
+    /// <summary>The extension awaiting a dependents decision.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ExtensionDependencyImpact? Extension { get; init; }
+
+    /// <summary>Installed extensions that depend on the requested extension.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ExtensionDependencyImpact>? Dependents { get; init; }
+
+    /// <summary>Ids of the extensions removed by this request.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? UninstalledExtensions { get; init; }
+}
 
 /// <summary>Bridges extension IJobProgress to core IJobProgress.</summary>
 internal class JobProgressBridge(Cove.Core.Interfaces.IJobProgress coreProgress) : Cove.Plugins.IJobProgress

@@ -241,7 +241,7 @@ public class ExtensionBundleSupportTests
             Assert.Equal(2, bundle.Dependencies.Count);
 
             var uninstallResult = await controller.RegistryUninstall(new RegistryUninstallRequest { ExtensionId = "docs.full" });
-            Assert.IsType<OkObjectResult>(uninstallResult);
+            Assert.IsType<OkObjectResult>(uninstallResult.Result);
             Assert.Null(manager.GetInstallation("docs.full"));
             Assert.False(Directory.Exists(bundleDir));
         }
@@ -432,10 +432,10 @@ public class ExtensionBundleSupportTests
             var controller = CreateController(manager, new ServiceCollection().BuildServiceProvider());
 
             var previewResult = await controller.RegistryUninstall(new RegistryUninstallRequest { ExtensionId = "base.pack" });
-            var previewOk = Assert.IsType<OkObjectResult>(previewResult);
-            var preview = JsonSerializer.SerializeToElement(previewOk.Value);
-            Assert.True(preview.GetProperty("requiresDependents").GetBoolean());
-            Assert.Equal("dependent.bundle", preview.GetProperty("dependents")[0].GetProperty("Id").GetString());
+            var previewOk = Assert.IsType<OkObjectResult>(previewResult.Result);
+            var preview = Assert.IsType<RegistryUninstallResult>(previewOk.Value);
+            Assert.Equal(true, preview.RequiresDependents);
+            Assert.Equal("dependent.bundle", preview.Dependents![0].Id);
             Assert.True(Directory.Exists(baseDir));
             Assert.True(Directory.Exists(dependentDir));
 
@@ -444,7 +444,7 @@ public class ExtensionBundleSupportTests
                 ExtensionId = "base.pack",
                 UninstallDependents = true,
             });
-            Assert.IsType<OkObjectResult>(uninstallResult);
+            Assert.IsType<OkObjectResult>(uninstallResult.Result);
             Assert.False(Directory.Exists(baseDir));
             Assert.False(Directory.Exists(dependentDir));
         }
