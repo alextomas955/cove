@@ -70,7 +70,7 @@ export function BulkEditDialog({ open, onClose, title, selectedCount, fields, on
           result[f.key] = serializedValue;
         }
         if (f.type === "multiId") {
-          result[getModeKey(f)] = values[getModeKey(f)] ?? "ADD";
+          result[getModeKey(f)] = values[getModeKey(f)] ?? "add";
         }
       }
     }
@@ -102,7 +102,7 @@ export function BulkEditDialog({ open, onClose, title, selectedCount, fields, on
               enabled={enabledFields.has(field.key)}
               onToggle={() => toggleField(field)}
               value={values[field.key]}
-              mode={(values[getModeKey(field)] as BulkUpdateMode) ?? "ADD"}
+              mode={(values[getModeKey(field)] as BulkUpdateMode) ?? "add"}
               onValueChange={(v) => updateValue(field.key, v)}
               onModeChange={(m) => updateValue(getModeKey(field), m)}
             />
@@ -301,7 +301,7 @@ function MultiIdBulkEditor({
     <div className="space-y-2">
       {/* Mode selector */}
       <div className="flex gap-1">
-        {(["SET", "ADD", "REMOVE"] as BulkUpdateMode[]).map((m) => (
+        {(["set", "add", "remove"] as BulkUpdateMode[]).map((m) => (
           <button
             key={m}
             onClick={() => onModeChange(m)}
@@ -342,9 +342,9 @@ function isMultiIdEntityType(entityType: BulkEditField["entityType"]): entityTyp
 }
 
 const BULK_MODE_LABELS: Record<BulkUpdateMode, string> = {
-  SET: "Overwrite",
-  ADD: "Add",
-  REMOVE: "Remove",
+  set: "Overwrite",
+  add: "Add",
+  remove: "Remove",
 };
 
 function getModeKey(field: BulkEditField) {

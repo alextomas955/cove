@@ -209,6 +209,14 @@ public sealed record AuditEventDto(
     string? Detail);
 
 public sealed record MeResponse(
-    UserDto User,
-    IReadOnlyList<string> Permissions);
+    MeUser User,
+    IReadOnlyList<string> Permissions,
+    IReadOnlyList<string> ReadGrantedEntityKinds);
+
+public sealed record MeUser(
+    string Id,
+    string Username,
+    IReadOnlyList<string> Roles,
+    string Kind,
+    UserUiPreferencesDto? UiPreferences);
 

@@ -59,7 +59,7 @@ export function writeStoredRatingOptionsOverride(options: RatingSystemOptions | 
 
   updateAuthenticatedUserUiPreferences((current) => ({
     ...(current ?? {}),
-    ratingSystemOptions: options,
+    ratingSystemOptions: options ?? undefined,
   }));
 
   window.dispatchEvent(new Event(RATING_OPTIONS_CHANGE_EVENT));

@@ -560,7 +560,8 @@ public class SystemController(
 
     [HttpPost("downloaders/download-batch")]
     [RequiresPermission(Permissions.JobsRun)]
-    public async Task<ActionResult<object>> StartDownloaderBatchJob([FromServices] DownloaderService downloaderService, [FromServices] IJobService jobService, [FromServices] ICurrentPrincipalAccessor principalAccessor, [FromServices] IAuthorizationService authorizationService, [FromBody] DownloaderBatchStartRequestDto dto, CancellationToken ct)
+    [ProducesResponseType<DownloaderBatchStartResponseDto>(StatusCodes.Status202Accepted)]
+    public async Task<ActionResult<DownloaderBatchStartResponseDto>> StartDownloaderBatchJob([FromServices] DownloaderService downloaderService, [FromServices] IJobService jobService, [FromServices] ICurrentPrincipalAccessor principalAccessor, [FromServices] IAuthorizationService authorizationService, [FromBody] DownloaderBatchStartRequestDto dto, CancellationToken ct)
     {
         if (dto.Items.Count == 0)
             return BadRequest(new { error = "At least one batch download item is required." });
@@ -582,7 +583,7 @@ public class SystemController(
         }
 
         IReadOnlyList<DownloaderBatchItemDto> itemsToQueue = dto.Items;
-        IReadOnlyList<DownloaderBatchStartIssueDto> issues = Array.Empty<DownloaderBatchStartIssueDto>();
+        IReadOnlyList<DownloaderBatchIssueDto> issues = Array.Empty<DownloaderBatchIssueDto>();
 
         if (dto.PreflightBeforeQueue)
         {
@@ -592,7 +593,7 @@ public class SystemController(
         }
 
         if (itemsToQueue.Count == 0)
-            return Accepted(new { jobId = (string?)null, queuedCount = 0, issues });
+            return Accepted(new DownloaderBatchStartResponseDto(null, 0, issues));
 
         var jobId = jobService.Enqueue(
             "download-batch",
@@ -604,7 +605,7 @@ public class SystemController(
             },
             exclusive: false);
 
-        return Accepted(new { jobId, queuedCount = itemsToQueue.Count, issues });
+        return Accepted(new DownloaderBatchStartResponseDto(jobId, itemsToQueue.Count, issues));
     }
 
     [HttpPost("metadata-servers/validate")]

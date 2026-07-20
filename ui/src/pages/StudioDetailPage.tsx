@@ -562,7 +562,7 @@ function StudioMetadataServerPanel({ studio, metadataServers, onNavigate }: { st
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-base font-semibold text-foreground">{match.name}</span>
-                            <span className="rounded-full border border-border px-2 py-0.5 text-xs text-secondary">{match.serverName}</span>
+                            <span className="rounded-full border border-border px-2 py-0.5 text-xs text-secondary">{match.metadataServerName}</span>
                           </div>
                           {match.parentName && <p className="mt-1 text-sm text-secondary">Parent: {match.parentName}</p>}
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">

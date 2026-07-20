@@ -16,6 +16,13 @@
          collocated modules Cove.Api does not use. Release/publish keeps the SDK pipeline. -->
     <StaticWebAssetsEnabled Condition="'$(Configuration)' == 'Debug'">false</StaticWebAssetsEnabled>
     <PgvectorStagingScript>$(MSBuildProjectDirectory)\..\..\scripts\stage-pgvector-payload.ps1</PgvectorStagingScript>
+    <!-- Emit the API contract document during build to the repo-root /contracts directory.
+         Forward slashes keep the path portable across build hosts. -->
+    <OpenApiGenerateDocumentsOnBuild>true</OpenApiGenerateDocumentsOnBuild>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../../contracts</OpenApiDocumentsDirectory>
+    <!-- The generator only accepts alphanumeric/underscore/dash file names, so the document is emitted
+         as cove.json and renamed to the dotted cove.openapi.json below. -->
+    <OpenApiGenerateDocumentsOptions>--file-name cove --openapi-version OpenApi3_1</OpenApiGenerateDocumentsOptions>
     <PgvectorEmbeddedPayloadDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)pgvector-payload\$(RuntimeIdentifier)</PgvectorEmbeddedPayloadDir>
     <PgvectorPayloadRepository Condition="'$(PgvectorPayloadRepository)' == ''">yourcove/cove</PgvectorPayloadRepository>
     <PgvectorShellExecutable Condition="'$(OS)' == 'Windows_NT'">powershell</PgvectorShellExecutable>
@@ -65,12 +72,23 @@
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.5" />
   </ItemGroup>
 
+  <!-- Normalize the emitted contract document name to cove.openapi.json. -->
+  <Target Name="RenameOpenApiDocument" AfterTargets="GenerateOpenApiDocuments"
+          Condition="Exists('$(OpenApiDocumentsDirectory)/cove.json')">
+    <Move SourceFiles="$(OpenApiDocumentsDirectory)/cove.json"
+          DestinationFiles="$(OpenApiDocumentsDirectory)/cove.openapi.json"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.2" />
     <PackageReference Include="MediatR" Version="14.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="PdfPig" Version="0.1.14" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />

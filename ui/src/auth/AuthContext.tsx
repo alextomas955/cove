@@ -91,8 +91,8 @@ export function AuthProvider({ children, authEnabled }: { children: ReactNode; a
     if (me) {
       const u: AuthUser = {
         id: String(me.user.id),
-        username: me.user.username,
-        kind: me.user.kind,
+        username: me.user.username ?? "",
+        kind: me.user.kind as AuthUser["kind"],
         permissions: me.permissions,
         readGrantedEntityKinds: me.readGrantedEntityKinds ?? [],
         uiPreferences: me.user.uiPreferences ?? null,

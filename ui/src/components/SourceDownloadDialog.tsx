@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Download, FileText, Headphones, Image as ImageIcon, Layers3, Loader2, X } from "lucide-react";
 import { groups, system } from "../api/client";
 import type { DownloaderMatch } from "../api/types";
-import { formatBatchDownloadSummary, type BatchDownloadResult } from "../utils/batchDownloads";
+import { formatBatchDownloadSummary, type BatchDownloadResult, type BatchDownloadIssue } from "../utils/batchDownloads";
 import { loadScrapeApplyPreferences } from "./videoScrapeUtils";
 
 type SourceDownloadEntity = "Audio" | "Image" | "Text";
@@ -186,7 +186,7 @@ export function SourceDownloadDialog({ open, entity, sourceUrl, matches, baseTit
 
       return {
         queuedCount: response.queuedCount,
-        issues: response.issues ?? [],
+        issues: (response.issues ?? []) as BatchDownloadIssue[],
         jobId: response.jobId ?? undefined,
       };
     },

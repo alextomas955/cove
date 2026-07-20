@@ -53,7 +53,7 @@ export function RuleFormModal({
             />
           </Field>
           <Field label="Host Type">
-            <SelectInput value={form.hostType} onChange={(value) => setForm((current) => ({ ...current, hostType: value as RuleFormState["hostType"] }))} options={HOST_TYPE_OPTIONS} />
+            <SelectInput value={form.hostType ?? ""} onChange={(value) => setForm((current) => ({ ...current, hostType: value as RuleFormState["hostType"] }))} options={HOST_TYPE_OPTIONS} />
           </Field>
           <Field label="Visible">
             <SelectInput

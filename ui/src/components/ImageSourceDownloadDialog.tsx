@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Download, FolderOpen, Image as ImageIcon, Layers3, Loader2, X } from "lucide-react";
 import { galleries, groups, system } from "../api/client";
 import type { DownloaderMatch, ImageCreate } from "../api/types";
-import { formatBatchDownloadSummary, type BatchDownloadResult } from "../utils/batchDownloads";
+import { formatBatchDownloadSummary, type BatchDownloadResult, type BatchDownloadIssue } from "../utils/batchDownloads";
 import { loadScrapeApplyPreferences } from "./videoScrapeUtils";
 
 type ContainerMode = "none" | "existing" | "create";
@@ -211,7 +211,7 @@ export function ImageSourceDownloadDialog({ open, sourceUrl, matches, baseTitle,
 
       return {
         queuedCount: response.queuedCount,
-        issues: response.issues ?? [],
+        issues: (response.issues ?? []) as BatchDownloadIssue[],
         jobId: response.jobId ?? undefined,
       };
     },

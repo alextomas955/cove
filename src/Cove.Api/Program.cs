@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.SignalR;
@@ -227,11 +228,18 @@ try
     var isIntegrationTest = builder.Environment.IsEnvironment("IntegrationTest");
     var isIntegrationStartupTest = builder.Environment.IsEnvironment("IntegrationStartup");
     var isTestHarness = isIntegrationTest || isIntegrationStartupTest;
+    // The build-time document generator boots this entry point with an inert server to serialize the
+    // OpenAPI document. Runtime bootstrap (data-root checks, managed database, media tooling downloads,
+    // schema migration) must be skipped in that mode so the build stays offline and side-effect free.
+    var isDocumentGeneration = string.Equals(
+        System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name,
+        "GetDocument.Insider",
+        StringComparison.Ordinal);
 
     var runtimeLogLevelSwitch = new LoggingLevelSwitch(ParseSerilogLogLevel(builder.Configuration.GetValue<string>("Cove:LogLevel")));
     builder.Services.AddSingleton(runtimeLogLevelSwitch);
 
-    if (isTestHarness)
+    if (isTestHarness || isDocumentGeneration)
     {
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Warning()
@@ -392,20 +400,26 @@ try
         return new GitHubExtensionRegistry(http, coveVersion: extensionContext.CoveVersion);
     });
     builder.Services.AddHttpClient("ExtensionRegistry");
-    builder.Services.AddHostedService<ExtensionEventBridge>();
     extensionManager.ConfigureServices(builder.Services);
 
-    // Managed PostgreSQL — auto-downloads and runs a local PG instance
-    var pgManaged = pgSection.GetValue<bool?>("Managed") ?? true;
-    if (pgManaged)
-        builder.Services.AddHostedService<PostgresManagerService>();
+    // Runtime-only background services are not registered during build-time document generation, so the
+    // inert build-time boot never touches the database, downloads media tooling, or bridges events.
+    if (!isDocumentGeneration)
+    {
+        builder.Services.AddHostedService<ExtensionEventBridge>();
 
-    // Auth bootstrap (must run AFTER PostgresManagerService so the DB is reachable).
-    builder.Services.AddSingleton<Cove.Data.Auth.BootstrapAuthService>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<Cove.Data.Auth.BootstrapAuthService>());
+        // Managed PostgreSQL — auto-downloads and runs a local PG instance
+        var pgManaged = pgSection.GetValue<bool?>("Managed") ?? true;
+        if (pgManaged)
+            builder.Services.AddHostedService<PostgresManagerService>();
 
-    // FFmpeg — auto-downloads if not found in PATH or configured path
-    builder.Services.AddHostedService<FfmpegManagerService>();
+        // Auth bootstrap (must run AFTER PostgresManagerService so the DB is reachable).
+        builder.Services.AddSingleton<Cove.Data.Auth.BootstrapAuthService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<Cove.Data.Auth.BootstrapAuthService>());
+
+        // FFmpeg — auto-downloads if not found in PATH or configured path
+        builder.Services.AddHostedService<FfmpegManagerService>();
+    }
 
     // SignalR
     builder.Services.AddSignalR()
@@ -459,7 +473,32 @@ try
     // extension code writing via HttpContext.Response.WriteAsJsonAsync) inherit these options; before
     // this registration the path fell back to bare web defaults and emitted enums as integers.
     builder.Services.ConfigureHttpJsonOptions(options => ApplyCanonicalJson(options.SerializerOptions));
-    builder.Services.AddOpenApi();
+    builder.Services.AddOpenApi(options =>
+    {
+        // Schema IDs mirror the client's type names, which omit the "Dto" suffix carried by the
+        // C# transfer types (e.g. VideoDto -> Video). Returning the default (possibly null) id
+        // otherwise preserves inlining for anonymous shapes.
+        options.CreateSchemaReferenceId = jsonTypeInfo =>
+        {
+            var id = OpenApiOptions.CreateDefaultSchemaReferenceId(jsonTypeInfo);
+            return id is not null && id.EndsWith("Dto", StringComparison.Ordinal)
+                ? id[..^3]
+                : id;
+        };
+        // Align emitted schemas with the real wire contract (required members, nullability, and the
+        // numeric read tolerance) so generated clients match what the API produces and accepts. The
+        // schema transformer records each shape's genuinely-required request inputs for the relaxation
+        // pass below, so the two share one instance.
+        var requestRequiredMembers = new Cove.Api.OpenApi.RequestRequiredMembers();
+        options.AddSchemaTransformer(new Cove.Api.OpenApi.ContractSchemaTransformer(requestRequiredMembers));
+        // Drop the null branch that the framework adds around nullable reference members after schema
+        // transformers run, keeping the "omit, don't null" convention consistent for those members.
+        options.AddDocumentTransformer<Cove.Api.OpenApi.ContractDocumentTransformer>();
+        // Request-only shapes are authored by the caller, who may omit members the server defaults, so
+        // relax those optional-on-input members once the request/response usage of every schema is
+        // known, while keeping genuinely-required inputs (a create's name, an id list) required.
+        options.AddDocumentTransformer(new Cove.Api.OpenApi.RequestSchemaRelaxationTransformer(requestRequiredMembers));
+    });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
 
@@ -665,7 +704,9 @@ try
     }
 
     var port = coveConfig.GetValue<int?>("Port") ?? 5073;
-    if (!isTestHarness)
+    // The build-time document generator uses an inert server with no address feature, so binding a URL
+    // would throw before the document is serialized.
+    if (!isTestHarness && !isDocumentGeneration)
         app.Urls.Add($"http://0.0.0.0:{port}");
 
     // Initialize SignalR log sink with hub context
@@ -673,6 +714,15 @@ try
 
     // FfmpegInProcess is a static class with no injected logger — give it one for init diagnostics.
     FfmpegInProcess.Logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Cove.Api.Services.FfmpegInProcess");
+
+    if (isDocumentGeneration)
+    {
+        // The build-time document generator intercepts app.Run(), serializes the already-configured
+        // OpenAPI document, and exits before Kestrel binds a port. Returning here skips the schema
+        // migration and pre-warm work that requires a running database.
+        app.Run();
+        return;
+    }
 
     if (isIntegrationTest)
     {

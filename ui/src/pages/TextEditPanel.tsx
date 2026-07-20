@@ -134,7 +134,7 @@ export function TextEditPanel({ text, onSaved }: Props) {
             </span>
           ))}
         </div>
-        <EntityReferenceMultiSelector entityType="group" values={selectedGroups.map((group) => group.groupId)} onChange={setSelectedGroupIds} placeholder="Search groups..." inputClassName={inputCls} />
+        <EntityReferenceMultiSelector entityType="group" values={selectedGroups.map((group) => group.groupId).filter((id): id is number => id !== undefined)} onChange={setSelectedGroupIds} placeholder="Search groups..." inputClassName={inputCls} />
       </Field>
 
       <Field label="Custom Fields" fieldProvenance={text.fieldProvenance} fieldKey="customFields">

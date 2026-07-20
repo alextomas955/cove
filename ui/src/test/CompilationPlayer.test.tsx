@@ -49,7 +49,7 @@ function renderPlayer() {
             hostType: "video",
             hostId: 14,
             videoId: 14,
-            audioId: null,
+            audioId: undefined,
             title: "Clip One",
             src: "/video-14.mp4",
             startSec: 5,

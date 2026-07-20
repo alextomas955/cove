@@ -288,7 +288,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
       ...(current ?? {}),
       theme: {
         ...(current?.theme ?? {}),
-        activeThemeId: id,
+        activeThemeId: id ?? undefined,
       },
     }));
   }, []);
@@ -676,7 +676,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
   const getPageOverride = useCallback(
     (targetPage: string) => {
       const overrides = manifest?.pageOverrides.filter((o) => o.targetPage === targetPage) ?? [];
-      return overrides.sort((a, b) => b.priority - a.priority)[0];
+      return overrides.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0];
     },
     [manifest]
   );
@@ -684,7 +684,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
   const availableComponentStyles = manifest?.componentStyles ?? [];
   const availableLayoutStyles = manifest?.layoutStyles ?? [];
   const features = manifest?.features ?? [];
-  const settingsTabs = [...(manifest?.settingsTabs ?? [])].sort((a, b) => a.order - b.order);
+  const settingsTabs = [...(manifest?.settingsTabs ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const settingsPanels = manifest?.settingsPanels ?? [];
   const actions = manifest?.actions ?? [];
   const listFilters = manifest?.listFilters ?? [];
@@ -708,7 +708,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
           if (section == null) return !p.targetSection;
           return p.targetSection === section;
         })
-        .sort((a, b) => a.order - b.order);
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
     [settingsPanels]
   );
@@ -721,7 +721,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
         if (page && a.pages && a.pages.length > 0 && !a.pages.includes(page)) return false;
         if (a.requiredPermission && !hasPermission(a.requiredPermission)) return false;
         return true;
-      }).sort((a, b) => a.order - b.order);
+      }).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
     [actions, hasPermission]
   );
@@ -731,7 +731,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
       const normalized = normalizeListEntityType(entityType);
       return listFilters
         .filter((filter) => normalizeListEntityType(filter.entityType) === normalized)
-        .sort((a, b) => a.order - b.order);
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
     [listFilters]
   );
@@ -741,7 +741,7 @@ export function ExtensionLoaderProvider({ children }: { children: ReactNode }) {
       const normalized = normalizeListEntityType(entityType);
       return listSorts
         .filter((sort) => normalizeListEntityType(sort.entityType) === normalized)
-        .sort((a, b) => a.order - b.order);
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
     [listSorts]
   );

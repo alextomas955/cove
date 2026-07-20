@@ -78,6 +78,7 @@ describe("VideoEditModal", () => {
     const video: Video = {
       id: 42,
       title: "Sample Video",
+      isVr: false,
       code: "SCN-42",
       details: "Existing details",
       captions: "English",
