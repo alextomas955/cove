@@ -9,7 +9,9 @@
  * ```
  */
 // Generated host-key constants (referenced instead of magic strings). Values plus their unions.
-export { EntityKinds, EventKinds, ExtensionActionKinds, UiComponentKeys, UiPageKeys, UiSlotKeys, UiZoneKeys, } from "@cove/types";
+// The runtime values come from ./contracts, which the build inlines so the published bundle carries
+// them directly instead of importing the types-only @cove/types package at runtime.
+export { EntityKinds, EventKinds, ExtensionActionKinds, UiComponentKeys, UiPageKeys, UiSlotKeys, UiZoneKeys, } from "./contracts";
 // Extension definition helper
 export { defineExtension } from "./define";
 // Typed API client plus the extension helpers. The host-session accessor is bound by the host
