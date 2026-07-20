@@ -6,4 +6,5 @@
   <Project Path="Cove.Sdk/Cove.Sdk.csproj" />
   <Project Path="Cove.PerformanceTests/Cove.PerformanceTests.csproj" />
   <Project Path="Cove.Tests/Cove.Tests.csproj" />
+  <Project Path="../tools/contract-emit/contract-emit.csproj" />
 </Solution>

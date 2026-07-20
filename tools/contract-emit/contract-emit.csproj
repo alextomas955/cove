@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Cove.ContractEmit</RootNamespace>
+    <AssemblyName>contract-emit</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Cove.Core/Cove.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Regenerate the committed contract document from the reflected registry after every build,
+    so building the project keeps contracts/cove.contracts.json in lockstep with the source of
+    truth. The output path is passed relative to this project file so the working directory does
+    not matter.
+  -->
+  <Target Name="EmitContractRegistry" AfterTargets="Build">
+    <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$(MSBuildThisFileDirectory)../../contracts/cove.contracts.json&quot;" />
+  </Target>
+
+</Project>
