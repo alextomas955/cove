@@ -16718,10 +16718,10 @@ export interface components {
             /** Format: int32 */
             orderIndex?: number;
             /** Format: int32 */
-            subGroupId: number;
+            subGroupId?: number;
         };
         AdminPasswordRequest: {
-            newPassword: string;
+            newPassword?: string;
         };
         /** @enum {string} */
         AffinityHostType: "video" | "image" | "performer" | "face" | "tag" | "studio" | "gallery" | "group" | "audio" | "text" | "segment";
@@ -16857,7 +16857,7 @@ export interface components {
             date?: string;
             details?: string;
             groupIds?: components["schemas"]["VideoGroupInput"][];
-            organized: boolean;
+            organized?: boolean;
             performerIds?: number[];
             /** Format: int32 */
             studioId?: number;
@@ -16890,7 +16890,7 @@ export interface components {
             channelsCriterion?: components["schemas"]["IntCriterion"];
             codeCriterion?: components["schemas"]["StringCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: components["schemas"]["DateCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
@@ -16958,7 +16958,7 @@ export interface components {
             deleteFiles: boolean;
             /** @default false */
             deleteGenerated: boolean;
-            ids: number[];
+            ids?: number[];
         };
         Bookmark: {
             createdAt: string;
@@ -16967,8 +16967,8 @@ export interface components {
             hostType: components["schemas"]["AffinityHostType"];
         };
         BookmarkBatchRequest: {
-            hostIds: number[];
-            hostType: components["schemas"]["AffinityHostType"];
+            hostIds?: number[];
+            hostType?: components["schemas"]["AffinityHostType"];
         };
         BookmarkState: {
             createdAt?: string;
@@ -16979,23 +16979,23 @@ export interface components {
         };
         BookmarkToggle: {
             /** Format: int32 */
-            hostId: number;
-            hostType: components["schemas"]["AffinityHostType"];
-            saved: boolean;
+            hostId?: number;
+            hostType?: components["schemas"]["AffinityHostType"];
+            saved?: boolean;
         };
         BoolCriterion: {
             value?: boolean;
         };
         BootstrapOwnerRequest: {
-            password: string;
-            username: string;
+            password?: string;
+            username?: string;
         };
         BulkAudioUpdate: {
             clearFields?: string[];
             code?: string;
             date?: string;
             details?: string;
-            ids: number[];
+            ids?: number[];
             organized?: boolean;
             performerIds?: number[];
             performerMode?: components["schemas"]["BulkUpdateMode"];
@@ -17009,7 +17009,7 @@ export interface components {
             code?: string;
             date?: string;
             details?: string;
-            ids: number[];
+            ids?: number[];
             organized?: boolean;
             performerIds?: number[];
             performerMode?: components["schemas"]["BulkUpdateMode"];
@@ -17026,7 +17026,7 @@ export interface components {
             date?: string;
             description?: string;
             director?: string;
-            ids: number[];
+            ids?: number[];
             /** Format: int32 */
             rating?: number;
             /** Format: int32 */
@@ -17041,7 +17041,7 @@ export interface components {
             details?: string;
             galleryIds?: number[];
             galleryMode?: components["schemas"]["BulkUpdateMode"];
-            ids: number[];
+            ids?: number[];
             organized?: boolean;
             performerIds?: number[];
             performerMode?: components["schemas"]["BulkUpdateMode"];
@@ -17057,7 +17057,7 @@ export interface components {
             details?: string;
             favorite?: boolean;
             gender?: string;
-            ids: number[];
+            ids?: number[];
             /** Format: int32 */
             rating?: number;
             tagIds?: number[];
@@ -17067,7 +17067,7 @@ export interface components {
             clearFields?: string[];
             details?: string;
             favorite?: boolean;
-            ids: number[];
+            ids?: number[];
             organized?: boolean;
             /** Format: int32 */
             rating?: number;
@@ -17081,7 +17081,7 @@ export interface components {
             color?: string;
             description?: string;
             favorite?: boolean;
-            ids: number[];
+            ids?: number[];
             /** Format: double */
             minOccurrencePercent?: number;
             /** Format: double */
@@ -17099,7 +17099,7 @@ export interface components {
             code?: string;
             date?: string;
             details?: string;
-            ids: number[];
+            ids?: number[];
             organized?: boolean;
             performerIds?: number[];
             performerMode?: components["schemas"]["BulkUpdateMode"];
@@ -17119,7 +17119,7 @@ export interface components {
             galleryMode?: components["schemas"]["BulkUpdateMode"];
             groupIds?: components["schemas"]["VideoGroupInput"][];
             groupMode?: components["schemas"]["BulkUpdateMode"];
-            ids: number[];
+            ids?: number[];
             isVr?: boolean;
             organized?: boolean;
             performerIds?: number[];
@@ -17139,11 +17139,11 @@ export interface components {
             languageCode: string;
         };
         ChangePasswordRequest: {
-            currentPassword: string;
-            newPassword: string;
+            currentPassword?: string;
+            newPassword?: string;
         };
         CleanOptions: {
-            dryRun: boolean;
+            dryRun?: boolean;
             paths?: string[];
         };
         ConfigBackupResult: {
@@ -17219,25 +17219,25 @@ export interface components {
         CreateApiTokenRequest: {
             /** Format: date-time */
             expiresAt?: string;
-            name: string;
+            name?: string;
             scope?: string[];
         };
         CreateContentRuleRequest: {
-            appliesTo: string;
-            effect: string;
-            entityKind: string;
+            appliesTo?: string;
+            effect?: string;
+            entityKind?: string;
             /** Format: int32 */
-            roleId: number;
-            scopeKind: string;
-            scopeValue: string;
+            roleId?: number;
+            scopeKind?: string;
+            scopeValue?: string;
         };
         CreateEntityOverrideRequest: {
-            appliesTo: string;
-            effect: string;
-            entityId: string;
-            entityKind: string;
+            appliesTo?: string;
+            effect?: string;
+            entityId?: string;
+            entityKind?: string;
             /** Format: int32 */
-            roleId: number;
+            roleId?: number;
         };
         CreateInviteRequest: {
             displayName?: string;
@@ -17247,22 +17247,22 @@ export interface components {
         };
         CreateRoleRequest: {
             description?: string;
-            name: string;
-            permissions: string[];
+            name?: string;
+            permissions?: string[];
         };
         CreateScrapeAttempt: {
             /** Format: int32 */
             entityId?: number;
-            entityType: string;
+            entityType?: string;
             fragment?: Record<string, never>;
-            inputKind: string;
+            inputKind?: string;
             name?: string;
-            scraperId: string;
+            scraperId?: string;
             url?: string;
         };
         CreateShareLinkRequest: {
-            entityIds: string[];
-            entityKind: string;
+            entityIds?: string[];
+            entityKind?: string;
             /** Format: date-time */
             expiresAt?: string;
             password?: string;
@@ -17274,14 +17274,14 @@ export interface components {
             mustChangePassword: boolean;
             password?: string;
             roles?: string[];
-            username: string;
+            username?: string;
         };
         CriterionModifier: string;
         CustomFieldCriterion: {
-            key: string;
+            key?: string;
             modifier?: components["schemas"]["CriterionModifier"];
-            type: string;
-            value: string;
+            type?: string;
+            value?: string;
             value2?: string;
         };
         CustomFieldDefinition: {
@@ -17303,28 +17303,28 @@ export interface components {
         CustomFieldDefinitionCreate: {
             /** Format: int32 */
             displayOrder?: number;
-            entityTypes: string[];
+            entityTypes?: string[];
             filterable?: boolean;
-            isMultiValue: boolean;
+            isMultiValue?: boolean;
             key?: string;
-            label: string;
-            options: string[];
-            sortable: boolean;
-            type: string;
+            label?: string;
+            options?: string[];
+            sortable?: boolean;
+            type?: string;
         };
         CustomFieldDefinitionSync: {
             /** Format: int32 */
             displayOrder?: number;
-            entityTypes: string[];
+            entityTypes?: string[];
             filterable?: boolean;
             /** Format: int32 */
             id?: number;
-            isMultiValue: boolean;
-            key: string;
-            label: string;
-            options: string[];
-            sortable: boolean;
-            type: string;
+            isMultiValue?: boolean;
+            key?: string;
+            label?: string;
+            options?: string[];
+            sortable?: boolean;
+            type?: string;
         };
         CustomFieldDefinitionUpdate: {
             /** Format: int32 */
@@ -17347,12 +17347,12 @@ export interface components {
         };
         DateCriterion: {
             modifier?: components["schemas"]["CriterionModifier"];
-            value: string;
+            value?: string;
             value2?: string;
         };
         DeleteFiles: {
-            deleteFromDisk: boolean;
-            fileIds: number[];
+            deleteFromDisk?: boolean;
+            fileIds?: number[];
         };
         DependencyInfo: {
             available: boolean;
@@ -17402,72 +17402,72 @@ export interface components {
             y: number;
         };
         DetectionCreate: {
-            class: string;
+            class?: string;
             extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
-            frameHeight: number;
+            frameHeight?: number;
             /** Format: int32 */
-            frameWidth: number;
+            frameWidth?: number;
             groupKey?: string;
             /** Format: float */
-            h: number;
+            h?: number;
             /** Format: double */
             observedAtSec?: number;
             /** Format: int64 */
             refId?: number;
             refKind?: string;
             /** Format: float */
-            score: number;
+            score?: number;
             sourceKey?: string;
             sourceRunId?: string;
             /** Format: float */
-            w: number;
+            w?: number;
             /** Format: float */
-            x: number;
+            x?: number;
             /** Format: float */
-            y: number;
+            y?: number;
         };
         /** @enum {string} */
         DetectionHostType: "video" | "image";
         DetectionUpdate: {
-            class: string;
+            class?: string;
             extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
-            frameHeight: number;
+            frameHeight?: number;
             /** Format: int32 */
-            frameWidth: number;
+            frameWidth?: number;
             groupKey?: string;
             /** Format: float */
-            h: number;
+            h?: number;
             /** Format: double */
             observedAtSec?: number;
             /** Format: int64 */
             refId?: number;
             refKind?: string;
             /** Format: float */
-            score: number;
-            sourceKey: string;
+            score?: number;
+            sourceKey?: string;
             sourceRunId?: string;
             /** Format: float */
-            w: number;
+            w?: number;
             /** Format: float */
-            x: number;
+            x?: number;
             /** Format: float */
-            y: number;
+            y?: number;
         };
         DirectoryEntry: {
             isDirectory: boolean;
             path: string;
         };
         DownloaderBatchFollowUp: {
-            allowDuplicateDownloads: boolean;
-            autoApplyMetadata: boolean;
-            createMissingPerformers: boolean;
-            createMissingStudio: boolean;
-            createMissingTags: boolean;
+            allowDuplicateDownloads?: boolean;
+            autoApplyMetadata?: boolean;
+            createMissingPerformers?: boolean;
+            createMissingStudio?: boolean;
+            createMissingTags?: boolean;
             generate?: components["schemas"]["GenerateOptions"];
-            markOrganized: boolean;
-            scrapeVideos: boolean;
+            markOrganized?: boolean;
+            scrapeVideos?: boolean;
         };
         DownloaderBatchIssue: {
             kind: string;
@@ -17475,27 +17475,27 @@ export interface components {
             reason: string;
         };
         DownloaderBatchItem: {
-            autoApplyMetadata: boolean;
-            createEntityIfMissing: boolean;
-            createMissingPerformers: boolean;
-            createMissingStudio: boolean;
-            createMissingTags: boolean;
+            autoApplyMetadata?: boolean;
+            createEntityIfMissing?: boolean;
+            createMissingPerformers?: boolean;
+            createMissingStudio?: boolean;
+            createMissingTags?: boolean;
             downloaderId?: string;
-            entity: string;
+            entity?: string;
             /** Format: int32 */
             entityId?: number;
             galleryIds?: number[];
             groupIds?: components["schemas"]["VideoGroupInput"][];
             label?: string;
-            markOrganized: boolean;
+            markOrganized?: boolean;
             qualityId?: string;
             sourceUrl?: string;
             title?: string;
-            url: string;
+            url?: string;
         };
         DownloaderBatchStartRequest: {
-            followUp: components["schemas"]["DownloaderBatchFollowUp"];
-            items: components["schemas"]["DownloaderBatchItem"][];
+            followUp?: components["schemas"]["DownloaderBatchFollowUp"];
+            items?: components["schemas"]["DownloaderBatchItem"][];
             preflightBeforeQueue?: boolean;
         };
         DownloaderBatchStartResponse: {
@@ -17521,7 +17521,7 @@ export interface components {
             supportedEntity: string;
         };
         DownloaderMatchRequest: {
-            url: string;
+            url?: string;
         };
         DownloaderPathOverride: {
             downloaderId: string;
@@ -17529,10 +17529,10 @@ export interface components {
             site?: string;
         };
         DownloaderPreflightRequest: {
-            entity: string;
+            entity?: string;
             /** Format: int32 */
             entityId?: number;
-            url: string;
+            url?: string;
         };
         DownloaderPreflightResponse: {
             duplicateReason?: string;
@@ -17544,19 +17544,19 @@ export interface components {
             label: string;
         };
         DownloaderStartRequest: {
-            allowDuplicateDownload: boolean;
-            autoApplyMetadata: boolean;
+            allowDuplicateDownload?: boolean;
+            autoApplyMetadata?: boolean;
             createMissingPerformers?: boolean;
             createMissingStudio?: boolean;
             createMissingTags?: boolean;
-            downloaderId: string;
-            entity: string;
+            downloaderId?: string;
+            entity?: string;
             /** Format: int32 */
             entityId?: number;
-            markOrganized: boolean;
+            markOrganized?: boolean;
             qualityId?: string;
             sourceUrl?: string;
-            url: string;
+            url?: string;
         };
         DynamicGroupSource: {
             displayName: string;
@@ -17644,8 +17644,8 @@ export interface components {
         EngagementInteractionWrite: {
             /** Format: int32 */
             hostId?: number;
-            hostType: string;
-            kind: string;
+            hostType?: string;
+            kind?: string;
             meta?: unknown;
         };
         EntityEngagement: {
@@ -17671,11 +17671,11 @@ export interface components {
             resumeTime: number;
         };
         EntityEngagementBatchRequest: {
-            hostIds: number[];
-            hostType: components["schemas"]["AffinityHostType"];
+            hostIds?: number[];
+            hostType?: components["schemas"]["AffinityHostType"];
         };
         EntityFavorite: {
-            isFavorite: boolean;
+            isFavorite?: boolean;
         };
         EntityImageCoverSource: {
             /** Format: int32 */
@@ -17856,7 +17856,7 @@ export interface components {
             topConfidence?: number;
         };
         FaceBatchDelete: {
-            faceIds: number[];
+            faceIds?: number[];
         };
         FaceBatchFailed: {
             error: string;
@@ -17866,7 +17866,7 @@ export interface components {
         FaceBatchLinkTopSuggestion: {
             /** @default false */
             createFromReference: boolean;
-            faceIds: number[];
+            faceIds?: number[];
             /** @default false */
             linkConflicting: boolean;
             /** @default false */
@@ -17883,14 +17883,14 @@ export interface components {
             reason: string;
         };
         FaceCreate: {
-            ignored: boolean;
+            ignored?: boolean;
             label?: string;
             /** Format: int32 */
             performerId?: number;
             primarySourceKey?: string;
         };
         FaceCreatePerformer: {
-            name: string;
+            name?: string;
             /** @default true */
             setPerformerImage: boolean;
         };
@@ -17929,7 +17929,7 @@ export interface components {
             videoCount: number;
         };
         FaceIgnore: {
-            ignored: boolean;
+            ignored?: boolean;
         };
         FaceLink: {
             /** Format: int32 */
@@ -17939,7 +17939,7 @@ export interface components {
         };
         FaceMerge: {
             /** Format: int32 */
-            targetFaceId: number;
+            targetFaceId?: number;
         };
         FaceSimilar: {
             /** Format: int32 */
@@ -17993,9 +17993,9 @@ export interface components {
             why: string;
         };
         FaceSuggestionDecision: {
-            decision: string;
+            decision?: string;
             /** Format: int32 */
-            performerId: number;
+            performerId?: number;
             referenceEndpoint?: string;
             referenceExternalId?: string;
             /** @default false */
@@ -18027,7 +18027,7 @@ export interface components {
             performerName: string;
         };
         FaceUpdate: {
-            ignored: boolean;
+            ignored?: boolean;
             label?: string;
             /** Format: int32 */
             performerId?: number;
@@ -18052,12 +18052,12 @@ export interface components {
             value?: components["schemas"]["JsonElement"];
         };
         FileBackedCreate: {
-            filePath: string;
+            filePath?: string;
         };
         FileSetFingerprints: {
             /** Format: int32 */
-            fileId: number;
-            fingerprints: components["schemas"]["FingerprintEntry"][];
+            fileId?: number;
+            fingerprints?: components["schemas"]["FingerprintEntry"][];
         };
         FilteredQueryRequestOfAudioFilter: {
             findFilter?: components["schemas"]["FindFilter"];
@@ -18112,12 +18112,12 @@ export interface components {
         };
         FingerprintCriterion: {
             modifier?: components["schemas"]["CriterionModifier"];
-            type: string;
-            value: string;
+            type?: string;
+            value?: string;
         };
         FingerprintEntry: {
-            type: string;
-            value: string;
+            type?: string;
+            value?: string;
         };
         Gallery: {
             backCoverPath?: string;
@@ -18152,7 +18152,7 @@ export interface components {
             videoIds: number[];
         };
         GalleryAddImages: {
-            imageIds: number[];
+            imageIds?: number[];
         };
         GalleryChapter: {
             createdAt: string;
@@ -18167,8 +18167,8 @@ export interface components {
         };
         GalleryChapterCreate: {
             /** Format: int32 */
-            imageIndex: number;
-            title: string;
+            imageIndex?: number;
+            title?: string;
         };
         GalleryChapterUpdate: {
             /** Format: int32 */
@@ -18180,7 +18180,7 @@ export interface components {
             customFields?: Record<string, never>;
             date?: string;
             details?: string;
-            organized: boolean;
+            organized?: boolean;
             performerIds?: number[];
             photographer?: string;
             /** Format: int32 */
@@ -18205,7 +18205,7 @@ export interface components {
             checksumCriterion?: components["schemas"]["StringCriterion"];
             codeCriterion?: components["schemas"]["StringCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: components["schemas"]["DateCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
@@ -18242,11 +18242,11 @@ export interface components {
             videosCriterion?: components["schemas"]["MultiIdCriterion"];
         };
         GalleryRemoveImages: {
-            imageIds: number[];
+            imageIds?: number[];
         };
         GallerySetCover: {
             /** Format: int32 */
-            imageId: number;
+            imageId?: number;
         };
         GallerySummary: {
             date?: string;
@@ -18273,22 +18273,22 @@ export interface components {
         };
         GenerateOptions: {
             audioIds?: number[];
-            audioPhashes: boolean;
-            galleryThumbnails: boolean;
+            audioPhashes?: boolean;
+            galleryThumbnails?: boolean;
             imageIds?: number[];
-            imagePhashes: boolean;
-            imageThumbnails: boolean;
-            md5: boolean;
-            overwrite: boolean;
+            imagePhashes?: boolean;
+            imageThumbnails?: boolean;
+            md5?: boolean;
+            overwrite?: boolean;
             paths?: string[];
-            phashes: boolean;
-            previews: boolean;
-            segmentPreviews: boolean;
-            segments: boolean;
-            segmentThumbnails: boolean;
-            sprites: boolean;
+            phashes?: boolean;
+            previews?: boolean;
+            segmentPreviews?: boolean;
+            segments?: boolean;
+            segmentThumbnails?: boolean;
+            sprites?: boolean;
             textIds?: number[];
-            textPhashes: boolean;
+            textPhashes?: boolean;
             thumbnails?: boolean;
             videoIds?: number[];
         };
@@ -18392,7 +18392,7 @@ export interface components {
             description?: string;
             director?: string;
             kind?: components["schemas"]["GroupKind"];
-            name: string;
+            name?: string;
             queryJson?: string;
             querySourceKey?: string;
             /** Format: int32 */
@@ -18412,7 +18412,7 @@ export interface components {
             cachedItemCountCriterion?: components["schemas"]["IntCriterion"];
             containingGroupCountCriterion?: components["schemas"]["IntCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: components["schemas"]["DateCriterion"];
             directorCriterion?: components["schemas"]["StringCriterion"];
@@ -18492,10 +18492,10 @@ export interface components {
             /** Format: int32 */
             hostId?: number;
             hostType?: string;
-            kind: components["schemas"]["GroupItemKind"];
+            kind?: components["schemas"]["GroupItemKind"];
             notes?: string;
             /** Format: int32 */
-            orderIndex: number;
+            orderIndex?: number;
             /** Format: int32 */
             sourceProfileId?: number;
             sourceQueryJson?: string;
@@ -18509,7 +18509,7 @@ export interface components {
         /** @enum {string} */
         GroupItemKind: "video" | "videoRange" | "image" | "audio" | "text" | "group" | "performer" | "studio" | "tag" | "gallery" | "face" | "segment";
         GroupItemsFromSpans: {
-            spans: components["schemas"]["GroupItemSpanInput"][];
+            spans?: components["schemas"]["GroupItemSpanInput"][];
         };
         GroupItemSpanInput: {
             derivedQuery?: components["schemas"]["SegmentSpanDerivedQuery"];
@@ -18525,11 +18525,11 @@ export interface components {
             videoId?: number;
         };
         GroupItemsRemoveHosts: {
-            hostIds: number[];
-            kind: components["schemas"]["GroupItemKind"];
+            hostIds?: number[];
+            kind?: components["schemas"]["GroupItemKind"];
         };
         GroupItemsReorder: {
-            ids: number[];
+            ids?: number[];
             /**
              * Format: int32
              * @default 0
@@ -18539,10 +18539,10 @@ export interface components {
         GroupItemUpdate: {
             /** Format: double */
             endSec?: number;
-            kind: components["schemas"]["GroupItemKind"];
+            kind?: components["schemas"]["GroupItemKind"];
             notes?: string;
             /** Format: int32 */
-            orderIndex: number;
+            orderIndex?: number;
             /** Format: double */
             startSec?: number;
             title?: string;
@@ -18591,7 +18591,7 @@ export interface components {
             /** Format: int32 */
             cacheTtlSec?: number;
             queryJson?: string;
-            querySourceKey: string;
+            querySourceKey?: string;
         };
         GroupSummary: {
             /** Format: int32 */
@@ -18639,13 +18639,13 @@ export interface components {
             fieldStrategies?: {
                 [key: string]: string;
             };
-            markOrganized: boolean;
+            markOrganized?: boolean;
             performerGenders?: string[];
             setCoverImage?: boolean;
             setPerformers?: boolean;
             setStudio?: boolean;
             setTags?: boolean;
-            skipMultipleMatches: boolean;
+            skipMultipleMatches?: boolean;
             skipSingleNamePerformers?: boolean;
             sources?: string[];
             videoIds?: number[];
@@ -18686,7 +18686,7 @@ export interface components {
             details?: string;
             galleryIds?: number[];
             groupIds?: components["schemas"]["VideoGroupInput"][];
-            organized: boolean;
+            organized?: boolean;
             performerIds?: number[];
             photographer?: string;
             /** Format: int32 */
@@ -18714,7 +18714,7 @@ export interface components {
             checksumCriterion?: components["schemas"]["StringCriterion"];
             codeCriterion?: components["schemas"]["StringCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: components["schemas"]["DateCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
@@ -18771,19 +18771,19 @@ export interface components {
             urls?: string[];
         };
         ImportOptions: {
-            duplicateHandling: boolean;
-            filePath: string;
+            duplicateHandling?: boolean;
+            filePath?: string;
         };
         ImportRequest: {
             generatedPath?: string;
             /** @default true */
             migrateGeneratedContent: boolean;
             pathMappings?: components["schemas"]["PathMappingRequest"][];
-            stashDbPath: string;
+            stashDbPath?: string;
         };
         InstallExtensionFromUrlRequest: {
-            trustUnverified: boolean;
-            url: string;
+            trustUnverified?: boolean;
+            url?: string;
         };
         IntCriterion: {
             modifier?: components["schemas"]["CriterionModifier"];
@@ -18809,8 +18809,8 @@ export interface components {
             menuItems: string[];
         };
         InviteRedeemRequest: {
-            password: string;
-            token: string;
+            password?: string;
+            token?: string;
             username?: string;
         };
         JobInfo: {
@@ -18857,8 +18857,8 @@ export interface components {
             timestamp: string;
         };
         LoginRequest: {
-            password: string;
-            username: string;
+            password?: string;
+            username?: string;
         };
         MeResponse: {
             permissions: string[];
@@ -18878,7 +18878,7 @@ export interface components {
             name: string;
         };
         MetadataServerEndpoint: {
-            endpoint: string;
+            endpoint?: string;
         };
         MetadataServerEntityCandidate: {
             existsLocally: boolean;
@@ -18888,8 +18888,8 @@ export interface components {
             remoteId: string;
         };
         MetadataServerFindByIdsRequest: {
-            endpoint: string;
-            ids: string[];
+            endpoint?: string;
+            ids?: string[];
         };
         MetadataServerFingerprint: {
             algorithm: string;
@@ -18898,19 +18898,19 @@ export interface components {
             hash: string;
         };
         MetadataServerPerformerBatchTagRequest: {
-            endpoint: string;
+            endpoint?: string;
             excludeFields?: string[];
             filter?: components["schemas"]["PerformerFilter"];
             ids?: number[];
-            refreshAlreadyTagged: boolean;
-            selectAll: boolean;
+            refreshAlreadyTagged?: boolean;
+            selectAll?: boolean;
         };
         MetadataServerPerformerImportRequest: {
-            endpoint: string;
+            endpoint?: string;
             fieldStrategies?: {
                 [key: string]: string;
             };
-            performerId: string;
+            performerId?: string;
         };
         MetadataServerPerformerMatch: {
             aliases: string[];
@@ -18929,19 +18929,19 @@ export interface components {
         };
         MetadataServerStudioBatchTagRequest: {
             createParentStudios?: boolean;
-            endpoint: string;
+            endpoint?: string;
             excludeFields?: string[];
             filter?: components["schemas"]["StudioFilter"];
             ids?: number[];
-            refreshAlreadyTagged: boolean;
-            selectAll: boolean;
+            refreshAlreadyTagged?: boolean;
+            selectAll?: boolean;
         };
         MetadataServerStudioImportRequest: {
-            endpoint: string;
+            endpoint?: string;
             fieldStrategies?: {
                 [key: string]: string;
             };
-            studioId: string;
+            studioId?: string;
         };
         MetadataServerStudioMatch: {
             aliases: string[];
@@ -18954,16 +18954,16 @@ export interface components {
             urls: string[];
         };
         MetadataServerTagBatchTagRequest: {
-            endpoint: string;
+            endpoint?: string;
             excludeFields?: string[];
             filter?: components["schemas"]["TagFilter"];
             ids?: number[];
-            refreshAlreadyTagged: boolean;
-            selectAll: boolean;
+            refreshAlreadyTagged?: boolean;
+            selectAll?: boolean;
         };
         MetadataServerTagImportRequest: {
-            endpoint: string;
-            tagId: string;
+            endpoint?: string;
+            tagId?: string;
         };
         MetadataServerTagMatch: {
             aliases: string[];
@@ -18979,34 +18979,34 @@ export interface components {
             valid: boolean;
         };
         MetadataServerVideoEntityOverride: {
-            action: string;
+            action?: string;
             /** Format: int32 */
             localId?: number;
-            name: string;
-            remoteId: string;
+            name?: string;
+            remoteId?: string;
         };
         MetadataServerVideoImportRequest: {
-            endpoint: string;
+            endpoint?: string;
             excludedPerformerNames?: string[];
             excludedTagNames?: string[];
             fieldStrategies?: {
                 [key: string]: string;
             };
-            markOrganized: boolean;
-            onlyExistingPerformers: boolean;
-            onlyExistingStudio: boolean;
-            onlyExistingTags: boolean;
-            overwriteExplicitCover: boolean;
+            markOrganized?: boolean;
+            onlyExistingPerformers?: boolean;
+            onlyExistingStudio?: boolean;
+            onlyExistingTags?: boolean;
+            overwriteExplicitCover?: boolean;
             performerGenders?: string[];
             performerOverrides?: components["schemas"]["MetadataServerVideoEntityOverride"][];
             setCoverImage?: boolean;
             setPerformers?: boolean;
             setStudio?: boolean;
             setTags?: boolean;
-            skipSingleNamePerformers: boolean;
+            skipSingleNamePerformers?: boolean;
             studioOverride?: components["schemas"]["MetadataServerVideoEntityOverride"];
             tagOverrides?: components["schemas"]["MetadataServerVideoEntityOverride"][];
-            videoId: string;
+            videoId?: string;
         };
         MetadataServerVideoMatch: {
             code?: string;
@@ -19040,8 +19040,8 @@ export interface components {
             username?: string;
         };
         MoveFiles: {
-            destinationPath: string;
-            fileIds: number[];
+            destinationPath?: string;
+            fileIds?: number[];
         };
         MultiIdCriterion: {
             /** Format: int32 */
@@ -19051,7 +19051,7 @@ export interface components {
             requiredIds?: number[];
             /** Format: int32 */
             requiredIdsDepth?: number;
-            value: number[];
+            value?: number[];
         };
         PaginatedResponseOfAiRun: {
             items: components["schemas"]["AiRun"][];
@@ -19207,8 +19207,8 @@ export interface components {
             totalCount: number;
         };
         PathMappingRequest: {
-            source: string;
-            target: string;
+            source?: string;
+            target?: string;
         };
         Performer: {
             aliases: string[];
@@ -19270,7 +19270,7 @@ export interface components {
             };
             createMissingTags?: boolean;
             replaceFields?: string[];
-            scraped: components["schemas"]["ScrapedPerformer"];
+            scraped?: components["schemas"]["ScrapedPerformer"];
         };
         PerformerCreate: {
             aliases?: string[];
@@ -19286,13 +19286,13 @@ export interface components {
             ethnicity?: string;
             eyeColor?: string;
             fakeTits?: string;
-            favorite: boolean;
+            favorite?: boolean;
             gender?: string;
             hairColor?: string;
             /** Format: int32 */
             heightCm?: number;
             measurements?: string;
-            name: string;
+            name?: string;
             /** Format: double */
             penisLength?: number;
             piercings?: string;
@@ -19315,7 +19315,7 @@ export interface components {
             circumcisedCriterion?: components["schemas"]["StringCriterion"];
             countryCriterion?: components["schemas"]["StringCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             deathDateCriterion?: components["schemas"]["DateCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
@@ -19360,9 +19360,9 @@ export interface components {
             weightCriterion?: components["schemas"]["IntCriterion"];
         };
         PerformerMerge: {
-            sourceIds: number[];
+            sourceIds?: number[];
             /** Format: int32 */
-            targetId: number;
+            targetId?: number;
         };
         PerformerRemoteId: {
             endpoint: string;
@@ -19463,9 +19463,9 @@ export interface components {
         };
         PlaybackIntervalInput: {
             /** Format: double */
-            endSec: number;
+            endSec?: number;
             /** Format: double */
-            startSec: number;
+            startSec?: number;
         };
         PlaybackIntervalsRequest: {
             autoplay?: boolean;
@@ -19475,19 +19475,19 @@ export interface components {
             clipStartSec?: number;
             context?: unknown;
             /** Format: double */
-            currentPositionSec: number;
+            currentPositionSec?: number;
             fullscreen?: boolean;
             /** Format: int32 */
             groupItemId?: number;
             /** Format: int32 */
-            hostId: number;
-            hostType: string;
-            intervals: components["schemas"]["PlaybackIntervalInput"][];
+            hostId?: number;
+            hostType?: string;
+            intervals?: components["schemas"]["PlaybackIntervalInput"][];
             /** Format: int32 */
             itemHostId?: number;
             itemHostType?: string;
             /** Format: double */
-            mediaDurationSec: number;
+            mediaDurationSec?: number;
             muted?: boolean;
             /** Format: int32 */
             parentHostId?: number;
@@ -19501,8 +19501,8 @@ export interface components {
             /** Format: int32 */
             segmentId?: number;
             /** Format: uuid */
-            sessionId: string;
-            state: string;
+            sessionId?: string;
+            state?: string;
             surface?: string;
         };
         Plugin: {
@@ -19516,7 +19516,7 @@ export interface components {
             version: string;
         };
         PluginSettings: {
-            enabledMap: {
+            enabledMap?: {
                 [key: string]: boolean;
             };
         };
@@ -19531,7 +19531,7 @@ export interface components {
             name: string;
         };
         PreviewRequest: {
-            stashDbPath: string;
+            stashDbPath?: string;
         };
         /** @enum {string} */
         RatingStarPrecision: "full" | "half" | "quarter" | "tenth";
@@ -19546,7 +19546,7 @@ export interface components {
             entitiesRecomputed: number;
         };
         RefreshRequest: {
-            refreshToken: string;
+            refreshToken?: string;
         };
         RegistryExtensionDetail: {
             author?: string;
@@ -19590,9 +19590,9 @@ export interface components {
             version: string;
         };
         RegistryInstallRequest: {
-            extensionId: string;
-            installDependencies: boolean;
-            version: string;
+            extensionId?: string;
+            installDependencies?: boolean;
+            version?: string;
         };
         RegistryInstallResult: {
             extension?: components["schemas"]["RegistryInstallExtensionRef"];
@@ -19612,8 +19612,8 @@ export interface components {
             totalCount?: number;
         };
         RegistryUninstallRequest: {
-            extensionId: string;
-            uninstallDependents: boolean;
+            extensionId?: string;
+            uninstallDependents?: boolean;
         };
         RegistryUninstallResult: {
             dependents?: components["schemas"]["ExtensionDependencyImpact"][];
@@ -19643,7 +19643,7 @@ export interface components {
             beforeJobId?: string;
         };
         ReorderSubGroups: {
-            subGroupIds: number[];
+            subGroupIds?: number[];
         };
         ResolvedSpan: {
             collapsedToInstant: boolean;
@@ -19686,15 +19686,15 @@ export interface components {
             spans: components["schemas"]["ResolvedSpan"][];
         };
         ResolveScrapeRelationsRequest: {
-            performers: string[];
-            tags: string[];
+            performers?: string[];
+            tags?: string[];
         };
         ResolveScrapeRelationsResult: {
             performers: components["schemas"]["ScrapeRelationMatch"][];
             tags: components["schemas"]["ScrapeRelationMatch"][];
         };
         RestoreBackupRequest: {
-            backupPath: string;
+            backupPath?: string;
         };
         RestoreBackupResult: {
             backupPath: string;
@@ -19705,8 +19705,8 @@ export interface components {
             args?: {
                 [key: string]: string;
             };
-            pluginId: string;
-            taskName: string;
+            pluginId?: string;
+            taskName?: string;
         };
         SavedFilter: {
             findFilter?: string;
@@ -19719,8 +19719,8 @@ export interface components {
         };
         SavedFilterCreate: {
             findFilter?: string;
-            mode: string;
-            name: string;
+            mode?: string;
+            name?: string;
             objectFilter?: string;
             uiOptions?: string;
         };
@@ -19733,17 +19733,17 @@ export interface components {
         };
         ScanOptions: {
             paths?: string[];
-            rescan: boolean;
-            scanGenerateAudioPhashes: boolean;
-            scanGenerateCovers: boolean;
-            scanGenerateImagePhashes: boolean;
-            scanGenerateMd5: boolean;
-            scanGeneratePhashes: boolean;
-            scanGeneratePreviews: boolean;
-            scanGenerateSprites: boolean;
-            scanGenerateTextPhashes: boolean;
-            scanGenerateThumbnails: boolean;
-            scanGenerators: boolean;
+            rescan?: boolean;
+            scanGenerateAudioPhashes?: boolean;
+            scanGenerateCovers?: boolean;
+            scanGenerateImagePhashes?: boolean;
+            scanGenerateMd5?: boolean;
+            scanGeneratePhashes?: boolean;
+            scanGeneratePreviews?: boolean;
+            scanGenerateSprites?: boolean;
+            scanGenerateTextPhashes?: boolean;
+            scanGenerateThumbnails?: boolean;
+            scanGenerators?: boolean;
         };
         ScrapeApplyDefaultsConfig: {
             createMissingPerformers?: boolean;
@@ -19797,14 +19797,14 @@ export interface components {
             weight?: number;
         };
         ScrapeFragmentRequest: {
-            entityType: string;
-            fragment: Record<string, never>;
-            scraperId: string;
+            entityType?: string;
+            fragment?: Record<string, never>;
+            scraperId?: string;
         };
         ScrapeNameRequest: {
-            entityType: string;
-            name: string;
-            scraperId: string;
+            entityType?: string;
+            name?: string;
+            scraperId?: string;
         };
         ScrapeRelationMatch: {
             input: string;
@@ -19812,7 +19812,7 @@ export interface components {
         };
         ScraperMatchUrlRequest: {
             entityType?: string;
-            url: string;
+            url?: string;
         };
         ScraperPreference: {
             entityType: string;
@@ -19829,9 +19829,9 @@ export interface components {
             urls: string[];
         };
         ScrapeUrlRequest: {
-            entityType: string;
-            scraperId: string;
-            url: string;
+            entityType?: string;
+            scraperId?: string;
+            url?: string;
         };
         ScrapingConfig: {
             identifyDefaults: components["schemas"]["IdentifyDefaultsConfig"];
@@ -19890,7 +19890,7 @@ export interface components {
             sourceKey?: string;
             sourceRunId?: string;
             /** Format: double */
-            startSec: number;
+            startSec?: number;
             /** Format: int32 */
             tagId?: number;
             title?: string;
@@ -19911,17 +19911,17 @@ export interface components {
         };
         SegmentDisplayProfileCreate: {
             description?: string;
-            isDefault: boolean;
-            name: string;
+            isDefault?: boolean;
+            name?: string;
         };
         SegmentDisplayProfilePreviewRequest: {
-            rules: components["schemas"]["SegmentDisplayRuleCreate"][];
+            rules?: components["schemas"]["SegmentDisplayRuleCreate"][];
             /** Format: int32 */
-            videoId: number;
+            videoId?: number;
         };
         SegmentDisplayProfileUpdate: {
             description?: string;
-            name: string;
+            name?: string;
         };
         SegmentDisplayRule: {
             collapseToInstant: boolean;
@@ -19952,7 +19952,7 @@ export interface components {
             visible: boolean;
         };
         SegmentDisplayRuleCreate: {
-            collapseToInstant: boolean;
+            collapseToInstant?: boolean;
             colorOverride?: string;
             hostType?: components["schemas"]["SegmentHostType"];
             kind?: string;
@@ -19970,10 +19970,10 @@ export interface components {
             tagCategory?: string;
             /** Format: int32 */
             tagId?: number;
-            visible: boolean;
+            visible?: boolean;
         };
         SegmentDisplayRuleUpdate: {
-            collapseToInstant: boolean;
+            collapseToInstant?: boolean;
             colorOverride?: string;
             hostType?: components["schemas"]["SegmentHostType"];
             kind?: string;
@@ -19991,7 +19991,7 @@ export interface components {
             tagCategory?: string;
             /** Format: int32 */
             tagId?: number;
-            visible: boolean;
+            visible?: boolean;
         };
         SegmentDistinctValue: {
             /** Format: int32 */
@@ -20041,8 +20041,8 @@ export interface components {
             mergeGapSec?: number;
             /** Format: double */
             minDurationSec?: number;
-            operands: components["schemas"]["SegmentSpanOperand"][];
-            operator: string;
+            operands?: components["schemas"]["SegmentSpanOperand"][];
+            operator?: string;
         };
         SegmentSpanOperand: {
             kind?: string;
@@ -20057,8 +20057,8 @@ export interface components {
             mergeGapSec?: number;
             /** Format: double */
             minDurationSec?: number;
-            operands: components["schemas"]["SegmentSpanOperand"][];
-            operator: string;
+            operands?: components["schemas"]["SegmentSpanOperand"][];
+            operator?: string;
             /** Format: int32 */
             profile?: number;
         };
@@ -20143,7 +20143,7 @@ export interface components {
         SegmentTagBulkRemoveRequest: {
             ids?: number[];
             /** Format: int32 */
-            tagId: number;
+            tagId?: number;
         };
         SegmentUpdate: {
             colorHint?: string;
@@ -20155,10 +20155,10 @@ export interface components {
             payload?: components["schemas"]["JsonElement"];
             /** Format: int64 */
             refId?: number;
-            sourceKey: string;
+            sourceKey?: string;
             sourceRunId?: string;
             /** Format: double */
-            startSec: number;
+            startSec?: number;
             /** Format: int32 */
             tagId?: number;
             title?: string;
@@ -20167,13 +20167,13 @@ export interface components {
             level?: string;
         };
         SetRolesRequest: {
-            roles: string[];
+            roles?: string[];
         };
         /** @enum {string} */
         SettingsTabLayout: "panels" | "page";
         SetupTokenRedeemRequest: {
-            password: string;
-            token: string;
+            password?: string;
+            token?: string;
             username?: string;
         };
         /** @enum {string} */
@@ -20303,7 +20303,7 @@ export interface components {
         };
         StringCriterion: {
             modifier?: components["schemas"]["CriterionModifier"];
-            value: string;
+            value?: string;
         };
         Studio: {
             aliases: string[];
@@ -20345,9 +20345,9 @@ export interface components {
             aliases?: string[];
             customFields?: Record<string, never>;
             details?: string;
-            favorite: boolean;
-            name: string;
-            organized: boolean;
+            favorite?: boolean;
+            name?: string;
+            organized?: boolean;
             /** Format: int32 */
             parentId?: number;
             /** Format: int32 */
@@ -20360,7 +20360,7 @@ export interface components {
             aliasesCriterion?: components["schemas"]["StringCriterion"];
             childCountCriterion?: components["schemas"]["IntCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
             favorite?: boolean;
@@ -20387,9 +20387,9 @@ export interface components {
             videoCountCriterion?: components["schemas"]["IntCriterion"];
         };
         StudioMerge: {
-            sourceIds: number[];
+            sourceIds?: number[];
             /** Format: int32 */
-            targetId: number;
+            targetId?: number;
         };
         StudioRemoteId: {
             endpoint: string;
@@ -20493,14 +20493,14 @@ export interface components {
             /** Format: double */
             hostDurationSec?: number;
             /** Format: int32 */
-            hostId: number;
-            hostType: string;
+            hostId?: number;
+            hostType?: string;
             modelKey?: string;
             /** @default user */
             sourceKey: string;
             sourceRunId?: string;
             /** Format: int32 */
-            tagId: number;
+            tagId?: number;
             /** Format: double */
             totalDurationSec?: number;
         };
@@ -20510,12 +20510,12 @@ export interface components {
             color?: string;
             customFields?: Record<string, never>;
             description?: string;
-            favorite: boolean;
+            favorite?: boolean;
             /** Format: double */
             minOccurrencePercent?: number;
             /** Format: double */
             minOccurrenceSec?: number;
-            name: string;
+            name?: string;
             /** @default false */
             organized: boolean;
             parentIds?: number[];
@@ -20578,25 +20578,25 @@ export interface components {
             videoCount: number;
         };
         TagDurationClause: {
-            contextMode: string;
+            contextMode?: string;
             contextType?: string;
             modifier?: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
             tagId?: number;
-            unit: string;
+            unit?: string;
             /** Format: double */
             value?: number;
             /** Format: double */
             value2?: number;
         };
         TagDurationCriterion: {
-            clauses: components["schemas"]["TagDurationClause"][];
-            contextMode: string;
+            clauses?: components["schemas"]["TagDurationClause"][];
+            contextMode?: string;
             contextType?: string;
             modifier?: components["schemas"]["CriterionModifier"];
             /** Format: int32 */
             tagId?: number;
-            unit: string;
+            unit?: string;
             /** Format: double */
             value?: number;
             /** Format: double */
@@ -20607,7 +20607,7 @@ export interface components {
             childCountCriterion?: components["schemas"]["IntCriterion"];
             childrenCriterion?: components["schemas"]["MultiIdCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             descriptionCriterion?: components["schemas"]["StringCriterion"];
             favorite?: boolean;
@@ -20697,7 +20697,7 @@ export interface components {
         TagGroupCreate: {
             color?: string;
             description?: string;
-            name: string;
+            name?: string;
             /** Format: int32 */
             sortOrder?: number;
         };
@@ -20747,9 +20747,9 @@ export interface components {
             videoCount: number;
         };
         TagMerge: {
-            sourceIds: number[];
+            sourceIds?: number[];
             /** Format: int32 */
-            targetId: number;
+            targetId?: number;
         };
         TagProvenance: {
             appliedAt: string;
@@ -20849,7 +20849,7 @@ export interface components {
             date?: string;
             details?: string;
             groupIds?: components["schemas"]["VideoGroupInput"][];
-            organized: boolean;
+            organized?: boolean;
             performerIds?: number[];
             /** Format: int32 */
             studioId?: number;
@@ -20861,7 +20861,7 @@ export interface components {
             codeCriterion?: components["schemas"]["StringCriterion"];
             contentCriterion?: components["schemas"]["StringCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: components["schemas"]["DateCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
@@ -20920,7 +20920,7 @@ export interface components {
         };
         TimestampCriterion: {
             modifier?: components["schemas"]["CriterionModifier"];
-            value: string;
+            value?: string;
             value2?: string;
         };
         UIComponentOverride: {
@@ -21334,7 +21334,7 @@ export interface components {
         };
         VideoAssignFile: {
             /** Format: int32 */
-            fileId: number;
+            fileId?: number;
         };
         VideoCreate: {
             captions?: string;
@@ -21351,7 +21351,7 @@ export interface components {
             groups?: components["schemas"]["VideoGroupInput"][];
             /** @default false */
             isVr: boolean;
-            organized: boolean;
+            organized?: boolean;
             /** Format: int32 */
             parentVideoId?: number;
             performerIds?: number[];
@@ -21395,7 +21395,7 @@ export interface components {
             code?: string;
             codeCriterion?: components["schemas"]["StringCriterion"];
             createdAtCriterion?: components["schemas"]["TimestampCriterion"];
-            customFieldCriteria: components["schemas"]["CustomFieldCriterion"][];
+            customFieldCriteria?: components["schemas"]["CustomFieldCriterion"][];
             customFieldCriterion?: components["schemas"]["CustomFieldCriterion"];
             dateCriterion?: components["schemas"]["DateCriterion"];
             detailsCriterion?: components["schemas"]["StringCriterion"];
@@ -21456,7 +21456,7 @@ export interface components {
         };
         VideoGroupInput: {
             /** Format: int32 */
-            groupId: number;
+            groupId?: number;
             /**
              * Format: int32
              * @default 0
@@ -21480,9 +21480,9 @@ export interface components {
             video?: components["schemas"]["Video"];
         };
         VideoMerge: {
-            sourceIds: number[];
+            sourceIds?: number[];
             /** Format: int32 */
-            targetId: number;
+            targetId?: number;
         };
         VideoPlaybackSession: {
             endedAt?: string;
