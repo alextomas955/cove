@@ -20513,6 +20513,9 @@
         }
       },
       "AdminPasswordRequest": {
+        "required": [
+          "newPassword"
+        ],
         "type": "object",
         "properties": {
           "newPassword": {
@@ -21426,6 +21429,9 @@
         }
       },
       "BatchDelete": {
+        "required": [
+          "ids"
+        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -21466,6 +21472,9 @@
         }
       },
       "BookmarkBatchRequest": {
+        "required": [
+          "hostIds"
+        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -21527,6 +21536,10 @@
         }
       },
       "BootstrapOwnerRequest": {
+        "required": [
+          "password",
+          "username"
+        ],
         "type": "object",
         "properties": {
           "username": {
@@ -22077,6 +22090,10 @@
         }
       },
       "ChangePasswordRequest": {
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
         "type": "object",
         "properties": {
           "currentPassword": {
@@ -22376,6 +22393,9 @@
         }
       },
       "CreateApiTokenRequest": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -22394,6 +22414,13 @@
         }
       },
       "CreateContentRuleRequest": {
+        "required": [
+          "appliesTo",
+          "effect",
+          "entityKind",
+          "scopeKind",
+          "scopeValue"
+        ],
         "type": "object",
         "properties": {
           "roleId": {
@@ -22418,6 +22445,12 @@
         }
       },
       "CreateEntityOverrideRequest": {
+        "required": [
+          "appliesTo",
+          "effect",
+          "entityId",
+          "entityKind"
+        ],
         "type": "object",
         "properties": {
           "roleId": {
@@ -22459,6 +22492,10 @@
         }
       },
       "CreateRoleRequest": {
+        "required": [
+          "name",
+          "permissions"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -22476,6 +22513,11 @@
         }
       },
       "CreateScrapeAttempt": {
+        "required": [
+          "entityType",
+          "inputKind",
+          "scraperId"
+        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -22504,6 +22546,10 @@
         }
       },
       "CreateShareLinkRequest": {
+        "required": [
+          "entityIds",
+          "entityKind"
+        ],
         "type": "object",
         "properties": {
           "entityKind": {
@@ -22525,6 +22571,9 @@
         }
       },
       "CreateUserRequest": {
+        "required": [
+          "username"
+        ],
         "type": "object",
         "properties": {
           "username": {
@@ -22803,6 +22852,9 @@
         }
       },
       "DeleteFiles": {
+        "required": [
+          "fileIds"
+        ],
         "type": "object",
         "properties": {
           "fileIds": {
@@ -22961,6 +23013,9 @@
         }
       },
       "DetectionCreate": {
+        "required": [
+          "class"
+        ],
         "type": "object",
         "properties": {
           "observedAtSec": {
@@ -23031,6 +23086,10 @@
         "type": "string"
       },
       "DetectionUpdate": {
+        "required": [
+          "class",
+          "sourceKey"
+        ],
         "type": "object",
         "properties": {
           "observedAtSec": {
@@ -23330,6 +23389,9 @@
         }
       },
       "DownloaderMatchRequest": {
+        "required": [
+          "url"
+        ],
         "type": "object",
         "properties": {
           "url": {
@@ -23706,6 +23768,10 @@
         }
       },
       "EngagementInteractionWrite": {
+        "required": [
+          "hostType",
+          "kind"
+        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -23780,6 +23846,9 @@
         }
       },
       "EntityEngagementBatchRequest": {
+        "required": [
+          "hostIds"
+        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -24347,6 +24416,9 @@
         }
       },
       "FaceBatchDelete": {
+        "required": [
+          "faceIds"
+        ],
         "type": "object",
         "properties": {
           "faceIds": {
@@ -24375,6 +24447,9 @@
         }
       },
       "FaceBatchLinkTopSuggestion": {
+        "required": [
+          "faceIds"
+        ],
         "type": "object",
         "properties": {
           "faceIds": {
@@ -24462,6 +24537,9 @@
         }
       },
       "FaceCreatePerformer": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -24731,6 +24809,9 @@
         }
       },
       "FaceSuggestionDecision": {
+        "required": [
+          "decision"
+        ],
         "type": "object",
         "properties": {
           "performerId": {
@@ -24910,6 +24991,9 @@
         }
       },
       "FileBackedCreate": {
+        "required": [
+          "filePath"
+        ],
         "type": "object",
         "properties": {
           "filePath": {
@@ -24918,6 +25002,9 @@
         }
       },
       "FileSetFingerprints": {
+        "required": [
+          "fingerprints"
+        ],
         "type": "object",
         "properties": {
           "fileId": {
@@ -25159,6 +25246,10 @@
         }
       },
       "FingerprintEntry": {
+        "required": [
+          "type",
+          "value"
+        ],
         "type": "object",
         "properties": {
           "type": {
@@ -25288,6 +25379,9 @@
         }
       },
       "GalleryAddImages": {
+        "required": [
+          "imageIds"
+        ],
         "type": "object",
         "properties": {
           "imageIds": {
@@ -25334,6 +25428,9 @@
         }
       },
       "GalleryChapterCreate": {
+        "required": [
+          "title"
+        ],
         "type": "object",
         "properties": {
           "title": {
@@ -25684,6 +25781,9 @@
         }
       },
       "GalleryRemoveImages": {
+        "required": [
+          "imageIds"
+        ],
         "type": "object",
         "properties": {
           "imageIds": {
@@ -26048,6 +26148,9 @@
         }
       },
       "GroupCreate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -26569,6 +26672,9 @@
         "type": "string"
       },
       "GroupItemsFromSpans": {
+        "required": [
+          "spans"
+        ],
         "type": "object",
         "properties": {
           "spans": {
@@ -26614,6 +26720,9 @@
         }
       },
       "GroupItemsRemoveHosts": {
+        "required": [
+          "hostIds"
+        ],
         "type": "object",
         "properties": {
           "kind": {
@@ -26629,6 +26738,9 @@
         }
       },
       "GroupItemsReorder": {
+        "required": [
+          "ids"
+        ],
         "type": "object",
         "properties": {
           "ids": {
@@ -26772,6 +26884,9 @@
         }
       },
       "GroupQueryUpdate": {
+        "required": [
+          "querySourceKey"
+        ],
         "type": "object",
         "properties": {
           "querySourceKey": {
@@ -27523,6 +27638,9 @@
         }
       },
       "ImportRequest": {
+        "required": [
+          "stashDbPath"
+        ],
         "type": "object",
         "properties": {
           "stashDbPath": {
@@ -27627,6 +27745,10 @@
         }
       },
       "InviteRedeemRequest": {
+        "required": [
+          "password",
+          "token"
+        ],
         "type": "object",
         "properties": {
           "token": {
@@ -27767,6 +27889,10 @@
         }
       },
       "LoginRequest": {
+        "required": [
+          "password",
+          "username"
+        ],
         "type": "object",
         "properties": {
           "username": {
@@ -27849,6 +27975,9 @@
         }
       },
       "MetadataServerEndpoint": {
+        "required": [
+          "endpoint"
+        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -27880,6 +28009,10 @@
         }
       },
       "MetadataServerFindByIdsRequest": {
+        "required": [
+          "endpoint",
+          "ids"
+        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28154,6 +28287,10 @@
         }
       },
       "MetadataServerTagImportRequest": {
+        "required": [
+          "endpoint",
+          "tagId"
+        ],
         "type": "object",
         "properties": {
           "endpoint": {
@@ -28456,6 +28593,10 @@
         }
       },
       "MoveFiles": {
+        "required": [
+          "destinationPath",
+          "fileIds"
+        ],
         "type": "object",
         "properties": {
           "fileIds": {
@@ -29001,6 +29142,10 @@
         }
       },
       "PathMappingRequest": {
+        "required": [
+          "source",
+          "target"
+        ],
         "type": "object",
         "properties": {
           "source": {
@@ -29199,6 +29344,9 @@
         }
       },
       "PerformerCreate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -29643,6 +29791,9 @@
         }
       },
       "PerformerMerge": {
+        "required": [
+          "sourceIds"
+        ],
         "type": "object",
         "properties": {
           "targetId": {
@@ -29920,6 +30071,11 @@
         }
       },
       "PlaybackIntervalsRequest": {
+        "required": [
+          "hostType",
+          "intervals",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -30055,6 +30211,9 @@
         }
       },
       "PluginSettings": {
+        "required": [
+          "enabledMap"
+        ],
         "type": "object",
         "properties": {
           "enabledMap": {
@@ -30102,6 +30261,9 @@
         }
       },
       "PreviewRequest": {
+        "required": [
+          "stashDbPath"
+        ],
         "type": "object",
         "properties": {
           "stashDbPath": {
@@ -30153,6 +30315,9 @@
         }
       },
       "RefreshRequest": {
+        "required": [
+          "refreshToken"
+        ],
         "type": "object",
         "properties": {
           "refreshToken": {
@@ -30494,6 +30659,9 @@
         }
       },
       "ReorderSubGroups": {
+        "required": [
+          "subGroupIds"
+        ],
         "type": "object",
         "properties": {
           "subGroupIds": {
@@ -30673,6 +30841,9 @@
         }
       },
       "RestoreBackupRequest": {
+        "required": [
+          "backupPath"
+        ],
         "type": "object",
         "properties": {
           "backupPath": {
@@ -30699,6 +30870,10 @@
         }
       },
       "RunPluginTask": {
+        "required": [
+          "pluginId",
+          "taskName"
+        ],
         "type": "object",
         "properties": {
           "pluginId": {
@@ -30745,6 +30920,10 @@
         }
       },
       "SavedFilterCreate": {
+        "required": [
+          "mode",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "mode": {
@@ -30999,6 +31178,11 @@
         }
       },
       "ScrapeFragmentRequest": {
+        "required": [
+          "entityType",
+          "fragment",
+          "scraperId"
+        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -31014,6 +31198,11 @@
         }
       },
       "ScrapeNameRequest": {
+        "required": [
+          "entityType",
+          "name",
+          "scraperId"
+        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -31043,6 +31232,9 @@
         }
       },
       "ScraperMatchUrlRequest": {
+        "required": [
+          "url"
+        ],
         "type": "object",
         "properties": {
           "url": {
@@ -31116,6 +31308,11 @@
         }
       },
       "ScrapeUrlRequest": {
+        "required": [
+          "entityType",
+          "scraperId",
+          "url"
+        ],
         "type": "object",
         "properties": {
           "scraperId": {
@@ -31380,6 +31577,9 @@
         }
       },
       "SegmentDisplayProfileCreate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -31394,6 +31594,9 @@
         }
       },
       "SegmentDisplayProfilePreviewRequest": {
+        "required": [
+          "rules"
+        ],
         "type": "object",
         "properties": {
           "videoId": {
@@ -31409,6 +31612,9 @@
         }
       },
       "SegmentDisplayProfileUpdate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -31737,6 +31943,10 @@
         }
       },
       "SegmentSpanDerivedQuery": {
+        "required": [
+          "operands",
+          "operator"
+        ],
         "type": "object",
         "properties": {
           "operator": {
@@ -31788,6 +31998,10 @@
         }
       },
       "SegmentSpanQueryRequest": {
+        "required": [
+          "operands",
+          "operator"
+        ],
         "type": "object",
         "properties": {
           "profile": {
@@ -32063,6 +32277,9 @@
         }
       },
       "SegmentUpdate": {
+        "required": [
+          "sourceKey"
+        ],
         "type": "object",
         "properties": {
           "startSec": {
@@ -32118,6 +32335,9 @@
         }
       },
       "SetRolesRequest": {
+        "required": [
+          "roles"
+        ],
         "type": "object",
         "properties": {
           "roles": {
@@ -32136,6 +32356,10 @@
         "type": "string"
       },
       "SetupTokenRedeemRequest": {
+        "required": [
+          "password",
+          "token"
+        ],
         "type": "object",
         "properties": {
           "token": {
@@ -32606,6 +32830,9 @@
         }
       },
       "StudioCreate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -32842,6 +33069,9 @@
         }
       },
       "StudioMerge": {
+        "required": [
+          "sourceIds"
+        ],
         "type": "object",
         "properties": {
           "targetId": {
@@ -33133,6 +33363,9 @@
         }
       },
       "TagApplicationCreate": {
+        "required": [
+          "hostType"
+        ],
         "type": "object",
         "properties": {
           "hostType": {
@@ -33178,6 +33411,9 @@
         }
       },
       "TagCreate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -33851,6 +34087,9 @@
         }
       },
       "TagGroupCreate": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -33990,6 +34229,9 @@
         }
       },
       "TagMerge": {
+        "required": [
+          "sourceIds"
+        ],
         "type": "object",
         "properties": {
           "targetId": {
@@ -36649,6 +36891,9 @@
         }
       },
       "VideoMerge": {
+        "required": [
+          "sourceIds"
+        ],
         "type": "object",
         "properties": {
           "targetId": {

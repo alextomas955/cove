@@ -28,8 +28,13 @@ namespace Cove.Api.OpenApi;
 /// </list>
 /// Required members are emitted in a stable ordinal sort so the committed document is deterministic
 /// across builds.
+///
+/// For each object schema it also records — via <paramref name="requestRequired"/> — the subset of
+/// required members that a request body genuinely mandates (a non-nullable, no-default constructor
+/// parameter of reference type). <see cref="RequestSchemaRelaxationTransformer"/> uses that to relax
+/// the optional-on-input members of request-only shapes without dropping the mandatory ones.
 /// </summary>
-internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
+internal sealed class ContractSchemaTransformer(RequestRequiredMembers requestRequired) : IOpenApiSchemaTransformer
 {
     public Task TransformAsync(
         OpenApiSchema schema,
@@ -57,6 +62,12 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
         // One context per call: NullabilityInfoContext is not thread-safe.
         var nullability = new NullabilityInfoContext();
         var required = new SortedSet<string>(StringComparer.Ordinal);
+        var inputRequired = new HashSet<string>(StringComparer.Ordinal);
+
+        // Constructor parameters of the longest constructor identify the type's mandatory inputs
+        // (records author every member as a primary-constructor parameter). Members set through a
+        // plain property, by contrast, carry an initializer default and are optional on input.
+        var constructorParameters = GetConstructorParameters(typeInfo.Type);
 
         foreach (var property in typeInfo.Properties)
         {
@@ -70,11 +81,57 @@ internal sealed class ContractSchemaTransformer : IOpenApiSchemaTransformer
                 && propertySchema.Default is null)
             {
                 required.Add(property.Name);
+
+                // A request body genuinely mandates this member only when omitting it yields an
+                // invalid value: a non-nullable reference-typed constructor parameter with no
+                // default deserializes to null. Value types fall back to their CLR default and
+                // members without a matching constructor parameter carry an initializer default, so
+                // both are optional on input and left out of the request-required set.
+                if (!property.PropertyType.IsValueType
+                    && TryGetConstructorParameter(property, constructorParameters, out var parameter)
+                    && !parameter.HasDefaultValue)
+                {
+                    inputRequired.Add(property.Name);
+                }
             }
         }
 
         schema.Required = required;
+        requestRequired.Record(schema, inputRequired);
         return Task.CompletedTask;
+    }
+
+    private static ParameterInfo[] GetConstructorParameters(Type type)
+    {
+        ConstructorInfo? longest = null;
+        foreach (var constructor in type.GetConstructors())
+        {
+            if (longest is null || constructor.GetParameters().Length > longest.GetParameters().Length)
+                longest = constructor;
+        }
+
+        return longest?.GetParameters() ?? [];
+    }
+
+    private static bool TryGetConstructorParameter(
+        JsonPropertyInfo property,
+        ParameterInfo[] parameters,
+        out ParameterInfo parameter)
+    {
+        // Match the JSON member back to its constructor parameter by the CLR member name; parameter
+        // names mirror the property names they initialize.
+        var memberName = (property.AttributeProvider as MemberInfo)?.Name ?? property.Name;
+        foreach (var candidate in parameters)
+        {
+            if (string.Equals(candidate.Name, memberName, StringComparison.OrdinalIgnoreCase))
+            {
+                parameter = candidate;
+                return true;
+            }
+        }
+
+        parameter = null!;
+        return false;
     }
 
     private static bool IsMemberNullable(JsonPropertyInfo property, NullabilityInfoContext nullability)

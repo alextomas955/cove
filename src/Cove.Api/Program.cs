@@ -486,14 +486,18 @@ try
                 : id;
         };
         // Align emitted schemas with the real wire contract (required members, nullability, and the
-        // numeric read tolerance) so generated clients match what the API produces and accepts.
-        options.AddSchemaTransformer<Cove.Api.OpenApi.ContractSchemaTransformer>();
+        // numeric read tolerance) so generated clients match what the API produces and accepts. The
+        // schema transformer records each shape's genuinely-required request inputs for the relaxation
+        // pass below, so the two share one instance.
+        var requestRequiredMembers = new Cove.Api.OpenApi.RequestRequiredMembers();
+        options.AddSchemaTransformer(new Cove.Api.OpenApi.ContractSchemaTransformer(requestRequiredMembers));
         // Drop the null branch that the framework adds around nullable reference members after schema
         // transformers run, keeping the "omit, don't null" convention consistent for those members.
         options.AddDocumentTransformer<Cove.Api.OpenApi.ContractDocumentTransformer>();
-        // Request-only shapes are authored by the caller, who may omit fields the server defaults, so
-        // relax their required set once the request/response usage of every schema is known.
-        options.AddDocumentTransformer<Cove.Api.OpenApi.RequestSchemaRelaxationTransformer>();
+        // Request-only shapes are authored by the caller, who may omit members the server defaults, so
+        // relax those optional-on-input members once the request/response usage of every schema is
+        // known, while keeping genuinely-required inputs (a create's name, an id list) required.
+        options.AddDocumentTransformer(new Cove.Api.OpenApi.RequestSchemaRelaxationTransformer(requestRequiredMembers));
     });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();

@@ -16757,7 +16757,7 @@ export interface components {
             subGroupId?: number;
         };
         AdminPasswordRequest: {
-            newPassword?: string;
+            newPassword: string;
         };
         /** @enum {string} */
         AffinityHostType: "video" | "image" | "performer" | "face" | "tag" | "studio" | "gallery" | "group" | "audio" | "text" | "segment";
@@ -17000,7 +17000,7 @@ export interface components {
             deleteFiles?: boolean;
             /** @default false */
             deleteGenerated?: boolean;
-            ids?: number[];
+            ids: number[];
         };
         Bookmark: {
             createdAt: string;
@@ -17009,7 +17009,7 @@ export interface components {
             hostType: components["schemas"]["AffinityHostType"];
         };
         BookmarkBatchRequest: {
-            hostIds?: number[];
+            hostIds: number[];
             hostType?: components["schemas"]["AffinityHostType"];
         };
         BookmarkState: {
@@ -17029,8 +17029,8 @@ export interface components {
             value?: boolean;
         };
         BootstrapOwnerRequest: {
-            password?: string;
-            username?: string;
+            password: string;
+            username: string;
         };
         BulkAudioUpdate: {
             clearFields?: string[];
@@ -17181,8 +17181,8 @@ export interface components {
             languageCode: string;
         };
         ChangePasswordRequest: {
-            currentPassword?: string;
-            newPassword?: string;
+            currentPassword: string;
+            newPassword: string;
         };
         CleanOptions: {
             dryRun?: boolean;
@@ -17263,23 +17263,23 @@ export interface components {
         CreateApiTokenRequest: {
             /** Format: date-time */
             expiresAt?: string;
-            name?: string;
+            name: string;
             scope?: string[];
         };
         CreateContentRuleRequest: {
-            appliesTo?: string;
-            effect?: string;
-            entityKind?: string;
+            appliesTo: string;
+            effect: string;
+            entityKind: string;
             /** Format: int32 */
             roleId?: number;
-            scopeKind?: string;
-            scopeValue?: string;
+            scopeKind: string;
+            scopeValue: string;
         };
         CreateEntityOverrideRequest: {
-            appliesTo?: string;
-            effect?: string;
-            entityId?: string;
-            entityKind?: string;
+            appliesTo: string;
+            effect: string;
+            entityId: string;
+            entityKind: string;
             /** Format: int32 */
             roleId?: number;
         };
@@ -17291,24 +17291,24 @@ export interface components {
         };
         CreateRoleRequest: {
             description?: string;
-            name?: string;
-            permissions?: string[];
+            name: string;
+            permissions: string[];
         };
         CreateScrapeAttempt: {
             /** Format: int32 */
             entityId?: number;
-            entityType?: string;
+            entityType: string;
             fragment?: {
                 [key: string]: unknown;
             };
-            inputKind?: string;
+            inputKind: string;
             name?: string;
-            scraperId?: string;
+            scraperId: string;
             url?: string;
         };
         CreateShareLinkRequest: {
-            entityIds?: string[];
-            entityKind?: string;
+            entityIds: string[];
+            entityKind: string;
             /** Format: date-time */
             expiresAt?: string;
             password?: string;
@@ -17320,7 +17320,7 @@ export interface components {
             mustChangePassword?: boolean;
             password?: string;
             roles?: string[];
-            username?: string;
+            username: string;
         };
         CriterionModifier: string;
         CustomFieldCriterion: {
@@ -17398,7 +17398,7 @@ export interface components {
         };
         DeleteFiles: {
             deleteFromDisk?: boolean;
-            fileIds?: number[];
+            fileIds: number[];
         };
         DependencyInfo: {
             available: boolean;
@@ -17448,7 +17448,7 @@ export interface components {
             y: number;
         };
         DetectionCreate: {
-            class?: string;
+            class: string;
             extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             frameHeight?: number;
@@ -17476,7 +17476,7 @@ export interface components {
         /** @enum {string} */
         DetectionHostType: "video" | "image";
         DetectionUpdate: {
-            class?: string;
+            class: string;
             extra?: components["schemas"]["JsonElement"];
             /** Format: int32 */
             frameHeight?: number;
@@ -17492,7 +17492,7 @@ export interface components {
             refKind?: string;
             /** Format: float */
             score?: number;
-            sourceKey?: string;
+            sourceKey: string;
             sourceRunId?: string;
             /** Format: float */
             w?: number;
@@ -17567,7 +17567,7 @@ export interface components {
             supportedEntity: string;
         };
         DownloaderMatchRequest: {
-            url?: string;
+            url: string;
         };
         DownloaderPathOverride: {
             downloaderId: string;
@@ -17690,8 +17690,8 @@ export interface components {
         EngagementInteractionWrite: {
             /** Format: int32 */
             hostId?: number;
-            hostType?: string;
-            kind?: string;
+            hostType: string;
+            kind: string;
             meta?: unknown;
         };
         EntityEngagement: {
@@ -17717,7 +17717,7 @@ export interface components {
             resumeTime: number;
         };
         EntityEngagementBatchRequest: {
-            hostIds?: number[];
+            hostIds: number[];
             hostType?: components["schemas"]["AffinityHostType"];
         };
         EntityFavorite: {
@@ -17902,7 +17902,7 @@ export interface components {
             topConfidence?: number;
         };
         FaceBatchDelete: {
-            faceIds?: number[];
+            faceIds: number[];
         };
         FaceBatchFailed: {
             error: string;
@@ -17912,7 +17912,7 @@ export interface components {
         FaceBatchLinkTopSuggestion: {
             /** @default false */
             createFromReference?: boolean;
-            faceIds?: number[];
+            faceIds: number[];
             /** @default false */
             linkConflicting?: boolean;
             /** @default false */
@@ -17936,7 +17936,7 @@ export interface components {
             primarySourceKey?: string;
         };
         FaceCreatePerformer: {
-            name?: string;
+            name: string;
             /** @default true */
             setPerformerImage?: boolean;
         };
@@ -18039,7 +18039,7 @@ export interface components {
             why: string;
         };
         FaceSuggestionDecision: {
-            decision?: string;
+            decision: string;
             /** Format: int32 */
             performerId?: number;
             referenceEndpoint?: string;
@@ -18098,12 +18098,12 @@ export interface components {
             value?: components["schemas"]["JsonElement"];
         };
         FileBackedCreate: {
-            filePath?: string;
+            filePath: string;
         };
         FileSetFingerprints: {
             /** Format: int32 */
             fileId?: number;
-            fingerprints?: components["schemas"]["FingerprintEntry"][];
+            fingerprints: components["schemas"]["FingerprintEntry"][];
         };
         FilteredQueryRequestOfAudioFilter: {
             findFilter?: components["schemas"]["FindFilter"];
@@ -18162,8 +18162,8 @@ export interface components {
             value?: string;
         };
         FingerprintEntry: {
-            type?: string;
-            value?: string;
+            type: string;
+            value: string;
         };
         Gallery: {
             backCoverPath?: string;
@@ -18200,7 +18200,7 @@ export interface components {
             videoIds: number[];
         };
         GalleryAddImages: {
-            imageIds?: number[];
+            imageIds: number[];
         };
         GalleryChapter: {
             createdAt: string;
@@ -18216,7 +18216,7 @@ export interface components {
         GalleryChapterCreate: {
             /** Format: int32 */
             imageIndex?: number;
-            title?: string;
+            title: string;
         };
         GalleryChapterUpdate: {
             /** Format: int32 */
@@ -18292,7 +18292,7 @@ export interface components {
             videosCriterion?: components["schemas"]["MultiIdCriterion"];
         };
         GalleryRemoveImages: {
-            imageIds?: number[];
+            imageIds: number[];
         };
         GallerySetCover: {
             /** Format: int32 */
@@ -18448,7 +18448,7 @@ export interface components {
             description?: string;
             director?: string;
             kind?: components["schemas"]["GroupKind"];
-            name?: string;
+            name: string;
             queryJson?: string;
             querySourceKey?: string;
             /** Format: int32 */
@@ -18565,7 +18565,7 @@ export interface components {
         /** @enum {string} */
         GroupItemKind: "video" | "videoRange" | "image" | "audio" | "text" | "group" | "performer" | "studio" | "tag" | "gallery" | "face" | "segment";
         GroupItemsFromSpans: {
-            spans?: components["schemas"]["GroupItemSpanInput"][];
+            spans: components["schemas"]["GroupItemSpanInput"][];
         };
         GroupItemSpanInput: {
             derivedQuery?: components["schemas"]["SegmentSpanDerivedQuery"];
@@ -18581,11 +18581,11 @@ export interface components {
             videoId?: number;
         };
         GroupItemsRemoveHosts: {
-            hostIds?: number[];
+            hostIds: number[];
             kind?: components["schemas"]["GroupItemKind"];
         };
         GroupItemsReorder: {
-            ids?: number[];
+            ids: number[];
             /**
              * Format: int32
              * @default 0
@@ -18647,7 +18647,7 @@ export interface components {
             /** Format: int32 */
             cacheTtlSec?: number;
             queryJson?: string;
-            querySourceKey?: string;
+            querySourceKey: string;
         };
         GroupSummary: {
             /** Format: int32 */
@@ -18843,7 +18843,7 @@ export interface components {
             /** @default true */
             migrateGeneratedContent?: boolean;
             pathMappings?: components["schemas"]["PathMappingRequest"][];
-            stashDbPath?: string;
+            stashDbPath: string;
         };
         InstallExtensionFromUrlRequest: {
             trustUnverified?: boolean;
@@ -18873,8 +18873,8 @@ export interface components {
             menuItems: string[];
         };
         InviteRedeemRequest: {
-            password?: string;
-            token?: string;
+            password: string;
+            token: string;
             username?: string;
         };
         JobInfo: {
@@ -18921,8 +18921,8 @@ export interface components {
             timestamp: string;
         };
         LoginRequest: {
-            password?: string;
-            username?: string;
+            password: string;
+            username: string;
         };
         MeResponse: {
             permissions: string[];
@@ -18942,7 +18942,7 @@ export interface components {
             name: string;
         };
         MetadataServerEndpoint: {
-            endpoint?: string;
+            endpoint: string;
         };
         MetadataServerEntityCandidate: {
             existsLocally: boolean;
@@ -18952,8 +18952,8 @@ export interface components {
             remoteId: string;
         };
         MetadataServerFindByIdsRequest: {
-            endpoint?: string;
-            ids?: string[];
+            endpoint: string;
+            ids: string[];
         };
         MetadataServerFingerprint: {
             algorithm: string;
@@ -19026,8 +19026,8 @@ export interface components {
             selectAll?: boolean;
         };
         MetadataServerTagImportRequest: {
-            endpoint?: string;
-            tagId?: string;
+            endpoint: string;
+            tagId: string;
         };
         MetadataServerTagMatch: {
             aliases: string[];
@@ -19104,8 +19104,8 @@ export interface components {
             username: string;
         };
         MoveFiles: {
-            destinationPath?: string;
-            fileIds?: number[];
+            destinationPath: string;
+            fileIds: number[];
         };
         MultiIdCriterion: {
             /** Format: int32 */
@@ -19271,8 +19271,8 @@ export interface components {
             totalCount: number;
         };
         PathMappingRequest: {
-            source?: string;
-            target?: string;
+            source: string;
+            target: string;
         };
         Performer: {
             aliases: string[];
@@ -19360,7 +19360,7 @@ export interface components {
             /** Format: int32 */
             heightCm?: number;
             measurements?: string;
-            name?: string;
+            name: string;
             /** Format: double */
             penisLength?: number;
             piercings?: string;
@@ -19428,7 +19428,7 @@ export interface components {
             weightCriterion?: components["schemas"]["IntCriterion"];
         };
         PerformerMerge: {
-            sourceIds?: number[];
+            sourceIds: number[];
             /** Format: int32 */
             targetId?: number;
         };
@@ -19551,8 +19551,8 @@ export interface components {
             groupItemId?: number;
             /** Format: int32 */
             hostId?: number;
-            hostType?: string;
-            intervals?: components["schemas"]["PlaybackIntervalInput"][];
+            hostType: string;
+            intervals: components["schemas"]["PlaybackIntervalInput"][];
             /** Format: int32 */
             itemHostId?: number;
             itemHostType?: string;
@@ -19572,7 +19572,7 @@ export interface components {
             segmentId?: number;
             /** Format: uuid */
             sessionId?: string;
-            state?: string;
+            state: string;
             surface?: string;
         };
         Plugin: {
@@ -19586,7 +19586,7 @@ export interface components {
             version: string;
         };
         PluginSettings: {
-            enabledMap?: {
+            enabledMap: {
                 [key: string]: boolean;
             };
         };
@@ -19601,7 +19601,7 @@ export interface components {
             name: string;
         };
         PreviewRequest: {
-            stashDbPath?: string;
+            stashDbPath: string;
         };
         /** @enum {string} */
         RatingStarPrecision: "full" | "half" | "quarter" | "tenth";
@@ -19616,7 +19616,7 @@ export interface components {
             entitiesRecomputed: number;
         };
         RefreshRequest: {
-            refreshToken?: string;
+            refreshToken: string;
         };
         RegistryExtensionDetail: {
             author?: string;
@@ -19713,7 +19713,7 @@ export interface components {
             beforeJobId?: string;
         };
         ReorderSubGroups: {
-            subGroupIds?: number[];
+            subGroupIds: number[];
         };
         ResolvedSpan: {
             collapsedToInstant: boolean;
@@ -19764,7 +19764,7 @@ export interface components {
             tags: components["schemas"]["ScrapeRelationMatch"][];
         };
         RestoreBackupRequest: {
-            backupPath?: string;
+            backupPath: string;
         };
         RestoreBackupResult: {
             backupPath: string;
@@ -19775,8 +19775,8 @@ export interface components {
             args?: {
                 [key: string]: string;
             };
-            pluginId?: string;
-            taskName?: string;
+            pluginId: string;
+            taskName: string;
         };
         SavedFilter: {
             findFilter?: string;
@@ -19789,8 +19789,8 @@ export interface components {
         };
         SavedFilterCreate: {
             findFilter?: string;
-            mode?: string;
-            name?: string;
+            mode: string;
+            name: string;
             objectFilter?: string;
             uiOptions?: string;
         };
@@ -19867,16 +19867,16 @@ export interface components {
             weight?: number;
         };
         ScrapeFragmentRequest: {
-            entityType?: string;
-            fragment?: {
+            entityType: string;
+            fragment: {
                 [key: string]: unknown;
             };
-            scraperId?: string;
+            scraperId: string;
         };
         ScrapeNameRequest: {
-            entityType?: string;
-            name?: string;
-            scraperId?: string;
+            entityType: string;
+            name: string;
+            scraperId: string;
         };
         ScrapeRelationMatch: {
             input: string;
@@ -19884,7 +19884,7 @@ export interface components {
         };
         ScraperMatchUrlRequest: {
             entityType?: string;
-            url?: string;
+            url: string;
         };
         ScraperPreference: {
             entityType: string;
@@ -19901,9 +19901,9 @@ export interface components {
             urls: string[];
         };
         ScrapeUrlRequest: {
-            entityType?: string;
-            scraperId?: string;
-            url?: string;
+            entityType: string;
+            scraperId: string;
+            url: string;
         };
         ScrapingConfig: {
             identifyDefaults: components["schemas"]["IdentifyDefaultsConfig"];
@@ -19984,16 +19984,16 @@ export interface components {
         SegmentDisplayProfileCreate: {
             description?: string;
             isDefault?: boolean;
-            name?: string;
+            name: string;
         };
         SegmentDisplayProfilePreviewRequest: {
-            rules?: components["schemas"]["SegmentDisplayRuleCreate"][];
+            rules: components["schemas"]["SegmentDisplayRuleCreate"][];
             /** Format: int32 */
             videoId?: number;
         };
         SegmentDisplayProfileUpdate: {
             description?: string;
-            name?: string;
+            name: string;
         };
         SegmentDisplayRule: {
             collapseToInstant: boolean;
@@ -20113,8 +20113,8 @@ export interface components {
             mergeGapSec?: number;
             /** Format: double */
             minDurationSec?: number;
-            operands?: components["schemas"]["SegmentSpanOperand"][];
-            operator?: string;
+            operands: components["schemas"]["SegmentSpanOperand"][];
+            operator: string;
         };
         SegmentSpanOperand: {
             kind?: string;
@@ -20129,8 +20129,8 @@ export interface components {
             mergeGapSec?: number;
             /** Format: double */
             minDurationSec?: number;
-            operands?: components["schemas"]["SegmentSpanOperand"][];
-            operator?: string;
+            operands: components["schemas"]["SegmentSpanOperand"][];
+            operator: string;
             /** Format: int32 */
             profile?: number;
         };
@@ -20227,7 +20227,7 @@ export interface components {
             payload?: components["schemas"]["JsonElement"];
             /** Format: int64 */
             refId?: number;
-            sourceKey?: string;
+            sourceKey: string;
             sourceRunId?: string;
             /** Format: double */
             startSec?: number;
@@ -20239,13 +20239,13 @@ export interface components {
             level?: string;
         };
         SetRolesRequest: {
-            roles?: string[];
+            roles: string[];
         };
         /** @enum {string} */
         SettingsTabLayout: "panels" | "page";
         SetupTokenRedeemRequest: {
-            password?: string;
-            token?: string;
+            password: string;
+            token: string;
             username?: string;
         };
         /** @enum {string} */
@@ -20422,7 +20422,7 @@ export interface components {
             };
             details?: string;
             favorite?: boolean;
-            name?: string;
+            name: string;
             organized?: boolean;
             /** Format: int32 */
             parentId?: number;
@@ -20463,7 +20463,7 @@ export interface components {
             videoCountCriterion?: components["schemas"]["IntCriterion"];
         };
         StudioMerge: {
-            sourceIds?: number[];
+            sourceIds: number[];
             /** Format: int32 */
             targetId?: number;
         };
@@ -20574,7 +20574,7 @@ export interface components {
             hostDurationSec?: number;
             /** Format: int32 */
             hostId?: number;
-            hostType?: string;
+            hostType: string;
             modelKey?: string;
             /** @default user */
             sourceKey?: string;
@@ -20597,7 +20597,7 @@ export interface components {
             minOccurrencePercent?: number;
             /** Format: double */
             minOccurrenceSec?: number;
-            name?: string;
+            name: string;
             /** @default false */
             organized?: boolean;
             parentIds?: number[];
@@ -20781,7 +20781,7 @@ export interface components {
         TagGroupCreate: {
             color?: string;
             description?: string;
-            name?: string;
+            name: string;
             /** Format: int32 */
             sortOrder?: number;
         };
@@ -20831,7 +20831,7 @@ export interface components {
             videoCount: number;
         };
         TagMerge: {
-            sourceIds?: number[];
+            sourceIds: number[];
             /** Format: int32 */
             targetId?: number;
         };
@@ -21576,7 +21576,7 @@ export interface components {
             video?: components["schemas"]["Video"];
         };
         VideoMerge: {
-            sourceIds?: number[];
+            sourceIds: number[];
             /** Format: int32 */
             targetId?: number;
         };
