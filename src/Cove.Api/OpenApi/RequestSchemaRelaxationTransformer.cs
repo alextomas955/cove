@@ -4,17 +4,29 @@ using Microsoft.OpenApi;
 namespace Cove.Api.OpenApi;
 
 /// <summary>
-/// Relaxes the required set on schemas that are only ever consumed as request bodies. Response
-/// shapes are always emitted in full, so their non-nullable members are genuinely required; request
-/// shapes, however, are authored by the caller, who may send only the fields being changed and let
-/// the server apply defaults (an omitted flag, an unset filter, an unspecified update mode). Marking
-/// such members required would force callers to supply values the API does not actually demand.
+/// Relaxes the required set on schemas that are only ever consumed as request bodies, keeping the
+/// members the server genuinely mandates required while dropping those the caller may omit.
+///
+/// <see cref="ContractSchemaTransformer"/> marks a member required whenever it is non-nullable and
+/// carries no schema default — the correct rule for a <b>response</b>, which the server always emits
+/// in full. A <b>request</b> body is authored by the caller, and some non-nullable members still have
+/// a server-side default the schema does not surface: value-type inputs (a bool flag, a numeric page
+/// size) deserialize to their CLR default when omitted, and members declared with a property
+/// initializer (e.g. a filter's <c>Page = 1</c> or an empty criteria list) carry a default that is
+/// never emitted onto the schema. Forcing callers to supply those would misrepresent the contract in
+/// the opposite direction — claiming values are mandatory that the API actually defaults.
+///
+/// The schema transformer already identified, per schema, the members a request genuinely mandates
+/// (non-nullable, no-default, reference-typed constructor parameters — a create's name, an id list, a
+/// nested request object) and recorded them in <see cref="RequestRequiredMembers"/>. For a
+/// request-only schema this transformer intersects the required set with that recorded set, so every
+/// optional-on-input member is relaxed and the mandatory ones stay required.
 ///
 /// A schema is treated as request-only when it is reachable from at least one operation's request
-/// body and from no operation's response. Its required set is cleared so every member is optional;
-/// shapes shared with responses are left strict.
+/// body and from no operation's response. Shapes shared with responses are left strict.
 /// </summary>
-internal sealed class RequestSchemaRelaxationTransformer : IOpenApiDocumentTransformer
+internal sealed class RequestSchemaRelaxationTransformer(RequestRequiredMembers requestRequired)
+    : IOpenApiDocumentTransformer
 {
     public Task TransformAsync(
         OpenApiDocument document,
@@ -62,7 +74,16 @@ internal sealed class RequestSchemaRelaxationTransformer : IOpenApiDocumentTrans
                 && requestReachable.Contains(concrete)
                 && !responseReachable.Contains(concrete))
             {
-                concrete.Required.Clear();
+                var keep = requestRequired.TryGet(concrete, out var inputRequired)
+                    ? inputRequired
+                    : (IReadOnlySet<string>)new HashSet<string>();
+
+                var relaxable = concrete.Required
+                    .Where(name => !keep.Contains(name))
+                    .ToList();
+
+                foreach (var name in relaxable)
+                    concrete.Required.Remove(name);
             }
         }
 
