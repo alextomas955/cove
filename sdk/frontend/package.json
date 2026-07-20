@@ -16,17 +16,21 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@cove/types": "file:../types"
+    "@cove/types": "file:../types",
+    "openapi-fetch": "0.17.0"
   },
   "peerDependencies": {
     "react": ">=18.0.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "@types/react": "^19.0.0"
+    "@types/react": "^19.0.0",
+    "jsdom": "^25.0.0",
+    "vitest": "^4.1.0"
   },
   "license": "AGPL-3.0",
   "repository": {
