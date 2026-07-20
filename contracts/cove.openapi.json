@@ -30349,7 +30349,10 @@
       },
       "RegistrySearchResult": {
         "required": [
-          "items"
+          "items",
+          "page",
+          "pageSize",
+          "totalCount"
         ],
         "type": "object",
         "properties": {

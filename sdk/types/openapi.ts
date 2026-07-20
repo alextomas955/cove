@@ -19675,11 +19675,11 @@ export interface components {
         RegistrySearchResult: {
             items: components["schemas"]["RegistryExtensionSummary"][];
             /** Format: int32 */
-            page?: number;
+            page: number;
             /** Format: int32 */
-            pageSize?: number;
+            pageSize: number;
             /** Format: int32 */
-            totalCount?: number;
+            totalCount: number;
         };
         RegistryUninstallRequest: {
             extensionId?: string;
