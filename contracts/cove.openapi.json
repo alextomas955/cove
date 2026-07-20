@@ -11703,17 +11703,20 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               }
             }
@@ -11738,17 +11741,20 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": { }
               }
             },
             "text/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": { }
               }
             },
             "application/*+json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": { }
               }
             }
           },
@@ -15476,17 +15482,20 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               }
             }
@@ -15527,7 +15536,8 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": { }
                   }
                 }
               },
@@ -15535,7 +15545,8 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": { }
                   }
                 }
               },
@@ -15543,7 +15554,8 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": { }
                   }
                 }
               }
@@ -15583,17 +15595,20 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": { }
                 }
               }
             }
@@ -15975,17 +15990,20 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": { }
               }
             },
             "text/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": { }
               }
             },
             "application/*+json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": { }
               }
             }
           },
@@ -20902,7 +20920,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -20987,7 +21006,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -21380,7 +21400,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -22311,7 +22332,8 @@
           "pluginConfigurations": {
             "type": "object",
             "additionalProperties": {
-              "type": "object"
+              "type": "object",
+              "additionalProperties": { }
             }
           },
           "disabledPlugins": {
@@ -22472,7 +22494,8 @@
             "type": "string"
           },
           "fragment": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -25228,7 +25251,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -25384,7 +25408,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -25748,7 +25773,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -25916,7 +25942,8 @@
             "format": "int32"
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -26054,7 +26081,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "kind": {
             "oneOf": [
@@ -26813,7 +26841,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "kind": {
             "oneOf": [
@@ -27027,7 +27056,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -27112,7 +27142,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -27464,7 +27495,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -29106,7 +29138,8 @@
             "type": "string"
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -29249,7 +29282,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -29831,7 +29865,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -30952,7 +30987,8 @@
             "type": "string"
           },
           "fragment": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -32529,7 +32565,8 @@
             "type": "string"
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -32594,7 +32631,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -32860,7 +32898,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -32983,7 +33022,8 @@
             "format": "double"
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "isDerived": {
             "type": "boolean",
@@ -33175,7 +33215,8 @@
             "format": "double"
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "remoteIds": {
             "type": "array",
@@ -33282,7 +33323,8 @@
             "format": "int32"
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -34076,7 +34118,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "showAsSegment": {
             "type": "boolean"
@@ -34205,7 +34248,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -34291,7 +34335,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -34565,7 +34610,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           }
         }
       },
@@ -35860,7 +35906,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "createdAt": {
             "type": "string"
@@ -35986,7 +36033,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "parentVideoId": {
             "type": "integer",
@@ -36759,7 +36807,8 @@
             }
           },
           "customFields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": { }
           },
           "clipStartSec": {
             "type": "number",

@@ -8913,9 +8913,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
-                        "text/json": Record<string, never>;
-                        "text/plain": Record<string, never>;
+                        "application/json": {
+                            [key: string]: unknown;
+                        };
+                        "text/json": {
+                            [key: string]: unknown;
+                        };
+                        "text/plain": {
+                            [key: string]: unknown;
+                        };
                     };
                 };
             };
@@ -8932,9 +8938,15 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/*+json": Record<string, never>;
-                    "application/json": Record<string, never>;
-                    "text/json": Record<string, never>;
+                    "application/*+json": {
+                        [key: string]: unknown;
+                    };
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                    "text/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             responses: {
@@ -12040,9 +12052,15 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/*+json": Record<string, never>;
-                    "application/json": Record<string, never>;
-                    "text/json": Record<string, never>;
+                    "application/*+json": {
+                        [key: string]: unknown;
+                    };
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                    "text/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             responses: {
@@ -12612,9 +12630,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
-                        "text/json": Record<string, never>;
-                        "text/plain": Record<string, never>;
+                        "application/json": {
+                            [key: string]: unknown;
+                        };
+                        "text/json": {
+                            [key: string]: unknown;
+                        };
+                        "text/plain": {
+                            [key: string]: unknown;
+                        };
                     };
                 };
             };
@@ -12655,9 +12679,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>[];
-                        "text/json": Record<string, never>[];
-                        "text/plain": Record<string, never>[];
+                        "application/json": {
+                            [key: string]: unknown;
+                        }[];
+                        "text/json": {
+                            [key: string]: unknown;
+                        }[];
+                        "text/plain": {
+                            [key: string]: unknown;
+                        }[];
                     };
                 };
             };
@@ -12698,9 +12728,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
-                        "text/json": Record<string, never>;
-                        "text/plain": Record<string, never>;
+                        "application/json": {
+                            [key: string]: unknown;
+                        };
+                        "text/json": {
+                            [key: string]: unknown;
+                        };
+                        "text/plain": {
+                            [key: string]: unknown;
+                        };
                     };
                 };
             };
@@ -16826,7 +16862,9 @@ export interface components {
             code?: string;
             contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
@@ -16853,7 +16891,9 @@ export interface components {
         };
         AudioCreate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             groupIds?: components["schemas"]["VideoGroupInput"][];
@@ -16935,7 +16975,9 @@ export interface components {
         };
         AudioUpdate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             groupIds?: components["schemas"]["VideoGroupInput"][];
@@ -17193,7 +17235,9 @@ export interface components {
             /** Format: int32 */
             maxTranscodeSize?: number;
             pluginConfigurations: {
-                [key: string]: Record<string, never>;
+                [key: string]: {
+                    [key: string]: unknown;
+                };
             };
             /** Format: int32 */
             port?: number;
@@ -17254,7 +17298,9 @@ export interface components {
             /** Format: int32 */
             entityId?: number;
             entityType?: string;
-            fragment?: Record<string, never>;
+            fragment?: {
+                [key: string]: unknown;
+            };
             inputKind?: string;
             name?: string;
             scraperId?: string;
@@ -18126,7 +18172,9 @@ export interface components {
             coverImageId?: number;
             coverPath?: string;
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             displayName?: string;
@@ -18177,7 +18225,9 @@ export interface components {
         };
         GalleryCreate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             organized?: boolean;
@@ -18256,7 +18306,9 @@ export interface components {
         };
         GalleryUpdate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             organized?: boolean;
@@ -18310,7 +18362,9 @@ export interface components {
             /** Format: int32 */
             containingGroupCount: number;
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             description?: string;
             director?: string;
@@ -18387,7 +18441,9 @@ export interface components {
         GroupCreate: {
             aliases?: string;
             allowedHostTypes?: string[];
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             description?: string;
             director?: string;
@@ -18603,7 +18659,9 @@ export interface components {
         GroupUpdate: {
             aliases?: string;
             allowedHostTypes?: string[];
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             description?: string;
             director?: string;
@@ -18656,7 +18714,9 @@ export interface components {
             code?: string;
             contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
@@ -18681,7 +18741,9 @@ export interface components {
         };
         ImageCreate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             galleryIds?: number[];
@@ -18754,7 +18816,9 @@ export interface components {
         };
         ImageUpdate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             galleryIds?: number[];
@@ -19220,7 +19284,9 @@ export interface components {
             circumcised?: string;
             country?: string;
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             deathDate?: string;
             details?: string;
             disambiguation?: string;
@@ -19279,7 +19345,9 @@ export interface components {
             careerStart?: string;
             circumcised?: string;
             country?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             deathDate?: string;
             details?: string;
             disambiguation?: string;
@@ -19428,7 +19496,9 @@ export interface components {
             careerStart?: string;
             circumcised?: string;
             country?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             deathDate?: string;
             details?: string;
             disambiguation?: string;
@@ -19798,7 +19868,9 @@ export interface components {
         };
         ScrapeFragmentRequest: {
             entityType?: string;
-            fragment?: Record<string, never>;
+            fragment?: {
+                [key: string]: unknown;
+            };
             scraperId?: string;
         };
         ScrapeNameRequest: {
@@ -20312,7 +20384,9 @@ export interface components {
             /** Format: int32 */
             childStudioCount: number;
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             details?: string;
             favorite: boolean;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
@@ -20343,7 +20417,9 @@ export interface components {
         };
         StudioCreate: {
             aliases?: string[];
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             details?: string;
             favorite?: boolean;
             name?: string;
@@ -20397,7 +20473,9 @@ export interface components {
         };
         StudioUpdate: {
             aliases?: string[];
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             details?: string;
             favorite?: boolean;
             name?: string;
@@ -20435,7 +20513,9 @@ export interface components {
             /** @default false */
             canReportIncorrect: boolean;
             color?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             description?: string;
             /** Format: double */
             effectiveDurationPercent?: number;
@@ -20508,7 +20588,9 @@ export interface components {
             aliases?: string[];
             childIds?: number[];
             color?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             description?: string;
             favorite?: boolean;
             /** Format: double */
@@ -20535,7 +20617,9 @@ export interface components {
             children: components["schemas"]["Tag"][];
             color?: string;
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             description?: string;
             favorite: boolean;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
@@ -20790,7 +20874,9 @@ export interface components {
             aliases?: string[];
             childIds?: number[];
             color?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             description?: string;
             favorite?: boolean;
             /** Format: double */
@@ -20818,7 +20904,9 @@ export interface components {
             code?: string;
             contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             fieldProvenance?: components["schemas"]["FieldProvenance"][];
@@ -20845,7 +20933,9 @@ export interface components {
         };
         TextDocumentCreate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             groupIds?: components["schemas"]["VideoGroupInput"][];
@@ -20892,7 +20982,9 @@ export interface components {
         };
         TextDocumentUpdate: {
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             groupIds?: components["schemas"]["VideoGroupInput"][];
@@ -21306,7 +21398,9 @@ export interface components {
             code?: string;
             contextTagApplications?: components["schemas"]["TagApplication"][];
             createdAt: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             director?: string;
@@ -21343,7 +21437,9 @@ export interface components {
             /** Format: double */
             clipStartSec?: number;
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             director?: string;
@@ -21524,7 +21620,9 @@ export interface components {
             /** Format: double */
             clipStartSec?: number;
             code?: string;
-            customFields?: Record<string, never>;
+            customFields?: {
+                [key: string]: unknown;
+            };
             date?: string;
             details?: string;
             director?: string;
