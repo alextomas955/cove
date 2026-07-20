@@ -1213,6 +1213,11 @@ public record ApiKeyResponse(string ApiKey);
 // ===== CONFIG DTOs =====
 public record SystemStatusDto(
     string Version,
+    // Semver-clean host contract version (major.minor.patch, no prerelease suffix). This is the
+    // value extensions pin their minimum-host-version requirement against; the SPA/SDK read it to
+    // negotiate compatibility. Distinct from Version, which is the full display string shown on the
+    // About / Runtime Status pages. Both derive from the same single version source.
+    string ContractVersion,
     string? AppDir,
     string? ConfigFile,
     string DatabasePath,

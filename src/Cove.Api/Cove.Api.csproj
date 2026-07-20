@@ -111,6 +111,12 @@
     <ProjectReference Include="..\Cove.Data\Cove.Data.csproj" />
     <ProjectReference Include="..\Cove.Plugins\Cove.Plugins.csproj" />
     <ProjectReference Include="..\Cove.Sdk\Cove.Sdk.csproj" />
+    <!-- Build-time source generator that emits the host-service DI forwarding (AddCoveHostServices).
+         Referenced as an analyzer so the generator assembly is never emitted into this project's
+         output and is not propagated to downstream (extension) builds. -->
+    <ProjectReference Include="..\..\tools\host-services-gen\host-services-gen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

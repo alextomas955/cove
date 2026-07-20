@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
+using Cove.Api.HostServices;
 using Cove.Api.Hubs;
 using Cove.Api.Services;
 using Cove.Core.Common;
@@ -358,13 +359,14 @@ try
         AutomaticDecompression = System.Net.DecompressionMethods.All,
     });
     builder.Services.AddHttpClient<MetadataServerService>();
-    // Runtime extensions can bind only Cove.Core types, so surface the Cove.Api metadata-server client
-    // through its Cove.Core interface (as IReferencePerformerImporter below does).
-    builder.Services.AddTransient<IMetadataServerService>(sp => sp.GetRequiredService<MetadataServerService>());
     // Lets extensions (AI.Faces) enrich a newly-created performer from a configured metadata server
     // when a reference/SAIE match is accepted. Singleton so it is shared into extension containers; it
     // opens its own scope per call.
-    builder.Services.AddSingleton<IReferencePerformerImporter, ReferencePerformerImporter>();
+    builder.Services.AddSingleton<ReferencePerformerImporter>();
+    // Surface the host services above to extensions through their Cove.Core interfaces. Runtime
+    // extensions can bind only Cove.Core types, so each [ExposeToExtensions]-marked concrete is
+    // forwarded to its interface here.
+    builder.Services.AddCoveHostServices();
 
     // Extension system
     var extensionsDataDir = CoveDefaultPaths.GetDataSubdirectory("extensions");
@@ -374,7 +376,8 @@ try
     {
         Configuration = builder.Configuration,
         DataDirectory = extensionsDataDir,
-        CoveVersion = coveVersion
+        CoveVersion = coveVersion,
+        CoveVersionDisplay = Cove.Core.Common.CoveVersion.Display
     };
     var extensionManager = new ExtensionManager(extensionContext);
     // Discover .NET plugin DLLs from extensions directory
