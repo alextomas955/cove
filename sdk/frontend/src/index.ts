@@ -21,6 +21,8 @@ export type {
   DetailPageProps,
   NavigateTarget,
   FindFilter,
+  JobInfo,
+  JobStatus,
   ListFilterOption,
   ListFilterContribution,
   ListSortContribution,
@@ -63,4 +65,12 @@ export {
 export type { CoveClient, CoveClientAuthAccessor } from "./api";
 
 // Hooks
-export { useFetch, useExtensionStore, useEntityList } from "./hooks";
+export {
+  useFetch,
+  useExtensionStore,
+  useEntityList,
+  useJobPolling,
+  isTerminalJobStatus,
+  DEFAULT_JOB_POLL_INTERVAL_MS,
+} from "./hooks";
+export type { UseJobPollingOptions } from "./hooks";
