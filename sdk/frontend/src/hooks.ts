@@ -52,7 +52,7 @@ export function useEntityList<T>(
     if (filter.perPage) params.set("perPage", String(filter.perPage));
     if (filter.sort) params.set("sort", filter.sort);
     if (filter.direction) params.set("direction", filter.direction);
-    if (filter.query) params.set("q", filter.query);
+    if (filter.q) params.set("q", filter.q);
     return params.toString();
   }, [filter]);
 
@@ -63,7 +63,7 @@ export function useEntityList<T>(
   const setSort = useCallback((sort: string, direction?: "asc" | "desc") =>
     setFilter(f => ({ ...f, sort, direction: direction ?? f.direction, page: 1 })), []);
   const setQuery = useCallback((query: string) =>
-    setFilter(f => ({ ...f, query, page: 1 })), []);
+    setFilter(f => ({ ...f, q: query, page: 1 })), []);
 
   return {
     items: data?.items ?? [],
