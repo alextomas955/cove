@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Puzzle } from "lucide-react";
 import { extensions } from "../api/client";
 import type { ExtensionAction } from "../api/types";
-import { useExtensions } from "../extensions/ExtensionLoader";
+import { useExtensions, renderExtensionIcon, resolveComponent } from "../extensions/ExtensionLoader";
 import { registerManualContext } from "./ManualContext";
 
 interface Props {
@@ -166,7 +166,12 @@ export function ExtensionSelectionActions({ entityType, selectedIds }: Props) {
             disabled={invokeActionMut.isPending}
             className="flex items-center gap-1 px-2 py-0.5 rounded text-xs text-accent hover:text-accent-hover hover:bg-accent/10 disabled:opacity-60"
           >
-            {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Puzzle className="w-3 h-3" />}
+            {isPending
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : renderExtensionIcon(action.icon, action.extensionId, resolveComponent, {
+                  sizeClass: "h-3 w-3",
+                  fallback: <Puzzle className="h-3 w-3" />,
+                })}
             {action.label}
           </button>
         );
