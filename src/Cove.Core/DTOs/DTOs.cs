@@ -2231,7 +2231,22 @@ public record BulkGroupUpdateDto
 }
 
 // ===== MERGE DTOs =====
-public record VideoMergeDto(int TargetId, List<int> SourceIds);
+public record VideoMergeDto(int TargetId, List<int> SourceIds)
+{
+    // Not a positional parameter: that would change the constructor and Deconstruct that extensions
+    // compiled against Cove 1.4 bind to. See src/Cove.Sdk/README.md.
+    public VideoMergeMetadataDto? Metadata { get; init; }
+}
+
+// Omitted choices retain target scalars or combined collections. Empty lists clear visible items.
+public record VideoMergeMetadataDto(
+    Dictionary<string, string>? Fields = null,
+    List<int>? TagIds = null,
+    List<int>? PerformerIds = null,
+    List<int>? GalleryIds = null,
+    List<string>? Urls = null,
+    List<VideoRemoteIdDto>? RemoteIds = null,
+    Dictionary<string, string>? CustomFields = null);
 public record PerformerMergeDto(int TargetId, List<int> SourceIds);
 public record TagMergeDto(int TargetId, List<int> SourceIds);
 public record StudioMergeDto(int TargetId, List<int> SourceIds);

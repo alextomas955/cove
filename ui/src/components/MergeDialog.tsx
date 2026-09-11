@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { QueryKey, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Merge, Loader2, X, ArrowRight } from "lucide-react";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
@@ -16,11 +16,13 @@ interface Props {
   items: MergeItem[];
   onMerge: (targetId: number, sourceIds: number[]) => Promise<unknown>;
   queryKey: string | QueryKey;
+  renderReview?: (targetId: number, sourceId: number, onBack: () => void) => ReactNode;
 }
 
-export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKey }: Props) {
+export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKey, renderReview }: Props) {
   const [targetId, setTargetId] = useState<number | null>(items[0]?.id ?? null);
   const qc = useQueryClient();
+  const [review, setReview] = useState(false);
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
@@ -36,6 +38,9 @@ export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKe
   });
 
   if (!open || items.length < 2) return null;
+
+  if (review && renderReview && targetId != null)
+    return renderReview(targetId, items.find((item) => item.id !== targetId)!.id, () => setReview(false));
 
   const sources = items.filter((i) => i.id !== targetId);
   const target = items.find((i) => i.id === targetId);
@@ -106,12 +111,12 @@ export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKe
             Cancel
           </button>
           <button
-            onClick={() => mutation.mutate()}
+            onClick={() => (renderReview && items.length === 2 ? setReview(true) : mutation.mutate())}
             disabled={mutation.isPending || !targetId}
             className="px-4 py-2 text-sm bg-accent hover:bg-accent-hover text-white rounded flex items-center gap-2 disabled:opacity-50"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Merge className="w-4 h-4" />}
-            Merge
+            {renderReview && items.length === 2 ? "Compare metadata" : "Merge"}
           </button>
         </div>
       </div>

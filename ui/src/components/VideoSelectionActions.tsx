@@ -1,3 +1,4 @@
+import { VideoMergeEditor } from "./VideoMergeEditor";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, Edit, Loader2, Merge, Play, Search, Trash2 } from "lucide-react";
@@ -285,6 +286,18 @@ export function VideoSelectionActions({
               id: video.id,
               name: video.title || video.files[0]?.basename || `Video ${video.id}`,
             }))}
+            renderReview={(targetId, sourceId, onBack) => (
+              <VideoMergeEditor
+                targetId={targetId}
+                sourceId={sourceId}
+                onClose={onBack}
+                queryKeys={[[queryKey]]}
+                onMerged={() => {
+                  setShowMerge(false);
+                  onSelectNone();
+                }}
+              />
+            )}
             onMerge={videos.merge}
             queryKey={queryKey}
           />

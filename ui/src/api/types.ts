@@ -3976,3 +3976,13 @@ export interface RegistryUninstallResult {
   dependents?: ExtensionDependencyImpact[];
   uninstalledExtensions?: string[];
 }
+
+export interface VideoMergeMetadata {
+  fields?: Record<string, "source" | "target">;
+  customFields?: Record<string, "source" | "target">;
+  tagIds?: number[];
+  performerIds?: number[];
+  galleryIds?: number[];
+  urls?: string[];
+  remoteIds?: VideoRemoteId[];
+}

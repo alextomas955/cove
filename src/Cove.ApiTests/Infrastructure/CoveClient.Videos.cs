@@ -250,6 +250,11 @@ public sealed partial class CoveClient
             new VideoMergeDto(target.Id, sources.Select(source => source.Id).ToList()),
             cancellationToken);
 
+    public Task<VideoDto> MergeVideoMetadataAsync(VideoDto target, VideoDto source,
+        VideoMergeMetadataDto metadata, CancellationToken cancellationToken = default)
+        => SendAsync<VideoDto>(HttpMethod.Post, "/api/videos/merge",
+            new VideoMergeDto(target.Id, [source.Id]) { Metadata = metadata }, cancellationToken);
+
     public Task AssignVideoFileAsync(
         VideoDto video,
         int fileId,

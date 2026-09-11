@@ -1,6 +1,6 @@
 import { QueryKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitMerge, Loader2, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 export interface DetailMergeCandidate {
   id: number;
@@ -18,6 +18,7 @@ interface Props {
   onMerge: (targetId: number, sourceIds: number[]) => Promise<unknown>;
   invalidateQueryKeys: Array<string | QueryKey>;
   onMerged?: () => void;
+  renderReview?: (targetId: number, sourceId: number, onBack: () => void) => ReactNode;
 }
 
 export function DetailMergeDialog({
@@ -29,8 +30,10 @@ export function DetailMergeDialog({
   onMerge,
   invalidateQueryKeys,
   onMerged,
+  renderReview,
 }: Props) {
   const queryClient = useQueryClient();
+  const [review, setReview] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   // "intoCurrent": merge other entries into this one (this one is kept).
@@ -39,6 +42,7 @@ export function DetailMergeDialog({
 
   useEffect(() => {
     if (!open) {
+      setReview(false);
       setSearchTerm("");
       setSelectedIds([]);
       setDirection("intoCurrent");
@@ -68,6 +72,13 @@ export function DetailMergeDialog({
   });
 
   if (!open) return null;
+
+  if (review && renderReview)
+    return renderReview(
+      direction === "intoCurrent" ? targetItem.id : selectedIds[0],
+      direction === "intoCurrent" ? selectedIds[0] : targetItem.id,
+      () => setReview(false),
+    );
 
   const intoOther = direction === "intoOther";
   const toggleSelection = (id: number) => {
@@ -205,12 +216,16 @@ export function DetailMergeDialog({
               Cancel
             </button>
             <button
-              onClick={() => mergeMut.mutate()}
+              onClick={() => (renderReview && selectedIds.length === 1 ? setReview(true) : mergeMut.mutate())}
               disabled={selectedIds.length === 0 || mergeMut.isPending}
               className="inline-flex items-center gap-2 rounded bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {mergeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
-              {intoOther ? `Merge this ${entityType} into selected` : `Merge into current ${entityType}`}
+              {renderReview && selectedIds.length === 1
+                ? "Compare metadata"
+                : intoOther
+                  ? `Merge this ${entityType} into selected`
+                  : `Merge into current ${entityType}`}
             </button>
           </div>
         </div>

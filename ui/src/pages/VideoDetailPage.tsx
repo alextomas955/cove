@@ -1,3 +1,4 @@
+import { VideoMergeEditor } from "../components/VideoMergeEditor";
 import { VideoCreateModal } from "../components/VideoCreateModal";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
@@ -1397,6 +1398,17 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
                 subtitle: item.studioName,
               }));
             }}
+            renderReview={(targetId, sourceId, onBack) => (
+              <VideoMergeEditor
+                targetId={targetId}
+                sourceId={sourceId}
+                onClose={onBack}
+                onMerged={(survivorId) => {
+                  setShowMerge(false);
+                  onNavigate({ page: "video", id: survivorId });
+                }}
+              />
+            )}
             onMerge={(targetId, sourceIds) => videos.merge(targetId, sourceIds)}
             invalidateQueryKeys={[["video", id], ["videos"]]}
           />
