@@ -22,6 +22,8 @@ describe("usePaginatedImageLightbox", () => {
     act(() => result.current.openImage(2));
     expect(result.current.lightboxProps.open).toBe(true);
     expect(result.current.lightboxProps.initialIndex).toBe(1);
+    expect(result.current.lightboxProps.totalCount).toBe(3);
+    expect(result.current.lightboxProps.positionOffset).toBe(0);
     expect(result.current.lightboxProps.hasNext).toBe(true);
 
     let loaded: Awaited<ReturnType<NonNullable<typeof result.current.lightboxProps.loadNext>>> = [];
@@ -47,9 +49,28 @@ describe("usePaginatedImageLightbox", () => {
 
     act(() => result.current.openScope(selected));
     expect(result.current.lightboxProps.images.map((item) => item.id)).toEqual([2, 4]);
+    expect(result.current.lightboxProps.totalCount).toBe(2);
+    expect(result.current.lightboxProps.positionOffset).toBe(0);
     expect(result.current.lightboxProps.autoPlay).toBe(true);
     expect(result.current.lightboxProps.hasPrevious).toBe(false);
     expect(result.current.lightboxProps.hasNext).toBe(false);
     expect(result.current.lightboxProps.wrap).toBe(true);
+  });
+
+  it("reports the position offset for a later result page", () => {
+    const { result } = renderHook(() =>
+      usePaginatedImageLightbox({
+        items: [image(5, "Fifth"), image(6, "Sixth")],
+        filter: { page: 3, perPage: 2 },
+        totalCount: 8,
+        infinitePageSize: false,
+        queryPage: vi.fn(),
+        toLightboxImage: (item) => ({ id: item.id, src: `/image/${item.id}` }),
+      }),
+    );
+
+    act(() => result.current.openImage(5));
+    expect(result.current.lightboxProps.positionOffset).toBe(4);
+    expect(result.current.lightboxProps.totalCount).toBe(8);
   });
 });

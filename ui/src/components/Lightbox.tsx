@@ -47,6 +47,8 @@ export interface LightboxProps {
   hasPrevious?: boolean;
   hasNext?: boolean;
   wrap?: boolean;
+  totalCount?: number;
+  positionOffset?: number;
 }
 
 export function Lightbox({
@@ -63,6 +65,8 @@ export function Lightbox({
   hasPrevious = false,
   hasNext = false,
   wrap = true,
+  totalCount,
+  positionOffset = 0,
 }: LightboxProps) {
   const [queuedImages, setQueuedImages] = useState(images);
   const [index, setIndex] = useState(initialIndex);
@@ -88,6 +92,8 @@ export function Lightbox({
   const lastTrackedIndex = useRef<number | null>(null);
 
   const count = queuedImages.length;
+  const displayCount = totalCount ?? count;
+  const displayPosition = positionOffset + index + 1;
   const current = queuedImages[index];
   const currentSrc = useRef<string | undefined>(current?.src);
   currentSrc.current = open ? current?.src : undefined;
@@ -491,7 +497,7 @@ export function Lightbox({
       {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 pt-[max(1rem,env(safe-area-inset-top))] bg-gradient-to-b from-black/80 via-black/40 to-transparent">
         <span className="text-white text-sm font-medium select-none">
-          {index + 1} / {count}
+          {displayPosition} / {displayCount}
           {current?.title && <span className="ml-3 text-white/70">{current.title}</span>}
         </span>
         <div className="flex items-center gap-2">

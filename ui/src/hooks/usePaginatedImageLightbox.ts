@@ -79,6 +79,8 @@ export function usePaginatedImageLightbox({
     | "loadPrevious"
     | "loadNext"
     | "wrap"
+    | "totalCount"
+    | "positionOffset"
   > = {
     images: lightboxImages,
     initialIndex,
@@ -90,6 +92,8 @@ export function usePaginatedImageLightbox({
     loadPrevious: () => loadPage(pageBounds.first - 1, "previous"),
     loadNext: () => loadPage(pageBounds.last + 1, "next"),
     wrap: scopeItems !== null || infinitePageSize,
+    totalCount: scopeItems?.length ?? totalCount,
+    positionOffset: scopeItems === null && !infinitePageSize ? (pageBounds.first - 1) * (filter.perPage ?? 40) : 0,
   };
 
   return { openImage, openScope, lightboxProps };
