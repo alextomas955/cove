@@ -1,11 +1,13 @@
 import { TagBadge } from "./shared";
+import { metadataServerLabel } from "./MetadataServerLinks";
+import { useOptionalAppConfig } from "../state/AppConfigContext";
 import { PerformerBadge } from "./EntityCards";
 import { getEditableTagIds } from "../utils/tags";
 import { GroupedTagOptionList, SelectedTagChips } from "./TagSelector";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { videos, tags } from "../api/client";
-import type { Video, VideoMergeMetadata, Tag } from "../api/types";
+import type { Video, VideoMergeMetadata, Tag, MetadataServer } from "../api/types";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import {
   MetadataDiff,
@@ -40,6 +42,7 @@ export function buildVideoMergeDiff(
   target: Video,
   unavailableCovers: string[] = [],
   onUnavailable?: (url: string) => void,
+  metadataServers: Pick<MetadataServer, "endpoint" | "name">[] = [],
 ) {
   const customKeys = [
     ...new Set([...Object.keys(target.customFields ?? {}), ...Object.keys(source.customFields ?? {})]),
@@ -97,9 +100,13 @@ export function buildVideoMergeDiff(
     label: "Remote IDs",
     kind: "list",
     itemKey: (item) => remoteKey(item as Video["remoteIds"][number]),
+    itemLabel: (item) => {
+      const remote = item as Video["remoteIds"][number];
+      return `${metadataServerLabel(remote.endpoint, metadataServers)}: ${remote.remoteId}`;
+    },
     render: (item) => {
       const remote = item as Video["remoteIds"][number];
-      return `${remote.endpoint}\n${remote.remoteId}`;
+      return `${metadataServerLabel(remote.endpoint, metadataServers)}\n${remote.remoteId}`;
     },
   });
   fields.push(...customKeys.map((key) => ({ key: `custom:${key}`, label: `Custom field · ${key}` })));
@@ -241,13 +248,20 @@ function VideoMergeDraft({
   queryKeys: QueryKey[];
 }) {
   const [addedTags, setAddedTags] = useState<Tag[]>([]);
+  const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   const [unavailableCovers, setUnavailableCovers] = useState<string[]>([]);
   const comparison = useMemo(() => {
-    const comparison = buildVideoMergeDiff(source, target, unavailableCovers, (url) => {
-      setUnavailableCovers((current) => (current.includes(url) ? current : [...current, url]));
-      if (url === (source.imagePath ?? videos.screenshotUrl(source.id, source.updatedAt)))
-        setSelection((current) => ({ ...current, cover: "target" }));
-    });
+    const comparison = buildVideoMergeDiff(
+      source,
+      target,
+      unavailableCovers,
+      (url) => {
+        setUnavailableCovers((current) => (current.includes(url) ? current : [...current, url]));
+        if (url === (source.imagePath ?? videos.screenshotUrl(source.id, source.updatedAt)))
+          setSelection((current) => ({ ...current, cover: "target" }));
+      },
+      metadataServers,
+    );
     const tagField = comparison.fields.find((field) => field.key === "tags")!;
     tagField.additionalItems = addedTags;
     tagField.renderListEditor = (selected, onChange, disabled) => (
@@ -261,7 +275,7 @@ function VideoMergeDraft({
       />
     );
     return comparison;
-  }, [source, target, addedTags, unavailableCovers]);
+  }, [source, target, addedTags, unavailableCovers, metadataServers]);
   const [selection, setSelection] = useState(() =>
     defaultDiffSelection(comparison.fields, comparison.source, comparison.target),
   );

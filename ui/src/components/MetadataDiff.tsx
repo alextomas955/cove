@@ -262,7 +262,7 @@ function ListDiff({
                             key={item.id}
                             className={
                               field.render
-                                ? "max-w-full whitespace-pre-wrap break-words"
+                                ? "max-w-full whitespace-pre-wrap break-words text-sm"
                                 : "max-w-full whitespace-pre-wrap break-words rounded bg-card px-2 py-1 text-sm"
                             }
                           >

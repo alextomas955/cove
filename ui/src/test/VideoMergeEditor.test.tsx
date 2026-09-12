@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { VideoMergeEditor } from "../components/VideoMergeEditor";
+import { VideoMergeEditor, buildVideoMergeDiff, videoMergeMetadata } from "../components/VideoMergeEditor";
+import { defaultDiffSelection } from "../components/MetadataDiff";
 import type { Video } from "../api/types";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), merge: vi.fn(), findTags: vi.fn() }));
@@ -42,6 +43,27 @@ beforeEach(() => {
   api.findTags.mockResolvedValue({ items: [{ id: 9, name: "Added tag" }] });
 });
 describe("VideoMergeEditor", () => {
+  it("labels remote IDs with configured server names without changing merge identity", () => {
+    const source = {
+      ...video(1),
+      remoteIds: [{ endpoint: "https://metadata.example/graphql/", remoteId: "source-id" }],
+    };
+    const target = {
+      ...video(2),
+      remoteIds: [{ endpoint: "https://www.other.example/graphql", remoteId: "target-id" }],
+    };
+    const diff = buildVideoMergeDiff(source, target, [], undefined, [
+      { endpoint: "https://metadata.example/graphql", name: "Example catalog" },
+    ]);
+    const field = diff.fields.find((field) => field.key === "remoteIds")!;
+    expect(field.render!(source.remoteIds[0])).toBe("Example catalog\nsource-id");
+    expect(field.itemLabel!(source.remoteIds[0])).toBe("Example catalog: source-id");
+    expect(field.render!(target.remoteIds[0])).toBe("other.example\ntarget-id");
+    const selection = defaultDiffSelection(diff.fields, diff.source, diff.target);
+    expect(videoMergeMetadata(selection, source, target).remoteIds).toEqual(
+      expect.arrayContaining([...source.remoteIds, ...target.remoteIds]),
+    );
+  });
   it("saves mixed choices and a library tag in a single merge request", async () => {
     const { onMerged } = setup();
     fireEvent.click(await screen.findByLabelText("Title from source"));
