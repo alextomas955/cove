@@ -19,7 +19,7 @@ import { FloatingActionMenu } from "../components/FloatingActionMenu";
 import { ListLoadError } from "../components/ListLoadError";
 import { MediaDetailLayout } from "../components/MediaDetailLayout/MediaDetailLayout";
 import { SegmentVisualSimilarityPanel, useSegmentVisualSimilarityAvailable } from "../components/VisualSimilarityPanel";
-import { VideoPlayer } from "../components/VideoPlayer";
+import { VideoPlayer, type VideoPlayerSeek } from "../components/VideoPlayer";
 import { ProvenanceBadge, TagBadge } from "../components/shared";
 import { useBackNavigation } from "../hooks/useBackNavigation";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -112,12 +112,11 @@ function ResolvedSpanPlayerCard({
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
   const { config } = useAppConfig();
-  const [, setCurrentAbsoluteTime] = useState(detail.intervals[0]?.startSec ?? detail.span.startSec);
   const [activeIntervalIndex, setActiveIntervalIndex] = useState(0);
-  const [resumeTime, setResumeTime] = useState(detail.intervals[0]?.startSec ?? detail.span.startSec);
+  const [resumeTime, setResumeTime] = useState(detail.span.startSec);
   const [autostart, setAutostart] = useState(config?.ui.autostartVideo ?? false);
   const autoplayOnOpenRef = useRef(config?.ui.autostartVideo ?? false);
-  const [autostartToken, setAutostartToken] = useState(0);
+  const playerSeekRef = useRef<VideoPlayerSeek | null>(null);
   const [activeTab, setActiveTab] = useState<ResolvedSpanTab>("overview");
   const [showOpsMenu, setShowOpsMenu] = useState(false);
   const opsMenuRef = useRef<HTMLDivElement>(null);
@@ -256,15 +255,11 @@ function ResolvedSpanPlayerCard({
   }, [config?.ui.autostartVideo]);
 
   useEffect(() => {
-    const initialStart = intervals[0]?.startSec ?? detail.span.startSec;
-    setCurrentAbsoluteTime(initialStart);
+    const initialStart = detail.span.startSec;
     setResumeTime(initialStart);
     setAutostart(autoplayOnOpenRef.current);
-    setAutostartToken(0);
     setActiveIntervalIndex(0);
   }, [detail.span.spanKey, detail.span.startSec, intervals]);
-
-  const currentInterval = intervals[activeIntervalIndex] ?? intervals[0];
 
   const seekAbsolute = useCallback(
     (nextTime: number) => {
@@ -272,32 +267,13 @@ function ResolvedSpanPlayerCard({
       const bounded = clampNumber(nextTime, intervals[nextIndex].startSec, intervals[nextIndex].endSec);
       setActiveIntervalIndex(nextIndex);
       setResumeTime(bounded);
-      setCurrentAbsoluteTime(bounded);
+      playerSeekRef.current?.(bounded, false);
     },
     [intervals],
   );
 
-  const advanceInterval = useCallback(() => {
-    const nextIndex = activeIntervalIndex + 1;
-    if (nextIndex < intervals.length) {
-      const nextStart = intervals[nextIndex].startSec;
-      setActiveIntervalIndex(nextIndex);
-      setResumeTime(nextStart);
-      setCurrentAbsoluteTime(nextStart);
-      setAutostart(true);
-      setAutostartToken((value) => value + 1);
-      return;
-    }
-
-    setAutostart(false);
-    const endTime = intervals[intervals.length - 1]?.endSec ?? detail.span.endSec;
-    setResumeTime(endTime);
-    setCurrentAbsoluteTime(endTime);
-  }, [activeIntervalIndex, detail.span.endSec, intervals]);
-
   const handlePlayerTimeUpdate = useCallback(
     (nextTime: number) => {
-      setCurrentAbsoluteTime(nextTime);
       const nextIndex = findIntervalIndex(nextTime, intervals);
       if (nextIndex !== activeIntervalIndex) {
         setActiveIntervalIndex(nextIndex);
@@ -355,9 +331,11 @@ function ResolvedSpanPlayerCard({
             faces={spanFaces}
             captions={currentFile.captions}
             onPlay={() => setAutostart(false)}
+            onSeekRegister={(seek) => {
+              playerSeekRef.current = seek;
+            }}
             onTimeUpdate={handlePlayerTimeUpdate}
             autostart={autostart}
-            autostartToken={autostartToken}
             playbackTracking={{
               hostType: "video",
               hostId: detail.videoId,
@@ -365,15 +343,13 @@ function ResolvedSpanPlayerCard({
               scopeKey: `video:${detail.videoId}:span:${detail.span.spanKey}`,
               itemHostType: "video",
               itemHostId: detail.videoId,
-              clipStartSec: currentInterval.startSec,
-              clipEndSec: currentInterval.endSec,
+              clipStartSec: detail.span.startSec,
+              clipEndSec: detail.span.endSec,
               context: {
                 spanKey: detail.span.spanKey,
-                intervalIndex: activeIntervalIndex,
               },
             }}
-            onEnded={advanceInterval}
-            clip={{ start: currentInterval.startSec, end: currentInterval.endSec, loop: false }}
+            clip={{ start: detail.span.startSec, end: detail.span.endSec, loop: false }}
           />
         </div>
       ) : (

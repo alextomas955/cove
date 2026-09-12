@@ -1232,6 +1232,83 @@ describe("VideoPlayer source lifecycle", () => {
     expect(video.currentTime).toBe(20);
   });
 
+  it("uses a resume time selected inside a clip before metadata loads", () => {
+    const renderPlayer = (resumeTime: number) => (
+      <VideoPlayer
+        streamUrl="/api/stream/video/1"
+        format="mp4"
+        duration={120}
+        videoId={1}
+        detections={[]}
+        trackingEnabled={false}
+        resumeTime={resumeTime}
+        clip={{ start: 5, end: 25, loop: false }}
+      />
+    );
+    const { container, rerender } = render(renderPlayer(5));
+    const video = container.querySelector("video") as HTMLVideoElement;
+
+    rerender(renderPlayer(20));
+    act(() => video.dispatchEvent(new Event("loadedmetadata")));
+
+    expect(video.currentTime).toBe(20);
+  });
+
+  it("keeps an imperative clip seek through metadata loading when automatic resume is disabled", () => {
+    mockUiConfig.alwaysResumeOnPlayback = false;
+    let seek: ((time: number, forcePlay?: boolean) => void) | undefined;
+    const { container } = render(
+      <VideoPlayer
+        streamUrl="/api/stream/video/1"
+        format="mp4"
+        duration={120}
+        videoId={1}
+        detections={[]}
+        trackingEnabled={false}
+        resumeTime={5}
+        onSeekRegister={(registeredSeek) => {
+          seek = registeredSeek;
+        }}
+        clip={{ start: 5, end: 25, loop: false }}
+      />,
+    );
+    const video = container.querySelector("video") as HTMLVideoElement;
+
+    act(() => seek?.(20, false));
+    act(() => video.dispatchEvent(new Event("loadedmetadata")));
+
+    expect(video.currentTime).toBe(20);
+    expect(playMock).not.toHaveBeenCalled();
+  });
+
+  it("does not restore a pending imperative seek after navigating away and back before metadata loads", () => {
+    mockUiConfig.alwaysResumeOnPlayback = false;
+    let seek: ((time: number, forcePlay?: boolean) => void) | undefined;
+    const renderPlayer = (videoId: number) => (
+      <VideoPlayer
+        streamUrl={`/api/stream/video/${videoId}`}
+        format="mp4"
+        duration={120}
+        videoId={videoId}
+        detections={[]}
+        trackingEnabled={false}
+        onSeekRegister={(registeredSeek) => {
+          seek = registeredSeek;
+        }}
+        clip={{ start: 5, end: 25, loop: false }}
+      />
+    );
+    const { container, rerender } = render(renderPlayer(1));
+    const video = container.querySelector("video") as HTMLVideoElement;
+
+    act(() => seek?.(20, false));
+    rerender(renderPlayer(2));
+    rerender(renderPlayer(1));
+    act(() => video.dispatchEvent(new Event("loadedmetadata")));
+
+    expect(video.currentTime).toBe(5);
+  });
+
   it("consumes pending metadata work when metadata is ready before its event is delivered", async () => {
     const renderPlayer = (clipStart: number) => (
       <VideoPlayer
@@ -1254,6 +1331,54 @@ describe("VideoPlayer source lifecycle", () => {
 
     await waitFor(() => expect(playMock).toHaveBeenCalledOnce());
     expect(video.currentTime).toBe(20);
+  });
+
+  it("keeps the decoded frame when a non-looping clip reaches its end", async () => {
+    const onEnded = vi.fn();
+    const onTimeUpdate = vi.fn();
+    const { container } = render(
+      <VideoPlayer
+        streamUrl="/api/stream/video/1"
+        format="mp4"
+        duration={120}
+        videoId={1}
+        detections={[]}
+        onEnded={onEnded}
+        onTimeUpdate={onTimeUpdate}
+        clip={{ start: 5, end: 25, loop: false }}
+      />,
+    );
+    const video = container.querySelector("video") as HTMLVideoElement;
+    let currentTime = 5;
+    const currentTimeSet = vi.fn((nextTime: number) => {
+      currentTime = nextTime;
+    });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: currentTimeSet,
+    });
+
+    act(() => video.dispatchEvent(new Event("play")));
+    currentTime = 24.98;
+    act(() => video.dispatchEvent(new Event("timeupdate")));
+
+    expect(pauseMock).toHaveBeenCalledOnce();
+    expect(currentTimeSet).not.toHaveBeenCalled();
+    expect(onEnded).toHaveBeenCalledOnce();
+    expect(onTimeUpdate).toHaveBeenLastCalledWith(25);
+    expect(screen.getByText("0:20 / 0:20")).toBeInTheDocument();
+    expect(mockPlaybackTracker.recordInterval).toHaveBeenCalledWith(
+      expect.objectContaining({ endSec: 25, currentPositionSec: 25, state: "ended" }),
+    );
+
+    act(() => video.dispatchEvent(new Event("timeupdate")));
+    expect(onEnded).toHaveBeenCalledOnce();
+
+    await act(async () => fireEvent.click(video));
+    expect(currentTimeSet).toHaveBeenCalledOnce();
+    expect(currentTimeSet).toHaveBeenCalledWith(5);
+    expect(playMock).toHaveBeenCalledOnce();
   });
 
   it("does not declare a misleading MIME type for unknown direct video streams", () => {
