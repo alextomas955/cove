@@ -95,6 +95,43 @@ describe("PaginationControls", () => {
     }
   });
 
+  it("groups the page numbers so narrow screens show them above the arrows and Go-to control", () => {
+    const { container } = renderControls(10, 20);
+    const numbers = screen.getByTestId("page-numbers");
+
+    expect(numbers).toHaveClass("order-first", "basis-full", "sm:order-none", "sm:basis-auto");
+    expect(numbers.querySelectorAll('button[aria-label^="Page "], span[aria-hidden="true"]')).toHaveLength(7);
+    expect(container.querySelectorAll('button[aria-label^="Page "]')).toHaveLength(
+      numbers.querySelectorAll('button[aria-label^="Page "]').length,
+    );
+
+    // Narrow-screen order: « ‹ Go to… › » with the numbers row first.
+    const mobileOrder = [
+      ["First page", "order-1"],
+      ["Previous page", "order-2"],
+      ["Go to page", "order-3"],
+      ["Next page", "order-4"],
+      ["Last page", "order-5"],
+    ] as const;
+    for (const [name, orderClass] of mobileOrder) {
+      const control = screen.getByRole("button", { name });
+      expect(control).toHaveClass(orderClass, "sm:order-none");
+      expect(numbers).not.toContainElement(control);
+    }
+  });
+
+  it("keeps the narrow-screen order while the Go-to input is open", async () => {
+    const user = userEvent.setup();
+    renderControls(10, 20);
+
+    await user.click(screen.getByRole("button", { name: "Go to page" }));
+
+    expect(screen.getByRole("textbox", { name: "Page number" }).closest("form")).toHaveClass(
+      "order-3",
+      "sm:order-none",
+    );
+  });
+
   it("navigates when a page number is clicked", async () => {
     const user = userEvent.setup();
     const { goTo } = renderControls(10, 20);
