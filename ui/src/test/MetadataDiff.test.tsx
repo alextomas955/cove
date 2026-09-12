@@ -52,13 +52,13 @@ describe("MetadataDiff", () => {
   });
   it("deduplicates lists by adapter identity and allows deselecting shared and unique items", () => {
     render(<Harness />);
-    expect(screen.getByLabelText("Include Tags: shared")).toBeChecked();
-    expect(screen.getByLabelText("Include Tags: new")).toBeChecked();
-    expect(screen.getByLabelText("Include Tags: existing")).toBeChecked();
-    fireEvent.click(screen.getByLabelText("Include Tags: shared"));
-    fireEvent.click(screen.getByLabelText("Include Tags: new"));
-    expect(screen.getByLabelText("Include Tags: shared")).not.toBeChecked();
-    expect(screen.getByLabelText("Include Tags: existing")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Remove Tags: shared" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Tags: existing" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Tags: shared" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Tags: new" }));
+    expect(screen.getByRole("button", { name: "Add Tags: shared" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Tags: existing" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Tags: Source only" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Tags: Target only" })).toBeInTheDocument();
   });
@@ -70,14 +70,17 @@ describe("MetadataDiff", () => {
       "Tags: Target only",
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Use source Tags" }));
-    expect(screen.getByLabelText("Include Tags: shared")).toBeChecked();
-    expect(screen.getByLabelText("Include Tags: new")).toBeChecked();
-    expect(screen.getByLabelText("Include Tags: existing")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Remove Tags: shared" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Tags: existing" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use target Tags" }));
-    expect(screen.getByLabelText("Include Tags: new")).not.toBeChecked();
-    expect(screen.getByLabelText("Include Tags: existing")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Add Tags: new" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Tags: existing" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add Tags: new" }));
+    expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Tags" })).queryByRole("checkbox")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use combined Tags" }));
-    expect(screen.getByLabelText("Include Tags: new")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
   });
   it("renders adapter visuals and hides only identical fields", () => {
     render(<Harness />);

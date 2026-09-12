@@ -48,6 +48,9 @@ describe("VideoMergeEditor", () => {
     fireEvent.change(screen.getByPlaceholderText("Search tags…"), { target: { value: "Added" } });
     fireEvent.click(await screen.findByRole("button", { name: "Added tag" }));
     expect(screen.getByRole("region", { name: "Editable tags: Added to result" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Added tag" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Added tag" }));
+    expect(screen.getByRole("button", { name: "Remove Added tag" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Merge videos" }));
     await waitFor(() => expect(onMerged).toHaveBeenCalledWith(2));
     expect(api.merge).toHaveBeenCalledWith(

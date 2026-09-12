@@ -1,7 +1,7 @@
 import { TagBadge } from "./shared";
 import { PerformerBadge } from "./EntityCards";
 import { getEditableTagIds } from "../utils/tags";
-import { GroupedTagOptionList } from "./TagSelector";
+import { GroupedTagOptionList, SelectedTagChips } from "./TagSelector";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { videos, tags } from "../api/client";
@@ -67,12 +67,26 @@ export function buildVideoMergeDiff(
       label,
       kind: "list",
       itemKey: (item) => String((item as NamedItem).id),
+      itemLabel: (item) => (item as NamedItem).name ?? (item as NamedItem).title ?? "Untitled",
       render: (item) => (item as NamedItem).name ?? (item as NamedItem).title ?? "Untitled",
     });
   }
-  fields.find((field) => field.key === "tags")!.render = (value) => {
+  fields.find((field) => field.key === "tags")!.renderListItem = (value, action) => {
     const tag = value as Tag;
-    return <TagBadge name={tag.name} tag={tag} />;
+    if (!action || action.selected) return <SelectedTagChips tags={[tag]} onRemove={action?.toggle} />;
+    return (
+      <span className="inline-flex items-center gap-1.5 opacity-50">
+        <SelectedTagChips tags={[tag]} />
+        <button
+          type="button"
+          aria-label={`Add ${tag.name}`}
+          onClick={action.toggle}
+          className="text-muted hover:text-foreground"
+        >
+          +
+        </button>
+      </span>
+    );
   };
   fields.find((field) => field.key === "performers")!.render = (value) => (
     <PerformerBadge performer={value as Video["performers"][number]} />

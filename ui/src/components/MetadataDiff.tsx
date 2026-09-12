@@ -17,6 +17,8 @@ export interface DiffField {
   render?: (value: unknown) => ReactNode;
   equal?: (left: unknown, right: unknown) => boolean;
   itemKey?: (value: unknown) => string;
+  itemLabel?: (value: unknown) => string;
+  renderListItem?: (value: unknown, action?: { selected: boolean; toggle: () => void }) => ReactNode;
   additionalItems?: unknown[];
   renderListEditor?: (selected: string[], onChange: (selected: string[]) => void, disabled: boolean) => ReactNode;
 }
@@ -236,8 +238,24 @@ function ListDiff({
                   <span className="mb-2 block text-xs text-secondary md:hidden">
                     {side === "source" ? sourceLabel : side === "target" ? targetLabel : "Result"}
                   </span>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-start gap-1.5">
                     {group.items.map((item) => {
+                      const included = selected.includes(item.id);
+                      const toggle = () => {
+                        if (!disabled)
+                          onChange(included ? selected.filter((id) => id !== item.id) : [...selected, item.id]);
+                      };
+                      if (field.renderListItem) {
+                        if (side !== "result" && !(side === "source" ? item.inSource : item.inTarget)) return null;
+                        return (
+                          <div key={item.id} className="max-w-full">
+                            {field.renderListItem(
+                              item[side],
+                              side === "result" ? { selected: included, toggle } : undefined,
+                            )}
+                          </div>
+                        );
+                      }
                       if (side !== "result")
                         return (side === "source" ? item.inSource : item.inTarget) ? (
                           <span
@@ -252,7 +270,7 @@ function ListDiff({
                           </span>
                         ) : null;
                       return (
-                        <label
+                        <span
                           key={item.id}
                           className={
                             field.render
@@ -260,25 +278,21 @@ function ListDiff({
                               : "flex max-w-full cursor-pointer items-start gap-2 rounded border border-border bg-card px-2 py-1 text-sm"
                           }
                         >
-                          <input
-                            type="checkbox"
-                            checked={selected.includes(item.id)}
-                            aria-label={`Include ${field.label}: ${item.id}`}
-                            onChange={() =>
-                              onChange(
-                                selected.includes(item.id)
-                                  ? selected.filter((id) => id !== item.id)
-                                  : [...selected, item.id],
-                              )
-                            }
-                            className="mt-1 accent-accent"
-                          />
                           <span
                             className={`min-w-0 whitespace-pre-wrap break-words ${selected.includes(item.id) ? "" : "text-secondary line-through"}`}
                           >
                             {render(item.result)}
                           </span>
-                        </label>
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={toggle}
+                            aria-label={`${included ? "Remove" : "Add"} ${field.label}: ${field.itemLabel?.(item.result) ?? item.id}`}
+                            className="shrink-0 text-muted hover:text-foreground"
+                          >
+                            {included ? "×" : "+"}
+                          </button>
+                        </span>
                       );
                     })}
                     {side !== "result" &&
