@@ -1047,9 +1047,27 @@ export function ListPage({
   ) {
     setSettledCount({ listIdentity, totalCount });
   }
+  const settledTotalPages = Math.ceil(
+    settledCount.totalCount / (infinitePageSize ? Math.max(settledCount.totalCount, 1) : perPage),
+  );
   const reloading =
-    resolvedLoadState.status === "pending" && settledCount.listIdentity === listIdentity && settledCount.totalCount > 0;
+    resolvedLoadState.status === "pending" &&
+    settledCount.listIdentity === listIdentity &&
+    settledCount.totalCount > 0 &&
+    page <= settledTotalPages;
   const shownTotalCount = reloading ? settledCount.totalCount : totalCount;
+  // Keep the last successfully committed results on screen while that reload is pending, so a page
+  // change swaps the old items for the new ones instead of collapsing to a spinner in between, which
+  // also removed the scrollbar and shifted the layout. The children are rendered as a fragment, so
+  // the synthetic success state never hands its undefined data to a render callback.
+  const settledChildrenRef = useRef<ReactNode>(children);
+  useEffect(() => {
+    if (resolvedLoadState.status === "success" || resolvedLoadState.status === "empty") {
+      settledChildrenRef.current = children;
+    }
+  });
+  const resultsState: QueryLoadState<unknown> = reloading ? { status: "success", data: undefined } : resolvedLoadState;
+  const resultsChildren = reloading ? settledChildrenRef.current : children;
   const effectivePerPage = infinitePageSize ? Math.max(shownTotalCount, 1) : perPage;
   const totalPages = Math.max(1, Math.ceil(shownTotalCount / effectivePerPage));
   const start = shownTotalCount > 0 ? (infinitePageSize ? 1 : (page - 1) * effectivePerPage + 1) : 0;
@@ -1853,7 +1871,7 @@ export function ListPage({
 
       {/* Results */}
       <QueryState
-        state={resolvedLoadState}
+        state={resultsState}
         loading={
           <div role="status" aria-label={`Loading ${title}`} className="flex h-64 items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-accent" />
@@ -1865,10 +1883,12 @@ export function ListPage({
         <>
           <ListPageCardSizeContext.Provider value={{ cardMinWidthPx, zoomLevel }}>
             <div
+              aria-busy={reloading || undefined}
               className="list-page-content pt-3"
               style={{ "--card-min-width": `${cardMinWidthPx}px` } as React.CSSProperties}
             >
-              {children}
+              {reloading && <span role="status" aria-label={`Loading ${title} page ${page}`} className="sr-only" />}
+              {resultsChildren}
               {infinitePageSize && infiniteScroll && !contentOwnsInfiniteLoading && (
                 <InfiniteScrollSentinel
                   hasMore={Boolean(infiniteScroll.hasNextPage)}
