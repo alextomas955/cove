@@ -127,10 +127,21 @@ function readTab(defaultTab: string) {
 
 export function useDetailTabUrlState<TTab extends string>(defaultTab: TTab) {
   const [activeTab, setActiveTabState] = useState<TTab>(() => readTab(defaultTab) as TTab);
+  // Selecting the tab that happens to be the default leaves no "tab" parameter behind, so the URL
+  // alone cannot tell a deliberate choice from an untouched page. Remember the choice here instead:
+  // the app config resolves after mount and can move which tab ranks first, and a default arriving
+  // that late must not overrule the viewer.
+  const tabChosen = useRef(false);
 
+  // Adopt the default whenever it resolves or changes, but only while the viewer has not chosen.
+  useEffect(() => {
+    if (tabChosen.current) return;
+    setActiveTabState(readTab(defaultTab) as TTab);
+  }, [defaultTab]);
+
+  // The URL stays authoritative for real navigation, including back and forward.
   useEffect(() => {
     const applyUrlTab = () => setActiveTabState(readTab(defaultTab) as TTab);
-    applyUrlTab();
     window.addEventListener("popstate", applyUrlTab);
     window.addEventListener(LOCATION_CHANGE_EVENT, applyUrlTab);
     return () => {
@@ -141,6 +152,7 @@ export function useDetailTabUrlState<TTab extends string>(defaultTab: TTab) {
 
   const setActiveTab = useCallback(
     (nextTab: TTab) => {
+      tabChosen.current = true;
       const params = new URLSearchParams(window.location.search);
       for (const key of LIST_URL_MANAGED_KEYS) params.delete(key);
       if (nextTab === defaultTab) params.delete("tab");
