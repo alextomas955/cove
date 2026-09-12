@@ -1023,10 +1023,37 @@ export function ListPage({
   const previousSearchSortRef = useRef<Pick<FindFilter, "sort" | "direction" | "sorts" | "seed"> | null>(null);
   const infinitePageSize = allowInfinitePageSize && (perPage === 0 || infinitePageSizeOnly);
   const page = filter.page ?? 1;
-  const effectivePerPage = infinitePageSize ? Math.max(totalCount, 1) : perPage;
-  const totalPages = Math.max(1, Math.ceil(totalCount / effectivePerPage));
-  const start = totalCount > 0 ? (infinitePageSize ? 1 : (page - 1) * effectivePerPage + 1) : 0;
-  const end = infinitePageSize ? totalCount : Math.min(page * effectivePerPage, totalCount);
+  const resolvedLoadState =
+    loadState ??
+    resolveQueryLoadState({
+      data: isLoading || error ? undefined : true,
+      isPending: isLoading,
+      error,
+      isEmpty: () => false,
+      retry: onRetry,
+    });
+  // Callers report a zero result count while a page change loads. Remember the last settled count of
+  // the current list so the item range, byline and top pager stay in place across the reload instead
+  // of flickering on every page change; only the range for the requested page changes immediately.
+  // A changed filter is a different list, so it shows the loading label until its own count arrives.
+  const listIdentity = useMemo(
+    () => JSON.stringify([{ ...filter, page: undefined }, objectFilter]),
+    [filter, objectFilter],
+  );
+  const [settledCount, setSettledCount] = useState({ listIdentity, totalCount });
+  if (
+    resolvedLoadState.status !== "pending" &&
+    (settledCount.listIdentity !== listIdentity || !Object.is(settledCount.totalCount, totalCount))
+  ) {
+    setSettledCount({ listIdentity, totalCount });
+  }
+  const reloading =
+    resolvedLoadState.status === "pending" && settledCount.listIdentity === listIdentity && settledCount.totalCount > 0;
+  const shownTotalCount = reloading ? settledCount.totalCount : totalCount;
+  const effectivePerPage = infinitePageSize ? Math.max(shownTotalCount, 1) : perPage;
+  const totalPages = Math.max(1, Math.ceil(shownTotalCount / effectivePerPage));
+  const start = shownTotalCount > 0 ? (infinitePageSize ? 1 : (page - 1) * effectivePerPage + 1) : 0;
+  const end = infinitePageSize ? shownTotalCount : Math.min(page * effectivePerPage, shownTotalCount);
   const sortedSortOptions = useMemo(() => {
     const customSortOptions = createCustomFieldQueryDefinitions(customFieldDefinitions, "sortable").map(
       (definition) => ({
@@ -1230,16 +1257,6 @@ export function ListPage({
     },
     [filter, listEntityType, objectFilter, onFilterChange, pageKey, sortOptions],
   );
-
-  const resolvedLoadState =
-    loadState ??
-    resolveQueryLoadState({
-      data: isLoading || error ? undefined : true,
-      isPending: isLoading,
-      error,
-      isEmpty: () => false,
-      retry: onRetry,
-    });
 
   const goTo = useCallback(
     (p: number) => {
@@ -1450,21 +1467,21 @@ export function ListPage({
         <div className="list-page-title-group mr-auto flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pr-2">
           <h1 className="text-sm font-semibold text-foreground whitespace-nowrap">{title}</h1>
           <span className="text-xs text-muted hidden sm:inline">
-            {resolvedLoadState.status === "pending" || summaryLoading
+            {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
               ? "Loading…"
               : resolvedLoadState.status === "error"
                 ? "Unavailable"
-                : totalCount > 0
-                  ? `${start}-${end} of ${totalCount.toLocaleString()}`
+                : shownTotalCount > 0
+                  ? `${start}-${end} of ${shownTotalCount.toLocaleString()}`
                   : "0 items"}
           </span>
           <span className="text-xs text-muted sm:hidden">
-            {resolvedLoadState.status === "pending" || summaryLoading
+            {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
               ? "…"
               : resolvedLoadState.status === "error"
                 ? "—"
-                : totalCount > 0
-                  ? totalCount.toLocaleString()
+                : shownTotalCount > 0
+                  ? shownTotalCount.toLocaleString()
                   : "0"}
           </span>
           {!summaryLoading && metadataByline}
@@ -1827,6 +1844,13 @@ export function ListPage({
         </div>
       )}
 
+      {/* Top pager: rendered outside the load gate so it survives page changes */}
+      {showPagingControls && resolvedLoadState.status !== "error" && totalPages > 1 && (
+        <div className="mx-1 mt-1 flex flex-wrap items-center justify-center gap-1 py-1">
+          <PaginationControls page={page} totalPages={totalPages} goTo={goTo} />
+        </div>
+      )}
+
       {/* Results */}
       <QueryState
         state={resolvedLoadState}
@@ -1839,11 +1863,6 @@ export function ListPage({
         errorClassName="mx-1 mt-3"
       >
         <>
-          {showPagingControls && totalPages > 1 && (
-            <div className="mx-1 mt-1 flex flex-wrap items-center justify-center gap-1 py-1">
-              <PaginationControls page={page} totalPages={totalPages} goTo={goTo} />
-            </div>
-          )}
           <ListPageCardSizeContext.Provider value={{ cardMinWidthPx, zoomLevel }}>
             <div
               className="list-page-content pt-3"

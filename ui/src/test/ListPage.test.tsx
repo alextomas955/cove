@@ -268,8 +268,143 @@ describe("ListPage active filter chips", () => {
     expect(screen.getByRole("textbox", { name: "Search list" })).toBe(search);
     expect(search).toHaveFocus();
     expect(screen.getByRole("status", { name: "Loading Videos" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeInTheDocument();
     expect(screen.queryByText("collection content")).not.toBeInTheDocument();
+  });
+
+  it("keeps the top pager mounted with the last known page count while results are pending", () => {
+    const queryClient = new QueryClient();
+    const renderListPage = (
+      loadState: { status: "success"; data: unknown } | { status: "pending" },
+      totalCount: number,
+    ) => (
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 2, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={totalCount}
+            loadState={loadState}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderListPage({ status: "success", data: {} }, 81));
+    const [topNextPage] = screen.getAllByRole("button", { name: "Next page" });
+    expect(screen.getAllByRole("button", { name: "Page 3" })).toHaveLength(2);
+
+    rerender(renderListPage({ status: "pending" }, 0));
+
+    expect(screen.getByRole("status", { name: "Loading Videos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page" })).toBe(topNextPage);
+    expect(screen.getByRole("button", { name: "Page 3" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+
+    rerender(renderListPage({ status: "success", data: {} }, 41));
+
+    expect(screen.getAllByRole("button", { name: "Next page" })[0]).toBe(topNextPage);
+    expect(screen.queryByRole("button", { name: "Page 3" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the total count and byline while a page change is pending and moves only the item range", () => {
+    const queryClient = new QueryClient();
+    const renderListPage = (
+      loadState: { status: "success"; data: unknown } | { status: "pending" },
+      page: number,
+      totalCount: number,
+    ) => (
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={totalCount}
+            loadState={loadState}
+            metadataByline={<span>12h · 3 GB</span>}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderListPage({ status: "success", data: {} }, 1, 81));
+    const byline = screen.getByText("12h · 3 GB");
+    expect(screen.getByText("1-40 of 81")).toBeInTheDocument();
+
+    rerender(renderListPage({ status: "pending" }, 2, 0));
+
+    expect(screen.getByRole("status", { name: "Loading Videos" })).toBeInTheDocument();
+    expect(screen.getByText("41-80 of 81")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    expect(screen.getByText("12h · 3 GB")).toBe(byline);
+
+    rerender(renderListPage({ status: "success", data: {} }, 2, 81));
+
+    expect(screen.getByText("41-80 of 81")).toBeInTheDocument();
+  });
+
+  it("shows the loading label and hides the pager while a changed filter loads its own count", () => {
+    const queryClient = new QueryClient();
+    const renderListPage = (
+      loadState: { status: "success"; data: unknown } | { status: "pending" },
+      q: string | undefined,
+      totalCount: number,
+    ) => (
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40, q }}
+            onFilterChange={vi.fn()}
+            totalCount={totalCount}
+            loadState={loadState}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderListPage({ status: "success", data: {} }, undefined, 81));
+    expect(screen.getByText("1-40 of 81")).toBeInTheDocument();
+
+    rerender(renderListPage({ status: "pending" }, "summer", 0));
+
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByText("1-40 of 81")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
+
+    rerender(renderListPage({ status: "success", data: {} }, "summer", 12));
+
+    expect(screen.getByText("1-12 of 12")).toBeInTheDocument();
+  });
+
+  it("does not show a pager before the first result count arrives", () => {
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={0}
+            loadState={{ status: "pending" }}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("status", { name: "Loading Videos" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
   });
 
   it("returns to the last valid page when refreshed results remove the current page", async () => {
