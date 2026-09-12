@@ -37,6 +37,7 @@ const { mockGalleries, mockImages, mockVideos, mockEntityImages, mockSetRating, 
 
 const mockConfig = vi.hoisted(() => ({
   interface: undefined as { menuItems?: string[] } | undefined,
+  ui: {},
 }));
 
 vi.mock("../hooks/useDocumentTitle", () => ({

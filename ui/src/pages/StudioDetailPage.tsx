@@ -1297,6 +1297,7 @@ function StudioImagesPanel({
         hasNextPage={infiniteQuery.hasNextPage}
         isFetchingNextPage={infiniteQuery.isFetchingNextPage}
         loadMore={loadMore}
+        fetchMoreImages={infiniteQuery.fetchMoreItems}
       />
       <DetailListPagination
         filter={filter}

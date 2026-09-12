@@ -92,7 +92,8 @@ export function Lightbox({
   const lastTrackedIndex = useRef<number | null>(null);
 
   const count = queuedImages.length;
-  const displayCount = totalCount ?? count;
+  // A stale or absent total must never read as fewer results than the queue already holds.
+  const displayCount = Math.max(totalCount ?? 0, count);
   const displayPosition = positionOffset + index + 1;
   const current = queuedImages[index];
   const currentSrc = useRef<string | undefined>(current?.src);
@@ -153,6 +154,16 @@ export function Lightbox({
 
   useEffect(() => setFailedSrc(null), [current?.src]);
 
+  // Read through refs below so that a late-resolving config does not re-run the reset and discard
+  // pages the viewer loaded by navigating past the end of the queue. The delay is applied by its own
+  // effect instead, so a config that lands mid-session still takes effect.
+  const autoPlayRef = useRef(autoPlay);
+  autoPlayRef.current = autoPlay;
+  const slideshowDelayRef = useRef(slideshowDelay);
+  slideshowDelayRef.current = slideshowDelay;
+
+  useEffect(() => setCurrentSlideshowDelay(slideshowDelay), [slideshowDelay]);
+
   // Sync index when initialIndex or open changes
   useEffect(() => {
     if (open) {
@@ -160,12 +171,12 @@ export function Lightbox({
       setIndex(initialIndex);
       setZoom(1);
       setPan({ x: 0, y: 0 });
-      setPlaying(autoPlay);
-      setCurrentSlideshowDelay(slideshowDelay);
+      setPlaying(autoPlayRef.current);
+      setCurrentSlideshowDelay(slideshowDelayRef.current);
       trackedOpen.current = false;
       lastTrackedIndex.current = null;
     }
-  }, [autoPlay, open, initialIndex, slideshowDelay]);
+  }, [open, initialIndex]);
 
   useEffect(() => {
     if (!open || !current) {
@@ -175,15 +186,15 @@ export function Lightbox({
     if (!trackedOpen.current) {
       trackedOpen.current = true;
       lastTrackedIndex.current = index;
-      trackCurrentImageInteraction("openLightbox", { index: index + 1, count });
+      trackCurrentImageInteraction("openLightbox", { index: displayPosition, count: displayCount });
       return;
     }
 
     if (lastTrackedIndex.current !== null && lastTrackedIndex.current !== index) {
       trackCurrentImageInteraction("navigate", {
-        fromIndex: lastTrackedIndex.current + 1,
-        toIndex: index + 1,
-        count,
+        fromIndex: positionOffset + lastTrackedIndex.current + 1,
+        toIndex: displayPosition,
+        count: displayCount,
       });
       lastTrackedIndex.current = index;
     }
@@ -217,8 +228,8 @@ export function Lightbox({
           surface: "lightbox",
           scopeKey: `image:${imageId}:lightbox`,
           context: {
-            index: index + 1,
-            count,
+            index: positionOffset + index + 1,
+            count: displayCount,
             source: current.interactionSource ?? "lightbox",
             ...(current.interactionMeta ?? {}),
           },
@@ -281,13 +292,14 @@ export function Lightbox({
       goTo(index - 1);
       return;
     }
-    if (boundaryLoading) return;
     setBoundaryLoading(true);
     try {
       const loaded = await loadPrevious();
       if (loaded.length === 0) return;
       setQueuedImages((currentImages) => [...loaded, ...currentImages]);
-      setIndex(loaded.length - 1);
+      // Prepending shifts every existing position. Follow the new page only if the viewer is still
+      // where the load started; otherwise keep them on the image they navigated to meanwhile.
+      setIndex((current) => (current === index ? loaded.length - 1 : current + loaded.length));
       resetView();
     } catch {
       // Keep the current image visible when an adjacent page cannot be loaded.
@@ -301,13 +313,12 @@ export function Lightbox({
       goTo(index + 1);
       return;
     }
-    if (boundaryLoading) return;
     setBoundaryLoading(true);
     try {
       const loaded = await loadNext();
       if (loaded.length === 0) return;
       setQueuedImages((currentImages) => [...currentImages, ...loaded]);
-      setIndex(index + 1);
+      setIndex((current) => (current === index ? current + 1 : current));
       resetView();
     } catch {
       // Keep the current image visible when an adjacent page cannot be loaded.
@@ -376,7 +387,7 @@ export function Lightbox({
 
   const handleClose = useCallback(() => {
     if (open) {
-      trackCurrentImageInteraction("closeLightbox", { index: index + 1, count });
+      trackCurrentImageInteraction("closeLightbox", { index: displayPosition, count: displayCount });
     }
 
     if (document.fullscreenElement === containerRef.current) {
@@ -477,12 +488,15 @@ export function Lightbox({
   useEffect(() => {
     if (!open || count <= 1) return;
     const preload = (i: number) => {
+      // Only the wrapping queue has a neighbour past either end; a partial one would fetch a slide
+      // the disabled control cannot reach.
+      if (!wrap && (i < 0 || i >= count)) return;
       const img = new Image();
       img.src = queuedImages[((i % count) + count) % count]?.src ?? "";
     };
     preload(index + 1);
     preload(index - 1);
-  }, [open, index, queuedImages, count]);
+  }, [open, index, queuedImages, count, wrap]);
 
   if (!open) return <></>;
 

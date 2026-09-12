@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -42,6 +43,41 @@ function PaginatedLightboxHarness({
   return (
     <>
       <button onClick={() => lightbox.openImage(61)}>Open lightbox</button>
+      <Lightbox {...lightbox.lightboxProps} />
+    </>
+  );
+}
+
+// Stands in for an infinite list: holds a growing prefix of the 131 results and extends it one
+// 30-result page at a time, the way the list's own infinite query does.
+function useFakeInfiniteList(initialCount: number) {
+  const [loadedCount, setLoadedCount] = useState(initialCount);
+  const all = Array.from({ length: 131 }, (_, index) => image(index + 1));
+  const items = all.slice(0, loadedCount);
+  const fetchMoreItems = async () => {
+    const next = Math.min(131, loadedCount + 30);
+    setLoadedCount(next);
+    return all.slice(0, next);
+  };
+
+  return { items, fetchMoreItems };
+}
+
+function InfiniteLightboxHarness({ loadedCount, openAt }: { loadedCount: number; openAt: number }) {
+  const list = useFakeInfiniteList(loadedCount);
+  const lightbox = usePaginatedImageLightbox({
+    items: list.items,
+    filter: { page: 1, perPage: 0 },
+    totalCount: 131,
+    infinitePageSize: true,
+    queryPage: vi.fn(),
+    toLightboxImage: (item) => ({ id: item.id, src: `/image/${item.id}`, title: item.title }),
+    fetchMoreItems: list.fetchMoreItems,
+  });
+
+  return (
+    <>
+      <button onClick={() => lightbox.openImage(openAt)}>Open lightbox</button>
       <Lightbox {...lightbox.lightboxProps} />
     </>
   );
@@ -138,5 +174,64 @@ describe("Lightbox pagination", () => {
 
     await waitFor(() => expect(screen.getByAltText("Page two image")).toBeInTheDocument());
     expect(loadNext).toHaveBeenCalledOnce();
+  });
+
+  it("navigates past the loaded results of an infinite list instead of wrapping", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <InfiniteLightboxHarness loadedCount={60} openAt={60} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Open lightbox" }));
+    expect(screen.getByText("60 / 131")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next image" }));
+
+    await waitFor(() => expect(screen.getByText("61 / 131")).toBeInTheDocument());
+  });
+
+  it("reaches the final result of an infinite list and only then wraps", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <InfiniteLightboxHarness loadedCount={120} openAt={120} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Open lightbox" }));
+    const next = screen.getByRole("button", { name: "Next image" });
+
+    for (let position = 121; position <= 131; position += 1) {
+      await userEvent.click(next);
+      await waitFor(() => expect(screen.getByText(`${position} / 131`)).toBeInTheDocument());
+    }
+
+    // Every result is now in the queue, so the end of it is the end of the list and wrapping resumes.
+    await userEvent.click(next);
+    await waitFor(() => expect(screen.getByText("1 / 131")).toBeInTheDocument());
+  });
+
+  it("does not wrap backwards out of a partially loaded infinite list", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <InfiniteLightboxHarness loadedCount={60} openAt={1} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Open lightbox" }));
+    expect(screen.getByText("1 / 131")).toBeInTheDocument();
+
+    // Wrapping back to the last queued result would report it as result 60 of 131, which it is not.
+    expect(screen.getByRole("button", { name: "Previous image" })).toBeDisabled();
+
+    // The keyboard path is not covered by the disabled attribute, so it has to hold the line itself.
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(screen.getByText("1 / 131")).toBeInTheDocument();
   });
 });

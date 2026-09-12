@@ -308,6 +308,7 @@ export function ImagesPage({ onNavigate }: Props) {
     infinitePageSize,
     queryPage: queryImagesPage,
     toLightboxImage,
+    fetchMoreItems: listData.infiniteQuery.fetchMoreItems,
   });
 
   const playSelectedImages = useCallback(() => {

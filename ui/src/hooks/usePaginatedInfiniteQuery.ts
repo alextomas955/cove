@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { keepPreviousData, useInfiniteQuery, type QueryKey } from "@tanstack/react-query";
 import type { PaginatedResponse } from "../api/types";
 
@@ -44,6 +45,20 @@ export function usePaginatedInfiniteQuery<TItem extends { id: string | number }>
     getPreviousPageParam: (firstPage) => (firstPage.page > 1 ? firstPage.page - 1 : undefined),
   });
 
+  // Loads one more page and resolves with every item the query then knows about, newest page last.
+  // Callers that keep their own copy of the queue (the lightbox) diff against what they already hold,
+  // so they pick up the new page even if the list advanced independently while they were detached.
+  const { fetchNextPage, isPlaceholderData } = query;
+  const fetchMoreItems = useCallback(async () => {
+    // While placeholder data stands in for a key that has not loaded, the pages on hand belong to the
+    // previous filter and `fetchNextPage` would fetch page one of the new one. Report no results instead
+    // of handing the caller items from a different query.
+    if (isPlaceholderData) return [];
+    // Do not cancel and restart a page the list is already fetching for itself.
+    const result = await fetchNextPage({ cancelRefetch: false });
+    return (result.data?.pages ?? []).flatMap((page) => page.items);
+  }, [fetchNextPage, isPlaceholderData]);
+
   const pages = query.data?.pages ?? [];
   const totalCount = pages[0]?.totalCount ?? 0;
   const lastPage = pages[pages.length - 1];
@@ -53,6 +68,7 @@ export function usePaginatedInfiniteQuery<TItem extends { id: string | number }>
 
   return {
     ...query,
+    fetchMoreItems,
     items: uniqueItemsById(pages.flatMap((page) => page.items)),
     firstLoadedIndex: pages[0] ? (pages[0].page - 1) * pages[0].perPage : 0,
     loadedThroughCount,

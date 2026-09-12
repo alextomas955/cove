@@ -332,6 +332,7 @@ export function GalleryDetailPage({ id, onNavigate }: Props) {
     infinitePageSize: imageInfinitePageSize,
     queryPage: queryGalleryImages,
     toLightboxImage,
+    fetchMoreItems: imageInfiniteQuery.fetchMoreItems,
   });
 
   if (isLoading) {
