@@ -1479,10 +1479,14 @@ export function ListPage({
 
   return (
     <div className="list-page space-y-0">
-      {/* Toolbar - matches standard FilteredListToolbar */}
-      <div className="list-page-toolbar mx-1 mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 shadow-sm shadow-black/20 sm:px-2.5 sm:py-2">
+      {/* Toolbar - matches standard FilteredListToolbar. From the lg breakpoint it is three sections:
+          the title section keeps a reserved minimum width so a changing item range never moves the
+          controls, the controls section wraps internally, and the operations stay right-aligned.
+          Between sm and lg the title takes its own row above the controls; below sm the controls
+          wrapper is display: contents so the phone layout is unchanged. */}
+      <div className="list-page-toolbar mx-1 mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 shadow-sm shadow-black/20 sm:px-2.5 sm:py-2 lg:flex-nowrap">
         {/* Title + count + byline */}
-        <div className="list-page-title-group mr-auto flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pr-2">
+        <div className="list-page-title-group flex min-w-0 basis-full flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 lg:flex-1 lg:basis-0 lg:min-w-[12rem]">
           <h1 className="text-sm font-semibold text-foreground whitespace-nowrap">{title}</h1>
           <span className="text-xs text-muted hidden sm:inline">
             {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
@@ -1505,178 +1509,183 @@ export function ListPage({
           {!summaryLoading && metadataByline}
         </div>
 
-        {/* Search */}
-        <ListSearchControl
-          query={filter.q}
-          onQueryChange={handleSearchChange}
-          placeholder={searchPlaceholder}
-          searchMode={searchMode}
-          searchModes={searchModes}
-          onSearchModeChange={onSearchModeChange}
-          className={`list-page-search ${searchModes && searchModes.length > 1 ? "sm:w-[22rem]" : "sm:w-[18rem]"}`}
-        />
-
-        {/* Sort */}
-        {sortedSortOptions && (
-          <MultiSortControl
-            filter={filter}
-            onFilterChange={onFilterChange}
-            options={sortedSortOptions}
-            multiSortKeys={multiSortKeys}
-          />
-        )}
-
-        {/* Saved filters */}
-        {resolvedSavedFilterScope && (
-          <SavedFilterMenu
-            mode={resolvedSavedFilterScope}
-            currentFilter={filter}
-            currentObjectFilter={objectFilter}
-            currentUIOptions={{ ...savedFilterUIOptions, displayMode, zoomLevel }}
-            onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
-            onApplyObjectFilter={onObjectFilterChange}
-            onApplyUIOptions={applySavedFilterUIOptions}
-          />
-        )}
-
-        {/* Filter button */}
-        {mergedCriteriaDefinitions && onObjectFilterChange && (
-          <FilterButton
-            activeCount={countActiveObjectFilters(mergedCriteriaDefinitions, editorObjectFilter)}
-            onClick={() => {
-              setFilterDialogPreselect(undefined);
-              setFilterDialogExpressionPath(undefined);
-              setFilterDialogInitialView("simple");
-              setFilterDialogOpenAtRoot(true);
-              setFilterDialogOpen(true);
-            }}
-          />
-        )}
-
-        {/* Display mode */}
-        {onDisplayModeChange && availableDisplayModes && (
-          <div className={`${toolbarSegmentClass} gap-0.5`}>
-            {availableDisplayModes.includes("grid") && (
-              <button
-                onClick={() => onDisplayModeChange("grid")}
-                className={`${toolbarIconButtonClass} ${displayMode === "grid" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Grid"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("list") && (
-              <button
-                onClick={() => onDisplayModeChange("list")}
-                className={`${toolbarIconButtonClass} ${displayMode === "list" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="List"
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("wall") && (
-              <button
-                onClick={() => onDisplayModeChange("wall")}
-                className={`${toolbarIconButtonClass} ${displayMode === "wall" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Wall"
-              >
-                <Grid3X3 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("tagger") && (
-              <button
-                onClick={() => onDisplayModeChange("tagger")}
-                className={`${toolbarIconButtonClass} ${displayMode === "tagger" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Tagger"
-              >
-                <Tags className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("graph") && (
-              <button
-                onClick={() => onDisplayModeChange("graph")}
-                className={`${toolbarIconButtonClass} ${displayMode === "graph" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Graph/Tree"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("byGroup") && (
-              <button
-                onClick={() => onDisplayModeChange("byGroup")}
-                className={`${toolbarIconButtonClass} ${displayMode === "byGroup" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="By Group"
-              >
-                <FolderTree className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("feed") && (
-              <button
-                onClick={() => onDisplayModeChange("feed")}
-                className={`${toolbarIconButtonClass} ${displayMode === "feed" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Feed"
-              >
-                <Rows3 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("vertical") && (
-              <button
-                onClick={() => onDisplayModeChange("vertical")}
-                className={`${toolbarIconButtonClass} ${displayMode === "vertical" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Vertical Viewer"
-              >
-                <MonitorPlay className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Per page */}
-        <div className={toolbarSegmentClass}>
-          <PageSizeSelect
-            perPage={perPage}
-            allowInfinite={allowInfinitePageSize}
-            infinitePageSize={infinitePageSize}
-            infinitePageSizeOnly={infinitePageSizeOnly}
-            maxPageSize={maxPageSize}
-            onChange={(nextPerPage) =>
-              onFilterChange({
-                ...filter,
-                perPage: maxPageSize == null ? nextPerPage : Math.min(nextPerPage, maxPageSize),
-                page: 1,
-              })
-            }
+        {/* Controls */}
+        <div className="list-page-controls flex min-w-0 flex-1 basis-0 flex-wrap items-center gap-2 max-sm:contents lg:flex-initial">
+          {/* Search */}
+          <ListSearchControl
+            query={filter.q}
+            onQueryChange={handleSearchChange}
+            placeholder={searchPlaceholder}
+            searchMode={searchMode}
+            searchModes={searchModes}
+            onSearchModeChange={onSearchModeChange}
+            className={`list-page-search ${searchModes && searchModes.length > 1 ? "sm:w-[22rem]" : "sm:w-[18rem]"}`}
           />
 
-          {/* Zoom slider (standard card size slider) */}
-          {(displayMode === "grid" || displayMode === "list") && (
-            <div className="hidden items-center gap-1 pl-1 md:flex">
-              <ZoomOut className="w-3 h-3 text-muted" />
-              <input
-                type="range"
-                min={0}
-                max={cardSizeMaxLevel}
-                step={0.25}
-                value={zoomLevel}
-                onChange={(e) => setZoomLevel(clampEntityCardSizeLevel(cardSizeEntityType, Number(e.target.value)))}
-                style={{ "--range-fill": `${(zoomLevel / Math.max(0.25, cardSizeMaxLevel)) * 100}%` } as CSSProperties}
-                className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
-                title={`Card size: ${getEntityCardMinWidthPx(cardSizeEntityType, zoomLevel)}px`}
-              />
-              <ZoomIn className="w-3 h-3 text-muted" />
+          {/* Sort */}
+          {sortedSortOptions && (
+            <MultiSortControl
+              filter={filter}
+              onFilterChange={onFilterChange}
+              options={sortedSortOptions}
+              multiSortKeys={multiSortKeys}
+            />
+          )}
+
+          {/* Saved filters */}
+          {resolvedSavedFilterScope && (
+            <SavedFilterMenu
+              mode={resolvedSavedFilterScope}
+              currentFilter={filter}
+              currentObjectFilter={objectFilter}
+              currentUIOptions={{ ...savedFilterUIOptions, displayMode, zoomLevel }}
+              onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
+              onApplyObjectFilter={onObjectFilterChange}
+              onApplyUIOptions={applySavedFilterUIOptions}
+            />
+          )}
+
+          {/* Filter button */}
+          {mergedCriteriaDefinitions && onObjectFilterChange && (
+            <FilterButton
+              activeCount={countActiveObjectFilters(mergedCriteriaDefinitions, editorObjectFilter)}
+              onClick={() => {
+                setFilterDialogPreselect(undefined);
+                setFilterDialogExpressionPath(undefined);
+                setFilterDialogInitialView("simple");
+                setFilterDialogOpenAtRoot(true);
+                setFilterDialogOpen(true);
+              }}
+            />
+          )}
+
+          {/* Display mode */}
+          {onDisplayModeChange && availableDisplayModes && (
+            <div className={`${toolbarSegmentClass} gap-0.5`}>
+              {availableDisplayModes.includes("grid") && (
+                <button
+                  onClick={() => onDisplayModeChange("grid")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "grid" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Grid"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("list") && (
+                <button
+                  onClick={() => onDisplayModeChange("list")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "list" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="List"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("wall") && (
+                <button
+                  onClick={() => onDisplayModeChange("wall")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "wall" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Wall"
+                >
+                  <Grid3X3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("tagger") && (
+                <button
+                  onClick={() => onDisplayModeChange("tagger")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "tagger" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Tagger"
+                >
+                  <Tags className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("graph") && (
+                <button
+                  onClick={() => onDisplayModeChange("graph")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "graph" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Graph/Tree"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("byGroup") && (
+                <button
+                  onClick={() => onDisplayModeChange("byGroup")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "byGroup" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="By Group"
+                >
+                  <FolderTree className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("feed") && (
+                <button
+                  onClick={() => onDisplayModeChange("feed")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "feed" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Feed"
+                >
+                  <Rows3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("vertical") && (
+                <button
+                  onClick={() => onDisplayModeChange("vertical")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "vertical" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Vertical Viewer"
+                >
+                  <MonitorPlay className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 
-          {displayMode === "wall" && wallColumnCount != null && onWallColumnCountChange && (
-            <WallSizeControl
-              sizeLevel={getWallSizeLevelFromColumnCount(wallColumnCount)}
-              onChange={(sizeLevel) => onWallColumnCountChange(getWallColumnCountFromSizeLevel(sizeLevel))}
+          {/* Per page */}
+          <div className={toolbarSegmentClass}>
+            <PageSizeSelect
+              perPage={perPage}
+              allowInfinite={allowInfinitePageSize}
+              infinitePageSize={infinitePageSize}
+              infinitePageSizeOnly={infinitePageSizeOnly}
+              maxPageSize={maxPageSize}
+              onChange={(nextPerPage) =>
+                onFilterChange({
+                  ...filter,
+                  perPage: maxPageSize == null ? nextPerPage : Math.min(nextPerPage, maxPageSize),
+                  page: 1,
+                })
+              }
             />
-          )}
+
+            {/* Zoom slider (standard card size slider) */}
+            {(displayMode === "grid" || displayMode === "list") && (
+              <div className="hidden items-center gap-1 pl-1 md:flex">
+                <ZoomOut className="w-3 h-3 text-muted" />
+                <input
+                  type="range"
+                  min={0}
+                  max={cardSizeMaxLevel}
+                  step={0.25}
+                  value={zoomLevel}
+                  onChange={(e) => setZoomLevel(clampEntityCardSizeLevel(cardSizeEntityType, Number(e.target.value)))}
+                  style={
+                    { "--range-fill": `${(zoomLevel / Math.max(0.25, cardSizeMaxLevel)) * 100}%` } as CSSProperties
+                  }
+                  className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
+                  title={`Card size: ${getEntityCardMinWidthPx(cardSizeEntityType, zoomLevel)}px`}
+                />
+                <ZoomIn className="w-3 h-3 text-muted" />
+              </div>
+            )}
+
+            {displayMode === "wall" && wallColumnCount != null && onWallColumnCountChange && (
+              <WallSizeControl
+                sizeLevel={getWallSizeLevelFromColumnCount(wallColumnCount)}
+                onChange={(sizeLevel) => onWallColumnCountChange(getWallColumnCountFromSizeLevel(sizeLevel))}
+              />
+            )}
+          </div>
         </div>
 
         {/* Operations */}
-        <div className="list-page-operations ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className="list-page-operations ml-auto flex flex-wrap items-center justify-end gap-2 sm:ml-0 lg:flex-1 lg:basis-0 lg:min-w-fit">
           {renderOperations?.()}
           <ExtensionSlot slot="list-page-toolbar-end" context={slotContext} />
           {pageKey && <ExtensionSlot slot={`${pageKey}-list-toolbar-end`} context={slotContext} />}

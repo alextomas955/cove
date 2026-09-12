@@ -488,6 +488,46 @@ describe("ListPage active filter chips", () => {
     expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
   });
 
+  it("lays the toolbar out as title, controls and operations sections", () => {
+    const queryClient = new QueryClient();
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={81}
+            loadState={{ status: "success", data: {} }}
+            sortOptions={[{ value: "title", label: "Title" }]}
+            onNew={vi.fn()}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    const toolbar = container.querySelector(".list-page-toolbar");
+    const [title, controls, operations] = Array.from(toolbar?.children ?? []);
+
+    expect(toolbar).toHaveClass("lg:flex-nowrap");
+    expect(title).toHaveClass("list-page-title-group", "basis-full", "lg:flex-1", "lg:basis-0", "lg:min-w-[12rem]");
+    expect(title).toContainElement(screen.getByText("1-40 of 81"));
+    expect(controls).toHaveClass(
+      "list-page-controls",
+      "flex-wrap",
+      "min-w-0",
+      "flex-1",
+      "max-sm:contents",
+      "lg:flex-initial",
+    );
+    expect(controls).toContainElement(screen.getByRole("textbox", { name: "Search list" }));
+    expect(operations).toHaveClass("list-page-operations", "justify-end", "lg:flex-1", "lg:basis-0", "lg:min-w-fit");
+    expect(operations).toContainElement(screen.getByRole("button", { name: "+ New" }));
+    expect(toolbar?.children).toHaveLength(3);
+  });
+
   it("does not show a pager before the first result count arrives", () => {
     const queryClient = new QueryClient();
     render(
