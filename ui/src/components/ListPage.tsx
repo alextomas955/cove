@@ -1023,10 +1023,55 @@ export function ListPage({
   const previousSearchSortRef = useRef<Pick<FindFilter, "sort" | "direction" | "sorts" | "seed"> | null>(null);
   const infinitePageSize = allowInfinitePageSize && (perPage === 0 || infinitePageSizeOnly);
   const page = filter.page ?? 1;
-  const effectivePerPage = infinitePageSize ? Math.max(totalCount, 1) : perPage;
-  const totalPages = Math.max(1, Math.ceil(totalCount / effectivePerPage));
-  const start = totalCount > 0 ? (infinitePageSize ? 1 : (page - 1) * effectivePerPage + 1) : 0;
-  const end = infinitePageSize ? totalCount : Math.min(page * effectivePerPage, totalCount);
+  const resolvedLoadState =
+    loadState ??
+    resolveQueryLoadState({
+      data: isLoading || error ? undefined : true,
+      isPending: isLoading,
+      error,
+      isEmpty: () => false,
+      retry: onRetry,
+    });
+  // Callers report a zero result count while a page change loads. Remember the last settled count of
+  // the current list so the item range, byline and top pager stay in place across the reload instead
+  // of flickering on every page change; only the range for the requested page changes immediately.
+  // A changed filter is a different list, so it shows the loading label until its own count arrives.
+  const listIdentity = useMemo(
+    () => JSON.stringify([{ ...filter, page: undefined }, objectFilter]),
+    [filter, objectFilter],
+  );
+  const [settledCount, setSettledCount] = useState({ listIdentity, totalCount });
+  if (
+    resolvedLoadState.status !== "pending" &&
+    (settledCount.listIdentity !== listIdentity || !Object.is(settledCount.totalCount, totalCount))
+  ) {
+    setSettledCount({ listIdentity, totalCount });
+  }
+  const settledTotalPages = Math.ceil(
+    settledCount.totalCount / (infinitePageSize ? Math.max(settledCount.totalCount, 1) : perPage),
+  );
+  const reloading =
+    resolvedLoadState.status === "pending" &&
+    settledCount.listIdentity === listIdentity &&
+    settledCount.totalCount > 0 &&
+    page <= settledTotalPages;
+  const shownTotalCount = reloading ? settledCount.totalCount : totalCount;
+  // Keep the last successfully committed results on screen while that reload is pending, so a page
+  // change swaps the old items for the new ones instead of collapsing to a spinner in between, which
+  // also removed the scrollbar and shifted the layout. The children are rendered as a fragment, so
+  // the synthetic success state never hands its undefined data to a render callback.
+  const settledChildrenRef = useRef<ReactNode>(children);
+  useEffect(() => {
+    if (resolvedLoadState.status === "success" || resolvedLoadState.status === "empty") {
+      settledChildrenRef.current = children;
+    }
+  });
+  const resultsState: QueryLoadState<unknown> = reloading ? { status: "success", data: undefined } : resolvedLoadState;
+  const resultsChildren = reloading ? settledChildrenRef.current : children;
+  const effectivePerPage = infinitePageSize ? Math.max(shownTotalCount, 1) : perPage;
+  const totalPages = Math.max(1, Math.ceil(shownTotalCount / effectivePerPage));
+  const start = shownTotalCount > 0 ? (infinitePageSize ? 1 : (page - 1) * effectivePerPage + 1) : 0;
+  const end = infinitePageSize ? shownTotalCount : Math.min(page * effectivePerPage, shownTotalCount);
   const sortedSortOptions = useMemo(() => {
     const customSortOptions = createCustomFieldQueryDefinitions(customFieldDefinitions, "sortable").map(
       (definition) => ({
@@ -1231,16 +1276,6 @@ export function ListPage({
     [filter, listEntityType, objectFilter, onFilterChange, pageKey, sortOptions],
   );
 
-  const resolvedLoadState =
-    loadState ??
-    resolveQueryLoadState({
-      data: isLoading || error ? undefined : true,
-      isPending: isLoading,
-      error,
-      isEmpty: () => false,
-      retry: onRetry,
-    });
-
   const goTo = useCallback(
     (p: number) => {
       // An unavailable result count is not a one-page collection.
@@ -1444,204 +1479,213 @@ export function ListPage({
 
   return (
     <div className="list-page space-y-0">
-      {/* Toolbar - matches standard FilteredListToolbar */}
-      <div className="list-page-toolbar mx-1 mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 shadow-sm shadow-black/20 sm:px-2.5 sm:py-2">
+      {/* Toolbar - matches standard FilteredListToolbar. From the lg breakpoint it is three sections:
+          the title section keeps a reserved minimum width so a changing item range never moves the
+          controls, the controls section wraps internally, and the operations stay right-aligned.
+          Between sm and lg the title takes its own row above the controls; below sm the controls
+          wrapper is display: contents so the phone layout is unchanged. */}
+      <div className="list-page-toolbar mx-1 mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 shadow-sm shadow-black/20 sm:px-2.5 sm:py-2 lg:flex-nowrap">
         {/* Title + count + byline */}
-        <div className="list-page-title-group mr-auto flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pr-2">
+        <div className="list-page-title-group flex min-w-0 basis-full flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 lg:flex-1 lg:basis-0 lg:min-w-[12rem]">
           <h1 className="text-sm font-semibold text-foreground whitespace-nowrap">{title}</h1>
           <span className="text-xs text-muted hidden sm:inline">
-            {resolvedLoadState.status === "pending" || summaryLoading
+            {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
               ? "Loading…"
               : resolvedLoadState.status === "error"
                 ? "Unavailable"
-                : totalCount > 0
-                  ? `${start}-${end} of ${totalCount.toLocaleString()}`
+                : shownTotalCount > 0
+                  ? `${start}-${end} of ${shownTotalCount.toLocaleString()}`
                   : "0 items"}
           </span>
           <span className="text-xs text-muted sm:hidden">
-            {resolvedLoadState.status === "pending" || summaryLoading
+            {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
               ? "…"
               : resolvedLoadState.status === "error"
                 ? "—"
-                : totalCount > 0
-                  ? totalCount.toLocaleString()
+                : shownTotalCount > 0
+                  ? shownTotalCount.toLocaleString()
                   : "0"}
           </span>
           {!summaryLoading && metadataByline}
         </div>
 
-        {/* Search */}
-        <ListSearchControl
-          query={filter.q}
-          onQueryChange={handleSearchChange}
-          placeholder={searchPlaceholder}
-          searchMode={searchMode}
-          searchModes={searchModes}
-          onSearchModeChange={onSearchModeChange}
-          className={`list-page-search ${searchModes && searchModes.length > 1 ? "sm:w-[22rem]" : "sm:w-[18rem]"}`}
-        />
-
-        {/* Sort */}
-        {sortedSortOptions && (
-          <MultiSortControl
-            filter={filter}
-            onFilterChange={onFilterChange}
-            options={sortedSortOptions}
-            multiSortKeys={multiSortKeys}
-          />
-        )}
-
-        {/* Saved filters */}
-        {resolvedSavedFilterScope && (
-          <SavedFilterMenu
-            mode={resolvedSavedFilterScope}
-            currentFilter={filter}
-            currentObjectFilter={objectFilter}
-            currentUIOptions={{ ...savedFilterUIOptions, displayMode, zoomLevel }}
-            onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
-            onApplyObjectFilter={onObjectFilterChange}
-            onApplyUIOptions={applySavedFilterUIOptions}
-          />
-        )}
-
-        {/* Filter button */}
-        {mergedCriteriaDefinitions && onObjectFilterChange && (
-          <FilterButton
-            activeCount={countActiveObjectFilters(mergedCriteriaDefinitions, editorObjectFilter)}
-            onClick={() => {
-              setFilterDialogPreselect(undefined);
-              setFilterDialogExpressionPath(undefined);
-              setFilterDialogInitialView("simple");
-              setFilterDialogOpenAtRoot(true);
-              setFilterDialogOpen(true);
-            }}
-          />
-        )}
-
-        {/* Display mode */}
-        {onDisplayModeChange && availableDisplayModes && (
-          <div className={`${toolbarSegmentClass} gap-0.5`}>
-            {availableDisplayModes.includes("grid") && (
-              <button
-                onClick={() => onDisplayModeChange("grid")}
-                className={`${toolbarIconButtonClass} ${displayMode === "grid" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Grid"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("list") && (
-              <button
-                onClick={() => onDisplayModeChange("list")}
-                className={`${toolbarIconButtonClass} ${displayMode === "list" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="List"
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("wall") && (
-              <button
-                onClick={() => onDisplayModeChange("wall")}
-                className={`${toolbarIconButtonClass} ${displayMode === "wall" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Wall"
-              >
-                <Grid3X3 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("tagger") && (
-              <button
-                onClick={() => onDisplayModeChange("tagger")}
-                className={`${toolbarIconButtonClass} ${displayMode === "tagger" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Tagger"
-              >
-                <Tags className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("graph") && (
-              <button
-                onClick={() => onDisplayModeChange("graph")}
-                className={`${toolbarIconButtonClass} ${displayMode === "graph" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Graph/Tree"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("byGroup") && (
-              <button
-                onClick={() => onDisplayModeChange("byGroup")}
-                className={`${toolbarIconButtonClass} ${displayMode === "byGroup" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="By Group"
-              >
-                <FolderTree className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("feed") && (
-              <button
-                onClick={() => onDisplayModeChange("feed")}
-                className={`${toolbarIconButtonClass} ${displayMode === "feed" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Feed"
-              >
-                <Rows3 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {availableDisplayModes.includes("vertical") && (
-              <button
-                onClick={() => onDisplayModeChange("vertical")}
-                className={`${toolbarIconButtonClass} ${displayMode === "vertical" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title="Vertical Viewer"
-              >
-                <MonitorPlay className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Per page */}
-        <div className={toolbarSegmentClass}>
-          <PageSizeSelect
-            perPage={perPage}
-            allowInfinite={allowInfinitePageSize}
-            infinitePageSize={infinitePageSize}
-            infinitePageSizeOnly={infinitePageSizeOnly}
-            maxPageSize={maxPageSize}
-            onChange={(nextPerPage) =>
-              onFilterChange({
-                ...filter,
-                perPage: maxPageSize == null ? nextPerPage : Math.min(nextPerPage, maxPageSize),
-                page: 1,
-              })
-            }
+        {/* Controls */}
+        <div className="list-page-controls flex min-w-0 flex-1 basis-0 flex-wrap items-center gap-2 max-sm:contents lg:flex-initial">
+          {/* Search */}
+          <ListSearchControl
+            query={filter.q}
+            onQueryChange={handleSearchChange}
+            placeholder={searchPlaceholder}
+            searchMode={searchMode}
+            searchModes={searchModes}
+            onSearchModeChange={onSearchModeChange}
+            className={`list-page-search ${searchModes && searchModes.length > 1 ? "sm:w-[22rem]" : "sm:w-[18rem]"}`}
           />
 
-          {/* Zoom slider (standard card size slider) */}
-          {(displayMode === "grid" || displayMode === "list") && (
-            <div className="hidden items-center gap-1 pl-1 md:flex">
-              <ZoomOut className="w-3 h-3 text-muted" />
-              <input
-                type="range"
-                min={0}
-                max={cardSizeMaxLevel}
-                step={0.25}
-                value={zoomLevel}
-                onChange={(e) => setZoomLevel(clampEntityCardSizeLevel(cardSizeEntityType, Number(e.target.value)))}
-                style={{ "--range-fill": `${(zoomLevel / Math.max(0.25, cardSizeMaxLevel)) * 100}%` } as CSSProperties}
-                className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
-                title={`Card size: ${getEntityCardMinWidthPx(cardSizeEntityType, zoomLevel)}px`}
-              />
-              <ZoomIn className="w-3 h-3 text-muted" />
+          {/* Sort */}
+          {sortedSortOptions && (
+            <MultiSortControl
+              filter={filter}
+              onFilterChange={onFilterChange}
+              options={sortedSortOptions}
+              multiSortKeys={multiSortKeys}
+            />
+          )}
+
+          {/* Saved filters */}
+          {resolvedSavedFilterScope && (
+            <SavedFilterMenu
+              mode={resolvedSavedFilterScope}
+              currentFilter={filter}
+              currentObjectFilter={objectFilter}
+              currentUIOptions={{ ...savedFilterUIOptions, displayMode, zoomLevel }}
+              onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
+              onApplyObjectFilter={onObjectFilterChange}
+              onApplyUIOptions={applySavedFilterUIOptions}
+            />
+          )}
+
+          {/* Filter button */}
+          {mergedCriteriaDefinitions && onObjectFilterChange && (
+            <FilterButton
+              activeCount={countActiveObjectFilters(mergedCriteriaDefinitions, editorObjectFilter)}
+              onClick={() => {
+                setFilterDialogPreselect(undefined);
+                setFilterDialogExpressionPath(undefined);
+                setFilterDialogInitialView("simple");
+                setFilterDialogOpenAtRoot(true);
+                setFilterDialogOpen(true);
+              }}
+            />
+          )}
+
+          {/* Display mode */}
+          {onDisplayModeChange && availableDisplayModes && (
+            <div className={`${toolbarSegmentClass} gap-0.5`}>
+              {availableDisplayModes.includes("grid") && (
+                <button
+                  onClick={() => onDisplayModeChange("grid")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "grid" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Grid"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("list") && (
+                <button
+                  onClick={() => onDisplayModeChange("list")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "list" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="List"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("wall") && (
+                <button
+                  onClick={() => onDisplayModeChange("wall")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "wall" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Wall"
+                >
+                  <Grid3X3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("tagger") && (
+                <button
+                  onClick={() => onDisplayModeChange("tagger")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "tagger" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Tagger"
+                >
+                  <Tags className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("graph") && (
+                <button
+                  onClick={() => onDisplayModeChange("graph")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "graph" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Graph/Tree"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("byGroup") && (
+                <button
+                  onClick={() => onDisplayModeChange("byGroup")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "byGroup" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="By Group"
+                >
+                  <FolderTree className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("feed") && (
+                <button
+                  onClick={() => onDisplayModeChange("feed")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "feed" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Feed"
+                >
+                  <Rows3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {availableDisplayModes.includes("vertical") && (
+                <button
+                  onClick={() => onDisplayModeChange("vertical")}
+                  className={`${toolbarIconButtonClass} ${displayMode === "vertical" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title="Vertical Viewer"
+                >
+                  <MonitorPlay className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 
-          {displayMode === "wall" && wallColumnCount != null && onWallColumnCountChange && (
-            <WallSizeControl
-              sizeLevel={getWallSizeLevelFromColumnCount(wallColumnCount)}
-              onChange={(sizeLevel) => onWallColumnCountChange(getWallColumnCountFromSizeLevel(sizeLevel))}
+          {/* Per page */}
+          <div className={toolbarSegmentClass}>
+            <PageSizeSelect
+              perPage={perPage}
+              allowInfinite={allowInfinitePageSize}
+              infinitePageSize={infinitePageSize}
+              infinitePageSizeOnly={infinitePageSizeOnly}
+              maxPageSize={maxPageSize}
+              onChange={(nextPerPage) =>
+                onFilterChange({
+                  ...filter,
+                  perPage: maxPageSize == null ? nextPerPage : Math.min(nextPerPage, maxPageSize),
+                  page: 1,
+                })
+              }
             />
-          )}
+
+            {/* Zoom slider (standard card size slider) */}
+            {(displayMode === "grid" || displayMode === "list") && (
+              <div className="hidden items-center gap-1 pl-1 md:flex">
+                <ZoomOut className="w-3 h-3 text-muted" />
+                <input
+                  type="range"
+                  min={0}
+                  max={cardSizeMaxLevel}
+                  step={0.25}
+                  value={zoomLevel}
+                  onChange={(e) => setZoomLevel(clampEntityCardSizeLevel(cardSizeEntityType, Number(e.target.value)))}
+                  style={
+                    { "--range-fill": `${(zoomLevel / Math.max(0.25, cardSizeMaxLevel)) * 100}%` } as CSSProperties
+                  }
+                  className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
+                  title={`Card size: ${getEntityCardMinWidthPx(cardSizeEntityType, zoomLevel)}px`}
+                />
+                <ZoomIn className="w-3 h-3 text-muted" />
+              </div>
+            )}
+
+            {displayMode === "wall" && wallColumnCount != null && onWallColumnCountChange && (
+              <WallSizeControl
+                sizeLevel={getWallSizeLevelFromColumnCount(wallColumnCount)}
+                onChange={(sizeLevel) => onWallColumnCountChange(getWallColumnCountFromSizeLevel(sizeLevel))}
+              />
+            )}
+          </div>
         </div>
 
         {/* Operations */}
-        <div className="list-page-operations ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className="list-page-operations ml-auto flex flex-wrap items-center justify-end gap-2 sm:ml-0 lg:flex-1 lg:basis-0 lg:min-w-fit">
           {renderOperations?.()}
           <ExtensionSlot slot="list-page-toolbar-end" context={slotContext} />
           {pageKey && <ExtensionSlot slot={`${pageKey}-list-toolbar-end`} context={slotContext} />}
@@ -1827,9 +1871,16 @@ export function ListPage({
         </div>
       )}
 
+      {/* Top pager: rendered outside the load gate so it survives page changes */}
+      {showPagingControls && resolvedLoadState.status !== "error" && totalPages > 1 && (
+        <div className="mx-1 mt-1 flex flex-wrap items-center justify-center gap-1 py-1">
+          <PaginationControls page={page} totalPages={totalPages} goTo={goTo} />
+        </div>
+      )}
+
       {/* Results */}
       <QueryState
-        state={resolvedLoadState}
+        state={resultsState}
         loading={
           <div role="status" aria-label={`Loading ${title}`} className="flex h-64 items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-accent" />
@@ -1839,17 +1890,14 @@ export function ListPage({
         errorClassName="mx-1 mt-3"
       >
         <>
-          {showPagingControls && totalPages > 1 && (
-            <div className="mx-1 mt-1 flex flex-wrap items-center justify-center gap-1 py-1">
-              <PaginationControls page={page} totalPages={totalPages} goTo={goTo} />
-            </div>
-          )}
           <ListPageCardSizeContext.Provider value={{ cardMinWidthPx, zoomLevel }}>
             <div
+              aria-busy={reloading || undefined}
               className="list-page-content pt-3"
               style={{ "--card-min-width": `${cardMinWidthPx}px` } as React.CSSProperties}
             >
-              {children}
+              {reloading && <span role="status" aria-label={`Loading ${title} page ${page}`} className="sr-only" />}
+              {resultsChildren}
               {infinitePageSize && infiniteScroll && !contentOwnsInfiniteLoading && (
                 <InfiniteScrollSentinel
                   hasMore={Boolean(infiniteScroll.hasNextPage)}

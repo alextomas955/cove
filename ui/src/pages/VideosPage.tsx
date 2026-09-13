@@ -835,7 +835,7 @@ export function VideosPage({ onNavigate }: Props) {
             />
           ) : undefined
         }
-        summaryLoading={!visualSearchActive && !canShowCompilationGroups && (loading || filteredAggregateLoading)}
+        summaryLoading={!visualSearchActive && !canShowCompilationGroups && filteredAggregateLoading}
         pageKey="videos"
         filterMode="videos"
         filter={filter}

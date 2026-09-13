@@ -1,5 +1,28 @@
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+
+const VISIBLE_SLOTS = 7;
+const ELLIPSIS = -1;
+
+// Every page-number slot (numbers and ellipses) shares one width derived from the widest page
+// number in the list, so the Next/Last arrows stay put while paging (#620). The width uses ch,
+// which resolves against each slot's own font, so the font classes are shared as well.
+const SLOT_WIDTH_PROPERTY = "--page-slot";
+const SLOT_CLASSES =
+  "min-w-[max(2.5rem,var(--page-slot))] text-sm font-medium tabular-nums sm:min-w-[max(28px,var(--page-slot))] sm:text-xs";
+
+// Below the sm breakpoint the callers' wrapping flex rows show the page numbers on their own first
+// row and the arrows with the Go-to control between them on a second row. Flex order puts the
+// controls in that sequence on narrow screens and restores DOM order (« ‹ numbers › » Go to…) above it.
+const ARROW_CLASSES =
+  "inline-flex min-h-10 min-w-10 items-center justify-center rounded text-secondary hover:bg-card hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1";
+const MOBILE_ORDER = {
+  first: "order-1 sm:order-none",
+  previous: "order-2 sm:order-none",
+  goTo: "order-3 sm:order-none",
+  next: "order-4 sm:order-none",
+  last: "order-5 sm:order-none",
+} as const;
 
 export function PaginationControls({
   page,
@@ -12,6 +35,8 @@ export function PaginationControls({
 }) {
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(String(page));
+  // ch is the width of "0", which tabular-nums makes the width of every digit; 1rem covers padding.
+  const slotStyle = { [SLOT_WIDTH_PROPERTY]: `calc(${String(totalPages).length}ch + 1rem)` } as CSSProperties;
 
   const handleSubmit = () => {
     const nextPage = Number.parseInt(inputValue, 10);
@@ -27,7 +52,7 @@ export function PaginationControls({
         title="First page"
         onClick={() => goTo(1)}
         disabled={page <= 1}
-        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded text-secondary hover:bg-card hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1"
+        className={`${ARROW_CLASSES} ${MOBILE_ORDER.first}`}
       >
         <ChevronsLeft className="w-3.5 h-3.5" />
       </button>
@@ -37,42 +62,48 @@ export function PaginationControls({
         title="Previous page"
         onClick={() => goTo(page - 1)}
         disabled={page <= 1}
-        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded text-secondary hover:bg-card hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1"
+        className={`${ARROW_CLASSES} ${MOBILE_ORDER.previous}`}
       >
         <ChevronLeft className="w-3.5 h-3.5" />
       </button>
-      {getPageNumbers(page, totalPages).map((pageNumber, index) =>
-        pageNumber === -1 ? (
-          // Same footprint as a page button, so swapping a number for an ellipsis never shifts the arrows.
-          <span
-            key={`ellipsis-${index}`}
-            aria-hidden="true"
-            className="inline-flex h-10 min-w-10 items-center justify-center text-xs text-muted sm:h-7 sm:min-w-[28px]"
-          >
-            …
-          </span>
-        ) : (
-          <button
-            type="button"
-            key={pageNumber}
-            aria-label={`Page ${pageNumber}`}
-            aria-current={pageNumber === page ? "page" : undefined}
-            onClick={() => goTo(pageNumber)}
-            className={`h-10 min-w-10 rounded text-sm font-medium tabular-nums sm:h-7 sm:min-w-[28px] sm:text-xs ${
-              pageNumber === page ? "bg-accent text-white" : "text-secondary hover:bg-card hover:text-foreground"
-            }`}
-          >
-            {pageNumber}
-          </button>
-        ),
-      )}
+      <div
+        data-testid="page-numbers"
+        className="order-first flex basis-full flex-wrap items-center justify-center gap-1 sm:order-none sm:basis-auto"
+      >
+        {getPageNumbers(page, totalPages).map((pageNumber, index) =>
+          pageNumber === ELLIPSIS ? (
+            <span
+              key={`ellipsis-${index}`}
+              aria-hidden="true"
+              style={slotStyle}
+              className={`inline-flex h-10 ${SLOT_CLASSES} items-center justify-center text-muted sm:h-7`}
+            >
+              …
+            </span>
+          ) : (
+            <button
+              type="button"
+              key={pageNumber}
+              aria-label={`Page ${pageNumber}`}
+              aria-current={pageNumber === page ? "page" : undefined}
+              onClick={() => goTo(pageNumber)}
+              style={slotStyle}
+              className={`h-10 ${SLOT_CLASSES} rounded sm:h-7 ${
+                pageNumber === page ? "bg-accent text-white" : "text-secondary hover:bg-card hover:text-foreground"
+              }`}
+            >
+              {pageNumber}
+            </button>
+          ),
+        )}
+      </div>
       <button
         type="button"
         aria-label="Next page"
         title="Next page"
         onClick={() => goTo(page + 1)}
         disabled={page >= totalPages}
-        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded text-secondary hover:bg-card hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1"
+        className={`${ARROW_CLASSES} ${MOBILE_ORDER.next}`}
       >
         <ChevronRight className="w-3.5 h-3.5" />
       </button>
@@ -82,18 +113,18 @@ export function PaginationControls({
         title="Last page"
         onClick={() => goTo(totalPages)}
         disabled={page >= totalPages}
-        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded text-secondary hover:bg-card hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1"
+        className={`${ARROW_CLASSES} ${MOBILE_ORDER.last}`}
       >
         <ChevronsRight className="w-3.5 h-3.5" />
       </button>
-      {totalPages > 7 &&
+      {totalPages > VISIBLE_SLOTS &&
         (editing ? (
           <form
             onSubmit={(event) => {
               event.preventDefault();
               handleSubmit();
             }}
-            className="ml-1 flex items-center gap-1"
+            className={`mx-1 flex items-center gap-1 sm:mr-0 ${MOBILE_ORDER.goTo}`}
           >
             <input
               type="text"
@@ -113,7 +144,7 @@ export function PaginationControls({
               setInputValue(String(page));
               setEditing(true);
             }}
-            className="ml-1 min-h-10 rounded border border-border px-3 text-sm text-muted hover:bg-card hover:text-foreground sm:h-7 sm:min-h-0 sm:px-2 sm:text-xs"
+            className={`mx-1 min-h-10 rounded border border-border px-3 text-sm text-muted hover:bg-card hover:text-foreground sm:mr-0 sm:h-7 sm:min-h-0 sm:px-2 sm:text-xs ${MOBILE_ORDER.goTo}`}
             title="Go to page…"
           >
             Go to…
@@ -123,14 +154,11 @@ export function PaginationControls({
   );
 }
 
-/**
- * Page slots to render, with -1 for an ellipsis. Once the pager overflows it always renders exactly seven
- * slots: a varying count moved the next/last buttons on every click, so repeatedly clicking "next" could
- * land on "last" instead.
- */
+// Always returns exactly VISIBLE_SLOTS entries when the list has more pages than that, so the
+// number block keeps a constant width as the current page changes. ELLIPSIS marks a gap.
 function getPageNumbers(current: number, total: number): number[] {
-  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
-  if (current <= 4) return [1, 2, 3, 4, 5, -1, total];
-  if (current >= total - 3) return [1, -1, total - 4, total - 3, total - 2, total - 1, total];
-  return [1, -1, current - 1, current, current + 1, -1, total];
+  if (total <= VISIBLE_SLOTS) return Array.from({ length: total }, (_, index) => index + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, ELLIPSIS, total];
+  if (current >= total - 3) return [1, ELLIPSIS, total - 4, total - 3, total - 2, total - 1, total];
+  return [1, ELLIPSIS, current - 1, current, current + 1, ELLIPSIS, total];
 }
