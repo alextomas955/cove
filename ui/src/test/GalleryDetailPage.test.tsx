@@ -35,6 +35,10 @@ const { mockGalleries, mockImages, mockVideos, mockEntityImages, mockSetRating, 
   mockGoBack: vi.fn(),
 }));
 
+const mockConfig = vi.hoisted(() => ({
+  interface: undefined as { menuItems?: string[] } | undefined,
+}));
+
 vi.mock("../hooks/useDocumentTitle", () => ({
   useDocumentTitle: () => {},
 }));
@@ -88,7 +92,7 @@ vi.mock("../auth/AuthContext", () => ({
 }));
 
 vi.mock("../state/AppConfigContext", () => ({
-  useAppConfig: () => ({ config: { ui: {} } }),
+  useAppConfig: () => ({ config: mockConfig }),
   useOptionalAppConfig: () => ({ config: { ui: {} } }),
 }));
 
@@ -207,6 +211,7 @@ describe("GalleryDetailPage", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/gallery/21");
     mockGalleries.getLikeCount.mockResolvedValue(0);
+    mockConfig.interface = undefined;
   });
 
   afterEach(() => {
@@ -295,6 +300,50 @@ describe("GalleryDetailPage", () => {
 
     fireEvent.click(within(tabs).getByRole("tab", { name: /file info/i }));
     expect(await screen.findByText("C:/galleries/summer-set")).toBeInTheDocument();
+  });
+
+  it("opens a directly visited gallery on the first configured tab", async () => {
+    // Arriving from image or gallery browsing carries an explicit tab in the URL, so this default only
+    // governs a gallery opened on its own, where the configured menu order decides.
+    mockConfig.interface = { menuItems: ["videos", "images", "fileinfo"] };
+    mockGalleries.get.mockResolvedValue(buildGallery({ videoCount: 1 }));
+    mockImages.find.mockResolvedValue({ items: [{ id: 91, title: "Cover Frame" }], totalCount: 1 });
+    mockVideos.find.mockResolvedValue({ items: [{ id: 4, title: "Video One" }], totalCount: 1 });
+
+    renderPage();
+
+    const tabs = within(await screen.findByRole("tablist", { name: /detail tabs/i })).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual(["Videos", "Images", "File Info"]);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Video One")).toBeInTheDocument();
+  });
+
+  it("honors the images tab that gallery browsing puts in the URL", async () => {
+    // The router resolves a gallery reached from image or gallery browsing to "?tab=images", which has
+    // to win over a configured order that ranks videos first.
+    window.history.replaceState(null, "", "/gallery/21?tab=images");
+    mockConfig.interface = { menuItems: ["videos", "images", "fileinfo"] };
+    mockGalleries.get.mockResolvedValue(buildGallery({ videoCount: 1 }));
+    mockImages.find.mockResolvedValue({ items: [{ id: 91, title: "Cover Frame" }], totalCount: 1 });
+    mockVideos.find.mockResolvedValue({ items: [{ id: 4, title: "Video One" }], totalCount: 1 });
+
+    renderPage();
+
+    const tabs = within(await screen.findByRole("tablist", { name: /detail tabs/i })).getAllByRole("tab");
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Cover Frame")).toBeInTheDocument();
+  });
+
+  it("honors an explicit videos tab in the URL", async () => {
+    window.history.replaceState(null, "", "/gallery/21?tab=videos");
+    mockGalleries.get.mockResolvedValue(buildGallery({ videoCount: 1 }));
+    mockImages.find.mockResolvedValue({ items: [{ id: 91, title: "Cover Frame" }], totalCount: 1 });
+    mockVideos.find.mockResolvedValue({ items: [{ id: 4, title: "Video One" }], totalCount: 1 });
+
+    renderPage();
+
+    expect(await screen.findByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Video One")).toBeInTheDocument();
   });
 
   it("shows the aggregate likes from gallery images and videos", async () => {

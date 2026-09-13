@@ -89,6 +89,8 @@ const GALLERY_VIDEOS_DEFAULT_FILTER_KEY = "gallery-videos";
 export function GalleryDetailPage({ id, onNavigate }: Props) {
   const { config } = useAppConfig();
   const { hasPermission, user } = useAuth();
+  // Reaching a gallery from image or gallery browsing already arrives with an explicit tab, so this
+  // default is what a directly opened gallery lands on: the first tab in the configured menu order.
   const { activeTab, setActiveTab } = useDetailTabUrlState<TabKey>(
     getFirstDetailTabByMenuItems(["images", "videos", "fileinfo"], config?.interface?.menuItems) ?? "images",
   );
