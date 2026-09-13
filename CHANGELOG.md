@@ -10,6 +10,7 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 
 ## [Unreleased]
 
+- The video list view is now a table with a column picker. Choose, reorder, and resize columns such as studio, date, duration, resolution, performers, tags, rating, play count, or file path, and the column layout is saved with saved filters and the default filter.
 - The Duplicate Finder has been rebuilt around reviewing and resolving duplicates quickly and safely. Search by visual similarity with accuracy presets, identical files, titles, or scene IDs, limited to or excluding library folders and ignoring short clips. Settings are remembered, searches show live progress, and recent searches can be resumed where you left off.
 - Duplicate keeper rules pick the best copy in every group by resolution, duration, bitrate, frame rate, preferred codec, file size, metadata, watch history, organized state, preferred folder, or date added. Each group records why its keeper was chosen, and the rules can be re-applied to all groups at any time.
 - Duplicate groups line copies up side by side with hover previews, highlighted best values, and visual-distance and length hints. A compare view adds a draggable slider, synchronized playback with an offset for trimmed copies, and aligned frame strips. Groups can be filtered, sorted by space to free, paged, quick-viewed without leaving the page, and reviewed with keyboard shortcuts.

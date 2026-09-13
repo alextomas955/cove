@@ -22,7 +22,6 @@ import {
   toggleOptionsFromEvent,
   useMultiSelect,
   type BoundMultiSelectToggleHandler,
-  type MultiSelectToggleHandler,
   type MultiSelectToggleOptions,
 } from "../hooks/useMultiSelect";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
@@ -72,7 +71,21 @@ import { NarrativeText } from "../components/NarrativeText";
 import { BookmarkButton } from "../components/BookmarkButton";
 import { VirtualizedInfiniteList } from "../components/VirtualizedInfiniteList";
 import { VirtualizedEntityGrid, VirtualizedWallColumns } from "../components/VirtualizedEntityLayouts";
-import { RelatedEntityListRow } from "../components/RelatedEntityListView";
+import { VideoListTable } from "../components/VideoListTable";
+import { VideoListColumnPicker } from "../components/VideoListColumnPicker";
+import {
+  getVideoDisplayDuration,
+  getVideoListTitle,
+  getVideoPrimaryFile,
+  hasVideoListColumnWidths,
+  isDefaultVideoListColumns,
+  resolveVideoListColumns,
+  resolveVideoListColumnWidths,
+  VIDEO_LIST_COLUMN_WIDTHS_UI_OPTION_KEY,
+  VIDEO_LIST_COLUMNS_UI_OPTION_KEY,
+  type VideoListColumnId,
+  type VideoListColumnWidths,
+} from "../components/videoListColumns";
 import { fetchAllMatchingIds } from "../utils/selectAllMatching";
 import { resolveQueryLoadState } from "../utils/queryLoadState";
 import { useVideoQueueNavigation } from "../hooks/useVideoQueueNavigation";
@@ -145,7 +158,25 @@ export function VideosPage({ onNavigate }: Props) {
         ["grid", "list", "wall", "tagger", "feed", "vertical"] as const,
         "grid",
       ) as DisplayMode,
+      listColumns: resolveVideoListColumns(savedFilter?.uiOptions),
+      listColumnWidths: resolveVideoListColumnWidths(savedFilter?.uiOptions),
     };
+  }, []);
+  const [listColumns, setListColumns] = useState<VideoListColumnId[]>(defaultState.listColumns);
+  const [listColumnWidths, setListColumnWidths] = useState<VideoListColumnWidths>(defaultState.listColumnWidths);
+  // Only persist a customised layout so saved filters do not pin the built-in default column set.
+  const savedFilterUIOptions = useMemo(
+    () => ({
+      ...(isDefaultVideoListColumns(listColumns) ? {} : { [VIDEO_LIST_COLUMNS_UI_OPTION_KEY]: listColumns }),
+      ...(hasVideoListColumnWidths(listColumnWidths)
+        ? { [VIDEO_LIST_COLUMN_WIDTHS_UI_OPTION_KEY]: listColumnWidths }
+        : {}),
+    }),
+    [listColumnWidths, listColumns],
+  );
+  const applySavedFilterUIOptions = useCallback((options: Record<string, unknown>) => {
+    setListColumns(resolveVideoListColumns(options));
+    setListColumnWidths(resolveVideoListColumnWidths(options));
   }, []);
   const visualSimilarity = useVisualSimilarityApi();
   const visualSimilarityAvailable = visualSimilarity != null;
@@ -669,7 +700,7 @@ export function VideosPage({ onNavigate }: Props) {
     items.map((item) => item.id),
   );
   const wallColumns = useWallColumns(items, wallColumnCount, (video) => {
-    const file = video.files[0];
+    const file = getVideoPrimaryFile(video);
     return file?.width && file.height ? file.height / file.width : 9 / 16;
   });
   const selectionResetKey = useMemo(
@@ -747,7 +778,7 @@ export function VideosPage({ onNavigate }: Props) {
         [
           {
             id: video.id,
-            title: video.title || video.files[0]?.basename || `Video ${video.id}`,
+            title: getVideoListTitle(video),
             subtitle: video.studioName || video.date || undefined,
             imagePath: videos.screenshotUrl(video.id, video.updatedAt),
           },
@@ -881,21 +912,33 @@ export function VideosPage({ onNavigate }: Props) {
         selectAllPending={infinitePageSize ? selectAllMatchingPending : false}
         onSelectAllMatching={infinitePageSize ? selectAll : undefined}
         selectAllMatchingLabel="Select shown"
+        savedFilterUIOptions={savedFilterUIOptions}
+        onApplySavedFilterUIOptions={applySavedFilterUIOptions}
         renderOperations={() => (
-          <button
-            type="button"
-            onClick={() => playRandomMutation.mutate()}
-            disabled={playRandomMutation.isPending || loading || (totalCount ?? 0) === 0}
-            className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-border bg-card/70 px-2.5 py-2 text-sm text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:py-1 sm:text-xs"
-            title="Play random"
-            aria-label="Play random"
-          >
-            {playRandomMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Shuffle className="h-3.5 w-3.5" />
+          <>
+            {displayMode === "list" && (
+              <VideoListColumnPicker
+                columnIds={listColumns}
+                onChange={setListColumns}
+                columnWidths={listColumnWidths}
+                onColumnWidthsChange={setListColumnWidths}
+              />
             )}
-          </button>
+            <button
+              type="button"
+              onClick={() => playRandomMutation.mutate()}
+              disabled={playRandomMutation.isPending || loading || (totalCount ?? 0) === 0}
+              className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-border bg-card/70 px-2.5 py-2 text-sm text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:py-1 sm:text-xs"
+              title="Play random"
+              aria-label="Play random"
+            >
+              {playRandomMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Shuffle className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </>
         )}
         onNew={canWriteVideo ? () => setShowCreate(true) : undefined}
         selectedIds={selectedIds}
@@ -1131,10 +1174,21 @@ export function VideosPage({ onNavigate }: Props) {
         {displayMode === "list" && (
           <VideoListTable
             entries={listEntries}
+            columnIds={listColumns}
+            columnWidths={listColumnWidths}
+            onColumnWidthsChange={setListColumnWidths}
             engagementById={engagementById}
             onNavigate={navigateFromVideoList}
             selectedIds={selectedIds}
             onToggle={toggle}
+            onSelectVisible={(ids, selected) => {
+              const next = new Set(selectedIds);
+              for (const id of ids) {
+                if (selected) next.add(id);
+                else next.delete(id);
+              }
+              selectIds([...next]);
+            }}
             selecting={selecting}
           />
         )}
@@ -1225,14 +1279,6 @@ function CompilationGroupCard({ group, onNavigate }: { group: Group; onNavigate:
   );
 }
 
-function getVideoDisplayDuration(video: Video) {
-  if (typeof video.clipStartSec === "number" && typeof video.clipEndSec === "number") {
-    return Math.max(0, video.clipEndSec - video.clipStartSec);
-  }
-
-  return video.files[0]?.duration ?? 0;
-}
-
 function getVideoFeedMedia(video: Video, feedVideoSource: string) {
   const coverUrl = entityImages.videoCoverUrl(video.id, video.updatedAt, 1280);
 
@@ -1264,84 +1310,6 @@ function getVideoFeedVideoStartTime(video: Video, feedVideoSource: string, start
   return duration * (Math.min(95, Math.max(0, startPercent)) / 100);
 }
 
-/* ── Video List Table ── */
-
-function VideoListTable({
-  entries,
-  onNavigate,
-  selectedIds,
-  onToggle,
-  selecting,
-}: {
-  entries: VideoListEntry[];
-  engagementById: ReadonlyMap<number, EntityEngagement>;
-  onNavigate: (r: any) => void;
-  selectedIds?: Set<number>;
-  onToggle?: MultiSelectToggleHandler;
-  selecting?: boolean;
-}) {
-  return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-2">
-      {entries.map((entry) => {
-        if (entry.kind === "compilation" && entry.group) {
-          const group = entry.group;
-          return <CompilationListRow key={`compilation-${group.id}`} group={group} onNavigate={onNavigate} />;
-        }
-        if (!entry.video) return null;
-        return (
-          <RelatedEntityListRow
-            key={`video-${entry.video.id}`}
-            entityType="videos"
-            item={entry.video}
-            selected={selectedIds?.has(entry.video.id) ?? false}
-            selecting={selecting}
-            onToggle={onToggle}
-            onNavigate={onNavigate}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function CompilationListRow({ group, onNavigate }: { group: Group; onNavigate: (r: any) => void }) {
-  return (
-    <article
-      className="group flex min-h-[5.75rem] w-full cursor-pointer items-stretch gap-3 rounded-lg border border-border/70 bg-card/70 p-2 text-left shadow-sm shadow-black/10 transition-colors hover:border-accent/45 hover:bg-card"
-      onClick={() => onNavigate({ page: "compilation", id: group.id })}
-    >
-      <div className="relative flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-surface/80 text-muted">
-        <Layers className="h-7 w-7" />
-      </div>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onNavigate({ page: "compilation", id: group.id });
-        }}
-        className="flex min-w-0 flex-1 flex-col justify-center text-left"
-      >
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <h3 className="min-w-0 truncate text-sm font-semibold text-foreground transition-colors group-hover:text-accent sm:text-[15px]">
-            {group.name}
-          </h3>
-          <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-accent">
-            Compilation
-          </span>
-        </div>
-        <p className="mt-1 truncate text-xs text-secondary">
-          {[group.studioName, group.date].filter(Boolean).join(" · ") || "Compilation"}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted">
-          <span className="rounded-full border border-border/70 bg-background/55 px-2 py-0.5">
-            {group.videoCount} videos
-          </span>
-        </div>
-      </button>
-    </article>
-  );
-}
-
 /* ── Video Wall Card ── */
 
 function VideoWallCard({
@@ -1357,7 +1325,7 @@ function VideoWallCard({
   selecting?: boolean;
   onSelect?: BoundMultiSelectToggleHandler;
 }) {
-  const file = video.files[0];
+  const file = getVideoPrimaryFile(video);
   const coverUrl = entityImages.videoCoverUrl(video.id, video.updatedAt, 1280);
   const previewUrl = videos.previewUrl(video.id);
   const previewStatusUrl = videos.previewStatusUrl(video.id);
@@ -1440,7 +1408,7 @@ function VideoFeedCard({
   selecting?: boolean;
   onSelect?: BoundMultiSelectToggleHandler;
 }) {
-  const file = video.files[0];
+  const file = getVideoPrimaryFile(video);
   const { coverUrl, videoSrc, videoStatusSrc } = getVideoFeedMedia(video, feedVideoSource);
   const title = video.title || file?.basename || `Video ${video.id}`;
   const coverAlt = video.imagePath ? title : "";
@@ -1765,7 +1733,7 @@ function VideoVerticalViewerCard({
   selecting?: boolean;
   onSelect?: BoundMultiSelectToggleHandler;
 }) {
-  const file = video.files[0];
+  const file = getVideoPrimaryFile(video);
   const { coverUrl, videoSrc, videoStatusSrc } = getVideoFeedMedia(video, feedVideoSource);
   const title = video.title || file?.basename || `Video ${video.id}`;
   const coverAlt = video.imagePath ? title : "";

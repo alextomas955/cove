@@ -341,11 +341,17 @@ export function SavedFilterMenu({
       }
     }
 
-    if (onApplyUIOptions && uiOptionsJson) {
-      try {
-        onApplyUIOptions(JSON.parse(uiOptionsJson) as SavedFilterUIOptions);
-      } catch {
-        // ignore invalid JSON
+    if (onApplyUIOptions) {
+      if (uiOptionsJson) {
+        try {
+          onApplyUIOptions(JSON.parse(uiOptionsJson) as SavedFilterUIOptions);
+        } catch {
+          // ignore invalid JSON
+        }
+      } else {
+        // A filter saved without display options still lets pages reset their own custom options; display mode
+        // and zoom level are left unchanged because nothing is supplied for them.
+        onApplyUIOptions({});
       }
     }
 
