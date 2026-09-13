@@ -8,6 +8,7 @@ import {
   Pause,
   ZoomIn,
   ZoomOut,
+  RotateCcw,
   Maximize2,
   Minimize2,
   ThumbsUp,
@@ -542,6 +543,7 @@ export function Lightbox({
             onClick={handleZoomOut}
             className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
             aria-label="Zoom out"
+            title="Zoom out"
           >
             <ZoomOut size={20} />
           </button>
@@ -549,6 +551,7 @@ export function Lightbox({
             onClick={handleZoomIn}
             className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
             aria-label="Zoom in"
+            title="Zoom in"
           >
             <ZoomIn size={20} />
           </button>
@@ -558,7 +561,7 @@ export function Lightbox({
             aria-label="Reset zoom"
             title="Reset zoom"
           >
-            <ZoomOut size={20} />
+            <RotateCcw size={20} />
           </button>
           <button
             onClick={() => void toggleFullscreen()}
