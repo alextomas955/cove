@@ -2095,6 +2095,18 @@ export function VideoPlayer({
           ref={sourceRef}
           src={compatibilityLookupPending || suspended ? undefined : effectiveStreamUrl}
           type={effectiveSourceType}
+          onError={(e) => {
+            // A source the browser cannot demux fails during resource selection, which fires
+            // `error` on the <source> and leaves video.error null — so the <video> onError below
+            // never sees it and the player sits dead with no message. Containers such as flv,
+            // mpegts and mpeg-ps reach the user this way. Treat it as a decode failure.
+            if (compatibilityLookupPending || suspended) return;
+            if (selectedQuality !== "Direct") return;
+            // Teardown clears the src to abort in-flight downloads; that is not a playback failure.
+            if (!e.currentTarget.getAttribute("src")) return;
+            if (videoRef.current?.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE) return;
+            fallbackToTranscode();
+          }}
         />
         {captions?.map((cap, idx) => (
           <track

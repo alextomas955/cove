@@ -1684,6 +1684,51 @@ describe("VideoPlayer source lifecycle", () => {
       expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
     });
 
+    const rejectSource = (container: HTMLElement, networkState: number) => {
+      const video = container.querySelector("video") as HTMLVideoElement;
+      const source = container.querySelector("source") as HTMLSourceElement;
+      Object.defineProperty(video, "networkState", { configurable: true, value: networkState });
+      act(() => {
+        source.dispatchEvent(new Event("error"));
+      });
+    };
+
+    it("falls back to a transcode when the browser rejects the container outright", async () => {
+      mockResolutions(["360p", "720p"]);
+      const { container } = render(player(60, "flv"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/60"));
+
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute(
+          "src",
+          "/api/stream/video/60/transcode?resolution=720p",
+        ),
+      );
+    });
+
+    it("stays on Direct when a source error leaves a resource selected", async () => {
+      mockResolutions(["360p", "720p"]);
+      const { container } = render(player(61, "flv"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/61"));
+
+      rejectSource(container, HTMLMediaElement.NETWORK_LOADING);
+
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/61");
+    });
+
+    it("stays on Direct when the source src was cleared for teardown", async () => {
+      mockResolutions(["360p", "720p"]);
+      const { container } = render(player(62, "flv"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/62"));
+
+      container.querySelector("source")?.removeAttribute("src");
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+
+      expect(container.querySelector("source")).not.toHaveAttribute("src");
+    });
+
     it("selects a transcode and shows an audio-specific notice for incompatible MP4 audio", async () => {
       mockResolutions(["360p", "720p"]);
       const { container } = render(player(43, "mp4", " AC3 "));
