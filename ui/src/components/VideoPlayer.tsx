@@ -367,6 +367,7 @@ export function VideoPlayer({
   const pendingAutostartRef = useRef(false);
   const navigationSeekKeyRef = useRef<string | null>(null);
   const navigationSeekIntentRef = useRef<{ key: string; play: boolean } | null>(null);
+  const pendingImperativeSeekRef = useRef<{ time: number; mediaIdentity: string } | null>(null);
   const navigationAutostartSuppressedRef = useRef(false);
   // Resume-seek bookkeeping: which source we last applied the resume/initial seek for, and whether a real
   // resume target has been applied for it. Lets us ignore later resumeTime changes for the SAME source (the
@@ -403,6 +404,7 @@ export function VideoPlayer({
   const interactionIdentityRef = useRef({ videoId, interactionResetKey });
   const videoMetricsReadyRef = useRef(false);
   const playerActiveRef = useRef(true);
+  const mediaIdentity = `${videoId}|${fileId ?? ""}|${streamUrl}|${clip?.start ?? ""}|${clip?.end ?? ""}`;
   const clipStart = clip?.start ?? 0;
   const clipEnd = Math.max(clipStart, clip?.end ?? duration);
   const timelineStart = clip ? clipStart : 0;
@@ -666,6 +668,12 @@ export function VideoPlayer({
       const rounded = roundPlaybackTime(target);
 
       if (selectedQuality === "Direct") {
+        const metadataPending =
+          metadataHandledGenerationRef.current !== sourceGenerationRef.current ||
+          (video?.readyState ?? 0) < HTMLMediaElement.HAVE_METADATA;
+        if (metadataPending) {
+          pendingImperativeSeekRef.current = { time: target, mediaIdentity };
+        }
         if (video) {
           video.currentTime = target;
           if (forcePlay) video.play().catch(() => {});
@@ -683,7 +691,7 @@ export function VideoPlayer({
       lastSeenTime.current = rounded;
       setTranscodeStartSec(target);
     },
-    [duration, onTimeUpdateProp, selectedQuality, playbackTrackingTarget],
+    [duration, mediaIdentity, onTimeUpdateProp, selectedQuality, playbackTrackingTarget],
   );
 
   useEffect(() => {
@@ -693,6 +701,12 @@ export function VideoPlayer({
       });
     }
   }, [onSeekRegister, seekToAbsoluteTime]);
+
+  useEffect(() => {
+    if (pendingImperativeSeekRef.current?.mediaIdentity !== mediaIdentity) {
+      pendingImperativeSeekRef.current = null;
+    }
+  }, [mediaIdentity]);
 
   const updateVideoBox = useCallback(() => {
     const video = videoRef.current;
@@ -1225,9 +1239,10 @@ export function VideoPlayer({
 
       clipEndedHandled.current = true;
       video.pause();
-      seekToAbsoluteTime(clipEnd, false);
-      lastSeenTime.current = roundPlaybackTime(clipEnd);
-      setCurTime(roundPlaybackTime(clipEnd));
+      const clipEndPosition = roundPlaybackTime(clipEnd);
+      lastSeenTime.current = clipEndPosition;
+      setCurTime(clipEndPosition);
+      onTimeUpdateProp?.(clipEndPosition);
       flushInterval("ended");
       intervalStart.current = null;
       setPlaying(false);
@@ -1245,6 +1260,7 @@ export function VideoPlayer({
     flushInterval,
     loop,
     onEndedProp,
+    onTimeUpdateProp,
     seekToAbsoluteTime,
     startTrackedInterval,
     toAbsoluteTime,
@@ -1726,6 +1742,8 @@ export function VideoPlayer({
       if (sourceGenerationRef.current !== sourceGeneration) {
         return;
       }
+      const pendingImperativeSeek =
+        pendingImperativeSeekRef.current?.mediaIdentity === mediaIdentity ? pendingImperativeSeekRef.current : null;
       metadataHandledGenerationRef.current = sourceGeneration;
       if (sourceRestoreRef.current === pendingRestore) {
         sourceRestoreRef.current = null;
@@ -1740,12 +1758,19 @@ export function VideoPlayer({
         playerVideoStartMinDuration,
       );
       const targetTime =
+        pendingImperativeSeek?.time ??
         (pendingNavigationSeek ? navigationSeekTo : pendingRestore?.time) ??
-        (clip ? clip.start : (effectiveResumeTime ?? configuredStartTime)) ??
+        (clip
+          ? Math.min(Math.max(effectiveResumeTime ?? clip.start, clip.start), clip.end ?? mediaDuration)
+          : (effectiveResumeTime ?? configuredStartTime)) ??
         positionBeforeLoad;
       if (targetTime != null && Number.isFinite(targetTime)) {
         video.currentTime = selectedQuality === "Direct" ? targetTime : Math.max(0, targetTime - transcodeStartSec);
         setCurTime(roundPlaybackTime(targetTime));
+      }
+
+      if (pendingImperativeSeekRef.current === pendingImperativeSeek) {
+        pendingImperativeSeekRef.current = null;
       }
 
       if (pendingNavigationSeek && navigationSeekIntentRef.current?.key === pendingNavigationSeek.key) {
@@ -1781,6 +1806,7 @@ export function VideoPlayer({
     effectiveSourceSignature,
     effectiveSourceType,
     effectiveStreamUrl,
+    mediaIdentity,
     navigationSeekTo,
     playerVideoStartMinDuration,
     playerVideoStartPercent,

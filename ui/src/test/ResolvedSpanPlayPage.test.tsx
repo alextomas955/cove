@@ -3,26 +3,28 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResolvedSpanPlayPage } from "../pages/ResolvedSpanPlayPage";
 
-const { mockVideos, mockSegmentDisplayProfiles, mockSegmentLibrary, mockGoBack, mockUiConfig } = vi.hoisted(() => ({
-  mockVideos: {
-    get: vi.fn(),
-    createSubVideo: vi.fn(),
-    streamUrl: vi.fn((id: number) => `/video-${id}.mp4`),
-    screenshotUrl: vi.fn((id: number) => `/video-${id}.jpg`),
-    segments: {
-      spanDetail: vi.fn(),
-      spans: vi.fn(),
+const { mockVideos, mockSegmentDisplayProfiles, mockSegmentLibrary, mockGoBack, mockUiConfig, mockPlayerSeek } =
+  vi.hoisted(() => ({
+    mockVideos: {
+      get: vi.fn(),
+      createSubVideo: vi.fn(),
+      streamUrl: vi.fn((id: number) => `/video-${id}.mp4`),
+      screenshotUrl: vi.fn((id: number) => `/video-${id}.jpg`),
+      segments: {
+        spanDetail: vi.fn(),
+        spans: vi.fn(),
+      },
     },
-  },
-  mockSegmentDisplayProfiles: {
-    get: vi.fn(),
-  },
-  mockSegmentLibrary: {
-    list: vi.fn(),
-  },
-  mockGoBack: vi.fn(),
-  mockUiConfig: { autostartVideo: true },
-}));
+    mockSegmentDisplayProfiles: {
+      get: vi.fn(),
+    },
+    mockSegmentLibrary: {
+      list: vi.fn(),
+    },
+    mockGoBack: vi.fn(),
+    mockUiConfig: { autostartVideo: true },
+    mockPlayerSeek: vi.fn(),
+  }));
 
 vi.mock("../hooks/useDocumentTitle", () => ({
   useDocumentTitle: () => {},
@@ -61,23 +63,33 @@ vi.mock("../components/VideoPlayer", () => ({
     clip,
     resumeTime,
     autostart,
-    onEnded,
+    onSeekRegister,
+    playbackTracking,
   }: {
     clip: { start: number; end: number };
     resumeTime?: number;
     autostart?: boolean;
-    onEnded?: () => void;
-  }) => (
-    <div>
-      <div data-testid="resolved-span-player">
-        Clip {clip.start}-{clip.end} @ {resumeTime}
+    onSeekRegister?: (seek: (time: number, forcePlay?: boolean) => void) => void;
+    playbackTracking?: {
+      clipStartSec?: number;
+      clipEndSec?: number;
+      context?: Record<string, unknown>;
+    };
+  }) => {
+    onSeekRegister?.(mockPlayerSeek);
+    return (
+      <div>
+        <div data-testid="resolved-span-player">
+          Clip {clip.start}-{clip.end} @ {resumeTime}
+        </div>
+        <div data-testid="resolved-span-autostart">{String(autostart)}</div>
+        <div data-testid="resolved-span-tracking">
+          Tracking {playbackTracking?.clipStartSec}-{playbackTracking?.clipEndSec}{" "}
+          {JSON.stringify(playbackTracking?.context)}
+        </div>
       </div>
-      <div data-testid="resolved-span-autostart">{String(autostart)}</div>
-      <button type="button" onClick={() => onEnded?.()}>
-        End clip
-      </button>
-    </div>
-  ),
+    );
+  },
 }));
 
 function buildDetail() {
@@ -160,7 +172,7 @@ describe("ResolvedSpanPlayPage", () => {
     expect(screen.queryByText("Resolved span not found")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("Clip 5-10 @ 5")).toBeInTheDocument();
+    expect(await screen.findByText("Clip 5-25 @ 5")).toBeInTheDocument();
   });
 
   it("keeps the not-found state for a genuinely missing resolved span", async () => {
@@ -186,7 +198,8 @@ describe("ResolvedSpanPlayPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Clip 5-10 @ 5")).toBeInTheDocument();
+    expect(await screen.findByText("Clip 5-25 @ 5")).toBeInTheDocument();
+    expect(screen.getByTestId("resolved-span-tracking")).toHaveTextContent('Tracking 5-25 {"spanKey":"tag-14"}');
     expect(screen.getByTestId("resolved-span-autostart")).toHaveTextContent("true");
     expect(screen.queryByTestId("media-detail-layout-media-frame")).not.toBeInTheDocument();
 
@@ -195,7 +208,7 @@ describe("ResolvedSpanPlayPage", () => {
     expect(screen.getByText("Interval 2")).toBeInTheDocument();
   });
 
-  it("auto-advances between intervals", async () => {
+  it("seeks within one continuous clip when an interval is selected", async () => {
     mockVideos.segments.spanDetail.mockResolvedValue(buildDetail());
     mockVideos.segments.spans.mockResolvedValue({ profileId: 3, spans: [] });
     mockVideos.get.mockResolvedValue(buildVideo());
@@ -209,10 +222,12 @@ describe("ResolvedSpanPlayPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Clip 5-10 @ 5")).toBeInTheDocument();
+    expect(await screen.findByText("Clip 5-25 @ 5")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("End clip"));
-    expect(await screen.findByText("Clip 20-25 @ 20")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /intervals/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /interval 2/i }));
+    expect(screen.getByText("Clip 5-25 @ 20")).toBeInTheDocument();
+    expect(mockPlayerSeek).toHaveBeenCalledWith(20, false);
   });
 
   it("leaves resolved spans paused when autoplay is disabled", async () => {
