@@ -77,25 +77,6 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-function getVideoSourceMimeType(format?: string) {
-  switch (format?.trim().toLowerCase()) {
-    case "mp4":
-      return "video/mp4";
-    case "webm":
-      return "video/webm";
-    case "ogg":
-    case "ogv":
-      return "video/ogg";
-    case "mpeg":
-    case "mpg":
-      return "video/mpeg";
-    case "mov":
-      return "video/quicktime";
-    default:
-      return undefined;
-  }
-}
-
 // Sentinel quality meaning "transcode at the source resolution" — used as a fallback when no
 // smaller transcode-ladder entries are available (e.g. a sub-360p source).
 const SOURCE_TRANSCODE_QUALITY = "Source";
@@ -906,16 +887,14 @@ export function VideoPlayer({
 
   // The source sentinel transcodes at the original resolution (no `resolution` query param).
   const transcodeResolution = selectedQuality === SOURCE_TRANSCODE_QUALITY ? undefined : selectedQuality;
-  const effectiveStreamUrl =
-    selectedQuality === "Direct"
-      ? streamUrl
-      : videos.transcodeUrl(
-          videoId,
-          transcodeResolution,
-          transcodeStartSec > 0 ? transcodeStartSec : undefined,
-          fileId,
-        );
-  const effectiveSourceType = selectedQuality === "Direct" ? getVideoSourceMimeType(format) : "video/mp4";
+  const isDirectSource = selectedQuality === "Direct";
+  const effectiveStreamUrl = isDirectSource
+    ? streamUrl
+    : videos.transcodeUrl(videoId, transcodeResolution, transcodeStartSec > 0 ? transcodeStartSec : undefined, fileId);
+  // The transcode endpoint always emits MP4. The direct stream declares no type, so the browser
+  // reads the container from the bytes. A declared type can only reject the source before any
+  // request, which browsers do for the correct type of several containers we serve.
+  const effectiveSourceType = isDirectSource ? undefined : "video/mp4";
   const effectiveSourceSignature = `${effectiveStreamUrl}|${effectiveSourceType ?? ""}`;
 
   const suspendedPlaybackRef = useRef<{ time: number; resume: boolean } | null>(null);

@@ -1137,7 +1137,7 @@ describe("VideoPlayer source lifecycle", () => {
 
     await waitFor(() => {
       expect(source).toHaveAttribute("src", "/api/stream/video/1");
-      expect(source).toHaveAttribute("type", "video/mp4");
+      expect(source).not.toHaveAttribute("type");
     });
   });
 
@@ -1381,22 +1381,25 @@ describe("VideoPlayer source lifecycle", () => {
     expect(playMock).toHaveBeenCalledOnce();
   });
 
-  it("does not declare a misleading MIME type for unknown direct video streams", () => {
-    const { container } = render(
-      <VideoPlayer
-        streamUrl="/api/stream/video/8912"
-        format="mpegts"
-        duration={120}
-        videoId={8912}
-        detections={[]}
-        trackingEnabled={false}
-      />,
-    );
+  it.each(["mov", "mpeg", "mp4", "mpegts"])(
+    "does not declare a MIME type on the direct source for format %s",
+    (format) => {
+      const { container } = render(
+        <VideoPlayer
+          streamUrl="/api/stream/video/8912"
+          format={format}
+          duration={120}
+          videoId={8912}
+          detections={[]}
+          trackingEnabled={false}
+        />,
+      );
 
-    const source = container.querySelector("source");
-    expect(source).toBeInstanceOf(HTMLSourceElement);
-    expect(source).not.toHaveAttribute("type");
-  });
+      const source = container.querySelector("source");
+      expect(source).toBeInstanceOf(HTMLSourceElement);
+      expect(source).not.toHaveAttribute("type");
+    },
+  );
 
   it("does not carry the previous video's end position into a different video", async () => {
     const { container, rerender } = render(
