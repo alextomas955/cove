@@ -103,8 +103,14 @@ two-argument call still resolves to the modern overload — no ambiguity either 
 ### The other shapes that break already-built extensions
 
 - **Adding a positional parameter to a public `record`** — the primary constructor and `Deconstruct`
-  both change arity. Reading properties stays fine; constructing or deconstructing breaks. Add an
-  explicit constructor at the old arity.
+  both change arity. Reading properties stays fine; constructing or deconstructing breaks. Prefer
+  adding the member as an `init` property in the record body. Once a positional parameter has
+  shipped, keep the old arity as an explicit `[EditorBrowsable(Never)]` constructor without default
+  values plus a matching `Deconstruct`. Also mark the primary constructor
+  `[method: JsonConstructor]`: System.Text.Json refuses to deserialize a type with more than one
+  public parameterized constructor unless one carries that attribute. `JobInfo` shows the pattern.
+  With a second constructor, ASP.NET Core no longer applies `[param:]` validation attributes, so a
+  request DTO using this pattern also needs them on the property.
 - **Changing a parameter type** — shimmable, by keeping an overload that takes the old type and
   converting. **Changing a return type is not**: C# cannot overload on return type alone, so the old
   shape has to survive under a different method name.

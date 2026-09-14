@@ -3,14 +3,6 @@
 <Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:Cove.Core.DTOs.VideoDto.#ctor(System.Int32,System.String,System.String,System.String,System.String,System.String,System.Boolean,System.Boolean,System.Nullable{System.Int32},System.String,System.String,System.Collections.Generic.List{System.String},System.Collections.Generic.List{Cove.Core.DTOs.TagDto},System.Collections.Generic.List{Cove.Core.DTOs.PerformerSummaryDto},System.Collections.Generic.List{Cove.Core.DTOs.VideoFileDto},System.Collections.Generic.List{Cove.Core.DTOs.GroupSummaryDto},System.Collections.Generic.List{Cove.Core.DTOs.GallerySummaryDto},System.Collections.Generic.List{Cove.Core.DTOs.VideoRemoteIdDto},System.Collections.Generic.Dictionary{System.String,System.Object},System.String,System.String,System.Collections.Generic.List{Cove.Core.DTOs.TagApplicationDto},System.Collections.Generic.List{Cove.Core.DTOs.FieldProvenanceDto},System.Nullable{System.Int32},System.String,System.Nullable{System.Double},System.Nullable{System.Double},System.Int32,System.String,System.Collections.Generic.IReadOnlyList{System.String})</Target>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:Cove.Core.DTOs.VideoDto.Deconstruct(System.Int32@,System.String@,System.String@,System.String@,System.String@,System.String@,System.Boolean@,System.Boolean@,System.Nullable{System.Int32}@,System.String@,System.String@,System.Collections.Generic.List{System.String}@,System.Collections.Generic.List{Cove.Core.DTOs.TagDto}@,System.Collections.Generic.List{Cove.Core.DTOs.PerformerSummaryDto}@,System.Collections.Generic.List{Cove.Core.DTOs.VideoFileDto}@,System.Collections.Generic.List{Cove.Core.DTOs.GroupSummaryDto}@,System.Collections.Generic.List{Cove.Core.DTOs.GallerySummaryDto}@,System.Collections.Generic.List{Cove.Core.DTOs.VideoRemoteIdDto}@,System.Collections.Generic.Dictionary{System.String,System.Object}@,System.String@,System.String@,System.Collections.Generic.List{Cove.Core.DTOs.TagApplicationDto}@,System.Collections.Generic.List{Cove.Core.DTOs.FieldProvenanceDto}@,System.Nullable{System.Int32}@,System.String@,System.Nullable{System.Double}@,System.Nullable{System.Double}@,System.Int32@,System.String@,System.Collections.Generic.IReadOnlyList{System.String}@)</Target>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Cove.Core.Interfaces.PerformerFilter.get_CountryCriterion</Target>
   </Suppression>
 </Suppressions>
