@@ -220,6 +220,29 @@ describe("SavedFilterMenu", () => {
     expect(onApplyUIOptions).toHaveBeenCalledWith({ displayMode: "wall", zoomLevel: 5.25 });
   });
 
+  it("applies empty ui options for filters saved without them", async () => {
+    vi.mocked(savedFilters.list).mockResolvedValue([{ id: 3, mode: "videos", name: "Plain", findFilter: "{}" }]);
+    const onApplyUIOptions = vi.fn();
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SavedFilterMenu
+          mode="videos"
+          currentFilter={{ page: 1 }}
+          onApplyFilter={vi.fn()}
+          onApplyUIOptions={onApplyUIOptions}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByTitle("Saved filters"));
+    await user.click(await screen.findByRole("button", { name: "Plain" }));
+
+    expect(onApplyUIOptions).toHaveBeenCalledWith({});
+  });
+
   it("keeps the menu open and reports an update failure", async () => {
     vi.mocked(savedFilters.list).mockResolvedValue([{ id: 2, mode: "videos", name: "Favorites", findFilter: "{}" }]);
     vi.mocked(savedFilters.update).mockRejectedValue(new Error("Conflict"));
