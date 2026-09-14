@@ -112,14 +112,20 @@ two-argument call still resolves to the modern overload — no ambiguity either 
   and friends) — give it a default implementation, or every existing extension fails to load.
 - **Renaming a public type or member, or moving it between namespaces or assemblies.**
 
-Verify a shim actually landed in metadata rather than trusting that it compiled — a clean build
-proves nothing here, since the source-level call sites were never broken:
+### The build checks the contract
 
-```csharp
-typeof(IVideoRepository).GetMethods()
-    .Where(m => m.Name == "FindAsync")
-    .Select(m => string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)))
-```
+The compiler cannot catch any of these, because the source-level call sites keep compiling. Instead,
+every build of `Cove.Core`, `Cove.Plugins`, and `Cove.Sdk` runs ApiCompat against the same package
+from the latest stable release on NuGet.org (`CoveExtensionAbiBaselineVersion` in the repository's
+`Directory.Build.props`). A break fails the build with a `CP` diagnostic naming the member that an
+already-built extension would no longer find. It only knows that one release, so a shim for an older
+release still needs a test that pins its shape.
+
+- **Fix the break instead of suppressing it.** An entry in a project's
+  `CompatibilitySuppressions.xml` is only for a break that is deliberately accepted, and the build
+  fails again once the entry is no longer needed.
+- **After publishing a stable release, bump `CoveExtensionAbiBaselineVersion` to it**, so later
+  changes are checked against the surface that extensions can now be built with.
 
 ## Authentication assertions
 

@@ -24,5 +24,7 @@ default values on the shim). The README has the pattern, the other breaking shap
 positional parameters, new abstract interface members, renames, return-type changes — and how to
 verify a shim reached metadata.
 
-A green build proves nothing about this. In-repo call sites keep compiling precisely because the
-change is source-compatible; only already-built extensions break.
+The compiler will not warn you. In-repo call sites keep compiling precisely because the change is
+source-compatible; only already-built extensions break. The builds of those three projects therefore
+run ApiCompat against the latest stable release's packages. Treat a `CP` error as a real break to fix,
+not as a suppression to generate.
