@@ -576,7 +576,10 @@ export function VideoPlayer({
     setSelectedQuality("Direct");
     setTranscodeStartSec(0);
     setCompatibilityLookup({ identity: compatibilityIdentity, pending: compatibilityRequired });
-  }, [videoId]);
+    // Keyed on the file as well as the video: a different file has its own container and codecs,
+    // so the playback strategy has to be derived again. Leaving the guards set from the previous
+    // file would suppress both the proactive fallback and the error-driven fallback for it.
+  }, [videoId, fileId]);
 
   useEffect(() => {
     void playbackTracker.current.setTarget(playbackTrackingTarget);
