@@ -163,6 +163,35 @@ describe("detail list URL state", () => {
     expect(window.location.search).toBe("?tab=videos");
   });
 
+  it("keeps a selected tab that matches the default when the default later changes", async () => {
+    // Selecting the current default removes the "tab" parameter, so the URL looks untouched. The app
+    // config resolving afterwards moves which tab ranks first, and must not reopen a different one.
+    const user = userEvent.setup();
+    const { rerender } = render(<TabProbe />);
+
+    await user.click(screen.getByRole("button", { name: "Videos" }));
+    expect(screen.getByTestId("tab")).toHaveTextContent("videos");
+    expect(window.location.search).toBe("");
+
+    rerender(<TabProbe defaultTab="galleries" />);
+
+    await waitFor(() => expect(screen.getByTestId("tab")).toHaveTextContent("videos"));
+  });
+
+  it("still follows the URL after a tab has been selected", async () => {
+    // Remembering the viewer's choice must not make back and forward navigation inert.
+    const user = userEvent.setup();
+    render(<TabProbe />);
+
+    await user.click(screen.getByRole("button", { name: "Galleries" }));
+    expect(screen.getByTestId("tab")).toHaveTextContent("galleries");
+
+    window.history.replaceState(null, "", "/performer/477?tab=videos");
+    window.dispatchEvent(new Event("popstate"));
+
+    await waitFor(() => expect(screen.getByTestId("tab")).toHaveTextContent("videos"));
+  });
+
   it("restores a visited tab's state from the page cache", async () => {
     const user = userEvent.setup();
     const { rerender } = render(

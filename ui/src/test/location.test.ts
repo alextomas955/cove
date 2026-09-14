@@ -72,6 +72,38 @@ describe("route history", () => {
     });
   });
 
+  it.each([
+    ["video", "videos"],
+    ["videos", "videos"],
+    ["image", "images"],
+    ["images", "images"],
+    // A gallery has no "galleries" tab, and its images are what the viewer was browsing.
+    ["gallery", "images"],
+    ["galleries", "images"],
+  ])("opens a gallery on the tab matching the %s source", (sourcePage, detailTab) => {
+    expect(resolveContextualDetailRoute({ page: "gallery", id: 7 }, sourcePage)).toEqual({
+      page: "gallery",
+      id: 7,
+      detailTab,
+    });
+  });
+
+  it.each(["performer", "studio", "tag", "home", "search"])(
+    "leaves a gallery opened from %s on the target's own default tab",
+    (sourcePage) => {
+      expect(resolveContextualDetailRoute({ page: "gallery", id: 7 }, sourcePage)).toEqual({ page: "gallery", id: 7 });
+    },
+  );
+
+  it("keeps the galleries tab for sources that target a related entity page", () => {
+    // The gallery override must not leak into performer, studio or tag targets.
+    expect(resolveContextualDetailRoute({ page: "performer", id: 7 }, "galleries")).toEqual({
+      page: "performer",
+      id: 7,
+      detailTab: "galleries",
+    });
+  });
+
   it("preserves an explicit detail tab over the source context", () => {
     expect(resolveContextualDetailRoute({ page: "performer", id: 7, detailTab: "faces" }, "gallery")).toEqual({
       page: "performer",

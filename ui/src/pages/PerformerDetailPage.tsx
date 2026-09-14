@@ -1726,6 +1726,7 @@ function PerformerImagesPanel({ performerId, onNavigate }: { performerId: number
         hasNextPage={infiniteQuery.hasNextPage}
         isFetchingNextPage={infiniteQuery.isFetchingNextPage}
         loadMore={loadMore}
+        fetchMoreImages={infiniteQuery.fetchMoreItems}
       />
       <DetailListPagination
         filter={filter}

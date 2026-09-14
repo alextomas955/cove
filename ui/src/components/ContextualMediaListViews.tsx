@@ -44,7 +44,12 @@ type ContextualImageListViewProps = ContextualListProps<Image> &
   Omit<
     RelatedEntityListViewProps<Image>,
     "entityType" | "items" | "onNavigate" | "onImagePreview" | "onImageDetails"
-  > & { interactionSource: string; interactionMeta?: Record<string, unknown> };
+  > & {
+    interactionSource: string;
+    interactionMeta?: Record<string, unknown>;
+    // Extends the underlying infinite list so the lightbox can navigate past its loaded results.
+    fetchMoreImages?: () => Promise<Image[]>;
+  };
 
 export function ContextualImageListView({
   items,
@@ -54,6 +59,7 @@ export function ContextualImageListView({
   onNavigate,
   interactionSource,
   interactionMeta,
+  fetchMoreImages,
   ...listProps
 }: ContextualImageListViewProps) {
   const appConfig = useOptionalAppConfig();
@@ -77,6 +83,7 @@ export function ContextualImageListView({
     infinitePageSize: listProps.infinitePageSize,
     queryPage,
     toLightboxImage,
+    fetchMoreItems: fetchMoreImages,
   });
 
   return (

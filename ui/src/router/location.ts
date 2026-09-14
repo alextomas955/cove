@@ -116,10 +116,18 @@ const DETAIL_TABS_BY_TARGET_PAGE: Record<string, ReadonlySet<string>> = {
   gallery: new Set(["videos", "images"]),
 };
 
+// Sources whose tab differs once the target is taken into account. A gallery reached from gallery
+// browsing has no "galleries" tab to land on, and its images are what the viewer was looking at, so
+// it opens on Images rather than falling through to the target's own default.
+const DETAIL_TAB_BY_SOURCE_PAGE_FOR_TARGET: Record<string, Record<string, string>> = {
+  gallery: { gallery: "images", galleries: "images" },
+};
+
 export function resolveContextualDetailRoute(route: Route, sourcePage: string = parseCurrentRoute().page): Route {
   if (route.detailTab) return route;
 
-  const detailTab = DETAIL_TAB_BY_SOURCE_PAGE[sourcePage];
+  const detailTab =
+    DETAIL_TAB_BY_SOURCE_PAGE_FOR_TARGET[route.page]?.[sourcePage] ?? DETAIL_TAB_BY_SOURCE_PAGE[sourcePage];
   if (!detailTab || !DETAIL_TABS_BY_TARGET_PAGE[route.page]?.has(detailTab)) return route;
 
   return { ...route, detailTab };
