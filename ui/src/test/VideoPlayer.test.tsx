@@ -1836,6 +1836,20 @@ describe("VideoPlayer source lifecycle", () => {
       expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
     });
 
+    it("transcodes incompatible audio when the compatibility lookup fails", async () => {
+      fetchMock.mockImplementation((input) =>
+        String(input).includes("/resolutions")
+          ? Promise.reject(new Error("lookup failed"))
+          : Promise.resolve(new Response(null, { status: 200 })),
+      );
+      const { container } = render(player(52, "mp4", "ac3"));
+
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/52/transcode"),
+      );
+      expect(screen.getByText("Using transcoded stream for audio codec compatibility")).toBeInTheDocument();
+    });
+
     it("uses source-resolution transcoding when no ladder resolutions are available", async () => {
       mockResolutions([]);
       const { container } = render(player(45, "asf"));

@@ -1354,34 +1354,45 @@ export function VideoPlayer({
 
   useEffect(() => {
     let cancelled = false;
+    const fallbackReason = prefersTranscodedVideoFormat(format)
+      ? "video format"
+      : !isBrowserCompatibleAudio(audioCodec)
+        ? "audio codec"
+        : null;
+    // Moves a source the browser cannot play directly onto a transcode. An empty `resolutions`
+    // means no ladder rung is known, which selects a transcode at the source resolution.
+    const applyCompatibilityFallback = (resolutions: string[]) => {
+      if (
+        compatibilityFallbackAppliedRef.current ||
+        autoTranscodeTriedRef.current ||
+        !fallbackReason ||
+        selectedQualityRef.current !== "Direct"
+      ) {
+        return;
+      }
+      compatibilityFallbackAppliedRef.current = true;
+      const target = resolutions.length > 0 ? resolutions[resolutions.length - 1] : SOURCE_TRANSCODE_QUALITY;
+      selectedQualityRef.current = target;
+      setSelectedQuality(target);
+      setCompatibilityFallbackReason(fallbackReason);
+    };
+
     videos
       .getResolutions(videoId, fileId)
       .then((res) => {
         if (cancelled) return;
         const resolutions = res ?? [];
         setAvailableQualities(resolutions);
-
-        const fallbackReason = prefersTranscodedVideoFormat(format)
-          ? "video format"
-          : !isBrowserCompatibleAudio(audioCodec)
-            ? "audio codec"
-            : null;
-        if (
-          !compatibilityFallbackAppliedRef.current &&
-          !autoTranscodeTriedRef.current &&
-          fallbackReason &&
-          selectedQualityRef.current === "Direct"
-        ) {
-          compatibilityFallbackAppliedRef.current = true;
-          const target = resolutions.length > 0 ? resolutions[resolutions.length - 1] : SOURCE_TRANSCODE_QUALITY;
-          selectedQualityRef.current = target;
-          setSelectedQuality(target);
-          setCompatibilityFallbackReason(fallbackReason);
-        }
+        applyCompatibilityFallback(resolutions);
         setCompatibilityLookup({ identity: compatibilityIdentity, pending: false });
       })
       .catch(() => {
         if (!cancelled) {
+          // With no ladder the transcode endpoint is unproven, so an incompatible container stays
+          // on Direct, where failing to decode still raises an error the player can act on. An
+          // unsupported audio codec has no such recovery: the video decodes and plays with silent
+          // audio and never fires an error, so transcode it at the source resolution instead.
+          if (fallbackReason === "audio codec") applyCompatibilityFallback([]);
           setCompatibilityLookup({ identity: compatibilityIdentity, pending: false });
         }
       });
