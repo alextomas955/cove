@@ -114,6 +114,12 @@ two-argument call still resolves to the modern overload — no ambiguity either 
 - **Changing a parameter type** — shimmable, by keeping an overload that takes the old type and
   converting. **Changing a return type is not**: C# cannot overload on return type alone, so the old
   shape has to survive under a different method name.
+- **Changing a property's type, even to a subclass** — the getter's return type and the setter's
+  parameter type are both part of the signature, while in-repo assignments keep compiling. Keep the
+  declared type and store the more specific instance in it. If the richer type genuinely has to be the
+  declared type, accept the break deliberately: keep the `CP` entry in `CompatibilitySuppressions.xml`
+  with a comment explaining it, and list it as a breaking change in `CHANGELOG.md`.
+  `PerformerFilter.CountryCriterion` is the example.
 - **Adding an abstract member to an interface extensions implement** (`IExtension`, `IUIExtension`,
   and friends) — give it a default implementation, or every existing extension fails to load.
 - **Renaming a public type or member, or moving it between namespaces or assemblies.**
