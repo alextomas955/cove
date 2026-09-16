@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -43,8 +44,12 @@ public record VideoDto(
     double? ClipEndSec = null,
     int ChildVideoCount = 0,
     string? ImagePath = null,
-    IReadOnlyList<string>? ImportWarnings = null,
-    int? PrimaryFileId = null);
+    IReadOnlyList<string>? ImportWarnings = null)
+{
+    // Not a positional parameter: that would change the constructor and Deconstruct that extensions
+    // compiled against Cove 1.4 bind to. See src/Cove.Sdk/README.md.
+    public int? PrimaryFileId { get; init; }
+}
 
 public record VideoListEntryDto(string Kind, int Id, VideoDto? Video = null, GroupDto? Group = null);
 
@@ -86,7 +91,22 @@ public record PerformerRemoteIdDto(string Endpoint, string RemoteId);
 
 public record PerformerCountryOptionDto(string Value, string? Code, string Name, int PerformerCount, bool IsCustom);
 
-public record PerformerSummaryDto(int Id, string Name, string? Disambiguation, string? Gender, string? Birthdate, bool Favorite, string? ImagePath, int VideoCount = 0, int ImageCount = 0, int GalleryCount = 0, int AudioCount = 0, int TextCount = 0, string? Country = null, [param: PartialDate] string? DeathDate = null);
+// System.Text.Json needs the attribute once the record has a second public constructor.
+[method: JsonConstructor]
+public record PerformerSummaryDto(int Id, string Name, string? Disambiguation, string? Gender, string? Birthdate, bool Favorite, string? ImagePath, int VideoCount = 0, int ImageCount = 0, int GalleryCount = 0, int AudioCount = 0, int TextCount = 0, string? Country = null, [param: PartialDate] string? DeathDate = null)
+{
+    // Binary-compatibility shims for extensions compiled against Cove 1.3, before Country and DeathDate
+    // were appended to the primary constructor.
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public PerformerSummaryDto(int Id, string Name, string? Disambiguation, string? Gender, string? Birthdate, bool Favorite, string? ImagePath, int VideoCount, int ImageCount, int GalleryCount, int AudioCount, int TextCount)
+        : this(Id, Name, Disambiguation, Gender, Birthdate, Favorite, ImagePath, VideoCount, ImageCount, GalleryCount, AudioCount, TextCount, null, null)
+    {
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Deconstruct(out int Id, out string Name, out string? Disambiguation, out string? Gender, out string? Birthdate, out bool Favorite, out string? ImagePath, out int VideoCount, out int ImageCount, out int GalleryCount, out int AudioCount, out int TextCount)
+        => Deconstruct(out Id, out Name, out Disambiguation, out Gender, out Birthdate, out Favorite, out ImagePath, out VideoCount, out ImageCount, out GalleryCount, out AudioCount, out TextCount, out _, out _);
+}
 
 public record GallerySummaryDto(int Id, string? Title, string? Date);
 

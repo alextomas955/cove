@@ -843,9 +843,11 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         s.ClipStartSec,
         s.ClipEndSec,
         s.ChildVideos.Count,
-        ImagePath: s.ImageBlobId != null ? EntityImageUrls.Video(ControllerContext.HttpContext, s.Id, s.UpdatedAt, 1280) : null,
-        PrimaryFileId: s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId
-    );
+        ImagePath: s.ImageBlobId != null ? EntityImageUrls.Video(ControllerContext.HttpContext, s.Id, s.UpdatedAt, 1280) : null
+    )
+    {
+        PrimaryFileId = s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId,
+    };
 
     private VideoDto MapListToDto(Video s, Dictionary<string, object>? customFieldValues = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByVideoId = null) => new(
         s.Id, s.Title, s.Code, s.Details, s.Director,
@@ -880,9 +882,11 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         ClipStartSec: s.ClipStartSec,
         ClipEndSec: s.ClipEndSec,
         ChildVideoCount: s.ChildVideos.Count,
-        ImagePath: s.ImageBlobId != null ? EntityImageUrls.Video(ControllerContext.HttpContext, s.Id, s.UpdatedAt, 1280) : null,
-        PrimaryFileId: s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId
-    );
+        ImagePath: s.ImageBlobId != null ? EntityImageUrls.Video(ControllerContext.HttpContext, s.Id, s.UpdatedAt, 1280) : null
+    )
+    {
+        PrimaryFileId = s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId,
+    };
 
     private static List<TagDto> GetEffectiveTags(Video video, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByVideoId)
         => effectiveTagsByVideoId != null && effectiveTagsByVideoId.TryGetValue(video.Id, out var tags)

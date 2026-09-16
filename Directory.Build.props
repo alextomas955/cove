@@ -3,4 +3,27 @@
     <!-- Exclude nested output and temporary artifact folders from default item globbing. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;**/artifacts/**;**/.artifacts/**;**/gitignored/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <!--
+    Extension ABI gate.
+
+    Cove.Core, Cove.Plugins and Cove.Sdk are the binary contract for separately compiled extensions
+    (see src/Cove.Sdk/README.md). Every build of those projects compares the freshly compiled assembly
+    with the same package from the latest stable release on NuGet.org and fails on any change that
+    would break an extension compiled against that release, such as a removed member, a changed
+    signature, or a record primary constructor that gained a parameter.
+
+    Bump CoveExtensionAbiBaselineVersion after each stable release has been published.
+  -->
+  <PropertyGroup Condition=" '$(MSBuildProjectName)' == 'Cove.Core' or '$(MSBuildProjectName)' == 'Cove.Plugins' or '$(MSBuildProjectName)' == 'Cove.Sdk' ">
+    <CoveExtensionAbiBaselineVersion>1.4.1</CoveExtensionAbiBaselineVersion>
+    <!-- Must be set before NuGet imports the ApiCompat package's build targets. -->
+    <ApiCompatValidateAssemblies>true</ApiCompatValidateAssemblies>
+    <!--
+      CP0003 compares assembly versions. Builds without git tags, such as CI's shallow checkouts, fall
+      back to a default version below the baseline, and the host does not bind extensions by assembly
+      version.
+    -->
+    <NoWarn>$(NoWarn);CP0003</NoWarn>
+  </PropertyGroup>
 </Project>

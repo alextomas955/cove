@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Text.Json.Serialization;
+
 namespace Cove.Core.Auth;
 
 public interface IUserService
@@ -146,6 +149,8 @@ public sealed record UserKeyboardShortcutPreferencesDto(
     IReadOnlyList<KeyboardShortcutPresetDto>? PersonalPresets,
     bool? ShowChordHints = null);
 
+// System.Text.Json needs the attribute once the record has a second public constructor.
+[method: JsonConstructor]
 public sealed record UserUiPreferencesDto(
     UserThemePreferencesDto? Theme,
     UserRatingSystemOptionsDto? RatingSystemOptions,
@@ -158,7 +163,36 @@ public sealed record UserUiPreferencesDto(
     // Per-list-mode default saved filter, keyed by mode (e.g. "videos") -> opaque filter JSON.
     Dictionary<string, string>? DefaultFilters = null,
     UserKeyboardShortcutPreferencesDto? KeyboardShortcuts = null,
-    bool? RenderMarkdown = null);
+    bool? RenderMarkdown = null)
+{
+    // Binary-compatibility shims for extensions compiled against Cove 1.3, before KeyboardShortcuts and
+    // RenderMarkdown were appended to the primary constructor.
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public UserUiPreferencesDto(
+        UserThemePreferencesDto? Theme,
+        UserRatingSystemOptionsDto? RatingSystemOptions,
+        UserTrackingPreferencesDto? Tracking,
+        UserVideosPreferencesDto? Videos,
+        Dictionary<string, string>? KeybindingOverrides,
+        UserPlaybackPreferencesDto? Playback,
+        string? HomePageContent,
+        Dictionary<string, string>? DefaultFilters)
+        : this(Theme, RatingSystemOptions, Tracking, Videos, KeybindingOverrides, Playback, HomePageContent, DefaultFilters, null, null)
+    {
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Deconstruct(
+        out UserThemePreferencesDto? Theme,
+        out UserRatingSystemOptionsDto? RatingSystemOptions,
+        out UserTrackingPreferencesDto? Tracking,
+        out UserVideosPreferencesDto? Videos,
+        out Dictionary<string, string>? KeybindingOverrides,
+        out UserPlaybackPreferencesDto? Playback,
+        out string? HomePageContent,
+        out Dictionary<string, string>? DefaultFilters)
+        => Deconstruct(out Theme, out RatingSystemOptions, out Tracking, out Videos, out KeybindingOverrides, out Playback, out HomePageContent, out DefaultFilters, out _, out _);
+}
 
 public sealed record CreateUserRequest(
     string Username,

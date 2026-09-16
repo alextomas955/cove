@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <!--
+    Deliberately accepted break, listed as a breaking change in CHANGELOG.md under the release that
+    follows 1.4.1. Multi-country performer filtering typed PerformerFilter.CountryCriterion as
+    CountryCriterion instead of StringCriterion, so an extension compiled against 1.4.x that reads or
+    sets the property must be rebuilt. Remove this entry when CoveExtensionAbiBaselineVersion is bumped
+    past that release.
+  -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.Interfaces.PerformerFilter.get_CountryCriterion</Target>
+  </Suppression>
+</Suppressions>

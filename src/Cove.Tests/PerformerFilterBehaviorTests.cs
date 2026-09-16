@@ -46,6 +46,36 @@ public class PerformerFilterBehaviorTests
             : new[] { "Other", "Partial", "Unknown" }, items.Select(item => item.Name).Order().ToArray());
     }
 
+    [Fact]
+    public async Task CountryCriterion_ListFromApiJsonKeepsValues()
+    {
+        await using var scope = await CreateContextAsync();
+        var context = scope.Context;
+        context.Performers.AddRange(
+            new Performer { Name = "Canadian", Country = "CA" },
+            new Performer { Name = "American", Country = "US" },
+            new Performer { Name = "Other", Country = "GB" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+        {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase) },
+        };
+        const string criterion = """{"value":"","values":["CA","US"],"modifier":"INCLUDES"}""";
+
+        // The filter reaches the repository through JSON, so the list has to survive binding by the declared property type.
+        var filter = System.Text.Json.JsonSerializer.Deserialize<PerformerFilter>(
+            """{"countryCriterion":""" + criterion + "}", options)!;
+        var related = System.Text.Json.JsonSerializer.Deserialize<VideoFilter>(
+            """{"performerFilterCriterion":{"objectFilter":{"countryCriterion":""" + criterion + "}}}", options)!;
+        var (items, totalCount) = await new PerformerRepository(context).FindAsync(
+            filter, new FindFilter { Page = 1, PerPage = 20 }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["CA", "US"], related.PerformerFilterCriterion?.ObjectFilter?.CountryCriterion?.Values);
+        Assert.Contains("\"values\":[\"CA\",\"US\"]", System.Text.Json.JsonSerializer.Serialize(filter, options));
+        Assert.Equal(2, totalCount);
+        Assert.Equal(["American", "Canadian"], items.Select(item => item.Name).Order().ToArray());
+    }
+
     [Theory]
     [InlineData(CriterionModifier.Includes)]
     [InlineData(CriterionModifier.Excludes)]

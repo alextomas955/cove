@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Cove.Core.Auth;
 using Cove.Core.DTOs;
 using Cove.Core.Events;
@@ -23,6 +24,8 @@ public enum JobUnitOutcome
     Skipped,
 }
 
+// System.Text.Json needs the attribute once the record has a second public constructor.
+[method: JsonConstructor]
 public record JobInfo(
     string Id,
     string Type,
@@ -43,7 +46,31 @@ public record JobInfo(
     // and the UTC timestamp it was computed at so clients can count it down smoothly between updates.
     double? EtaSeconds = null,
     DateTime? UpdatedAt = null,
-    string? ResultUrl = null);
+    string? ResultUrl = null)
+{
+    // Binary-compatibility shims for extensions compiled against Cove 1.3, before ResultUrl was appended
+    // to the primary constructor.
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public JobInfo(
+        string Id, string Type, string Description, JobStatus Status, double Progress, string? SubTask,
+        DateTime StartedAt, DateTime? CompletedAt, string? Error, int? UnitsTotal, int? UnitsCompleted,
+        int? UnitsSucceeded, int? UnitsFailed, int? UnitsSkipped, string? Summary, double? EtaSeconds,
+        DateTime? UpdatedAt)
+        : this(Id, Type, Description, Status, Progress, SubTask, StartedAt, CompletedAt, Error, UnitsTotal,
+            UnitsCompleted, UnitsSucceeded, UnitsFailed, UnitsSkipped, Summary, EtaSeconds, UpdatedAt, null)
+    {
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Deconstruct(
+        out string Id, out string Type, out string Description, out JobStatus Status, out double Progress,
+        out string? SubTask, out DateTime StartedAt, out DateTime? CompletedAt, out string? Error,
+        out int? UnitsTotal, out int? UnitsCompleted, out int? UnitsSucceeded, out int? UnitsFailed,
+        out int? UnitsSkipped, out string? Summary, out double? EtaSeconds, out DateTime? UpdatedAt)
+        => Deconstruct(out Id, out Type, out Description, out Status, out Progress, out SubTask, out StartedAt,
+            out CompletedAt, out Error, out UnitsTotal, out UnitsCompleted, out UnitsSucceeded, out UnitsFailed,
+            out UnitsSkipped, out Summary, out EtaSeconds, out UpdatedAt, out _);
+}
 
 public sealed record JobOwner(string Key)
 {
@@ -61,6 +88,8 @@ public sealed record JobOwner(string Key)
     }
 }
 
+// System.Text.Json needs the attribute once the record has a second public constructor.
+[method: JsonConstructor]
 public record JobBatchResult(
     int TotalUnits,
     int SucceededUnits,
@@ -69,6 +98,18 @@ public record JobBatchResult(
     IReadOnlyList<string> FailedUnitIds,
     IReadOnlyList<string> SkippedUnitIds)
 {
+    // Binary-compatibility shims for extensions compiled against Cove 1.3, before SkippedUnitIds was
+    // appended to the primary constructor.
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public JobBatchResult(int TotalUnits, int SucceededUnits, int FailedUnits, int SkippedUnits, IReadOnlyList<string> FailedUnitIds)
+        : this(TotalUnits, SucceededUnits, FailedUnits, SkippedUnits, FailedUnitIds, [])
+    {
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Deconstruct(out int TotalUnits, out int SucceededUnits, out int FailedUnits, out int SkippedUnits, out IReadOnlyList<string> FailedUnitIds)
+        => Deconstruct(out TotalUnits, out SucceededUnits, out FailedUnits, out SkippedUnits, out FailedUnitIds, out _);
+
     public int CompletedUnits => SucceededUnits + FailedUnits + SkippedUnits;
 
     public string Summary => FailedUnits > 0 || SkippedUnits > 0

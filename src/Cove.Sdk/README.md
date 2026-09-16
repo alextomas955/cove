@@ -103,23 +103,41 @@ two-argument call still resolves to the modern overload — no ambiguity either 
 ### The other shapes that break already-built extensions
 
 - **Adding a positional parameter to a public `record`** — the primary constructor and `Deconstruct`
-  both change arity. Reading properties stays fine; constructing or deconstructing breaks. Add an
-  explicit constructor at the old arity.
+  both change arity. Reading properties stays fine; constructing or deconstructing breaks. Prefer
+  adding the member as an `init` property in the record body. Once a positional parameter has
+  shipped, keep the old arity as an explicit `[EditorBrowsable(Never)]` constructor without default
+  values plus a matching `Deconstruct`. Also mark the primary constructor
+  `[method: JsonConstructor]`: System.Text.Json refuses to deserialize a type with more than one
+  public parameterized constructor unless one carries that attribute. `JobInfo` shows the pattern.
+  With a second constructor, ASP.NET Core no longer applies `[param:]` validation attributes, so a
+  request DTO using this pattern also needs them on the property.
 - **Changing a parameter type** — shimmable, by keeping an overload that takes the old type and
   converting. **Changing a return type is not**: C# cannot overload on return type alone, so the old
   shape has to survive under a different method name.
+- **Changing a property's type, even to a subclass** — the getter's return type and the setter's
+  parameter type are both part of the signature, while in-repo assignments keep compiling. Keep the
+  declared type and store the more specific instance in it. If the richer type genuinely has to be the
+  declared type, accept the break deliberately: keep the `CP` entry in `CompatibilitySuppressions.xml`
+  with a comment explaining it, and list it as a breaking change in `CHANGELOG.md`.
+  `PerformerFilter.CountryCriterion` is the example.
 - **Adding an abstract member to an interface extensions implement** (`IExtension`, `IUIExtension`,
   and friends) — give it a default implementation, or every existing extension fails to load.
 - **Renaming a public type or member, or moving it between namespaces or assemblies.**
 
-Verify a shim actually landed in metadata rather than trusting that it compiled — a clean build
-proves nothing here, since the source-level call sites were never broken:
+### The build checks the contract
 
-```csharp
-typeof(IVideoRepository).GetMethods()
-    .Where(m => m.Name == "FindAsync")
-    .Select(m => string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)))
-```
+The compiler cannot catch any of these, because the source-level call sites keep compiling. Instead,
+every build of `Cove.Core`, `Cove.Plugins`, and `Cove.Sdk` runs ApiCompat against the same package
+from the latest stable release on NuGet.org (`CoveExtensionAbiBaselineVersion` in the repository's
+`Directory.Build.props`). A break fails the build with a `CP` diagnostic naming the member that an
+already-built extension would no longer find. It only knows that one release, so a shim for an older
+release still needs a test that pins its shape.
+
+- **Fix the break instead of suppressing it.** An entry in a project's
+  `CompatibilitySuppressions.xml` is only for a break that is deliberately accepted, and the build
+  fails again once the entry is no longer needed.
+- **After publishing a stable release, bump `CoveExtensionAbiBaselineVersion` to it**, so later
+  changes are checked against the surface that extensions can now be built with.
 
 ## Authentication assertions
 
