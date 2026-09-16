@@ -259,6 +259,39 @@ public class VideoRepository : IVideoRepository
         return (sorted, totalCount);
     }
 
+    public async Task<IReadOnlyList<int>> FindIdsAsync(
+        VideoFilter? filter,
+        FindFilter? findFilter,
+        int limit,
+        CancellationToken ct = default,
+        FilterExpression<VideoFilter>? expression = null)
+    {
+        if (limit <= 0)
+            return [];
+
+        // Same filtering and ordering as FindAsync, but the ids never leave the lightweight query, so a
+        // membership pass over a large slice of the library costs one projection instead of N entities.
+        var filterQuery = await BuildFilteredQueryAsync(filter, findFilter, ct: ct, expression: expression);
+        var multiSortRegistry = CreateMultiSortRegistry();
+        var sortClauses = multiSortRegistry.Normalize(findFilter?.Sorts);
+        var hasExplicitSort = sortClauses.Count > 0 || !string.IsNullOrWhiteSpace(findFilter?.Sort);
+        var primarySortClause = sortClauses.FirstOrDefault();
+        var sort = primarySortClause?.Key ?? findFilter?.Sort ?? "updated_at";
+        var desc = primarySortClause?.Direction == Core.Enums.SortDirection.Desc
+            || (primarySortClause == null && findFilter?.Direction == Core.Enums.SortDirection.Desc);
+        filterQuery = sortClauses.Count > 1
+            ? ApplyMultiSorting(filterQuery, sortClauses, multiSortRegistry)
+            : ApplySorting(filterQuery, sort, desc, findFilter?.Seed);
+        if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
+            filterQuery = await ApplyVideoRelevanceOrderingAsync(filterQuery, findFilter?.Q, ct);
+
+        return await filterQuery
+            .AsNoTracking()
+            .Take(limit)
+            .Select(video => video.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<VideoAggregate> AggregateAsync(VideoFilter? filter, FindFilter? findFilter, CancellationToken ct = default, FilterExpression<VideoFilter>? expression = null)
     {
         var query = await BuildFilteredQueryAsync(filter, findFilter, ct: ct, expression: expression);

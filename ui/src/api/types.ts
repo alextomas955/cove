@@ -2294,6 +2294,7 @@ export interface ScrapingConfig {
 export interface CoveConfig {
   covePaths: CovePathConfig[];
   downloaderPathOverrides: DownloaderPathOverrideConfig[];
+  downloaderSiteCredentials: DownloaderSiteCredentialConfig[];
   generatedPath?: string;
   cachePath?: string;
   host: string;
@@ -2356,6 +2357,15 @@ export interface DownloaderPathOverrideConfig {
   downloaderId: string;
   site?: string;
   path: string;
+}
+
+export interface DownloaderSiteCredentialConfig {
+  id: string;
+  site: string;
+  username: string;
+  /** Write-only: the API never returns stored passwords. Leave unset to keep the saved password. */
+  password?: string;
+  hasPassword: boolean;
 }
 
 export interface JobInfo {
@@ -2545,6 +2555,8 @@ export interface DownloaderQualityOption {
   id: string;
   label: string;
   description?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface DownloaderMatch {
@@ -2962,6 +2974,7 @@ export interface VideoFilterCriteria {
   orientationCriterion?: StringCriterion;
   customFieldCriterion?: CustomFieldCriterion;
   customFieldCriteria?: CustomFieldCriterion[];
+  extensionCriteria?: ExtensionFilterCriterion[];
 }
 
 export interface VideoAggregate {

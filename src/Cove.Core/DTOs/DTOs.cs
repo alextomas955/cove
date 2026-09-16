@@ -1349,6 +1349,7 @@ public record CoveConfigDto
     public int MaxParallelTasks { get; init; } = System.Math.Max(1, System.Environment.ProcessorCount - 3);
     public int MaxConcurrentDownloads { get; init; } = 3;
     public List<DownloaderPathOverrideDto> DownloaderPathOverrides { get; init; } = [];
+    public List<DownloaderSiteCredentialDto> DownloaderSiteCredentials { get; init; } = [];
     public bool CalculateMd5 { get; init; }
     public string FrameExtractionMode { get; init; } = "external";
     public string? FfmpegPath { get; init; }
@@ -1485,6 +1486,20 @@ public record DownloaderPathOverrideDto
     public string DownloaderId { get; init; } = string.Empty;
     public string? Site { get; init; }
     public string Path { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// A downloader site login. This DTO is also the cove-config.json shape, so it carries the password,
+/// but the config API never returns it: <see cref="HasPassword"/> reports whether one is stored, and a
+/// blank <see cref="Password"/> on save keeps the stored password for the same <see cref="Id"/>.
+/// </summary>
+public record DownloaderSiteCredentialDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Site { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string? Password { get; init; }
+    public bool HasPassword { get; init; }
 }
 
 public record InterfaceConfigDto
@@ -1872,7 +1887,11 @@ public record DownloaderDescriptorDto(
     List<string> Capabilities
 );
 
-public record DownloaderQualityOptionDto(string Id, string Label, string? Description = null);
+public record DownloaderQualityOptionDto(string Id, string Label, string? Description = null)
+{
+    public int? Width { get; init; }
+    public int? Height { get; init; }
+}
 
 public record DownloaderMatchDto(
     string DownloaderId,

@@ -17,6 +17,11 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 - Duplicate groups line copies up side by side with hover previews, highlighted best values, and visual-distance and length hints. A compare view adds a draggable slider, synchronized playback with an offset for trimmed copies, and aligned frame strips. Groups can be filtered, sorted by space to free, paged, quick-viewed without leaving the page, and reviewed with keyboard shortcuts.
 - Resolve one duplicate group or all of them while you keep reviewing; resolution runs in the background. Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, play counts, and markers can be merged into the kept copy before the others are removed, optionally with their files.
 - Groups marked as not duplicates are remembered, so later searches never group those videos together again.
+- Downloader settings can store site logins, so downloaders such as yt-dlp can sign in to sites that only offer some content, like higher resolutions, to logged-in accounts. Passwords are write-only and never returned by the settings API.
+- Downloader quality options now report the width and height of the stream they download, so tools can compare an available resolution with the file already in the library.
+- The Docker images now include Python, in a virtual environment that extensions can install into, so extensions that drive Python tooling work in a container without a custom image.
+- Filters contributed by extensions now run on the Videos list, not only on Tags, so an extension can narrow the normal video list (with previews, sorting, and every built-in filter) to the videos it knows about. List totals count the same rows the list shows.
+- Changing a video's primary file to another copy of the same footage now keeps its cover, sprite, and previews instead of clearing them, so list thumbnails and hover previews keep working without waiting for a new generate run. Aligning a timeline to different footage still clears them.
 
 ## [1.4.1] - 2026-09-07
 

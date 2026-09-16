@@ -38,7 +38,7 @@ public partial class DownloaderService(
     CoveConfiguration config,
     IServiceScopeFactory serviceScopeFactory,
     ILogger<DownloaderService> logger,
-    PhysicalFileAccessCoordinator? physicalFileAccessCoordinator = null)
+    PhysicalFileAccessCoordinator? physicalFileAccessCoordinator = null) : IDownloaderService
 {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), "cove", "downloaders");
     private readonly Lock _downloadSlotLock = new();
@@ -312,6 +312,27 @@ public partial class DownloaderService(
             await ApplyAutoMetadataAsync(scope.ServiceProvider, request, result, importedEntityId.Value, metadataApplyOptions ?? new DownloaderMetadataApplyOptions(), progress, ct);
 
         return (result with { LocalPath = libraryPath }, importedEntityId);
+    }
+
+    async Task<DownloaderImportResult?> IDownloaderService.DownloadAndImportAsync(
+        DownloaderImportRequest request,
+        Cove.Core.Interfaces.IJobProgress? progress,
+        CancellationToken ct)
+    {
+        var (result, importedEntityId) = await DownloadAndIngestAsync(
+            new DownloaderRequest(
+                request.DownloaderId,
+                request.Url,
+                request.Entity,
+                BuildDownloaderPermissions(request.Url),
+                request.QualityId,
+                request.SourceUrl),
+            request.EntityId,
+            progress,
+            ct,
+            allowDuplicateDownload: request.AllowDuplicateDownload);
+
+        return result == null ? null : new DownloaderImportResult(result.LocalPath, importedEntityId);
     }
 
     public async Task<DownloaderBatchExecutionSummary> DownloadAndIngestBatchAsync(
@@ -1877,7 +1898,11 @@ public partial class DownloaderService(
             descriptor.SupportedEntity.ToString(),
             match.NormalizedUrl,
             match.Label,
-            match.QualityOptions?.Select(option => new DownloaderQualityOptionDto(option.Id, option.Label, option.Description)).ToList() ?? [],
+            match.QualityOptions?.Select(option => new DownloaderQualityOptionDto(option.Id, option.Label, option.Description)
+            {
+                Width = option.Width,
+                Height = option.Height,
+            }).ToList() ?? [],
             match.SourceUrl);
     }
 
@@ -2703,7 +2728,7 @@ public partial class DownloaderService(
         }
     }
 
-    private static DownloaderPermissions BuildDownloaderPermissions(string url)
+    internal static DownloaderPermissions BuildDownloaderPermissions(string url)
     {
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
             return new DownloaderPermissions([uri.Host]);

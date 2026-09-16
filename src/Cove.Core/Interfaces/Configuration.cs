@@ -19,6 +19,8 @@ public class CoveConfiguration
     public int MaxParallelTasks { get; set; } = System.Math.Max(1, System.Environment.ProcessorCount - 3);
     public int MaxConcurrentDownloads { get; set; } = 3;
     public List<DownloaderPathOverride> DownloaderPathOverrides { get; set; } = [];
+    // Site logins downloaders use for content that requires a signed-in account (e.g. higher resolutions).
+    public List<DownloaderSiteCredential> DownloaderSiteCredentials { get; set; } = [];
     public bool CalculateMd5 { get; set; }
     // When enabled (default), a scan that finds a file at a new path first checks whether its content
     // (byte-identical oshash) already exists in the library. If a matching record's old location is gone,
@@ -88,6 +90,15 @@ public class DownloaderPathOverride
     public string DownloaderId { get; set; } = string.Empty;
     public string? Site { get; set; }
     public string Path { get; set; } = string.Empty;
+}
+
+public class DownloaderSiteCredential
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("n");
+    // Host the login applies to (e.g. "pornhub.com"); it also covers subdomains.
+    public string Site { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
 }
 
 public class AuthConfig

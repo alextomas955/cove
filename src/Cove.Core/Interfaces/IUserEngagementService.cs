@@ -4,6 +4,12 @@ using System.Text.Json;
 
 namespace Cove.Core.Interfaces;
 
+public static class UserEngagementConcurrency
+{
+    /// <summary>PostgreSQL transaction lock namespace for one account's direct-like writes.</summary>
+    public const int AdvisoryLockNamespace = 0x434F5645;
+}
+
 public sealed record UserEngagementSnapshot(
     bool IsFavorite,
     int? Rating,
@@ -59,6 +65,10 @@ public interface IUserEngagementService
     Task<UserEngagementSnapshot?> AddHistoricalLikeAsync(AffinityHostType hostType, int hostId, DateTime at, CancellationToken cancellationToken = default);
 
     Task<UserEngagementSnapshot?> DeleteLikeAtAsync(AffinityHostType hostType, int hostId, DateTime at, CancellationToken cancellationToken = default);
+
+    /// <summary>Delete one exact owned LikeCount history row; missing rows are a no-op.</summary>
+    Task<UserEngagementSnapshot?> DeleteLikeByIdAsync(AffinityHostType hostType, int hostId, int interactionId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This engagement provider does not support exact like receipts.");
 
     Task<UserEngagementSnapshot?> DecrementLikeAsync(AffinityHostType hostType, int hostId, CancellationToken cancellationToken = default);
 

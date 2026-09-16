@@ -83,6 +83,7 @@ import type {
   CustomFieldType,
   DownloaderDescriptor,
   DownloaderPathOverrideConfig,
+  DownloaderSiteCredentialConfig,
   DependencyInfo,
   ExtensionDependencyImpact,
   ExtensionTutorialTopic,
@@ -268,7 +269,7 @@ const primaryTabs: BuiltInSettingsTabDefinition[] = [
   { key: "data-sources-scrapers", label: "Scrapers", icon: SearchCode },
   { key: "data-sources-metadata-servers", label: "Metadata Servers", icon: Server },
   { key: "data-sources-identify-batch-defaults", label: "Identify & Batch Defaults", icon: FileText },
-  { key: "data-sources-downloader-paths", label: "Downloader Paths", icon: Download },
+  { key: "data-sources-downloader-paths", label: "Downloaders", icon: Download },
   { key: "data-sources-ai-data", label: "AI Data", icon: Database },
   { key: "extensions-installed", label: "Installed Extensions", icon: Plug, order: 10 },
   { key: "extensions-registry", label: "Discover", icon: Search, order: 90 },
@@ -491,7 +492,7 @@ const tabDescriptions: Partial<Record<BuiltInSettingsTab, string>> = {
   "data-sources-scrapers": "Legacy YAML scraper directories, scraper preferences, and discovered scrapers.",
   "data-sources-metadata-servers": "MetadataServer endpoint configuration and validation.",
   "data-sources-identify-batch-defaults": "Defaults for Identify and MetadataServer batch dialogs.",
-  "data-sources-downloader-paths": "Downloader save-path overrides.",
+  "data-sources-downloader-paths": "Downloader limits, site logins, and save-path overrides.",
   "data-sources-ai-data":
     "Inspect and safely purge AI-produced embeddings, detections, segments, tag sources, and face-owned data.",
   "extensions-installed": "Manage extensions loaded into this instance.",
@@ -561,7 +562,16 @@ const settingsSearchKeywords: Partial<Record<BuiltInSettingsTab, string[]>> = {
   "operations-duplicates": ["duplicates", "duplicate finder", "exact duplicate", "cleanup"],
   "operations-maintenance": ["clean", "clean generated", "orphaned", "optimize", "vacuum", "analyse"],
   "operations-backup-restore": ["backup", "restore", "export", "import", "config backup", "wipe", "danger zone"],
-  "data-sources-downloader-paths": ["downloader", "save path", "path override", "site override"],
+  "data-sources-downloader-paths": [
+    "downloader",
+    "save path",
+    "path override",
+    "site override",
+    "site login",
+    "account",
+    "password",
+    "credentials",
+  ],
   "system-info-about": ["about", "version", "release history", "changelog", "setup tour"],
   "system-info-runtime-status": ["runtime", "status", "shutdown", "database", "config file", "app directory"],
   logs: ["logs", "tail", "server log level", "filter", "trace", "debug"],
@@ -880,6 +890,10 @@ function emptyDownloaderPathOverride(): DownloaderPathOverrideConfig {
   return { downloaderId: "", site: "", path: "" };
 }
 
+function emptyDownloaderSiteCredential(): DownloaderSiteCredentialConfig {
+  return { id: "", site: "", username: "", password: "", hasPassword: false };
+}
+
 function emptyMetadataServer(): MetadataServer {
   return { name: "", endpoint: "", apiKey: "", maxRequestsPerMinute: 240 };
 }
@@ -1178,6 +1192,14 @@ function normalizeConfig(config: CoveConfig): CoveConfig {
           ) === index
         );
       }),
+    downloaderSiteCredentials: (config.downloaderSiteCredentials ?? [])
+      .map((credential) => ({
+        ...credential,
+        site: credential.site.trim(),
+        username: credential.username.trim(),
+        password: credential.password || undefined,
+      }))
+      .filter((credential) => credential.site !== "" && credential.username !== ""),
     videoExtensions: config.videoExtensions.map((value) => value.trim()).filter(Boolean),
     imageExtensions: config.imageExtensions.map((value) => value.trim()).filter(Boolean),
     galleryExtensions: config.galleryExtensions.map((value) => value.trim()).filter(Boolean),
@@ -1519,6 +1541,7 @@ export function SettingsPage() {
       nextDraft.covePaths = [emptyPath()];
     }
     nextDraft.downloaderPathOverrides = nextDraft.downloaderPathOverrides ?? [];
+    nextDraft.downloaderSiteCredentials = nextDraft.downloaderSiteCredentials ?? [];
     if (nextDraft.scraping.scraperDirectories.length === 0) {
       nextDraft.scraping.scraperDirectories = [""];
     }
@@ -2580,6 +2603,90 @@ export function SettingsPage() {
                       }))
                     }
                   />
+                </SectionCard>
+
+                <SectionCard
+                  title="Site Logins"
+                  description="Sign in to sites that only offer some content, such as higher resolutions, to logged-in accounts. Downloaders that support logins, like yt-dlp, use the login whose site matches the download URL. A site also covers its subdomains."
+                >
+                  <div className="space-y-3">
+                    {draft.downloaderSiteCredentials.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border bg-card/40 px-4 py-3 text-sm text-secondary">
+                        No site logins are configured yet.
+                      </div>
+                    ) : null}
+
+                    {draft.downloaderSiteCredentials.map((credential, index) => {
+                      const updateCredential = (patch: Partial<DownloaderSiteCredentialConfig>) =>
+                        updateDraft((current) => ({
+                          ...current,
+                          downloaderSiteCredentials: current.downloaderSiteCredentials.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, ...patch } : item,
+                          ),
+                        }));
+
+                      return (
+                        <div
+                          key={credential.id || `new-site-login-${index}`}
+                          className="rounded-xl border border-border bg-card p-3"
+                        >
+                          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
+                            <TextField
+                              label="Site"
+                              value={credential.site}
+                              onChange={(value) => updateCredential({ site: value })}
+                              placeholder="example.com"
+                            />
+                            <TextField
+                              label="Username"
+                              value={credential.username}
+                              onChange={(value) => updateCredential({ username: value })}
+                            />
+                            <TextField
+                              label="Password"
+                              type="password"
+                              value={credential.password ?? ""}
+                              onChange={(value) => updateCredential({ password: value })}
+                              placeholder={credential.hasPassword ? "Saved (leave blank to keep)" : ""}
+                            />
+                            <button
+                              onClick={() =>
+                                updateDraft((current) => ({
+                                  ...current,
+                                  downloaderSiteCredentials: current.downloaderSiteCredentials.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                                }))
+                              }
+                              className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-2 text-xs text-red-300 hover:border-red-500 hover:text-red-200"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Remove
+                            </button>
+                          </div>
+                          {!credential.hasPassword && !credential.password ? (
+                            <p className="mt-2 text-xs text-red-300">
+                              Enter a password. Downloaders skip logins that have no password.
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      onClick={() =>
+                        updateDraft((current) => ({
+                          ...current,
+                          downloaderSiteCredentials: [...current.downloaderSiteCredentials, emptyDownloaderSiteCredential()],
+                        }))
+                      }
+                      className="inline-flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-sm text-secondary hover:text-foreground"
+                    >
+                      <Plus className="h-4 w-4" /> Add site login
+                    </button>
+                    <p className="text-xs text-secondary">
+                      Passwords are saved in the server's cove-config.json and are never sent back to the browser.
+                    </p>
+                  </div>
                 </SectionCard>
 
                 <SectionCard

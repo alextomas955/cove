@@ -23,8 +23,12 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.VideosRead)]
-public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null) : ControllerBase
+public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null) : ControllerBase
 {
+    // The candidate pass projects ids only, so this just bounds how much of the library one
+    // extension-filtered query walks; it is not a page size.
+    private const int ExtensionFilterCandidateLimit = 50_000;
+
     private bool CanReadFiles => principalAccessor?.Current?.Has(Permissions.FilesRead) == true;
     private bool HasUserScopedEngagement => principalAccessor?.Current?.UserId != null;
     private static string GetVisibleBasename(string path, string basename) => string.IsNullOrWhiteSpace(basename) ? System.IO.Path.GetFileName(path) : basename;
@@ -253,7 +257,56 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
 
         var findFilter = req.FindFilter ?? new FindFilter();
         var filter = req.ObjectFilter ?? new VideoFilter();
-        var (items, totalCount) = await videoRepo.FindAsync(filter, findFilter, ct, req.FilterExpression);
+        IReadOnlyList<Video> items;
+        int totalCount;
+        if ((filter.ExtensionCriteria ?? []).Count == 0)
+        {
+            (items, totalCount) = await videoRepo.FindAsync(filter, findFilter, ct, req.FilterExpression);
+        }
+        else
+        {
+            try
+            {
+                var matchingIds = await ApplyExtensionCriteriaAsync(filter, findFilter, req.FilterExpression, ct);
+                totalCount = matchingIds.Count;
+                var page = Math.Max(1, findFilter.Page);
+                var perPage = Math.Max(0, findFilter.PerPage);
+                List<int> pagedIds = perPage == 0
+                    ? []
+                    : [.. matchingIds.Skip((page - 1) * perPage).Take(perPage)];
+                if (pagedIds.Count == 0)
+                {
+                    items = [];
+                }
+                else
+                {
+                    // Load entities for this page only, then restore the order the filter produced.
+                    var (pageItems, _) = await videoRepo.FindAsync(
+                        new VideoFilter { Ids = pagedIds },
+                        new FindFilter { Page = 1, PerPage = pagedIds.Count },
+                        ct);
+                    var order = pagedIds.Select((id, index) => (id, index)).ToDictionary(entry => entry.id, entry => entry.index);
+                    items = [.. pageItems.OrderBy(video => order.GetValueOrDefault(video.Id, int.MaxValue))];
+                }
+            }
+            catch (ExtensionEntityFilterValidationException ex)
+            {
+                return UnprocessableEntity(new ProblemDetails { Title = "Invalid extension filter.", Detail = ex.Message });
+            }
+            catch (ExtensionEntityFilterLimitException ex)
+            {
+                return UnprocessableEntity(new ProblemDetails { Title = "Extension filter limit exceeded.", Detail = ex.Message });
+            }
+            catch (ExtensionEntityFilterProviderException ex)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails { Title = "Extension filter provider unavailable.", Detail = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails { Title = "Extension filtering is unavailable.", Detail = ex.Message });
+            }
+        }
+
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Video, items.Select(video => video.Id), ct);
         var engagement = await engagementService.GetVideoSnapshotsAsync(items.Select(video => video.Id), ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, items.Select(video => video.Id), ct);
@@ -269,7 +322,76 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
     {
         if (!FilterExpressionQuery.TryValidate(req.FilterExpression, out var expressionError))
             return BadRequest(new { message = expressionError });
-        return Ok(await videoRepo.AggregateAsync(req.ObjectFilter, req.FindFilter, ct, req.FilterExpression));
+
+        var filter = req.ObjectFilter;
+        if ((filter?.ExtensionCriteria ?? []).Count == 0)
+            return Ok(await videoRepo.AggregateAsync(filter, req.FindFilter, ct, req.FilterExpression));
+
+        // Totals have to cover exactly the rows the list shows, so aggregate over the matching ids only.
+        try
+        {
+            var matchingIds = await ApplyExtensionCriteriaAsync(filter!, req.FindFilter ?? new FindFilter(), req.FilterExpression, ct);
+            return Ok(await videoRepo.AggregateAsync(new VideoFilter { Ids = [.. matchingIds] }, req.FindFilter, ct));
+        }
+        catch (ExtensionEntityFilterValidationException ex)
+        {
+            return UnprocessableEntity(new ProblemDetails { Title = "Invalid extension filter.", Detail = ex.Message });
+        }
+        catch (ExtensionEntityFilterLimitException ex)
+        {
+            return UnprocessableEntity(new ProblemDetails { Title = "Extension filter limit exceeded.", Detail = ex.Message });
+        }
+        catch (ExtensionEntityFilterProviderException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails { Title = "Extension filter provider unavailable.", Detail = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails { Title = "Extension filtering is unavailable.", Detail = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Runs the core query first, then hands the authorized candidate ids to the owning extensions. The
+    /// candidate cap keeps one query from walking the whole library through an extension provider.
+    /// </summary>
+    private async Task<IReadOnlyList<int>> ApplyExtensionCriteriaAsync(
+        VideoFilter filter,
+        FindFilter findFilter,
+        FilterExpression<VideoFilter>? filterExpression,
+        CancellationToken ct)
+    {
+        if (extensionFilters is null || principalAccessor?.Current is null)
+            throw new InvalidOperationException("Extension filtering is unavailable.");
+
+        var candidateFindFilter = new FindFilter
+        {
+            Q = findFilter.Q,
+            Page = 1,
+            PerPage = ExtensionFilterCandidateLimit + 1,
+            Sort = findFilter.Sort,
+            Direction = findFilter.Direction,
+            Sorts = findFilter.Sorts,
+            Seed = findFilter.Seed,
+        };
+        var candidateIds = await videoRepo.FindIdsAsync(
+            filter, candidateFindFilter, ExtensionFilterCandidateLimit + 1, ct, filterExpression);
+        if (candidateIds.Count > ExtensionFilterCandidateLimit)
+            throw new ExtensionEntityFilterLimitException($"Extension filtering supports at most {ExtensionFilterCandidateLimit:N0} videos per query. Narrow the other filters first.");
+
+        var authorizedQuery = await ReadScopeListOptimization.ApplyAsync<Video>(db, EntityKinds.Video, Permissions.VideosRead, ct);
+        var authorizedIds = await authorizedQuery
+            .AsNoTracking()
+            .Where(video => candidateIds.Contains(video.Id))
+            .Select(video => video.Id)
+            .ToHashSetAsync(ct);
+
+        return await extensionFilters.ApplyAsync(
+            "videos",
+            filter.ExtensionCriteria,
+            [.. candidateIds.Where(authorizedIds.Contains)],
+            principalAccessor.Current,
+            ct);
     }
 
     [HttpGet("{id:int}")]

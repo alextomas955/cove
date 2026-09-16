@@ -459,7 +459,16 @@ public sealed partial class UserEngagementService(
     public Task<UserEngagementSnapshot?> AddHistoricalLikeAsync(AffinityHostType hostType, int hostId, DateTime at, CancellationToken cancellationToken = default)
         => IncrementLikeCoreAsync(hostType, hostId, cancellationToken, at);
 
-    public async Task<UserEngagementSnapshot?> DeleteLikeAtAsync(AffinityHostType hostType, int hostId, DateTime at, CancellationToken cancellationToken = default)
+    public Task<UserEngagementSnapshot?> DeleteLikeAtAsync(AffinityHostType hostType, int hostId, DateTime at, CancellationToken cancellationToken = default)
+        => DeleteLikeHistoryAsync(hostType, hostId, at, null, cancellationToken);
+
+    public Task<UserEngagementSnapshot?> DeleteLikeByIdAsync(AffinityHostType hostType, int hostId, int interactionId, CancellationToken cancellationToken = default)
+        => DeleteLikeHistoryAsync(hostType, hostId, null, interactionId, cancellationToken);
+
+    private async Task<UserEngagementSnapshot?> DeleteLikeHistoryAsync(AffinityHostType hostType, int hostId, DateTime? at, int? interactionId, CancellationToken cancellationToken)
+        => await WithLikeMutationAsync(() => DeleteLikeHistoryCoreAsync(hostType, hostId, at, interactionId, cancellationToken), cancellationToken);
+
+    private async Task<UserEngagementSnapshot?> DeleteLikeHistoryCoreAsync(AffinityHostType hostType, int hostId, DateTime? at, int? interactionId, CancellationToken cancellationToken)
     {
         if (!IsDirectLikeHost(hostType))
             return null;
@@ -469,16 +478,16 @@ public sealed partial class UserEngagementService(
         var affinity = await GetOrCreateAffinityAsync(hostType, hostId, cancellationToken, createIfMissing: false);
         if (affinity != null)
         {
-            var normalizedAt = at.Kind == DateTimeKind.Unspecified
-                ? DateTime.SpecifyKind(at, DateTimeKind.Utc)
-                : at.ToUniversalTime();
+            var normalizedAt = at.HasValue
+                ? (at.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(at.Value, DateTimeKind.Utc) : at.Value.ToUniversalTime())
+                : (DateTime?)null;
             var interactionHostType = ToInteractionHostType(hostType);
             var interaction = await db.Interactions
                 .Where(item => item.UserId == affinity.UserId
                     && item.HostType == interactionHostType
                     && item.HostId == hostId
                     && item.Kind == InteractionKind.LikeCount
-                    && item.At == normalizedAt)
+                    && (interactionId.HasValue ? item.Id == interactionId.Value : item.At == normalizedAt))
                 .OrderBy(item => item.Id)
                 .FirstOrDefaultAsync(cancellationToken);
             if (interaction != null)
@@ -498,6 +507,10 @@ public sealed partial class UserEngagementService(
         int hostId,
         CancellationToken cancellationToken,
         DateTime? at = null)
+        => await WithLikeMutationAsync(() => IncrementLikePersistAsync(hostType, hostId, cancellationToken, at), cancellationToken);
+
+    private async Task<UserEngagementSnapshot?> IncrementLikePersistAsync(
+        AffinityHostType hostType, int hostId, CancellationToken cancellationToken, DateTime? at)
     {
         if (!IsDirectLikeHost(hostType))
             return null;
@@ -525,6 +538,9 @@ public sealed partial class UserEngagementService(
     }
 
     public async Task<UserEngagementSnapshot?> DecrementLikeAsync(AffinityHostType hostType, int hostId, CancellationToken cancellationToken = default)
+        => await WithLikeMutationAsync(() => DecrementLikeCoreAsync(hostType, hostId, cancellationToken), cancellationToken);
+
+    private async Task<UserEngagementSnapshot?> DecrementLikeCoreAsync(AffinityHostType hostType, int hostId, CancellationToken cancellationToken)
     {
         if (!IsDirectLikeHost(hostType))
             return null;
@@ -550,6 +566,9 @@ public sealed partial class UserEngagementService(
     }
 
     public async Task<UserEngagementSnapshot?> ResetLikeAsync(AffinityHostType hostType, int hostId, CancellationToken cancellationToken = default)
+        => await WithLikeMutationAsync(() => ResetLikeCoreAsync(hostType, hostId, cancellationToken), cancellationToken);
+
+    private async Task<UserEngagementSnapshot?> ResetLikeCoreAsync(AffinityHostType hostType, int hostId, CancellationToken cancellationToken)
     {
         if (!IsDirectLikeHost(hostType))
             return null;
@@ -574,6 +593,41 @@ public sealed partial class UserEngagementService(
 
     private static bool IsDirectLikeHost(AffinityHostType hostType)
         => hostType is AffinityHostType.Video or AffinityHostType.Image or AffinityHostType.Audio or AffinityHostType.Text;
+
+    private async Task<UserEngagementSnapshot?> WithLikeMutationAsync(Func<Task<UserEngagementSnapshot?>> operation, CancellationToken ct)
+    {
+        if (!db.Database.IsNpgsql() || principalAccessor.Current?.UserId is not int user)
+            return await operation();
+
+        async Task<UserEngagementSnapshot?> LockedAsync()
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({UserEngagementConcurrency.AdvisoryLockNamespace}, {user})", ct);
+            // A caller can have read an affinity before it acquired this lock. Refresh only the
+            // counter, preserving unrelated pending engagement fields and deliberate local deltas.
+            foreach (var entry in db.ChangeTracker.Entries<UserEntityAffinity>()
+                .Where(x => x.Entity.UserId == user && x.State is not (EntityState.Added or EntityState.Deleted)).ToArray())
+            {
+                var values = await entry.GetDatabaseValuesAsync(ct);
+                if (values is null) continue;
+                var property = entry.Property(x => x.LikeCount);
+                var delta = property.IsModified ? property.CurrentValue - property.OriginalValue : 0;
+                property.OriginalValue = values.GetValue<int>(nameof(UserEntityAffinity.LikeCount));
+                property.CurrentValue = property.OriginalValue + delta;
+            }
+            return await operation();
+        }
+
+        // Extension event/receipt transactions share this same context and lock. Otherwise
+        // keep the lock until both the counter and its history change have committed.
+        if (db.Database.CurrentTransaction is not null) return await LockedAsync();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            var result = await LockedAsync();
+            await transaction.CommitAsync(ct);
+            return result;
+        });
+    }
 
     /// <summary>
     /// Record a batch of contiguous watched intervals for a playback session.

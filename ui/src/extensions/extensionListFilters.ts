@@ -21,8 +21,18 @@ function parseExtensionFilterKey(key: string) {
   }
 }
 
+/** Lists whose backend executes extension-owned filters (see TagsController and VideosController). */
+const EXECUTABLE_FILTER_ENTITY_TYPES = new Set(["tags", "videos"]);
+
+function normalizeFilterEntityType(entityType: string) {
+  const normalized = entityType.trim().toLowerCase();
+  return normalized.endsWith("s") ? normalized : `${normalized}s`;
+}
+
 export function executableExtensionFilterKey(contribution: ExtensionListFilterContribution) {
-  if (!contribution.filterId || contribution.entityType.trim().toLowerCase() !== "tags") return null;
+  if (!contribution.filterId || !EXECUTABLE_FILTER_ENTITY_TYPES.has(normalizeFilterEntityType(contribution.entityType))) {
+    return null;
+  }
   return extensionFilterKey(contribution.extensionId, contribution.filterId);
 }
 
