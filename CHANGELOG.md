@@ -17,6 +17,8 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 - Duplicate groups line copies up side by side with hover previews, highlighted best values, and visual-distance and length hints. A compare view adds a draggable slider, synchronized playback with an offset for trimmed copies, and aligned frame strips. Groups can be filtered, sorted by space to free, paged, quick-viewed without leaving the page, and reviewed with keyboard shortcuts.
 - Resolve one duplicate group or all of them while you keep reviewing; resolution runs in the background. Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, play counts, and markers can be merged into the kept copy before the others are removed, optionally with their files.
 - Groups marked as not duplicates are remembered, so later searches never group those videos together again.
+- Bulk video and performer updates can now add, remove, set, or clear custom field values on every selected item in one request, the same way they already handle tags and performers. Only the named fields are touched, unknown fields or values of the wrong type reject the whole request, and the last-updated time changes only on items whose values actually changed.
+- The bulk Edit dialog for selected videos and performers now includes a collapsible Custom fields section. Expand it, tick a field, enter a value with the same control the single-record editor uses, choose Overwrite, Add, or Remove for the group, or clear a field on every selected item. Untouched fields are left alone.
 
 ## [1.4.1] - 2026-09-07
 

@@ -113,6 +113,10 @@
           "text": "Leaving a field unset means that record has no value. To clear an existing value, empty its control or choose Unset where available, then save the record. A definition may be shared by several entity types, but every value still belongs to one specific record."
         },
         {
+          "type": "paragraph",
+          "text": "To change a custom field on many videos or performers at once, select them in the list, choose Edit, expand Custom fields, and tick the field. The section applies one mode to every ticked custom field: Overwrite replaces the value, Add appends entries to multi-value fields and overwrites single-value fields, and Remove drops matching entries. Choose Clear value on a field to remove it from every selected record. Fields you do not tick are left unchanged, and an invalid JSON value blocks Apply. The section appears only once at least one custom field is defined for that record type."
+        },
+        {
           "type": "links",
           "items": [
             {

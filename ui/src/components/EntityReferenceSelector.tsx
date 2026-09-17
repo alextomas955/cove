@@ -115,6 +115,7 @@ export function EntityReferenceSelector({
   disabled = false,
   inputClassName,
   inputId,
+  inputAriaLabel,
   excludeIds,
   creatable = true,
   resultsMaxHeight,
@@ -131,6 +132,8 @@ export function EntityReferenceSelector({
   inputClassName?: string;
   /** Associates the selector input with an external label. */
   inputId?: string;
+  /** Accessible name for the search input when no external label is associated. */
+  inputAriaLabel?: string;
   excludeIds?: Iterable<number>;
   creatable?: boolean;
   resultsMaxHeight?: number;
@@ -290,6 +293,7 @@ export function EntityReferenceSelector({
             }
           }}
           placeholder={placeholder ?? `Search ${labels.plural}...`}
+          aria-label={inputAriaLabel}
           disabled={disabled}
           className={
             inputClassName ??
@@ -372,6 +376,7 @@ export function EntityReferenceMultiSelector({
   emptyMessage,
   disabled = false,
   inputClassName,
+  inputAriaLabel,
   resultsClassName,
   resultsMaxHeight,
   containerClassName,
@@ -392,6 +397,8 @@ export function EntityReferenceMultiSelector({
   emptyMessage?: string;
   disabled?: boolean;
   inputClassName?: string;
+  /** Accessible name for the search input when no external label is associated. */
+  inputAriaLabel?: string;
   resultsClassName?: string;
   resultsMaxHeight?: number;
   containerClassName?: string;
@@ -573,6 +580,7 @@ export function EntityReferenceMultiSelector({
         type="text"
         value={searchText}
         placeholder={placeholder ?? `Search ${labels.plural}...`}
+        aria-label={inputAriaLabel}
         disabled={disabled}
         className={
           inputClassName ??

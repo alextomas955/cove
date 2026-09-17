@@ -13,7 +13,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import type { FindFilter } from "../api/types";
+import type { CustomFieldEntityType, FindFilter } from "../api/types";
 import { isValidElement, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   clampEntityCardSizeLevel,
@@ -27,6 +27,7 @@ import { useRegisterKeyboardActions, type KeyboardActionRegistration } from "../
 import { reshuffleRandomSort, withSeededRandomSort } from "../utils/seededRandomSort";
 import { toolbarIconButtonClass, toolbarSegmentClass, toolbarSelectClass } from "./listToolbarStyles";
 import { FilterDialog, type FilterDialogPreselection } from "./FilterDialog";
+import { customFieldEntityTypeForFilterMode, useCustomFieldFilterSection } from "./CustomFieldFilterSection";
 import { FilterButton } from "./FilterButton";
 import type { CriterionDefinition } from "./filterCriteriaTypes";
 import { migrateLegacyPerformerFavoriteCriterion } from "./filterCriterionState";
@@ -82,6 +83,12 @@ export interface DetailListToolbarProps {
   criteriaDefinitions?: CriterionDefinition[];
   objectFilter?: Record<string, unknown>;
   onObjectFilterChange?: (filter: Record<string, unknown>) => void;
+  /**
+   * Entity whose filterable custom fields become a "Custom Fields" section in the filter dialog and chips, the same
+   * one the top-level list pages generate. Defaults to the entity behind `filterMode`; without either, custom field
+   * criteria cannot be added or edited here.
+   */
+  customFieldEntityType?: CustomFieldEntityType;
   allowInfinitePageSize?: boolean;
   infinitePageSizeOnly?: boolean;
   showPagingControls?: boolean;
@@ -176,6 +183,7 @@ export function DetailListToolbar({
   criteriaDefinitions,
   objectFilter,
   onObjectFilterChange,
+  customFieldEntityType,
   allowInfinitePageSize = false,
   infinitePageSizeOnly = false,
   showPagingControls = true,
@@ -288,6 +296,14 @@ export function DetailListToolbar({
   const activeObjectFilter = useMemo(
     () => migrateLegacyPerformerFavoriteCriterion(objectFilter ?? {}, criteriaDefinitions ?? []),
     [criteriaDefinitions, objectFilter],
+  );
+  const customFieldSection = useCustomFieldFilterSection(
+    customFieldEntityType ?? customFieldEntityTypeForFilterMode(filterMode),
+    activeObjectFilter,
+  );
+  const customFilterSections = useMemo(
+    () => (customFieldSection ? [customFieldSection] : undefined),
+    [customFieldSection],
   );
 
   // Any embedded list that exposes the saved-filter menu must also honor that mode's default.
@@ -470,6 +486,7 @@ export function DetailListToolbar({
         <ActiveObjectFilterChips
           criteriaDefinitions={criteriaDefinitions}
           objectFilter={activeObjectFilter}
+          customFilterSections={customFilterSections}
           className="mb-2"
           onEdit={(target) => {
             const key = getFilterChipTargetKey(target);
@@ -481,6 +498,8 @@ export function DetailListToolbar({
                 item.secondaryFilterKey === key ||
                 item.auxiliaryToggleKey === key,
             );
+            const customSection =
+              target.kind === "root" ? customFilterSections?.find((section) => section.filterKey === key) : undefined;
             setFilterDialogPreselect(
               target.kind === "expression"
                 ? undefined
@@ -490,7 +509,7 @@ export function DetailListToolbar({
                       relatedFacet: target.facet,
                       nestedCriterionId: target.nestedCriterionId,
                     }
-                  : (criterion?.id ?? key),
+                  : (customSection?.id ?? criterion?.id ?? key),
             );
             setFilterDialogInitialView(
               key === "_filterExpression" && target.kind !== "expression" ? "advanced" : "simple",
@@ -562,6 +581,7 @@ export function DetailListToolbar({
             setFilterDialogOpenAtRoot(false);
           }}
           criteria={criteriaDefinitions}
+          customSections={customFilterSections}
           activeFilter={activeObjectFilter}
           onApply={(nextFilter) => {
             onObjectFilterChange(nextFilter);

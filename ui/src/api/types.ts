@@ -3362,6 +3362,8 @@ export interface BulkVideoUpdate {
   tagMode?: BulkUpdateMode;
   performerIds?: number[];
   performerMode?: BulkUpdateMode;
+  customFields?: Record<string, unknown>;
+  customFieldMode?: BulkUpdateMode;
   galleryIds?: number[];
   galleryMode?: BulkUpdateMode;
   groupIds?: VideoGroupInput[];
@@ -3378,6 +3380,8 @@ export interface BulkPerformerUpdate {
   details?: string;
   tagIds?: number[];
   tagMode?: BulkUpdateMode;
+  customFields?: Record<string, unknown>;
+  customFieldMode?: BulkUpdateMode;
 }
 
 export interface BulkTagUpdate {
