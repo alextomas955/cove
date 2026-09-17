@@ -641,6 +641,11 @@ export const videos = {
   transcodeUrl: (id: number, resolution?: string, start?: number, fileId?: number) =>
     buildMediaUrl(`/stream/video/${id}/transcode`, undefined, undefined, { resolution, start, fileId }),
   hlsMasterUrl: (id: number) => buildMediaUrl(`/stream/video/${id}/hls/master.m3u8`),
+  hlsPlaylistUrl: (id: number, profile: string, start?: number, fileId?: number) =>
+    buildMediaUrl(`/stream/video/${id}/hls/${encodeURIComponent(profile)}.m3u8`, undefined, undefined, {
+      start,
+      fileId,
+    }),
   getResolutions: (id: number, fileId?: number) =>
     request<string[]>(`/stream/video/${id}/resolutions${fileId == null ? "" : `?fileId=${fileId}`}`),
   segments: {

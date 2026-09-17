@@ -167,7 +167,7 @@ public sealed class VideoGenerationAndRescanApiTests(
             .Single(line => line.StartsWith($"/api/stream/video/{video.Id}/hls/segment/", StringComparison.Ordinal));
         segmentUrl.Should().EndWith($"?fileId={video.PrimaryFileId}&access_token=<access-token>");
         var segmentName = segmentUrl.Split('?', 2)[0].Split('/').Last();
-        segmentName.Should().Be("original_0000.ts");
+        segmentName.Should().Be("original_s0_0000.ts");
 
         var segment = await AsUser().GetHlsSegmentAsync(video.Id, segmentName, TestContext.Current.CancellationToken);
         segment.MediaType.Should().Be("video/mp2t");

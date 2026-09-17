@@ -18,6 +18,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { videos } from "../api/client";
+import { supportsNativeHls, transcodeSource } from "../utils/transcodeSource";
 import type { Detection, Face, Segment } from "../api/types";
 import { createPlaybackTracker, trackInteraction, type PlaybackTrackingTarget } from "../utils/interactionTracking";
 import { useAppConfig } from "../state/AppConfigContext";
@@ -86,6 +87,17 @@ const SOURCE_TRANSCODE_QUALITY = "Source";
 // the onError->transcode fallback never fires — so we proactively avoid defaulting to Direct.
 const INCOMPATIBLE_AUDIO_CODECS = new Set(["ac3", "eac3", "ec-3", "dts", "dts-hd", "truehd", "mlp"]);
 const TRANSCODE_PREFERRED_VIDEO_FORMATS = new Set(["wmv", "asf", "avi"]);
+
+// Video codecs Safari/WebKit advertises support for but frequently fails to play directly (HEVC is only
+// reliable as 8-bit hvc1-tagged MP4, which the library metadata cannot distinguish). Playback does not
+// error in those cases, so the onError->transcode fallback never fires; on native-HLS browsers these
+// default to the transcode and Direct stays available in the quality menu. Other browsers decode them.
+const NATIVE_HLS_TRANSCODE_PREFERRED_VIDEO_CODECS = new Set(["hevc", "h265"]);
+
+function prefersTranscodedVideoCodec(codec: string | undefined, nativeHls: boolean) {
+  const normalized = codec?.trim().toLowerCase();
+  return nativeHls && normalized ? NATIVE_HLS_TRANSCODE_PREFERRED_VIDEO_CODECS.has(normalized) : false;
+}
 
 function prefersTranscodedVideoFormat(format?: string) {
   const normalized = format?.trim().toLowerCase();
@@ -174,6 +186,7 @@ export function VideoPlayer({
   streamUrl,
   posterUrl,
   format,
+  videoCodec,
   audioCodec,
   duration,
   resumeTime,
@@ -208,6 +221,7 @@ export function VideoPlayer({
   streamUrl: string;
   posterUrl?: string;
   format: string;
+  videoCodec?: string;
   audioCodec?: string;
   duration: number;
   /** Explicit navigation timestamp. Takes precedence over saved resume state. */
@@ -318,8 +332,13 @@ export function VideoPlayer({
   }, [compactControls]);
   const [selectedQuality, setSelectedQuality] = useState<string>("Direct");
   const selectedQualityRef = useRef("Direct");
-  const compatibilityRequired = prefersTranscodedVideoFormat(format) || !isBrowserCompatibleAudio(audioCodec);
-  const compatibilityIdentity = `${videoId}:${fileId ?? "primary"}:${format?.trim().toLowerCase()}:${audioCodec?.trim().toLowerCase()}`;
+  // Safari cannot play the piped fragmented MP4 transcode; it gets the same encode as an HLS playlist.
+  const nativeHlsSupported = useMemo(() => supportsNativeHls(), []);
+  const compatibilityRequired =
+    prefersTranscodedVideoFormat(format) ||
+    prefersTranscodedVideoCodec(videoCodec, nativeHlsSupported) ||
+    !isBrowserCompatibleAudio(audioCodec);
+  const compatibilityIdentity = `${videoId}:${fileId ?? "primary"}:${format?.trim().toLowerCase()}:${videoCodec?.trim().toLowerCase()}:${audioCodec?.trim().toLowerCase()}`;
   const [compatibilityLookup, setCompatibilityLookup] = useState(() => ({
     identity: compatibilityIdentity,
     pending: compatibilityRequired,
@@ -328,9 +347,9 @@ export function VideoPlayer({
     compatibilityLookup.identity === compatibilityIdentity ? compatibilityLookup.pending : compatibilityRequired;
   const [transcodeStartSec, setTranscodeStartSec] = useState(0);
   const [availableQualities, setAvailableQualities] = useState<string[]>([]);
-  const [compatibilityFallbackReason, setCompatibilityFallbackReason] = useState<"video format" | "audio codec" | null>(
-    null,
-  );
+  const [compatibilityFallbackReason, setCompatibilityFallbackReason] = useState<
+    "video format" | "video codec" | "audio codec" | null
+  >(null);
   // Guards the one-shot automatic transcode fallback (on direct-play error). Reset per video.
   const autoTranscodeTriedRef = useRef(false);
   // Guards the one-shot compatibility default selection so a user can still pick Direct later.
@@ -891,13 +910,14 @@ export function VideoPlayer({
   // The source sentinel transcodes at the original resolution (no `resolution` query param).
   const transcodeResolution = selectedQuality === SOURCE_TRANSCODE_QUALITY ? undefined : selectedQuality;
   const isDirectSource = selectedQuality === "Direct";
-  const effectiveStreamUrl = isDirectSource
-    ? streamUrl
-    : videos.transcodeUrl(videoId, transcodeResolution, transcodeStartSec > 0 ? transcodeStartSec : undefined, fileId);
-  // The transcode endpoint always emits MP4. The direct stream declares no type, so the browser
-  // reads the container from the bytes. A declared type can only reject the source before any
-  // request, which browsers do for the correct type of several containers we serve.
-  const effectiveSourceType = isDirectSource ? undefined : "video/mp4";
+  const transcode = isDirectSource
+    ? null
+    : transcodeSource(videoId, transcodeResolution, transcodeStartSec, fileId, nativeHlsSupported);
+  const effectiveStreamUrl = transcode ? transcode.url : streamUrl;
+  // The transcode source declares its own type (MP4 or an HLS playlist). The direct stream declares
+  // no type, so the browser reads the container from the bytes. A declared type can only reject the
+  // source before any request, which browsers do for the correct type of several containers we serve.
+  const effectiveSourceType = transcode ? transcode.type : undefined;
   const effectiveSourceSignature = `${effectiveStreamUrl}|${effectiveSourceType ?? ""}`;
 
   const suspendedPlaybackRef = useRef<{ time: number; resume: boolean } | null>(null);
@@ -1338,9 +1358,11 @@ export function VideoPlayer({
     let cancelled = false;
     const fallbackReason = prefersTranscodedVideoFormat(format)
       ? "video format"
-      : !isBrowserCompatibleAudio(audioCodec)
-        ? "audio codec"
-        : null;
+      : prefersTranscodedVideoCodec(videoCodec, nativeHlsSupported)
+        ? "video codec"
+        : !isBrowserCompatibleAudio(audioCodec)
+          ? "audio codec"
+          : null;
     // Moves a source the browser cannot play directly onto a transcode. An empty `resolutions`
     // means no ladder rung is known, which selects a transcode at the source resolution.
     const applyCompatibilityFallback = (resolutions: string[]) => {
@@ -1381,7 +1403,7 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
     };
-  }, [audioCodec, fileId, format, videoId]);
+  }, [audioCodec, fileId, format, nativeHlsSupported, videoCodec, videoId]);
 
   const prepareClipForPlayback = useCallback(() => {
     const video = videoRef.current;

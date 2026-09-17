@@ -343,6 +343,7 @@ export function CompilationPlayer({
                 : (item.posterPath ?? videos.screenshotUrl(currentVideoId))
             }
             format={currentFile.format}
+            videoCodec={currentFile.videoCodec}
             audioCodec={currentFile.audioCodec}
             duration={currentFile.duration}
             resumeTime={videoItemStart}
