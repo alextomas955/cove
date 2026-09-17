@@ -286,10 +286,11 @@ export function VideoSelectionActions({
               id: video.id,
               name: video.title || video.files[0]?.basename || `Video ${video.id}`,
             }))}
-            renderReview={(targetId, sourceId, onBack) => (
+            renderReview={(targetId, sourceIds, onBack) => (
               <VideoMergeEditor
                 targetId={targetId}
-                sourceId={sourceId}
+                sourceIds={sourceIds}
+                canDeleteFiles={canDeleteFiles}
                 onClose={onBack}
                 queryKeys={[[queryKey]]}
                 onMerged={() => {

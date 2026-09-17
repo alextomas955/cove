@@ -94,8 +94,8 @@ public sealed class VideoMergeService(
     public async Task<VideoMergeResult> MergeAsync(VideoMergePlan plan, CancellationToken ct)
     {
         var removedIds = plan.RemovedVideoIds.Where(id => id > 0 && id != plan.KeptVideoId).Distinct().Order().ToArray();
-        if (plan.Metadata != null && removedIds.Length != 1)
-            return new VideoMergeResult(VideoMergeOutcome.InvalidMetadata, "Metadata choices require exactly one distinct source video.");
+        if (plan.Metadata != null && removedIds.Length == 0)
+            return new VideoMergeResult(VideoMergeOutcome.InvalidMetadata, "Metadata choices require at least one distinct source video.");
         var requestedIds = removedIds.Append(plan.KeptVideoId).ToArray();
 
         var equivalentIds = plan.FileHandling == VideoMergeFileHandling.Remove
@@ -163,13 +163,13 @@ public sealed class VideoMergeService(
                 var sources = videos.Where(video => video.Id != target.Id).ToArray();
                 if (plan.Metadata != null)
                 {
-                    if (sources.Length != 1)
+                    if (sources.Length != removedIds.Length)
                     {
                         outcome = VideoMergeOutcome.InvalidMetadata;
                         error = "Source video no longer exists or is unavailable.";
                         return;
                     }
-                    error = await ValidateMetadataAsync(target, sources[0], plan.Metadata, visibleTags, visiblePerformers, visibleGalleries, ct);
+                    error = await ValidateMetadataAsync(target, sources, plan.Metadata, visibleTags, visiblePerformers, visibleGalleries, ct);
                     if (error != null)
                     {
                         outcome = VideoMergeOutcome.InvalidMetadata;
@@ -319,23 +319,29 @@ public sealed class VideoMergeService(
 
     // ----- Validation -----
 
-    private async Task<string?> ValidateMetadataAsync(Video target, Video source, VideoMergeMetadataDto choices,
+    /// <summary>
+    /// Choices name a side, not a copy. With several removed copies the "source" side is the combined
+    /// incoming record: for a scalar, the first copy (by id) that has a value; for lists, everything the
+    /// copies have between them.
+    /// </summary>
+    private async Task<string?> ValidateMetadataAsync(Video target, Video[] sources, VideoMergeMetadataDto choices,
         int[] visibleTags, int[] visiblePerformers, int[] visibleGalleries, CancellationToken ct)
     {
+        var compared = sources.Prepend(target).ToArray();
         if (choices.Fields?.Any(item => !MergeScalarFields.Contains(item.Key) || item.Value is not ("source" or "target")) == true
             || choices.CustomFields?.Any(item => item.Value is not ("source" or "target")) == true)
             return "Unknown metadata field or selection side.";
         if (!ValidSelection(choices.TagIds, visibleTags)
-            || !ValidSelection(choices.PerformerIds, target.VideoPerformers.Concat(source.VideoPerformers).Select(item => item.PerformerId).Intersect(visiblePerformers))
-            || !ValidSelection(choices.GalleryIds, target.VideoGalleries.Concat(source.VideoGalleries).Select(item => item.GalleryId).Intersect(visibleGalleries)))
+            || !ValidSelection(choices.PerformerIds, compared.SelectMany(video => video.VideoPerformers).Select(item => item.PerformerId).Intersect(visiblePerformers))
+            || !ValidSelection(choices.GalleryIds, compared.SelectMany(video => video.VideoGalleries).Select(item => item.GalleryId).Intersect(visibleGalleries)))
             return "Selected relationships must be readable items from the compared videos.";
-        if (!ValidSelection(choices.Urls, target.Urls.Concat(source.Urls).Select(item => item.Url), StringComparer.OrdinalIgnoreCase)
+        if (!ValidSelection(choices.Urls, compared.SelectMany(video => video.Urls).Select(item => item.Url), StringComparer.OrdinalIgnoreCase)
             || !ValidSelection(choices.RemoteIds?.Select(item => (item.Endpoint, item.RemoteId)),
-                target.RemoteIds.Concat(source.RemoteIds).Select(item => (item.Endpoint, item.RemoteId)), RemoteIdKeyComparer.Instance))
+                compared.SelectMany(video => video.RemoteIds).Select(item => (item.Endpoint, item.RemoteId)), RemoteIdKeyComparer.Instance))
             return "Selected links must belong to one of the compared videos.";
         if (choices.CustomFields != null)
         {
-            var values = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, new[] { target.Id, source.Id }, ct);
+            var values = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, compared.Select(video => video.Id).ToArray(), ct);
             if (choices.CustomFields.Keys.Except(values.Values.SelectMany(item => item.Keys), StringComparer.OrdinalIgnoreCase).Any())
                 return "Selected custom fields must belong to one of the compared videos.";
         }
@@ -400,7 +406,9 @@ public sealed class VideoMergeService(
                 continue;
             if (side == "source")
             {
-                var error = await CopyScalarAsync(target, sources[0], key, chosen, createdCoverBlobs, readableStudioNames, ct);
+                // The incoming side of the review is the first copy that has a value for this field.
+                var donor = sources.FirstOrDefault(source => HasScalarValue(source, key)) ?? sources[0];
+                var error = await CopyScalarAsync(target, donor, key, chosen, createdCoverBlobs, readableStudioNames, ct);
                 if (error != null)
                     return error;
                 continue;
@@ -491,7 +499,8 @@ public sealed class VideoMergeService(
         foreach (var (key, side) in choices ?? [])
         {
             if (side != "source") continue;
-            if ((values.GetValueOrDefault(sources[0].Id)?.TryGetValue(key, out var value)) == true) result[key] = value!;
+            var incoming = sources.Select(source => values.GetValueOrDefault(source.Id)).FirstOrDefault(item => item?.ContainsKey(key) == true);
+            if (incoming != null) result[key] = incoming[key];
             else result.Remove(key);
             changed = true;
         }

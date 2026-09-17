@@ -933,6 +933,8 @@ export interface DuplicateResolveRequest {
   action: DuplicateResolutionAction;
   deleteFiles: boolean;
   deleteGenerated: boolean;
+  /** Review choices; honoured only when one group with one video to remove is merged. */
+  metadata?: VideoMergeMetadata;
 }
 
 export interface DuplicateResolveResult {
@@ -3985,4 +3987,14 @@ export interface VideoMergeMetadata {
   galleryIds?: number[];
   urls?: string[];
   remoteIds?: VideoRemoteId[];
+}
+
+/**
+ * What happens to the merged copies' files. "attach" moves them onto the kept video; "remove" leaves
+ * them with the copies, which are deleted like any other video with the same delete options.
+ */
+export interface VideoMergeFileHandling {
+  mode: "attach" | "remove";
+  deleteFiles: boolean;
+  deleteGenerated: boolean;
 }

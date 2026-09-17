@@ -176,7 +176,36 @@ public sealed class VideoMergeServiceTests
         => Assert.Equal(expected, VideoFileEquivalence.AreEquivalentOrSameLength(sourceDuration, sourceHash, targetDuration, targetHash));
 
     [Fact]
-    public async Task MetadataChoicesRequireExactlyOneRemovedVideo()
+    public async Task ChoicesWithSeveralRemovedVideosReadTheSourceSideAsTheFirstCopyWithAValue()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (kept, removed) = await harness.SeedPairAsync(keptDuration: 60, removedDuration: 60);
+        int secondId;
+        await using (var db = harness.CreateContext())
+        {
+            var second = new Video { Title = "Second title", Code = "CODE-2", ImageBlobId = "cover-of-second", Files = [new VideoFile { ParentFolder = new Folder { Path = "/library/second" }, Basename = "second.mp4" }] };
+            db.Videos.Add(second);
+            await db.SaveChangesAsync();
+            secondId = second.Id;
+        }
+
+        var result = await harness.MergeAsync(new VideoMergePlan(kept.Id, [secondId, removed.Id], Metadata: new VideoMergeMetadataDto(
+            Fields: new() { ["title"] = "source", ["code"] = "source", ["cover"] = "source", ["details"] = "target" })));
+
+        Assert.Equal(VideoMergeOutcome.Merged, result.Outcome);
+        await using var verify = harness.CreateContext();
+        var video = await verify.Videos.Include(item => item.Files).SingleAsync(item => item.Id == kept.Id);
+        // Title comes from the lower id (the first copy with a title); code and cover from the only copy that has one.
+        Assert.Equal("Removed title", video.Title);
+        Assert.Equal("CODE-2", video.Code);
+        Assert.Equal("cover-of-second", video.ImageBlobId);
+        Assert.Null(video.Details);
+        Assert.Equal(3, video.Files.Count);
+        Assert.False(await verify.Videos.AnyAsync(item => item.Id == removed.Id || item.Id == secondId));
+    }
+
+    [Fact]
+    public async Task MetadataChoicesAreRejectedWhenARemovedVideoIsMissing()
     {
         await using var harness = await Harness.CreateAsync();
         var (kept, removed) = await harness.SeedPairAsync(keptDuration: 60, removedDuration: 60);

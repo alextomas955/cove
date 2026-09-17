@@ -1526,8 +1526,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
     [RequiresEntityAccess(EntityKinds.Video, Permissions.VideosDelete, ActionArgumentName = "dto", PropertyName = "SourceIds")]
     public async Task<ActionResult<VideoDto>> MergeVideos([FromBody] VideoMergeDto dto, CancellationToken ct)
     {
-        if (dto.Metadata != null && (dto.SourceIds.Count != 1 || dto.SourceIds[0] <= 0 || dto.SourceIds[0] == dto.TargetId))
-            return BadRequest("Metadata choices require exactly one distinct source video.");
+        if (dto.Metadata != null && !dto.SourceIds.Any(id => id > 0 && id != dto.TargetId))
+            return BadRequest("Metadata choices require at least one distinct source video.");
         var fileHandling = dto.FileHandling?.Mode?.Trim().ToLowerInvariant() switch
         {
             null or "" or VideoMergeFileHandlingDto.AttachMode => VideoMergeFileHandling.Attach,

@@ -1398,10 +1398,11 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
                 subtitle: item.studioName,
               }));
             }}
-            renderReview={(targetId, sourceId, onBack) => (
+            renderReview={(targetId, sourceIds, onBack) => (
               <VideoMergeEditor
                 targetId={targetId}
-                sourceId={sourceId}
+                sourceIds={sourceIds}
+                canDeleteFiles={canDeleteVideoFiles}
                 onClose={onBack}
                 onMerged={(survivorId) => {
                   setShowMerge(false);

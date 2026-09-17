@@ -1,4 +1,4 @@
-import type { VideoMergeMetadata } from "./types";
+import type { VideoMergeFileHandling, VideoMergeMetadata } from "./types";
 import type {
   AlignmentState,
   AlignmentAnalysis,
@@ -629,8 +629,16 @@ export const videos = {
       body: JSON.stringify({ ids, deleteFiles, deleteGenerated }),
     });
   },
-  merge: (targetId: number, sourceIds: number[], metadata?: VideoMergeMetadata) =>
-    request<Video>("/videos/merge", { method: "POST", body: JSON.stringify({ targetId, sourceIds, metadata }) }),
+  merge: (
+    targetId: number,
+    sourceIds: number[],
+    metadata?: VideoMergeMetadata,
+    fileHandling?: VideoMergeFileHandling,
+  ) =>
+    request<Video>("/videos/merge", {
+      method: "POST",
+      body: JSON.stringify({ targetId, sourceIds, metadata, fileHandling }),
+    }),
   recordPlay: (id: number) => request<void>(`/videos/${id}/play`, { method: "POST" }),
   incrementLike: (id: number) => request<number>(`/videos/${id}/like`, { method: "POST" }),
   addHistoricalLike: (id: number, at: string) =>

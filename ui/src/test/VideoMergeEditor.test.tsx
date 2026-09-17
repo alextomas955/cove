@@ -1,15 +1,33 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { VideoMergeEditor, buildVideoMergeDiff, videoMergeMetadata } from "../components/VideoMergeEditor";
+import { VideoMergeEditor } from "../components/VideoMergeEditor";
+import { buildVideoMergeDiff, videoMergeMetadata } from "../components/VideoMergeReview";
 import { defaultDiffSelection } from "../components/MetadataDiff";
-import type { Video } from "../api/types";
+import { MergeDialog } from "../components/MergeDialog";
+import type { Video, VideoFile } from "../api/types";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), merge: vi.fn(), findTags: vi.fn() }));
 vi.mock("../api/client", () => ({
   videos: { get: api.get, merge: api.merge, screenshotUrl: (id: number) => `/cover/${id}` },
   tags: { find: api.findTags },
 }));
+const file = (id: number, overrides: Partial<VideoFile> = {}): VideoFile => ({
+  id,
+  path: `/library/video-${id}.mp4`,
+  basename: `video-${id}.mp4`,
+  format: "mp4",
+  width: 1920,
+  height: 1080,
+  duration: 600,
+  videoCodec: "h264",
+  audioCodec: "aac",
+  frameRate: 30,
+  bitRate: 8_000_000,
+  size: 600_000_000,
+  fingerprints: [],
+  ...overrides,
+});
 const video = (id: number): Video => ({
   id,
   title: `Title ${id}`,
@@ -25,13 +43,14 @@ const video = (id: number): Video => ({
   createdAt: "",
   updatedAt: "",
 });
-function setup(targetId = 2) {
+const attach = expect.objectContaining({ mode: "attach" });
+function setup(props: Partial<Parameters<typeof VideoMergeEditor>[0]> = {}) {
   const onClose = vi.fn(),
     onMerged = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
-      <VideoMergeEditor sourceId={1} targetId={targetId} onClose={onClose} onMerged={onMerged} />
+      <VideoMergeEditor sourceIds={[1]} targetId={2} onClose={onClose} onMerged={onMerged} {...props} />
     </QueryClientProvider>,
   );
   return { ...view, onClose, onMerged };
@@ -52,7 +71,7 @@ describe("VideoMergeEditor", () => {
       ...video(2),
       remoteIds: [{ endpoint: "https://www.other.example/graphql", remoteId: "target-id" }],
     };
-    const diff = buildVideoMergeDiff(source, target, [], undefined, [
+    const diff = buildVideoMergeDiff([source], target, [], undefined, [
       { endpoint: "https://metadata.example/graphql", name: "Example catalog" },
     ]);
     const field = diff.fields.find((field) => field.key === "remoteIds")!;
@@ -60,7 +79,7 @@ describe("VideoMergeEditor", () => {
     expect(field.itemLabel!(source.remoteIds[0])).toBe("Example catalog: source-id");
     expect(field.render!(target.remoteIds[0])).toBe("other.example\ntarget-id");
     const selection = defaultDiffSelection(diff.fields, diff.source, diff.target);
-    expect(videoMergeMetadata(selection, source, target).remoteIds).toEqual(
+    expect(videoMergeMetadata(selection, [source], target).remoteIds).toEqual(
       expect.arrayContaining([...source.remoteIds, ...target.remoteIds]),
     );
   });
@@ -72,12 +91,13 @@ describe("VideoMergeEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Tags: Added tag" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Tags: Added tag" }));
     expect(screen.getByRole("button", { name: "Remove Tags: Added tag" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
     await waitFor(() => expect(onMerged).toHaveBeenCalledWith(2));
     expect(api.merge).toHaveBeenCalledWith(
       2,
       [1],
       expect.objectContaining({ tagIds: [9], fields: expect.objectContaining({ title: "source", details: "target" }) }),
+      attach,
     );
   });
   it("cancels without saving and initializes a new comparison with target defaults", async () => {
@@ -87,7 +107,7 @@ describe("VideoMergeEditor", () => {
     expect(first.onClose).toHaveBeenCalled();
     expect(api.merge).not.toHaveBeenCalled();
     first.unmount();
-    setup(3);
+    setup({ targetId: 3 });
     expect(await screen.findByLabelText("Title from target")).toBeChecked();
   });
   it("keeps the cover row visible and falls back after a source preview fails", async () => {
@@ -98,12 +118,13 @@ describe("VideoMergeEditor", () => {
     fireEvent.error(screen.getAllByAltText("Video cover").find((image) => image.getAttribute("src") === "/cover/2")!);
     expect(screen.getByRole("group", { name: /Cover/ })).toBeInTheDocument();
     expect(screen.getAllByText("No cover available").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
     await waitFor(() =>
       expect(api.merge).toHaveBeenCalledWith(
         2,
         [1],
         expect.objectContaining({ fields: expect.objectContaining({ cover: "target" }) }),
+        attach,
       ),
     );
   });
@@ -115,15 +136,149 @@ describe("VideoMergeEditor", () => {
     setup();
     await screen.findByLabelText("Title from target");
     expect(screen.getByLabelText("Derived tags from source")).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
-    await waitFor(() => expect(api.merge).toHaveBeenCalledWith(2, [1], expect.objectContaining({ tagIds: [] })));
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    await waitFor(() =>
+      expect(api.merge).toHaveBeenCalledWith(2, [1], expect.objectContaining({ tagIds: [] }), attach),
+    );
   });
   it("keeps the draft after a failed save", async () => {
     api.merge.mockRejectedValue(new Error("Merge failed"));
     setup();
     fireEvent.click(await screen.findByLabelText("Title from source"));
-    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.getByLabelText("Title from source")).toBeChecked();
+  });
+  it("compares the files side by side and marks the best value", async () => {
+    api.get.mockImplementation(async (id: number) => ({
+      ...video(id),
+      files: [file(id, id === 1 ? { width: 3840, height: 2160, size: 2_000_000_000 } : { duration: 600 })],
+      primaryFileId: id,
+    }));
+    setup();
+    const files = await screen.findByRole("region", { name: "Files" });
+    const resolution = within(files).getByRole("row", { name: /Resolution/ });
+    const cells = within(resolution).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("3840×2160");
+    expect(cells[0].className).toContain("text-emerald-300");
+    expect(cells[1].className).not.toContain("text-emerald-300");
+    expect(within(files).getByRole("row", { name: /Duration/ })).toHaveTextContent("10:00");
+    expect(within(files).getByRole("row", { name: /Location/ })).toHaveTextContent("/library");
+    expect(screen.getByText(/1 file attached/)).toBeInTheDocument();
+  });
+  it("sends the files decision with the merge and needs permission to delete from disk", async () => {
+    api.get.mockImplementation(async (id: number) => ({ ...video(id), files: [file(id)], primaryFileId: id }));
+    const first = setup();
+    fireEvent.click(await screen.findByLabelText(/Remove the merged video's 1 file/));
+    expect(screen.queryByLabelText(/Delete the files from disk/)).not.toBeInTheDocument();
+    expect(screen.getByText(/You don't have permission to delete video files/)).toBeInTheDocument();
+    expect(screen.getByText(/1 file removed from Cove/)).toBeInTheDocument();
+    first.unmount();
+
+    setup({ canDeleteFiles: true });
+    fireEvent.click(await screen.findByLabelText(/Remove the merged video's 1 file/));
+    fireEvent.click(screen.getByLabelText(/Delete the files from disk/));
+    fireEvent.click(screen.getByLabelText(/Delete generated previews/));
+    expect(screen.getByText(/1 file deleted from disk/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    await waitFor(() =>
+      expect(api.merge).toHaveBeenCalledWith(2, [1], expect.anything(), {
+        mode: "remove",
+        deleteFiles: true,
+        deleteGenerated: false,
+      }),
+    );
+  });
+  it("combines several merged videos into one incoming side with an origin badge where they disagree", async () => {
+    api.get.mockImplementation(async (id: number) => ({
+      ...video(id),
+      title: id === 2 ? "" : id === 3 ? "" : `Title ${id}`,
+      details: id === 2 ? "Kept description" : `Description ${id}`,
+      director: id === 3 ? "Director from three" : undefined,
+      tags: [{ id: id * 10, name: `Tag ${id}` }],
+    }));
+    setup({ sourceIds: [3, 1] });
+    await screen.findByText("2 videos combined");
+    expect(screen.queryByRole("button", { name: "Swap" })).not.toBeInTheDocument();
+    const details = screen.getByRole("group", { name: "Description" });
+    expect(within(details).getByText("From Title 1")).toBeInTheDocument();
+    expect(within(details).getByText("Description 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Title from source")).toBeChecked();
+    expect(screen.getByLabelText("Director from source")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Remove Tags: Tag 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Tags: Tag 3" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 2 copies" }));
+    await waitFor(() =>
+      expect(api.merge).toHaveBeenCalledWith(
+        2,
+        [1, 3],
+        expect.objectContaining({ tagIds: expect.arrayContaining([10, 20, 30]), fields: expect.objectContaining({ title: "source" }) }),
+        attach,
+      ),
+    );
+  });
+});
+
+describe("VideoMergeEditor combined incoming side", () => {
+  it("shows the cover of the first copy that has a stored cover, as the backend reads it", async () => {
+    api.get.mockImplementation(async (id: number) => ({
+      ...video(id),
+      imagePath: id === 3 ? "/stored-cover/3" : undefined,
+    }));
+    setup({ sourceIds: [1, 3] });
+    await screen.findByText("2 videos combined");
+    const cover = screen.getByRole("group", { name: /Cover/ });
+    expect(within(cover).getAllByAltText("Video cover")[0]).toHaveAttribute("src", "/stored-cover/3");
+  });
+  it("skips whitespace-only values and lets a real one win, as the backend does", () => {
+    const blank = { ...video(1), title: "   " };
+    const real = { ...video(3), title: "Real title" };
+    const diff = buildVideoMergeDiff([blank, real], { ...video(2), title: "" });
+    expect(diff.source.values.title).toBe("Real title");
+    expect(diff.source.provenance?.title).toBeUndefined();
+  });
+  it("treats a copy's organized flag as a fill, matching the merge without choices", () => {
+    const diff = buildVideoMergeDiff([{ ...video(1), organized: true }], video(2));
+    expect(defaultDiffSelection(diff.fields, diff.source, diff.target).organized).toBe("source");
+  });
+  it("keeps the files decision when the roles are swapped", async () => {
+    api.get.mockImplementation(async (id: number) => ({ ...video(id), files: [file(id)], primaryFileId: id }));
+    setup();
+    fireEvent.click(await screen.findByLabelText(/Remove the merged video's 1 file/));
+    fireEvent.click(screen.getByRole("button", { name: "Swap" }));
+    expect(await screen.findByLabelText(/Remove the merged video's 1 file/)).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    await waitFor(() =>
+      expect(api.merge).toHaveBeenCalledWith(1, [2], expect.anything(), expect.objectContaining({ mode: "remove" })),
+    );
+  });
+});
+
+describe("MergeDialog", () => {
+  it("opens the review for any number of videos with the kept one first", () => {
+    const renderReview = vi.fn(() => <div>review</div>);
+    const client = new QueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <MergeDialog
+          open
+          onClose={vi.fn()}
+          entityType="video"
+          items={[
+            { id: 5, name: "Five" },
+            { id: 6, name: "Six" },
+            { id: 7, name: "Seven" },
+          ]}
+          onMerge={vi.fn()}
+          queryKey="videos"
+          renderReview={renderReview}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getAllByText("Merge in, then remove")).toHaveLength(2);
+    fireEvent.click(screen.getByLabelText(/Six/));
+    fireEvent.click(screen.getByRole("button", { name: "Compare metadata" }));
+    expect(renderReview).toHaveBeenCalledWith(6, [5, 7], expect.any(Function));
+    expect(screen.getByText("review")).toBeInTheDocument();
   });
 });
