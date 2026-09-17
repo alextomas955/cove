@@ -8,7 +8,7 @@ namespace Cove.Api.Services;
 public interface ITranscodeService
 {
     Task<Stream?> TranscodeToMp4Async(string inputPath, string? resolution, double startSeconds = 0, CancellationToken ct = default);
-    Task<string?> GenerateHlsManifestAsync(int videoId, string inputPath, string? resolution, CancellationToken ct = default);
+    Task<string?> GenerateHlsManifestAsync(int videoId, string inputPath, string? resolution, double startSeconds, CancellationToken ct = default);
     Task<Stream?> GetHlsSegmentAsync(int videoId, string segment, CancellationToken ct = default);
     string[] GetAvailableResolutions(int sourceWidth, int sourceHeight);
 }
@@ -181,91 +181,352 @@ public class TranscodeService : ITranscodeService
         return new PrefixedReleasingStream(prefix, read, stdout, process, _transcodeSemaphore);
     }
 
-    public async Task<string?> GenerateHlsManifestAsync(int videoId, string inputPath, string? resolution, CancellationToken ct = default)
+    public async Task<string?> GenerateHlsManifestAsync(int videoId, string inputPath, string? resolution, double startSeconds, CancellationToken ct = default)
     {
         var ffmpeg = FindFfmpeg();
         if (ffmpeg == null) return null;
 
-        var outputDir = Path.Combine(_config.GeneratedPath ?? Path.GetTempPath(), "transcodes", "hls", videoId.ToString());
-        Directory.CreateDirectory(outputDir);
+        var profile = resolution ?? "original";
+        var startKey = HlsStartKey(startSeconds);
+        var outputDir = HlsOutputDirectory(videoId, profile, startKey);
+        var manifestPath = Path.Combine(outputDir, HlsManifestFileName);
 
-        var manifestPath = Path.Combine(outputDir, $"{resolution ?? "original"}.m3u8");
+        // A finished, recent playlist is served as-is. Read outside the job lock: segment requests
+        // take that lock on every fetch and must not wait behind file I/O.
+        TouchHlsOutput(outputDir);
+        var cached = await TryReadCompletedHlsManifestAsync(manifestPath, ct);
+        if (cached != null) return cached;
 
-        // If manifest already exists and is recent, return it
-        if (File.Exists(manifestPath))
+        HlsJob? job;
+        lock (_hlsJobs)
         {
-            try
+            if (!_hlsJobs.TryGetValue(manifestPath, out job))
             {
-                if ((DateTime.UtcNow - File.GetLastWriteTimeUtc(manifestPath)).TotalHours < 24)
+                // A new offset for the same profile supersedes the offsets a player left behind (every
+                // seek is a new offset); their encodes are stopped so they release their slot now
+                // instead of after the idle timeout. Stopped encodes stay resumable on disk.
+                foreach (var other in _hlsJobs.Values)
                 {
-                    var cachedManifest = await FileReadRace.TryReadAllTextAsync(manifestPath, ct, pathWasObserved: true);
-                    if (cachedManifest != null)
-                        return cachedManifest;
+                    if (other.IsSibling(outputDir)) other.Cancel();
                 }
-            }
-            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-            {
-            }
-            catch (UnauthorizedAccessException ex) when (FileReadRace.IsWindowsDeletionRace(ex, manifestPath))
-            {
+
+                job = new HlsJob(outputDir, manifestPath);
+                job.Completion = RunHlsJobAsync(job, ffmpeg, inputPath, resolution, profile, startKey, startSeconds);
+                _hlsJobs[manifestPath] = job;
             }
         }
 
-        var encoder = GetH264Encoder(ffmpeg);
-        var segmentPath = Path.Combine(outputDir, $"{resolution ?? "original"}_%04d.ts");
-        var args = BuildEncodeArgs(ffmpeg, inputPath, resolution, 0, encoder,
-            $"-f hls -hls_time 6 -hls_list_size 0 -hls_segment_filename \"{segmentPath}\" \"{manifestPath}\"");
-
-        await _transcodeSemaphore.WaitAsync(ct);
-        try
+        // Return as soon as enough of the playlist exists for a player to start, or when the encode
+        // finishes (short inputs never reach the segment threshold before ENDLIST is written).
+        var deadline = DateTime.UtcNow + HlsFirstSegmentsTimeout;
+        while (true)
         {
-            var psi = new ProcessStartInfo
+            job.Touch();
+            var completed = job.Completion.IsCompleted;
+            if (completed) await job.Completion;
+
+            var manifest = await FileReadRace.TryReadAllTextAsync(manifestPath, ct, pathWasObserved: false);
+            var segments = manifest == null ? 0 : CountHlsSegments(manifest);
+            if (manifest != null && (segments >= HlsReadySegmentCount || manifest.Contains("#EXT-X-ENDLIST", StringComparison.Ordinal)))
+                return manifest;
+
+            // A failed or stopped encode still leaves whatever it produced playable.
+            if (completed) return segments > 0 ? manifest : null;
+
+            if (DateTime.UtcNow >= deadline)
             {
-                FileName = ffmpeg,
-                Arguments = args,
-                RedirectStandardOutput = false,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            FfmpegProcessEnvironment.Apply(psi, ffmpeg);
-
-            using var process = Process.Start(psi);
-            if (process == null) return null;
-
-            // Drain stderr concurrently so a verbose/long encode can't fill the pipe buffer and
-            // deadlock against our WaitForExit.
-            var stderrTask = process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-            var stderr = await stderrTask;
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogWarning("HLS generation failed (exit {Code}, encoder {Encoder}): {Stderr}",
-                    process.ExitCode, encoder, stderr[..Math.Min(stderr.Length, 500)]);
+                _logger.LogWarning("HLS playlist for {Input} ({Profile} from {Start}s) produced no segments within {Timeout}s.", inputPath, profile, startSeconds, HlsFirstSegmentsTimeout.TotalSeconds);
                 return null;
             }
 
-            return File.Exists(manifestPath)
-                ? await FileReadRace.TryReadAllTextAsync(manifestPath, ct, pathWasObserved: true)
-                : null;
-        }
-        finally
-        {
-            _transcodeSemaphore.Release();
+            await Task.WhenAny(job.Completion, Task.Delay(HlsPollInterval, ct));
+            ct.ThrowIfCancellationRequested();
         }
     }
 
     public Task<Stream?> GetHlsSegmentAsync(int videoId, string segment, CancellationToken ct = default)
     {
-        var segmentName = Path.GetFileName(segment);
-        if (string.IsNullOrWhiteSpace(segmentName) || segmentName != segment) return Task.FromResult<Stream?>(null);
+        // Segment names carry their profile and start offset (see HlsSegmentPattern), which locates
+        // the output directory without any extra query state on the segment URL.
+        var match = HlsSegmentPattern.Match(segment);
+        if (!match.Success) return Task.FromResult<Stream?>(null);
 
-        var segmentPath = Path.Combine(_config.GeneratedPath ?? Path.GetTempPath(), "transcodes", "hls", videoId.ToString(), segment);
+        var outputDir = HlsOutputDirectory(videoId, match.Groups["profile"].Value, match.Groups["start"].Value);
+        var segmentPath = Path.Combine(outputDir, segment);
+        var manifestPath = Path.Combine(outputDir, HlsManifestFileName);
+
+        // A segment fetch is playback activity for that output: it keeps the idle watchdog from
+        // stopping the encode and keeps the directory from being superseded while it is being played.
+        TouchHlsOutput(outputDir);
+        lock (_hlsJobs)
+        {
+            if (_hlsJobs.TryGetValue(manifestPath, out var job)) job.Touch();
+        }
 
         if (!File.Exists(segmentPath)) return Task.FromResult<Stream?>(null);
 
         return Task.FromResult<Stream?>(FileReadRace.TryOpenRead(segmentPath, pathWasObserved: true));
+    }
+
+    /// <summary>Whether <paramref name="profile"/> names an HLS rendition Cove can produce: a ladder
+    /// entry or "original" (source resolution).</summary>
+    public static bool IsHlsProfile(string profile)
+        => profile == "original" || ResolutionProfiles.ContainsKey(profile);
+
+    // ----- HLS background encode -----
+
+    private const int HlsSegmentSeconds = 6;
+    private const string HlsManifestFileName = "index.m3u8";
+    // Segments that must exist before a playlist is handed to the player while the encode continues.
+    private const int HlsReadySegmentCount = 1;
+    private static readonly TimeSpan HlsPollInterval = TimeSpan.FromMilliseconds(250);
+    // Upper bound on how long a playlist request waits for the first segment (covers a slow software
+    // encode and a job queued behind the transcode slots).
+    private static readonly TimeSpan HlsFirstSegmentsTimeout = TimeSpan.FromSeconds(120);
+    // An encode nobody has fetched a playlist or segment from for this long is stopped; a later request
+    // resumes it from where it stopped instead of starting over.
+    private static readonly TimeSpan HlsIdleTimeout = TimeSpan.FromSeconds(90);
+    private static readonly System.Text.RegularExpressions.Regex HlsSegmentPattern =
+        new(@"^(?<profile>original|\d{3,4}p|4K)_(?<start>s\d+(?:_\d{1,3})?)_\d{4,}\.ts$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private readonly Dictionary<string, HlsJob> _hlsJobs = new(StringComparer.Ordinal);
+    // Last playlist/segment fetch per output directory, so a directory still being played (even after
+    // its encode finished) is not deleted by a newer offset.
+    private readonly Dictionary<string, DateTime> _hlsOutputLastAccess = new(StringComparer.Ordinal);
+
+    private sealed class HlsJob(string outputDir, string manifestPath)
+    {
+        private readonly CancellationTokenSource _stop = new();
+        private long _lastAccessTicks = DateTime.UtcNow.Ticks;
+
+        public string OutputDir { get; } = outputDir;
+        public string ManifestPath { get; } = manifestPath;
+        public Task Completion { get; set; } = Task.CompletedTask;
+        public volatile bool Failed;
+        public CancellationToken StopToken => _stop.Token;
+
+        public void Touch() => Volatile.Write(ref _lastAccessTicks, DateTime.UtcNow.Ticks);
+        public TimeSpan Idle => TimeSpan.FromTicks(DateTime.UtcNow.Ticks - Volatile.Read(ref _lastAccessTicks));
+        public void Cancel() { try { _stop.Cancel(); } catch (ObjectDisposedException) { } }
+        public bool IsSibling(string otherOutputDir)
+            => !string.Equals(OutputDir, otherOutputDir, StringComparison.Ordinal)
+               && string.Equals(Path.GetDirectoryName(OutputDir), Path.GetDirectoryName(otherOutputDir), StringComparison.Ordinal);
+    }
+
+    /// <summary>Start offsets are part of the output path and segment names: "s12_5" for 12.5 s.</summary>
+    private static string HlsStartKey(double startSeconds)
+        => "s" + Math.Max(0, startSeconds).ToString("0.###", CultureInfo.InvariantCulture).Replace('.', '_');
+
+    private string HlsOutputDirectory(int videoId, string profile, string startKey)
+        => Path.Combine(_config.GeneratedPath ?? Path.GetTempPath(), "transcodes", "hls", videoId.ToString(CultureInfo.InvariantCulture), profile, startKey);
+
+    private void TouchHlsOutput(string outputDir)
+    {
+        lock (_hlsJobs) { _hlsOutputLastAccess[outputDir] = DateTime.UtcNow; }
+    }
+
+    /// <summary>Runs one HLS encode to completion in the background. The job holds a transcode slot
+    /// for its whole life, so an encode that no client is consuming is stopped after
+    /// <see cref="HlsIdleTimeout"/> (or when a newer offset supersedes it) instead of blocking live
+    /// transcodes for the rest of the file. A stopped encode leaves its playlist without ENDLIST; the
+    /// next job for the same output appends to it from the encoded position (FFmpeg
+    /// <c>append_list</c>), so a playlist handed to a player only ever grows. Like the piped path, a
+    /// hardware encoder that fails at runtime is retried with libx264.</summary>
+    private async Task RunHlsJobAsync(HlsJob job, string ffmpeg, string inputPath, string? resolution, string profile, string startKey, double startSeconds)
+    {
+        await Task.Yield();
+        var acquired = false;
+        try
+        {
+            await _transcodeSemaphore.WaitAsync(job.StopToken);
+            acquired = true;
+
+            RetireSupersededHlsOutputs(job.OutputDir);
+
+            var encoder = GetH264Encoder(ffmpeg);
+            var outcome = await RunHlsEncodeAsync(job, ffmpeg, encoder, inputPath, resolution, profile, startKey, startSeconds);
+            if (outcome == HlsEncodeOutcome.Failed && encoder != "libx264")
+            {
+                _logger.LogDebug("HLS encode with {Encoder} failed for {Input}; retrying with libx264.", encoder, inputPath);
+                outcome = await RunHlsEncodeAsync(job, ffmpeg, "libx264", inputPath, resolution, profile, startKey, startSeconds);
+            }
+            job.Failed = outcome == HlsEncodeOutcome.Failed;
+        }
+        catch (OperationCanceledException) when (job.StopToken.IsCancellationRequested)
+        {
+            // Superseded while queued for a slot; nothing was started.
+        }
+        catch (Exception ex)
+        {
+            job.Failed = true;
+            _logger.LogWarning(ex, "HLS generation crashed for {Input}", inputPath);
+        }
+        finally
+        {
+            if (acquired) _transcodeSemaphore.Release();
+            lock (_hlsJobs)
+            {
+                if (_hlsJobs.TryGetValue(job.ManifestPath, out var current) && ReferenceEquals(current, job))
+                    _hlsJobs.Remove(job.ManifestPath);
+            }
+        }
+    }
+
+    private enum HlsEncodeOutcome { Completed, Stopped, Failed }
+
+    private async Task<HlsEncodeOutcome> RunHlsEncodeAsync(HlsJob job, string ffmpeg, string encoder, string inputPath, string? resolution, string profile, string startKey, double startSeconds)
+    {
+        // Resume only a playlist that is genuinely unfinished. A finished one that aged out of the
+        // cache, or an unreadable one, is encoded again from scratch into an empty directory.
+        var encodedSeconds = await HlsResumableSecondsAsync(job.ManifestPath);
+        var resume = encodedSeconds > 0;
+        if (!resume)
+        {
+            try { if (Directory.Exists(job.OutputDir)) Directory.Delete(job.OutputDir, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        Directory.CreateDirectory(job.OutputDir);
+
+        var segmentPath = Path.Combine(job.OutputDir, $"{profile}_{startKey}_%04d.ts");
+        // Segments can only split on keyframes, so force one every segment length; NVENC emits
+        // plain I-frames for forced keyframes unless told to make them IDR, which the muxer needs.
+        var keyframeArgs = (encoder == "h264_nvenc" ? "-forced-idr 1 " : string.Empty)
+            + $"-force_key_frames \"expr:gte(t,n_forced*{HlsSegmentSeconds})\"";
+        // append_list continues the numbering and marks the first appended segment as a discontinuity
+        // by itself; discont_start must not be added, as it rewrites the playlist header on every run.
+        var flags = resume ? "temp_file+independent_segments+append_list" : "temp_file+independent_segments";
+        var args = BuildEncodeArgs(ffmpeg, inputPath, resolution, startSeconds + encodedSeconds, encoder,
+            $"-y -nostdin -sn -dn {keyframeArgs} -f hls -hls_time {HlsSegmentSeconds} -hls_list_size 0 -hls_playlist_type event -hls_flags {flags} -hls_segment_filename \"{segmentPath}\" \"{job.ManifestPath}\"");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpeg,
+            Arguments = args,
+            RedirectStandardOutput = false,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        FfmpegProcessEnvironment.Apply(psi, ffmpeg);
+
+        using var process = Process.Start(psi);
+        if (process == null) return HlsEncodeOutcome.Failed;
+
+        // Drain stderr concurrently so a verbose/long encode can't fill the pipe buffer and
+        // deadlock against our exit wait.
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        var exited = process.WaitForExitAsync();
+        var stopped = false;
+        while (!exited.IsCompleted)
+        {
+            if (job.StopToken.IsCancellationRequested || job.Idle > HlsIdleTimeout)
+            {
+                stopped = true;
+                try { process.Kill(true); } catch { }
+                break;
+            }
+            await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(1)));
+        }
+        await exited;
+        var stderr = await stderrTask;
+
+        if (stopped)
+        {
+            _logger.LogDebug("HLS encode for {Input} ({Profile} from {Start}s) stopped {Reason}; resumable.", inputPath, profile, startSeconds,
+                job.StopToken.IsCancellationRequested ? "because a newer offset superseded it" : $"after {HlsIdleTimeout.TotalSeconds}s idle");
+            return HlsEncodeOutcome.Stopped;
+        }
+        if (process.ExitCode != 0)
+        {
+            _logger.LogWarning("HLS generation failed (exit {Code}, encoder {Encoder}, resume {Resume}): {Stderr}",
+                process.ExitCode, encoder, resume, stderr[..Math.Min(stderr.Length, 500)]);
+            return HlsEncodeOutcome.Failed;
+        }
+        return HlsEncodeOutcome.Completed;
+    }
+
+    private static async Task<string?> TryReadCompletedHlsManifestAsync(string manifestPath, CancellationToken ct)
+    {
+        try
+        {
+            if (!File.Exists(manifestPath)) return null;
+            if ((DateTime.UtcNow - File.GetLastWriteTimeUtc(manifestPath)).TotalHours >= 24) return null;
+            var manifest = await FileReadRace.TryReadAllTextAsync(manifestPath, ct, pathWasObserved: true);
+            return manifest != null && manifest.Contains("#EXT-X-ENDLIST", StringComparison.Ordinal) ? manifest : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Seconds of media in an unfinished playlist (sum of EXTINF), or 0 when there is nothing
+    /// to resume from: no playlist, an unparsable one, or one that already ends with ENDLIST.</summary>
+    private static async Task<double> HlsResumableSecondsAsync(string manifestPath)
+    {
+        try
+        {
+            var lines = await FileReadRace.TryReadAllLinesAsync(manifestPath);
+            if (lines == null) return 0;
+            var total = 0d;
+            var segments = 0;
+            foreach (var line in lines)
+            {
+                if (line.StartsWith("#EXT-X-ENDLIST", StringComparison.Ordinal)) return 0;
+                if (!line.StartsWith("#EXTINF:", StringComparison.Ordinal)) continue;
+                var value = line["#EXTINF:".Length..].TrimEnd(',');
+                if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)) return 0;
+                total += seconds;
+                segments++;
+            }
+            return segments > 0 ? total : 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>One start offset per profile is kept on disk. Offsets that are neither being encoded
+    /// nor recently played are moved aside under the job lock (a cheap rename, so a concurrent job can
+    /// not observe a half-deleted directory) and deleted outside it.</summary>
+    private void RetireSupersededHlsOutputs(string keepOutputDir)
+    {
+        var profileDir = Path.GetDirectoryName(keepOutputDir);
+        if (profileDir == null || !Directory.Exists(profileDir)) return;
+
+        var retired = new List<string>();
+        var cutoff = DateTime.UtcNow - HlsIdleTimeout;
+        lock (_hlsJobs)
+        {
+            foreach (var dir in Directory.EnumerateDirectories(profileDir))
+            {
+                if (string.Equals(dir, keepOutputDir, StringComparison.Ordinal)) continue;
+                if (Path.GetFileName(dir).StartsWith(".retired-", StringComparison.Ordinal)) { retired.Add(dir); continue; }
+                if (_hlsJobs.ContainsKey(Path.Combine(dir, HlsManifestFileName))) continue;
+                if (_hlsOutputLastAccess.TryGetValue(dir, out var lastAccess) && lastAccess > cutoff) continue;
+
+                var target = Path.Combine(profileDir, $".retired-{Guid.NewGuid():N}");
+                try { Directory.Move(dir, target); retired.Add(target); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                _hlsOutputLastAccess.Remove(dir);
+            }
+        }
+
+        foreach (var dir in retired)
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static int CountHlsSegments(string manifest)
+    {
+        var count = 0;
+        foreach (var line in manifest.Split('\n'))
+        {
+            if (line.StartsWith("#EXTINF", StringComparison.Ordinal)) count++;
+        }
+        return count;
     }
 
     /// <summary>
