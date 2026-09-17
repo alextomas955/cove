@@ -1250,11 +1250,35 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             .Where(s => dto.Ids.Contains(s.Id))
             .ToListAsync(ct);
         var clearFields = dto.ClearFields?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        var customFieldChangedIds = new HashSet<int>();
+
+        // Validate and stage custom field values before any relationship work so a rejected key leaves nothing applied.
+        var customFieldClears = clearFields
+            .Where(field => field.StartsWith(CustomFieldClearPrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(field => field[CustomFieldClearPrefix.Length..])
+            .ToList();
+        if (dto.CustomFields != null || customFieldClears.Count > 0)
+        {
+            try
+            {
+                customFieldChangedIds.UnionWith(await customFields.ApplyBulkValuesAsync(
+                    CustomFieldEntityTypes.Video,
+                    videos.Select(video => video.Id).ToList(),
+                    dto.CustomFields,
+                    dto.CustomFieldMode,
+                    customFieldClears,
+                    ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
 
         foreach (var video in videos)
         {
             var previousTagIds = dto.TagIds != null ? video.VideoTags.Select(videoTag => videoTag.TagId).ToArray() : [];
-            var relationshipsChanged = false;
+            var relationshipsChanged = customFieldChangedIds.Contains(video.Id);
 
             if (clearFields.Contains("studioId")) video.StudioId = null;
             if (clearFields.Contains("date")) video.Date = null;
@@ -1328,6 +1352,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         }
         return Ok(new BulkUpdateResult(videos.Select(video => video.Id).ToList()));
     }
+
+    private const string CustomFieldClearPrefix = "customFields.";
 
     private static List<GroupSummaryDto> MapWholeVideoGroups(Video video)
         => video.GroupItems
