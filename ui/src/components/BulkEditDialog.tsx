@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { InteractiveRating } from "./Rating";
 import { IsoDateInput } from "./IsoDateInput";
-import type { BulkUpdateMode } from "../api/types";
+import type { BulkUpdateMode, CustomFieldDefinition, CustomFieldEntityType } from "../api/types";
 import { tagGroups } from "../api/client";
 import { StudioSelector } from "./StudioSelector";
 import { EntityReferenceMultiSelector, type EntityReferenceType } from "./EntityReferenceSelector";
 import { CountrySelect } from "./Country";
+import { ConfiguredFieldInput, normalizeConfiguredFieldValue } from "./CustomFields";
+import { useCustomFieldDefinitions } from "../hooks/useCustomFieldDefinitions";
 
 // ===== Generic Bulk Edit Dialog =====
 
@@ -30,6 +32,19 @@ interface BulkEditDialogProps {
   fields: BulkEditField[];
   onApply: (values: Record<string, unknown>) => void;
   isPending?: boolean;
+  /**
+   * When set, the dialog loads this entity's custom field definitions and offers a Custom fields section.
+   * Only pass it for entities whose bulk endpoint accepts `customFields`, `customFieldMode`, and
+   * `clearFields: ["customFields.<key>"]`.
+   */
+  customFieldEntityType?: CustomFieldEntityType;
+}
+
+/** Prefix shared by the request's `clearFields` entries and this dialog's internal state keys. */
+const CUSTOM_FIELD_KEY_PREFIX = "customFields.";
+
+function toCustomFieldStateKey(definitionKey: string) {
+  return `${CUSTOM_FIELD_KEY_PREFIX}${definitionKey}`;
 }
 
 export function BulkEditDialog({
@@ -40,9 +55,55 @@ export function BulkEditDialog({
   fields,
   onApply,
   isPending,
+  customFieldEntityType,
 }: BulkEditDialogProps) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set());
+  const [clearedCustomFields, setClearedCustomFields] = useState<Set<string>>(new Set());
+  const [customFieldMode, setCustomFieldMode] = useState<BulkUpdateMode>("ADD");
+  const [invalidJsonKeys, setInvalidJsonKeys] = useState<Set<string>>(new Set());
+  const customFieldDefinitionsQuery = useCustomFieldDefinitions(customFieldEntityType, Boolean(customFieldEntityType));
+  const customFieldDefinitions = customFieldEntityType ? (customFieldDefinitionsQuery.data ?? []) : [];
+
+  const dropCustomFieldDraft = (definition: CustomFieldDefinition) => {
+    setValues((current) => {
+      const next = { ...current };
+      delete next[toCustomFieldStateKey(definition.key)];
+      return next;
+    });
+    setInvalidJsonKeys((current) => withoutKey(current, definition.key));
+  };
+
+  const toggleCustomField = (definition: CustomFieldDefinition) => {
+    const stateKey = toCustomFieldStateKey(definition.key);
+    if (enabledFields.has(stateKey)) {
+      setEnabledFields((current) => withoutKey(current, stateKey));
+      setClearedCustomFields((current) => withoutKey(current, definition.key));
+      dropCustomFieldDraft(definition);
+    } else {
+      setEnabledFields((current) => new Set(current).add(stateKey));
+    }
+  };
+
+  const toggleCustomFieldCleared = (definition: CustomFieldDefinition) => {
+    if (clearedCustomFields.has(definition.key)) {
+      setClearedCustomFields((current) => withoutKey(current, definition.key));
+    } else {
+      setClearedCustomFields((current) => new Set(current).add(definition.key));
+      dropCustomFieldDraft(definition);
+    }
+  };
+
+  const updateJsonValidity = useCallback((key: string, isValid: boolean) => {
+    setInvalidJsonKeys((current) => {
+      if (isValid) return withoutKey(current, key);
+      return current.has(key) ? current : new Set(current).add(key);
+    });
+  }, []);
+
+  const hasInvalidCustomFieldJson = customFieldDefinitions.some(
+    (definition) => enabledFields.has(toCustomFieldStateKey(definition.key)) && invalidJsonKeys.has(definition.key),
+  );
 
   const toggleField = (field: BulkEditField) => {
     setEnabledFields((prev) => {
@@ -66,7 +127,7 @@ export function BulkEditDialog({
     setValues((prev) => ({ ...prev, [key]: val }));
   };
 
-  const handleApply = () => {
+  const buildPayload = () => {
     const result: Record<string, unknown> = {};
     const clearFields: string[] = [];
     for (const f of fields) {
@@ -83,13 +144,33 @@ export function BulkEditDialog({
         }
       }
     }
+    const customFields: Record<string, unknown> = {};
+    for (const definition of customFieldDefinitions) {
+      const stateKey = toCustomFieldStateKey(definition.key);
+      if (!enabledFields.has(stateKey)) continue;
+      if (clearedCustomFields.has(definition.key)) {
+        clearFields.push(stateKey);
+        continue;
+      }
+      const normalizedValue = normalizeConfiguredFieldValue(values[stateKey], definition);
+      if (normalizedValue === undefined) continue;
+      customFields[definition.key] = normalizedValue;
+    }
+    if (Object.keys(customFields).length > 0) {
+      result.customFields = customFields;
+      result.customFieldMode = customFieldMode;
+    }
     if (clearFields.length > 0) {
       result.clearFields = clearFields;
     }
-    onApply(result);
+    return result;
   };
 
   if (!open) return null;
+
+  const payload = buildPayload();
+  // A ticked field with nothing entered contributes nothing; do not send a request that changes nothing.
+  const hasChanges = Object.values(payload).some((value) => value !== undefined);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -119,6 +200,20 @@ export function BulkEditDialog({
               onModeChange={(m) => updateValue(getModeKey(field), m)}
             />
           ))}
+          {customFieldDefinitions.length > 0 && (
+            <CustomFieldsBulkSection
+              definitions={customFieldDefinitions}
+              mode={customFieldMode}
+              onModeChange={setCustomFieldMode}
+              enabledFields={enabledFields}
+              clearedFields={clearedCustomFields}
+              values={values}
+              onToggle={toggleCustomField}
+              onToggleCleared={toggleCustomFieldCleared}
+              onValueChange={(definition, nextValue) => updateValue(toCustomFieldStateKey(definition.key), nextValue)}
+              onJsonValidityChange={updateJsonValidity}
+            />
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border">
@@ -129,8 +224,8 @@ export function BulkEditDialog({
             Cancel
           </button>
           <button
-            onClick={handleApply}
-            disabled={isPending || enabledFields.size === 0}
+            onClick={() => onApply(payload)}
+            disabled={isPending || !hasChanges || hasInvalidCustomFieldJson}
             className="px-4 py-1 rounded text-xs font-medium bg-accent hover:bg-accent-hover text-white disabled:opacity-50"
           >
             {isPending ? "Applying..." : "Apply"}
@@ -278,6 +373,154 @@ function BulkFieldEditor({
   );
 }
 
+function CustomFieldsBulkSection({
+  definitions,
+  mode,
+  onModeChange,
+  enabledFields,
+  clearedFields,
+  values,
+  onToggle,
+  onToggleCleared,
+  onValueChange,
+  onJsonValidityChange,
+}: {
+  definitions: CustomFieldDefinition[];
+  mode: BulkUpdateMode;
+  onModeChange: (mode: BulkUpdateMode) => void;
+  enabledFields: Set<string>;
+  clearedFields: Set<string>;
+  values: Record<string, unknown>;
+  onToggle: (definition: CustomFieldDefinition) => void;
+  onToggleCleared: (definition: CustomFieldDefinition) => void;
+  onValueChange: (definition: CustomFieldDefinition, value: unknown) => void;
+  onJsonValidityChange: (key: string, isValid: boolean) => void;
+}) {
+  const modeRadioName = useId();
+  const bodyId = useId();
+  const [expanded, setExpanded] = useState(false);
+  const tickedCount = definitions.filter((definition) =>
+    enabledFields.has(toCustomFieldStateKey(definition.key)),
+  ).length;
+  // Collapsed by default so a long definition list does not bury the standard fields. Ticking a field opens it,
+  // and the header keeps showing how many are ticked while it is collapsed.
+  const open = expanded;
+  const valuedDefinitions = definitions.filter(
+    (definition) => enabledFields.has(toCustomFieldStateKey(definition.key)) && !clearedFields.has(definition.key),
+  );
+  // The mode only travels with values, so it is offered only while some ticked field is not being cleared.
+  const showMode = valuedDefinitions.length > 0;
+  const anyMultiValue = valuedDefinitions.some((definition) => definition.isMultiValue);
+
+  return (
+    <div role="group" aria-label="Custom fields" className="border-t border-border pt-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={() => setExpanded((current) => !current)}
+          className="flex items-center gap-1 text-xs font-semibold text-secondary hover:text-foreground"
+        >
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          Custom fields
+          <span className="font-normal text-muted">
+            ({tickedCount > 0 ? `${tickedCount} of ${definitions.length} selected` : definitions.length})
+          </span>
+        </button>
+        {open && showMode && (
+          <fieldset className="flex gap-1">
+            <legend className="sr-only">Custom field mode</legend>
+            {(["SET", "ADD", "REMOVE"] as BulkUpdateMode[]).map((candidate) => (
+              <label
+                key={candidate}
+                className={`cursor-pointer px-2 py-0.5 rounded text-[10px] border has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-surface ${
+                  candidate === mode ? "bg-accent text-white border-accent" : "border-border text-secondary"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name={modeRadioName}
+                  value={candidate}
+                  checked={candidate === mode}
+                  onChange={() => onModeChange(candidate)}
+                  className="sr-only"
+                />
+                {BULK_MODE_LABELS[candidate]}
+              </label>
+            ))}
+          </fieldset>
+        )}
+      </div>
+      {open && (
+        <div id={bodyId} className="space-y-3">
+          {showMode && (
+            <p className="text-[11px] text-muted">
+              {mode === "SET"
+                ? "Overwrite replaces the current value on every selected item."
+                : mode === "ADD"
+                  ? anyMultiValue
+                    ? "Add appends new entries to multi-value fields and overwrites single-value fields."
+                    : "Add overwrites single-value fields with the entered value."
+                  : anyMultiValue
+                    ? "Remove drops matching entries from multi-value fields and clears single-value fields whose value matches."
+                    : "Remove clears single-value fields whose current value matches the entered value."}
+            </p>
+          )}
+          {definitions.map((definition) => {
+            const stateKey = toCustomFieldStateKey(definition.key);
+            const enabled = enabledFields.has(stateKey);
+            const cleared = clearedFields.has(definition.key);
+            const label = definition.label || definition.key;
+            // The accessible name starts with the visible text so voice control can target the button by what it shows.
+            const clearText = cleared ? "Clearing value on every selected item" : "Clear value";
+            return (
+              <div key={definition.key}>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={() => {
+                      if (!enabled) setExpanded(true);
+                      onToggle(definition);
+                    }}
+                    className="w-3.5 h-3.5 rounded border-border accent-accent"
+                  />
+                  <span className={`text-xs font-medium ${enabled ? "text-foreground" : "text-muted"}`}>{label}</span>
+                  <span className="text-[11px] text-muted">{definition.key}</span>
+                </label>
+                {enabled && (
+                  <div className="ml-6 mt-1 space-y-2">
+                    {!cleared && (
+                      <ConfiguredFieldInput
+                        definition={definition}
+                        value={values[stateKey]}
+                        onChange={(nextValue) => onValueChange(definition, nextValue)}
+                        onJsonValidityChange={onJsonValidityChange}
+                        ariaLabel={label}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      aria-pressed={cleared}
+                      aria-label={`${clearText} for ${label}`}
+                      onClick={() => onToggleCleared(definition)}
+                      className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${cleared ? "border-accent bg-accent/10 text-accent" : "border-border text-secondary hover:text-foreground"}`}
+                    >
+                      <X className="h-3 w-3" />
+                      {clearText}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TagGroupBulkSelect({
   value,
   nullable,
@@ -393,6 +636,13 @@ const BULK_MODE_LABELS: Record<BulkUpdateMode, string> = {
   ADD: "Add",
   REMOVE: "Remove",
 };
+
+function withoutKey(set: Set<string>, key: string) {
+  if (!set.has(key)) return set;
+  const next = new Set(set);
+  next.delete(key);
+  return next;
+}
 
 function getModeKey(field: BulkEditField) {
   return field.modeKey ?? `${field.key}Mode`;

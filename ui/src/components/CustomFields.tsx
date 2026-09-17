@@ -159,17 +159,22 @@ export function CustomFieldsEditor({
   );
 }
 
-function ConfiguredFieldInput({
+export function ConfiguredFieldInput({
   definition,
   value,
   onChange,
   onJsonValidityChange,
+  ariaLabel,
 }: {
   definition: CustomFieldDefinition;
   value: unknown;
   onChange: (value: unknown) => void;
   onJsonValidityChange: (key: string, isValid: boolean) => void;
+  /** Accessible name for the control when it is not wrapped in a label of its own. */
+  ariaLabel?: string;
 }) {
+  const controlLabel = ariaLabel ?? (definition.label || definition.key);
+
   if (definition.type === "json") {
     return (
       <JsonFieldInput
@@ -184,7 +189,7 @@ function ConfiguredFieldInput({
   if (definition.type === "longText") {
     return (
       <textarea
-        aria-label={definition.label || definition.key}
+        aria-label={controlLabel}
         value={serializeScalarValue(value)}
         onChange={(event) => onChange(event.target.value)}
         rows={6}
@@ -201,12 +206,18 @@ function ConfiguredFieldInput({
           entityType={definition.type}
           values={ids}
           onChange={(nextIds) => onChange(nextIds)}
+          inputAriaLabel={controlLabel}
         />
       );
     }
 
     return (
-      <EntityReferenceSelector entityType={definition.type} value={ids[0]} onChange={(nextId) => onChange(nextId)} />
+      <EntityReferenceSelector
+        entityType={definition.type}
+        value={ids[0]}
+        onChange={(nextId) => onChange(nextId)}
+        inputAriaLabel={controlLabel}
+      />
     );
   }
 
@@ -218,7 +229,11 @@ function ConfiguredFieldInput({
         : [];
 
     return (
-      <div className="flex flex-wrap gap-2 rounded border border-border bg-surface px-3 py-2">
+      <div
+        role="group"
+        aria-label={controlLabel}
+        className="flex flex-wrap gap-2 rounded border border-border bg-surface px-3 py-2"
+      >
         {definition.options.map((option) => {
           const selected = selectedOptions.includes(option);
           return (
@@ -253,7 +268,11 @@ function ConfiguredFieldInput({
         : [];
 
     return (
-      <div className="flex gap-2 rounded border border-border bg-surface px-3 py-2">
+      <div
+        role="group"
+        aria-label={controlLabel}
+        className="flex gap-2 rounded border border-border bg-surface px-3 py-2"
+      >
         {[true, false].map((option) => {
           const selected = selectedValues.includes(option);
           return (
@@ -276,6 +295,7 @@ function ConfiguredFieldInput({
   if (definition.type === "boolean") {
     return (
       <select
+        aria-label={controlLabel}
         value={serializeBooleanValue(value)}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
@@ -290,6 +310,7 @@ function ConfiguredFieldInput({
   if (definition.type === "enum" && definition.options.length > 0) {
     return (
       <select
+        aria-label={controlLabel}
         value={serializeScalarValue(value)}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
@@ -307,6 +328,7 @@ function ConfiguredFieldInput({
   if (definition.isMultiValue) {
     return (
       <textarea
+        aria-label={controlLabel}
         value={serializeMultiValue(value)}
         onChange={(event) => onChange(event.target.value)}
         rows={3}
@@ -331,6 +353,7 @@ function ConfiguredFieldInput({
   return (
     <Input
       {...(definition.type === "timestamp" ? { pickerType: "datetime-local" as const } : {})}
+      aria-label={controlLabel}
       type={inputType[definition.type] ?? "text"}
       value={serializeScalarValue(value)}
       onChange={(event) => onChange(event.target.value)}
@@ -1111,7 +1134,7 @@ function normalizeReferenceFieldValue(value: unknown, isMultiValue: boolean): un
   return ids[0];
 }
 
-function normalizeConfiguredFieldValue(rawValue: unknown, definition: CustomFieldDefinition): unknown {
+export function normalizeConfiguredFieldValue(rawValue: unknown, definition: CustomFieldDefinition): unknown {
   if (definition.type === "json") {
     return rawValue === null ? undefined : rawValue;
   }

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, Edit, Loader2, Merge, Play, Search, Trash2 } from "lucide-react";
-import type { BulkDeletionJobStart, Video } from "../api/types";
+import type { BulkDeletionJobStart, BulkVideoUpdate, Video } from "../api/types";
 import { videos } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { canDeleteEntity, canWriteEntity } from "../auth/visibility";
@@ -116,7 +116,10 @@ export function VideoSelectionActions({
   });
 
   const bulkEditMut = useMutation({
-    mutationFn: (values: Record<string, unknown>) => videos.bulkUpdate({ ids: [...selectedIds], ...values } as any),
+    mutationFn: (values: Record<string, unknown>) => {
+      const payload: BulkVideoUpdate = { ids: [...selectedIds], ...(values as Omit<BulkVideoUpdate, "ids">) };
+      return videos.bulkUpdate(payload);
+    },
     onSuccess: () => {
       setShowBulkEdit(false);
       onSelectNone();
@@ -233,15 +236,18 @@ export function VideoSelectionActions({
         showDeleteFile={canDeleteFiles}
         showDeleteGenerated
       />
-      <BulkEditDialog
-        open={showBulkEdit}
-        onClose={() => setShowBulkEdit(false)}
-        title="Edit Videos"
-        selectedCount={selectedIds.size}
-        fields={VIDEO_BULK_FIELDS}
-        onApply={(values) => bulkEditMut.mutate(values)}
-        isPending={bulkEditMut.isPending}
-      />
+      {showBulkEdit && (
+        <BulkEditDialog
+          open
+          onClose={() => setShowBulkEdit(false)}
+          title="Edit Videos"
+          selectedCount={selectedIds.size}
+          fields={VIDEO_BULK_FIELDS}
+          customFieldEntityType="video"
+          onApply={(values) => bulkEditMut.mutate(values)}
+          isPending={bulkEditMut.isPending}
+        />
+      )}
       <Suspense fallback={null}>
         {downloadTarget !== null ? (
           <VideoDownloadDialog
