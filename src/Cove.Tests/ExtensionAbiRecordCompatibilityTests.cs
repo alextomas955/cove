@@ -129,4 +129,34 @@ public class ExtensionAbiRecordCompatibilityTests
         Assert.Equal(5, restored?.Id);
         Assert.Equal(11, restored?.PrimaryFileId);
     }
+
+    [Fact]
+    public void VideoMergeDto_KeepsItsTwoParameterConstructorAndDeserializesInitProperties()
+    {
+        Assert.NotNull(typeof(VideoMergeDto).GetConstructor([typeof(int), typeof(List<int>)]));
+
+        var restored = JsonSerializer.Deserialize<VideoMergeDto>(
+            """{"targetId":5,"sourceIds":[7],"metadata":{"fields":{"title":"source"}},"fileHandling":{"mode":"remove","deleteFiles":true,"deleteGenerated":false}}""",
+            Options);
+
+        Assert.Equal("source", restored?.Metadata?.Fields?["title"]);
+        Assert.Equal("remove", restored?.FileHandling?.Mode);
+        Assert.True(restored?.FileHandling?.DeleteFiles);
+        Assert.False(restored?.FileHandling?.DeleteGenerated);
+        Assert.Null(JsonSerializer.Deserialize<VideoMergeDto>("""{"targetId":5,"sourceIds":[7]}""", Options)?.FileHandling);
+    }
+
+    [Fact]
+    public void DuplicateResolveRequest_KeepsItsConstructorAndDeserializesMetadata()
+    {
+        Assert.NotNull(typeof(Cove.Api.Services.DuplicateResolveRequest).GetConstructor(
+            [typeof(IReadOnlyList<int>), typeof(string), typeof(bool), typeof(bool)]));
+
+        var restored = JsonSerializer.Deserialize<Cove.Api.Services.DuplicateResolveRequest>(
+            """{"groupIds":[3],"action":"merge","metadata":{"tagIds":[9]}}""",
+            Options);
+
+        Assert.Equal("merge", restored?.Action);
+        Assert.Equal([9], restored?.Metadata?.TagIds);
+    }
 }

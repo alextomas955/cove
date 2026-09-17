@@ -258,7 +258,8 @@ public class VideoMutationEventTests
             new CustomFieldService(db),
             eventBus,
             null,
-            principal);
+            principal,
+            videoMergeService: new VideoMergeService(db, new CustomFieldService(db), null!, null!, eventBus, principalAccessor: principal));
     }
 
     private static (CoveContext Context, CurrentPrincipalAccessor Principal) CreateContext()

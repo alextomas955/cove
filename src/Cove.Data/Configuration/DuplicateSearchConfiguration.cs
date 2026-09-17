@@ -56,6 +56,7 @@ public sealed class DuplicateSearchGroupConfiguration : IEntityTypeConfiguration
         builder.Property(group => group.DecisionSource).HasMaxLength(16);
         builder.Property(group => group.DecisionRule).HasMaxLength(32);
         builder.Property(group => group.ResolutionAction).HasMaxLength(16);
+        builder.Property(group => group.MergeMetadataJson).HasMaxLength(DuplicateSearchGroup.MergeMetadataJsonMaxLength);
         builder.Property(group => group.Error).HasMaxLength(2_000);
         builder.HasMany(group => group.Items)
             .WithOne(item => item.Group)

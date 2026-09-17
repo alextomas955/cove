@@ -90,6 +90,14 @@ public sealed record DuplicateResolveRequest(
     IReadOnlyList<int>? GroupIds,
     string Action = "remove",
     bool DeleteFiles = false,
-    bool DeleteGenerated = true);
+    bool DeleteGenerated = true)
+{
+    /// <summary>
+    /// Field-level choices from the merge review. Honoured only when exactly one group with one video to
+    /// remove is resolved with the merge action; absent choices follow the default merge policy. Not a
+    /// positional parameter, so already-compiled callers keep binding to the original constructor.
+    /// </summary>
+    public Cove.Core.DTOs.VideoMergeMetadataDto? Metadata { get; init; }
+}
 
 public sealed record DuplicateResolveResult(int QueuedGroupCount, string? JobId);

@@ -201,6 +201,45 @@ public sealed class DuplicateSearchControllerTests
     }
 
     [Fact]
+    public async Task ResolveStoresMetadataChoicesForOneGroupAndRejectsThemOtherwise()
+    {
+        var principalAccessor = CreatePrincipalAccessor();
+        var (connection, db) = await CreateDatabaseAsync(principalAccessor);
+        await using var _ = connection;
+        await using var __ = db;
+        var (search, groups, _) = await DuplicateSearchJobTests.AddSearchAsync(
+            db,
+            [[(true, "a"), (false, "b")], [(true, "c"), (false, "d")], [(true, "e"), (false, "f"), (false, "g")]],
+            ownerKey: "user:1");
+        var jobs = new DuplicateSearchJobTests.CapturingJobService();
+        using var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var controller = CreateController(db, principalAccessor, memoryCache, jobs);
+        var metadata = new Cove.Core.DTOs.VideoMergeMetadataDto(Fields: new() { ["title"] = "source" });
+
+        // Choices need the merge action, a single group, and a single video to remove in it.
+        Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
+            new DuplicateResolveRequest([groups[0].Id], "remove") { Metadata = metadata }, CancellationToken.None)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
+            new DuplicateResolveRequest(null, "merge") { Metadata = metadata }, CancellationToken.None)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
+            new DuplicateResolveRequest([groups[2].Id], "merge") { Metadata = metadata }, CancellationToken.None)).Result);
+        var oversized = new Cove.Core.DTOs.VideoMergeMetadataDto(Urls: Enumerable.Range(0, 2_000).Select(index => $"https://example.test/{index}").ToList());
+        Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
+            new DuplicateResolveRequest([groups[0].Id], "merge") { Metadata = oversized }, CancellationToken.None)).Result);
+        Assert.Equal(0, jobs.EnqueueCount);
+
+        var result = await controller.ResolveDuplicateGroups(search.Id,
+            new DuplicateResolveRequest([groups[0].Id], "merge") { Metadata = metadata }, CancellationToken.None);
+
+        Assert.IsType<AcceptedResult>(result.Result);
+        db.ChangeTracker.Clear();
+        var stored = await db.DuplicateSearchGroups.OrderBy(group => group.Position).ToListAsync();
+        Assert.Equal(DuplicateGroupStatus.Queued, stored[0].Status);
+        Assert.Equal("source", DuplicateResolutionService.ParseMergeMetadata(stored[0].MergeMetadataJson)?.Fields?["title"]);
+        Assert.Null(stored[1].MergeMetadataJson);
+    }
+
+    [Fact]
     public async Task ResolveRejectsUnknownActionsAndFileDeletionWithoutPermission()
     {
         var (connection, db) = await CreateDatabaseAsync(new CurrentPrincipalAccessor());

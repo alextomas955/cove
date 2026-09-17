@@ -24,7 +24,7 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.VideosRead)]
-public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null) : ControllerBase
+public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null) : ControllerBase
 {
     // The candidate pass projects ids only, so this just bounds how much of the library one
     // extension-filtered query walks; it is not a page size.
@@ -1528,243 +1528,82 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
     {
         if (dto.Metadata != null && (dto.SourceIds.Count != 1 || dto.SourceIds[0] <= 0 || dto.SourceIds[0] == dto.TargetId))
             return BadRequest("Metadata choices require exactly one distinct source video.");
+        var fileHandling = dto.FileHandling?.Mode?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or VideoMergeFileHandlingDto.AttachMode => VideoMergeFileHandling.Attach,
+            VideoMergeFileHandlingDto.RemoveMode => VideoMergeFileHandling.Remove,
+            _ => (VideoMergeFileHandling?)null,
+        };
+        if (fileHandling is null)
+            return BadRequest("File handling must be \"attach\" or \"remove\".");
+        var deleteFiles = dto.FileHandling?.DeleteFiles == true;
+        if (deleteFiles && fileHandling == VideoMergeFileHandling.Attach)
+            return BadRequest("Files can only be deleted from disk when the merged copy's files are removed.");
+        if (deleteFiles && principalAccessor?.Current?.Has(Permissions.VideosDeleteFile) != true)
+            return Forbid();
         if (dto.Metadata != null && authorizationService != null && principalAccessor?.Current != null)
             foreach (var id in dto.SourceIds.Append(dto.TargetId))
                 if (!(await authorizationService.AuthorizeAsync(principalAccessor.Current, Permissions.VideosRead,
                     EntityRef.Of(EntityKinds.Video, id), ct)).Allowed)
                     return Forbid();
-        string? metadataError = null;
-        var requestedIds = dto.SourceIds
-            .Where(id => id > 0 && id != dto.TargetId)
-            .Append(dto.TargetId)
-            .Distinct()
-            .ToArray();
-        var targetFound = false;
-        var invalidHierarchy = false;
-        int[] mergedSourceIds = [];
-        var executionStrategy = db.Database.CreateExecutionStrategy();
-        var createdCoverBlobs = new List<string>();
-        try
+
+        var merge = videoMergeService ?? throw new InvalidOperationException("The video merge service is not registered.");
+        var result = await merge.MergeAsync(new VideoMergePlan(dto.TargetId, dto.SourceIds, fileHandling.Value, dto.Metadata), ct);
+        switch (result.Outcome)
         {
-            await executionStrategy.ExecuteAsync(async () =>
-            {
-                targetFound = false;
-                invalidHierarchy = false;
-                mergedSourceIds = [];
-                db.ChangeTracker.Clear();
-                await using var blobTransaction = blobReferenceTransactions == null ? null : await blobReferenceTransactions.BeginAsync(db, ct);
-                await using var transaction = db.Database.IsRelational()
-                    ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct)
-                    : null;
-                var visibleIds = await db.Videos
-                    .AsNoTracking()
-                    .Where(video => requestedIds.Contains(video.Id))
-                    .Select(video => video.Id)
-                    .ToArrayAsync(ct);
-                if (!visibleIds.Contains(dto.TargetId))
-                    return;
-
-                var lockedTargetTags = dto.Metadata?.TagIds == null ? [] :
-                    (await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Video, [dto.TargetId], ct))
-                        .GetValueOrDefault(dto.TargetId)?.Where(tag => !tag.CanRemove).Select(tag => tag.Id).ToArray() ?? [];
-                var visibleTags = dto.Metadata == null ? [] : await db.Tags.Select(item => item.Id).ToArrayAsync(ct);
-                var visiblePerformers = dto.Metadata == null ? [] : await db.Performers.Select(item => item.Id).ToArrayAsync(ct);
-                var visibleGalleries = dto.Metadata == null ? [] : await db.Galleries.Select(item => item.Id).ToArrayAsync(ct);
-                var readableStudioNames = new Dictionary<int, string>();
-                if (dto.Metadata?.Fields?.GetValueOrDefault("studioId") == "source")
-                {
-                    var studioIds = await db.Videos.Where(video => requestedIds.Contains(video.Id) && video.StudioId.HasValue)
-                        .Select(video => video.StudioId!.Value).ToArrayAsync(ct);
-                    foreach (var studio in await db.Studios.Where(studio => studioIds.Contains(studio.Id)).ToListAsync(ct))
-                        if (authorizationService == null || principalAccessor?.Current == null
-                            || (await authorizationService.AuthorizeAsync(principalAccessor.Current, Permissions.StudiosRead,
-                                EntityRef.Of(EntityKinds.Studio, studio.Id), ct)).Allowed)
-                            readableStudioNames[studio.Id] = studio.Name;
-                }
-                using var authorizationFilterSuppression = db.SuppressAuthorizationFilters();
-                var videos = await db.Videos
-                    .Include(video => video.Files)
-                    .Include(video => video.VideoTags)
-                    .Include(video => video.VideoPerformers)
-                    .Include(video => video.VideoGalleries)
-                    .Include(video => video.Urls)
-                    .Include(video => video.RemoteIds)
-                    .Include(video => video.GroupItems)
-                    .Include(video => video.ChildVideos)
-                    .Where(video => visibleIds.Contains(video.Id))
-                    .OrderBy(video => video.Id)
-                    .ToListAsync(ct);
-                var target = videos.SingleOrDefault(video => video.Id == dto.TargetId);
-                if (target == null)
-                    return;
-
-                targetFound = true;
-                var sources = videos.Where(video => video.Id != target.Id).ToArray();
-                if (dto.Metadata != null)
-                {
-                    if (sources.Length != 1)
-                    {
-                        metadataError = "Source video no longer exists or is unavailable.";
-                        return;
-                    }
-                    metadataError = await ValidateMergeMetadata(target, sources[0], dto.Metadata,
-                        visibleTags, visiblePerformers, visibleGalleries, ct);
-                    if (metadataError != null) return;
-                }
-                var previousTagIds = target.VideoTags.Select(item => item.TagId).ToArray();
-                var replacementPrimaryFileId = target.PrimaryFileId
-                    ?? sources.OrderBy(source => source.Id).Select(source => source.PrimaryFileId).FirstOrDefault(id => id.HasValue);
-                var sourceIds = sources.Select(source => source.Id).ToArray();
-                var ancestorId = target.ParentVideoId;
-                var visitedAncestorIds = new HashSet<int> { target.Id };
-                while (ancestorId.HasValue)
-                {
-                    if (!visitedAncestorIds.Add(ancestorId.Value)
-                        || sourceIds.Contains(ancestorId.Value))
-                    {
-                        invalidHierarchy = true;
-                        return;
-                    }
-
-                    var ancestor = await db.Videos
-                        .AsNoTracking()
-                        .Where(video => video.Id == ancestorId.Value)
-                        .Select(video => new { video.ParentVideoId })
-                        .SingleOrDefaultAsync(ct);
-                    ancestorId = ancestor?.ParentVideoId;
-                }
-                // Resolve chosen values while both original records and their covers still exist.
-                if (dto.Metadata != null)
-                {
-                    metadataError = await ApplyMergeScalars(target, sources[0], dto.Metadata, createdCoverBlobs, readableStudioNames, ct);
-                    if (metadataError != null) return;
-                }
-                var sourceSegments = await db.Segments
-                    .Where(segment => segment.HostType == SegmentHostType.Video && sourceIds.Contains(segment.HostId))
-                    .ToListAsync(ct);
-                var sourceDetections = await db.Detections
-                    .Where(detection => detection.HostType == DetectionHostType.Video && sourceIds.Contains(detection.HostId))
-                    .ToListAsync(ct);
-                foreach (var segment in sourceSegments)
-                    segment.HostId = target.Id;
-                foreach (var detection in sourceDetections)
-                    detection.HostId = target.Id;
-                var existingTagIds = target.VideoTags.Select(st => st.TagId).ToHashSet();
-                var existingPerfIds = target.VideoPerformers.Select(sp => sp.PerformerId).ToHashSet();
-                var existingGalleryIds = target.VideoGalleries.Select(videoGallery => videoGallery.GalleryId).ToHashSet();
-                var existingUrls = target.Urls.Select(videoUrl => videoUrl.Url).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var existingRemoteIds = target.RemoteIds
-                    .Select(remoteId => (remoteId.Endpoint, remoteId.RemoteId))
-                    .ToHashSet(RemoteIdKeyComparer.Instance);
-
-                foreach (var source in sources)
-                {
-                    foreach (var file in source.Files)
-                        file.VideoId = target.Id;
-                    foreach (var videoTag in source.VideoTags)
-                    {
-                        if (existingTagIds.Add(videoTag.TagId))
-                            target.VideoTags.Add(new VideoTag { TagId = videoTag.TagId, VideoId = target.Id });
-                    }
-                    foreach (var videoPerformer in source.VideoPerformers)
-                    {
-                        if (existingPerfIds.Add(videoPerformer.PerformerId))
-                            target.VideoPerformers.Add(new VideoPerformer { PerformerId = videoPerformer.PerformerId, VideoId = target.Id });
-                    }
-                    foreach (var videoGallery in source.VideoGalleries)
-                    {
-                        if (existingGalleryIds.Add(videoGallery.GalleryId))
-                            target.VideoGalleries.Add(new VideoGallery { GalleryId = videoGallery.GalleryId, VideoId = target.Id });
-                    }
-                    foreach (var videoUrl in source.Urls)
-                    {
-                        if (existingUrls.Add(videoUrl.Url))
-                            target.Urls.Add(new VideoUrl { Url = videoUrl.Url, VideoId = target.Id });
-                    }
-                    foreach (var remoteId in source.RemoteIds)
-                    {
-                        if (existingRemoteIds.Add((remoteId.Endpoint, remoteId.RemoteId)))
-                            remoteId.VideoId = target.Id;
-                    }
-                    foreach (var groupItem in source.GroupItems)
-                    {
-                        groupItem.VideoId = target.Id;
-                        if (string.Equals(groupItem.HostType, "video", StringComparison.OrdinalIgnoreCase))
-                            groupItem.HostId = target.Id;
-                    }
-                    foreach (var child in source.ChildVideos.ToArray())
-                    {
-                        if (child.Id != target.Id)
-                            child.ParentVideoId = target.Id;
-                    }
-                    if (tagProvenanceService != null)
-                        await tagProvenanceService.RemoveForHostAsync(AffinityHostType.Video, source.Id, ct);
-                    db.Videos.Remove(source);
-                }
-
-                target.PrimaryFileId = replacementPrimaryFileId;
-                if (dto.Metadata != null)
-                {
-                    ApplyMergeCollections(target, dto.Metadata, visibleTags.Except(lockedTargetTags.Intersect(previousTagIds)).ToArray(), visiblePerformers, visibleGalleries);
-                    if (tagProvenanceService != null)
-                        await tagProvenanceService.SyncTagSetAsync(AffinityHostType.Video, target.Id, previousTagIds,
-                            target.VideoTags.Select(item => item.TagId).ToArray(), cancellationToken: ct);
-                    MetadataCollectionUpdater.Touch(target);
-                }
-
-                await db.SaveChangesAsync(ct);
-                if (transaction != null)
-                    await transaction.CommitAsync(ct);
-                if (blobTransaction != null) await blobTransaction.CompleteAsync();
-                mergedSourceIds = sources.Select(source => source.Id).ToArray();
-            });
-
+            case VideoMergeOutcome.InvalidMetadata:
+                return BadRequest(result.Error);
+            case VideoMergeOutcome.KeptVideoNotFound:
+                return NotFound("Target video not found");
+            case VideoMergeOutcome.InvalidHierarchy:
+                return BadRequest("A merge target cannot descend from one of its sources");
         }
-        finally
+
+        if (fileHandling == VideoMergeFileHandling.Remove && result.MergedVideoIds.Count > 0)
         {
-            foreach (var blobId in createdCoverBlobs)
+            // The copies kept their files and now go the way any deleted video goes.
+            var deletion = bulkEntityDeletionService ?? throw new InvalidOperationException("The deletion service is not registered.");
+            var executionContext = new BulkDeletionExecutionContext();
+            var remaining = result.MergedVideoIds.ToList();
+            try
             {
-                try { await blobService.DeleteBlobIfUnreferencedAsync(blobId, CancellationToken.None); }
-                catch (Exception ex)
+                foreach (var id in result.MergedVideoIds)
                 {
-                    HttpContext?.RequestServices.GetService<ILogger<VideosController>>()?.LogWarning(ex,
-                        "Could not clean up an unreferenced merge cover");
+                    db.ChangeTracker.Clear();
+                    await deletion.DeleteAsync(
+                        BulkDeletionEntityKind.Video,
+                        id,
+                        executionContext,
+                        deleteFiles,
+                        dto.FileHandling?.DeleteGenerated ?? true,
+                        ct,
+                        authorizationPrincipal: principalAccessor?.Current);
+                    remaining.Remove(id);
                 }
             }
+            catch (Exception ex) when (remaining.Count > 0)
+            {
+                // The merge itself is committed; the copies below still exist with their metadata already folded in.
+                HttpContext?.RequestServices.GetService<ILogger<VideosController>>()?.LogWarning(ex,
+                    "Merged videos {VideoIds} into video {TargetId} but could not delete them afterwards",
+                    string.Join(",", remaining), dto.TargetId);
+                throw;
+            }
+            finally
+            {
+                if (deleteFiles)
+                    physicalFileDeletionRecoverySignal?.Notify();
+            }
+            if (result.TimelineKeptVideoIds.Count > 0)
+                HttpContext?.RequestServices.GetService<ILogger<VideosController>>()?.LogInformation(
+                    "Markers of videos {VideoIds} were not carried over to video {TargetId}: their files are not equivalent",
+                    string.Join(",", result.TimelineKeptVideoIds), dto.TargetId);
         }
 
-        if (metadataError != null) return BadRequest(metadataError);
-        if (!targetFound)
-            return NotFound("Target video not found");
-        if (invalidHierarchy)
-            return BadRequest("A merge target cannot descend from one of its sources");
         db.ChangeTracker.Clear();
-        foreach (var requestedId in requestedIds.Where(id => id > 0))
-            segmentSpanCacheInvalidator?.InvalidateVideo(requestedId);
-        if (mergedSourceIds.Length > 0)
-        {
-            PublishVideoEvent(EventType.VideoUpdated, dto.TargetId);
-            foreach (var sourceId in mergedSourceIds)
-                PublishVideoEvent(EventType.VideoDeleted, sourceId);
-        }
-
-        var result = await videoRepo.GetByIdWithRelationsAsync(dto.TargetId, ct);
+        var merged = await videoRepo.GetByIdWithRelationsAsync(dto.TargetId, ct);
         var engagement = (await engagementService.GetVideoSnapshotsAsync([dto.TargetId], ct)).GetValueOrDefault(dto.TargetId);
-        return Ok(await MapToDtoWithProvenanceAsync(result!, engagement, HasUserScopedEngagement, ct));
-    }
-
-    private sealed class RemoteIdKeyComparer : IEqualityComparer<(string Endpoint, string RemoteId)>
-    {
-        public static RemoteIdKeyComparer Instance { get; } = new();
-
-        public bool Equals((string Endpoint, string RemoteId) left, (string Endpoint, string RemoteId) right)
-            => string.Equals(left.Endpoint, right.Endpoint, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(left.RemoteId, right.RemoteId, StringComparison.OrdinalIgnoreCase);
-
-        public int GetHashCode((string Endpoint, string RemoteId) value)
-            => HashCode.Combine(
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Endpoint),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.RemoteId));
+        return Ok(await MapToDtoWithProvenanceAsync(merged!, engagement, HasUserScopedEngagement, ct));
     }
 
     // ===== Generate Screenshot =====

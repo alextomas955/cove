@@ -1,3 +1,4 @@
+using System.Net;
 using Cove.ApiTests.Builders;
 using Cove.ApiTests.Infrastructure;
 using Cove.Core.Auth;
@@ -38,6 +39,80 @@ public sealed class VideoMergeApiTests(
         result.RemoteIds.Should().ContainSingle().Which.RemoteId.Should().Be("source");
         var readSource = () => AsUser().GetVideoByIdAsync(source.Id, ct);
         await readSource.Should().ThrowAsync<InvalidOperationException>().WithMessage("*404*");
+    }
+
+    [Fact]
+    public async Task GivenEmptyTargetFields_WhenMergedWithoutChoices_ThenTheyAreFilledFromTheSource()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source title")
+            .WithDetails("Source description").WithDirector("Source director").WithDate("2024-03").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target title")
+            .WithDetails("Target description").Build(), ct);
+
+        var merged = await AsUser().MergeVideosAsync(target, ct, source);
+
+        merged.Title.Should().Be("Target title");
+        merged.Details.Should().Be("Target description");
+        merged.Director.Should().Be("Source director");
+        merged.Date.Should().Be("2024-03");
+        merged.FieldProvenance.Should().Contain(entry => entry.FieldKey == "director" && entry.SourceKey == "merge");
+    }
+
+    [Fact]
+    public async Task GivenRatingFavouriteAndPlaybackOnTheSource_WhenMerged_ThenTheTargetCarriesThem()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target").Build(), ct);
+        await AsUser().SetVideoRatingAsync(source, 80, cancellationToken: ct);
+        await AsUser().SetVideoFavoriteAsync(source, true, ct);
+        await AsUser().RecordVideoPlaybackAsync(source, Guid.NewGuid(), ct);
+        await AsUser().SetVideoBookmarkAsync(source, true, ct);
+
+        await AsUser().MergeVideosAsync(target, ct, source);
+
+        var engagement = await AsUser().GetVideoEngagementAsync(target, ct);
+        engagement.Rating.Should().Be(80);
+        engagement.IsFavorite.Should().BeTrue();
+        engagement.PlayDuration.Should().BeGreaterThan(0);
+        engagement.LastPlayedAt.Should().NotBeNull();
+        (await AsUser().GetVideoBookmarkAsync(target, ct)).Saved.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GivenRemoveFileHandling_WhenMerged_ThenTheSourceFileIsNotAttachedToTheTarget()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var targetPath = AsTestFileSystem().CreateTextFile("The kept copy's file.");
+        var sourcePath = AsTestFileSystem().CreateTextFile("A redundant copy's file that is not wanted.");
+        var target = await AsUser().CreateVideoFromFileAsync(targetPath, ct);
+        var source = await AsUser().CreateVideoFromFileAsync(sourcePath, ct);
+        source = await AsUser().UpdateVideoAsync(source.Id, new { details = "Details only the copy had" }, ct);
+
+        var merged = await AsUser().MergeVideosAsync(new VideoMergeDto(target.Id, [source.Id])
+        {
+            FileHandling = new VideoMergeFileHandlingDto(VideoMergeFileHandlingDto.RemoveMode, DeleteFiles: false),
+        }, ct);
+
+        merged.Details.Should().Be("Details only the copy had");
+        merged.Files.Select(file => file.Path).Should().Equal(targetPath);
+        var readSource = () => AsUser().GetVideoByIdAsync(source.Id, ct);
+        await readSource.Should().ThrowAsync<InvalidOperationException>().WithMessage("*404*");
+        File.Exists(sourcePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GivenDeleteFilesWithAttachHandling_WhenMerged_ThenTheRequestIsRejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target").Build(), ct);
+
+        await AsUser().AssertResponseAsync(HttpMethod.Post, "/api/videos/merge", HttpStatusCode.BadRequest,
+            new VideoMergeDto(target.Id, [source.Id]) { FileHandling = new VideoMergeFileHandlingDto(DeleteFiles: true) }, ct);
+
+        (await AsUser().GetVideoByIdAsync(source.Id, ct)).Id.Should().Be(source.Id);
     }
 
     [Fact]

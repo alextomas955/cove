@@ -2233,12 +2233,26 @@ public record BulkGroupUpdateDto
 // ===== MERGE DTOs =====
 public record VideoMergeDto(int TargetId, List<int> SourceIds)
 {
-    // Not a positional parameter: that would change the constructor and Deconstruct that extensions
+    // Not positional parameters: that would change the constructor and Deconstruct that extensions
     // compiled against Cove 1.4 bind to. See src/Cove.Sdk/README.md.
     public VideoMergeMetadataDto? Metadata { get; init; }
+    /// <summary>What happens to the merged copies' files. Omitted means attach them to the kept video.</summary>
+    public VideoMergeFileHandlingDto? FileHandling { get; init; }
 }
 
-// Omitted choices retain target scalars or combined collections. Empty lists clear visible items.
+/// <summary>
+/// <paramref name="Mode"/> is "attach" (the files move onto the kept video) or "remove" (the files leave
+/// with the merged copy, which is deleted like any other video; the delete flags apply as they do there).
+/// </summary>
+public record VideoMergeFileHandlingDto(string Mode = "attach", bool DeleteFiles = false, bool DeleteGenerated = true)
+{
+    public const string AttachMode = "attach";
+    public const string RemoveMode = "remove";
+}
+
+// Omitted scalar choices follow the default policy: an empty kept value is filled from the source and a
+// conflict keeps the kept value. Omitted list choices keep the combined collections. Empty lists clear
+// visible items.
 public record VideoMergeMetadataDto(
     Dictionary<string, string>? Fields = null,
     List<int>? TagIds = null,

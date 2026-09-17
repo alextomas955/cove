@@ -579,6 +579,13 @@ public partial class VideosController
             return BadRequest("Choose either \"remove\" or \"merge\".");
         if (action == DuplicateResolutionService.MergeAction && principal?.Has(Permissions.VideosWrite) != true)
             return Forbid();
+        if (request.Metadata is not null && action != DuplicateResolutionService.MergeAction)
+            return BadRequest("Metadata choices apply to the merge action only.");
+        if (request.Metadata is not null)
+        {
+            try { DuplicateResolutionService.SerializeMergeMetadata(request.Metadata); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
 
         var search = await GetMutableDuplicateSearchAsync(searchId, ct);
         if (search is null)
@@ -644,6 +651,9 @@ public partial class VideosController
         var removalIds = await DuplicateSearchJobService
             .EffectiveUnkeptVideoIds(db, searchId, db.DuplicateSearchGroups.Where(group => eligibleGroupIds.Contains(group.Id)))
             .ToArrayAsync(ct);
+        // Field-level choices name one source side, so they only make sense for one group folding one copy.
+        if (request.Metadata is not null && (eligibleGroupIds.Length != 1 || removalIds.Length != 1))
+            return BadRequest("Metadata choices apply to a single group with one video to remove.");
         var deletionScopeIds = await VideoHierarchyQueries.ExpandDeletionScopeAsync(db, removalIds, ct);
         if (authorizationService is not null)
         {
@@ -684,7 +694,8 @@ public partial class VideosController
             request.DeleteFiles,
             request.DeleteGenerated,
             principal,
-            ct);
+            ct,
+            request.Metadata);
         return Accepted(result);
     }
 
