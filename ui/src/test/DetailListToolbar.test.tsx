@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DetailListPagination, DetailListToolbar } from "../components/DetailListToolbar";
 import { VIDEO_CRITERIA } from "../components/filterCriteriaCatalogs";
+import { customFieldDefinitionsQueryKey } from "../hooks/useCustomFieldDefinitions";
 import { useRegisterKeyboardActionHandler } from "../hooks/useRegisterKeyboardActionHandler";
 
 vi.mock("../hooks/useRegisterKeyboardActionHandler", () => ({
@@ -107,7 +108,7 @@ describe("DetailListToolbar", () => {
     const user = userEvent.setup();
     const onFilterChange = vi.fn();
 
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 3, perPage: 24 }}
         onFilterChange={onFilterChange}
@@ -129,7 +130,7 @@ describe("DetailListToolbar", () => {
   });
 
   it("allows the toolbar to fill the available detail-list width", () => {
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 1, perPage: 24 }}
         onFilterChange={vi.fn()}
@@ -168,7 +169,7 @@ describe("DetailListToolbar", () => {
     const onFilterChange = vi.fn();
     const filter = { page: 1, perPage: 24, sort: "title", direction: "desc" as const };
 
-    render(
+    renderWithQueryClient(
       <>
         <DetailListToolbar
           filter={filter}
@@ -211,7 +212,7 @@ describe("DetailListToolbar", () => {
 
   it("supports distinct navigation landmarks for multiple pagers", () => {
     const filter = { page: 2, perPage: 24 };
-    render(
+    renderWithQueryClient(
       <>
         <DetailListPagination
           filter={filter}
@@ -258,7 +259,7 @@ describe("DetailListToolbar", () => {
 
   it("corrects an out-of-range page when used without the toolbar", async () => {
     const onFilterChange = vi.fn();
-    render(
+    renderWithQueryClient(
       <DetailListPagination
         filter={{ page: 9999, perPage: 24, q: "example" }}
         onFilterChange={onFilterChange}
@@ -431,7 +432,7 @@ describe("DetailListToolbar", () => {
     const user = userEvent.setup();
     const onFilterChange = vi.fn();
 
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 1, perPage: 24, sort: "random", direction: "asc", seed: 2468 }}
         onFilterChange={onFilterChange}
@@ -452,7 +453,7 @@ describe("DetailListToolbar", () => {
     const onFilterChange = vi.fn();
     vi.spyOn(Math, "random").mockReturnValue(0.5);
 
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 3, perPage: 24, sort: "random", direction: "asc", seed: 2468 }}
         onFilterChange={onFilterChange}
@@ -467,7 +468,7 @@ describe("DetailListToolbar", () => {
   });
 
   it("uses the expanded image slider max for image detail lists", () => {
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 1, perPage: 24 }}
         onFilterChange={vi.fn()}
@@ -487,7 +488,7 @@ describe("DetailListToolbar", () => {
     const onZoomChange = vi.fn();
     localStorage.setItem("cove.cardSize.video", "5");
 
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 1, perPage: 24 }}
         onFilterChange={vi.fn()}
@@ -514,7 +515,7 @@ describe("DetailListToolbar", () => {
   });
 
   it("hides the size slider for embedded modes without card sizing", () => {
-    render(
+    renderWithQueryClient(
       <DetailListToolbar
         filter={{ page: 1, perPage: 24 }}
         onFilterChange={vi.fn()}
@@ -591,5 +592,179 @@ describe("DetailListToolbar", () => {
     );
 
     await waitFor(() => expect(onFilterChange).not.toHaveBeenCalled());
+  });
+
+  describe("custom field filtering", () => {
+    const reviewStatusField = {
+      id: 7,
+      key: "review_status",
+      label: "Review status",
+      type: "text",
+      entityTypes: ["video"],
+      options: [],
+      filterable: true,
+      sortable: false,
+      isMultiValue: false,
+      displayOrder: 0,
+      createdAt: "2026-09-17T00:00:00Z",
+      updatedAt: "2026-09-17T00:00:00Z",
+    };
+
+    function renderWithCustomFields(ui: React.ReactNode) {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(customFieldDefinitionsQueryKey("video"), [reviewStatusField]);
+      return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+    }
+
+    it("offers the entity's custom fields in the filter dialog and applies the criteria", async () => {
+      const user = userEvent.setup();
+      const onObjectFilterChange = vi.fn();
+
+      renderWithCustomFields(
+        <DetailListToolbar
+          filter={{ page: 3, perPage: 40 }}
+          onFilterChange={vi.fn()}
+          totalCount={0}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          criteriaDefinitions={VIDEO_CRITERIA}
+          customFieldEntityType="video"
+          objectFilter={{}}
+          onObjectFilterChange={onObjectFilterChange}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Filters" }));
+      await user.click(screen.getByText("Custom Fields"));
+      await user.click(screen.getByRole("button", { name: /add custom field filter/i }));
+      await user.type(screen.getByLabelText("Value"), "stale");
+      await user.click(screen.getByRole("button", { name: "Apply" }));
+
+      expect(onObjectFilterChange).toHaveBeenCalledWith({
+        customFieldCriteria: [{ key: "review_status", type: "text", modifier: "EQUALS", value: "stale" }],
+      });
+    });
+
+    it("hides custom fields from the dialog without an entity type", async () => {
+      const user = userEvent.setup();
+
+      renderWithCustomFields(
+        <DetailListToolbar
+          filter={{ page: 1, perPage: 40 }}
+          onFilterChange={vi.fn()}
+          totalCount={0}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          criteriaDefinitions={VIDEO_CRITERIA}
+          objectFilter={{}}
+          onObjectFilterChange={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Filters" }));
+
+      expect(screen.queryByText("Custom Fields")).not.toBeInTheDocument();
+    });
+
+    it("summarizes active custom field criteria as a removable chip", async () => {
+      const user = userEvent.setup();
+      const onObjectFilterChange = vi.fn();
+      const onFilterChange = vi.fn();
+
+      renderWithCustomFields(
+        <DetailListToolbar
+          filter={{ page: 3, perPage: 40 }}
+          onFilterChange={onFilterChange}
+          totalCount={0}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          criteriaDefinitions={VIDEO_CRITERIA}
+          customFieldEntityType="video"
+          objectFilter={{
+            customFieldCriteria: [{ key: "review_status", type: "text", modifier: "EQUALS", value: "stale" }],
+          }}
+          onObjectFilterChange={onObjectFilterChange}
+        />,
+      );
+
+      expect(screen.getByText(/Review status Equals stale/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Remove filter: Custom Fields" }));
+
+      expect(onObjectFilterChange).toHaveBeenCalledWith({});
+      expect(onFilterChange).toHaveBeenCalledWith({ page: 1, perPage: 40 });
+    });
+
+    it("ignores cached definitions for all entities when no entity type is requested", async () => {
+      const user = userEvent.setup();
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(customFieldDefinitionsQueryKey(), [reviewStatusField]);
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <DetailListToolbar
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={0}
+            sortOptions={[{ value: "title", label: "Title" }]}
+            criteriaDefinitions={VIDEO_CRITERIA}
+            objectFilter={{}}
+            onObjectFilterChange={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Filters" }));
+
+      expect(screen.queryByText("Custom Fields")).not.toBeInTheDocument();
+    });
+
+    it("opens the dialog on the custom field section when its chip is edited", async () => {
+      const user = userEvent.setup();
+
+      renderWithCustomFields(
+        <DetailListToolbar
+          filter={{ page: 1, perPage: 40 }}
+          onFilterChange={vi.fn()}
+          totalCount={0}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          criteriaDefinitions={VIDEO_CRITERIA}
+          customFieldEntityType="video"
+          objectFilter={{
+            customFieldCriteria: [{ key: "review_status", type: "text", modifier: "EQUALS", value: "stale" }],
+          }}
+          onObjectFilterChange={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Edit filter: Custom Fields" }));
+
+      expect(screen.getByRole("tab", { name: "Custom Fields", selected: true })).toBeInTheDocument();
+      expect(screen.getByLabelText("Value")).toHaveValue("stale");
+    });
+
+    it("derives the entity from the saved-filter mode of an embedded list", async () => {
+      const user = userEvent.setup();
+      const onObjectFilterChange = vi.fn();
+
+      renderWithCustomFields(
+        <DetailListToolbar
+          filter={{ page: 1, perPage: 40 }}
+          onFilterChange={vi.fn()}
+          totalCount={0}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          criteriaDefinitions={VIDEO_CRITERIA}
+          filterMode="videos"
+          objectFilter={{}}
+          onObjectFilterChange={onObjectFilterChange}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Filters" }));
+      await user.click(screen.getByText("Custom Fields"));
+      await user.click(screen.getByRole("button", { name: /add custom field filter/i }));
+      await user.type(screen.getByLabelText("Value"), "stale");
+      await user.click(screen.getByRole("button", { name: "Apply" }));
+
+      expect(onObjectFilterChange).toHaveBeenCalledWith({
+        customFieldCriteria: [{ key: "review_status", type: "text", modifier: "EQUALS", value: "stale" }],
+      });
+    });
   });
 });
