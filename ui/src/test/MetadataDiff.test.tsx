@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { MetadataDiff, defaultDiffSelection, type DiffField, type DiffRecord } from "../components/MetadataDiff";
+import {
+  MetadataDiff,
+  defaultDiffSelection,
+  scalarStatus,
+  summarizeDiff,
+  type DiffField,
+  type DiffRecord,
+} from "../components/MetadataDiff";
 
 const fields: DiffField[] = [
   { key: "title", label: "Title" },
@@ -9,28 +16,33 @@ const fields: DiffField[] = [
   { key: "empty", label: "Empty field" },
   { key: "missing", label: "Missing field" },
   { key: "same", label: "Same field" },
+  { key: "fill", label: "Fillable field" },
   { key: "tags", label: "Tags", kind: "list", itemKey: (item) => String(item).toLowerCase() },
   { key: "cover", label: "Cover", render: (value) => <img alt="Custom cover" src={String(value)} /> },
 ];
+// `source` is the incoming side, `target` the kept side.
 const source: DiffRecord = {
-  label: "Scraped metadata",
+  label: "Scraped",
   values: {
     title: "Scraped title",
     description: "Scraped description",
     empty: null,
     same: "Same",
+    fill: "Filled in",
     tags: ["Shared", "New"],
     cover: "/source.png",
   },
+  provenance: { title: "StashDB" },
 };
 const target: DiffRecord = {
-  label: "Library metadata",
+  label: "Library",
   values: {
     title: "Library title",
     description: "Library description",
     empty: "Populated",
     missing: "Present",
     same: "Same",
+    fill: null,
     tags: ["shared", "Existing"],
     cover: "/target.png",
   },
@@ -40,17 +52,36 @@ function Harness() {
   return <MetadataDiff {...{ fields, source, target, value, onChange }} />;
 }
 describe("MetadataDiff", () => {
-  it("independently chooses scalar fields and an explicit empty value", () => {
+  it("keeps conflicts, fills empty fields from the incoming side, and lets each field be chosen", () => {
     render(<Harness />);
+    expect(screen.getByLabelText("Title from target")).toBeChecked();
+    expect(screen.getByLabelText("Fillable field from source")).toBeChecked();
+    expect(screen.getByLabelText("Empty field from target")).toBeChecked();
     fireEvent.click(screen.getByLabelText("Title from source"));
     fireEvent.click(screen.getByLabelText("Empty field from source"));
     expect(screen.getByLabelText("Title from source")).toBeChecked();
     expect(screen.getByLabelText("Description from target")).toBeChecked();
     expect(screen.getByLabelText("Empty field from source")).toBeChecked();
     expect(screen.getByLabelText("Missing field from source")).toBeDisabled();
-    expect(within(screen.getByRole("group", { name: "Title" })).getAllByText("Scraped title")).toHaveLength(2);
+    expect(within(screen.getByRole("group", { name: "Title" })).getByText("StashDB")).toBeInTheDocument();
+    expect(scalarStatus(fields[0], source, target)).toBe("conflict");
+    expect(scalarStatus(fields[5], source, target)).toBe("filled");
+    expect(scalarStatus(fields[4], source, target)).toBe("identical");
   });
-  it("deduplicates lists by adapter identity and allows deselecting shared and unique items", () => {
+  it("labels the outcome of every visible row", () => {
+    render(<Harness />);
+    expect(
+      within(screen.getByRole("group", { name: "Title" })).getAllByText("Conflict · keeping library"),
+    ).not.toHaveLength(0);
+    expect(
+      within(screen.getByRole("group", { name: "Fillable field" })).getAllByText("Filled from scraped"),
+    ).not.toHaveLength(0);
+    fireEvent.click(screen.getByLabelText("Title from source"));
+    expect(within(screen.getByRole("group", { name: "Title" })).getAllByText("Replaced from scraped")).not.toHaveLength(
+      0,
+    );
+  });
+  it("shows list items as chips and allows leaving out shared and unique items", () => {
     render(<Harness />);
     expect(screen.getByRole("button", { name: "Remove Tags: shared" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
@@ -59,16 +90,12 @@ describe("MetadataDiff", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Tags: new" }));
     expect(screen.getByRole("button", { name: "Add Tags: shared" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Tags: existing" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Tags: Source only" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Tags: Target only" })).toBeInTheDocument();
+    const group = screen.getByRole("group", { name: "Tags" });
+    expect(group.querySelectorAll('[data-state="excluded"]')).toHaveLength(2);
+    expect(group.querySelectorAll('[data-state="kept"]')).toHaveLength(1);
   });
-  it("groups common values first and applies source, target, and combined presets", () => {
+  it("applies combined, kept-only and incoming-only presets", () => {
     render(<Harness />);
-    expect(screen.getAllByRole("region").map((item) => item.getAttribute("aria-label"))).toEqual([
-      "Tags: In both",
-      "Tags: Source only",
-      "Tags: Target only",
-    ]);
     fireEvent.click(screen.getByRole("button", { name: "Use source Tags" }));
     expect(screen.getByRole("button", { name: "Remove Tags: shared" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
@@ -76,17 +103,27 @@ describe("MetadataDiff", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use target Tags" }));
     expect(screen.getByRole("button", { name: "Add Tags: new" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Tags: existing" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Add Tags: new" }));
-    expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "Tags" })).queryByRole("checkbox")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use combined Tags" }));
     expect(screen.getByRole("button", { name: "Remove Tags: new" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use combined Tags" })).toHaveAttribute("aria-pressed", "true");
   });
-  it("renders adapter visuals and hides only identical fields", () => {
+  it("collapses identical fields and keeps always-visible rows", () => {
     render(<Harness />);
-    expect(screen.getAllByAltText("Custom cover")).toHaveLength(3);
-    fireEvent.click(screen.getByLabelText("Hide identical fields"));
-    expect(screen.queryByRole("group", { name: /Same field/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Title" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Same field" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Cover" })).toBeInTheDocument();
+    expect(screen.getAllByAltText("Custom cover")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: /1 identical/ }));
+    expect(screen.getByRole("group", { name: "Same field" })).toBeInTheDocument();
+  });
+  it("summarises what the selection will do", () => {
+    const value = defaultDiffSelection(fields, source, target);
+    const summary = summarizeDiff(fields, source, target, value);
+    expect(summary.changeCount).toBe(2);
+    expect(summary.changes.map((change) => change.text)).toEqual([
+      "Fillable field filled from scraped",
+      "1 tag added",
+      "Title, Description, Cover kept from library (conflict)",
+      "3 unchanged",
+    ]);
   });
 });

@@ -69,11 +69,10 @@ describe("VideoMergeEditor", () => {
     fireEvent.click(await screen.findByLabelText("Title from source"));
     fireEvent.change(screen.getByPlaceholderText("Search tags…"), { target: { value: "Added" } });
     fireEvent.click(await screen.findByRole("button", { name: "Added tag" }));
-    expect(screen.getByRole("region", { name: "Editable tags: Added to result" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Remove Added tag" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Added tag" }));
-    expect(screen.getByRole("button", { name: "Remove Added tag" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Merge videos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Tags: Added tag" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Tags: Added tag" }));
+    expect(screen.getByRole("button", { name: "Remove Tags: Added tag" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
     await waitFor(() => expect(onMerged).toHaveBeenCalledWith(2));
     expect(api.merge).toHaveBeenCalledWith(
       2,
@@ -97,10 +96,9 @@ describe("VideoMergeEditor", () => {
     fireEvent.error(screen.getAllByAltText("Video cover").find((image) => image.getAttribute("src") === "/cover/1")!);
     expect(screen.getByLabelText("Cover from source")).toBeDisabled();
     fireEvent.error(screen.getAllByAltText("Video cover").find((image) => image.getAttribute("src") === "/cover/2")!);
-    fireEvent.click(screen.getByLabelText("Hide identical fields"));
     expect(screen.getByRole("group", { name: /Cover/ })).toBeInTheDocument();
     expect(screen.getAllByText("No cover available").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Merge videos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
     await waitFor(() =>
       expect(api.merge).toHaveBeenCalledWith(
         2,
@@ -117,14 +115,14 @@ describe("VideoMergeEditor", () => {
     setup();
     await screen.findByLabelText("Title from target");
     expect(screen.getByLabelText("Derived tags from source")).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Merge videos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
     await waitFor(() => expect(api.merge).toHaveBeenCalledWith(2, [1], expect.objectContaining({ tagIds: [] })));
   });
   it("keeps the draft after a failed save", async () => {
     api.merge.mockRejectedValue(new Error("Merge failed"));
     setup();
     fireEvent.click(await screen.findByLabelText("Title from source"));
-    fireEvent.click(screen.getByRole("button", { name: "Merge videos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge into kept video" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.getByLabelText("Title from source")).toBeChecked();
   });
