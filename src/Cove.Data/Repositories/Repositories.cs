@@ -752,7 +752,10 @@ public class PerformerRepository : IPerformerRepository
             _ => desc ? query.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.Id) : query.OrderBy(p => p.UpdatedAt).ThenBy(p => p.Id),
             };
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(_db, query, findFilter?.Q, performer => performer.Name);
+            query = NameMatchOrdering.Apply(query, findFilter?.Q,
+                performer => performer.Name,
+                performer => performer.Favorite,
+                performer => performer.Aliases.Select(alias => alias.Alias));
 
         var page = findFilter?.Page ?? 1;
         var perPage = findFilter?.PerPage ?? 25;
@@ -1063,7 +1066,10 @@ public class TagRepository : ITagRepository
             _ => ApplyStableTagSort(query, t => t.UpdatedAt, desc),
             };
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(_db, query, findFilter?.Q, tag => tag.Name);
+            query = NameMatchOrdering.Apply(query, findFilter?.Q,
+                tag => tag.Name,
+                tag => tag.Favorite,
+                tag => tag.Aliases.Select(alias => alias.Alias));
 
         var page = findFilter?.Page ?? 1;
         var pagedIds = await query
@@ -1636,7 +1642,10 @@ public class StudioRepository : IStudioRepository
             _ => desc ? query.OrderByDescending(s => s.UpdatedAt).ThenByDescending(s => s.Id) : query.OrderBy(s => s.UpdatedAt).ThenBy(s => s.Id),
             };
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(_db, query, findFilter?.Q, studio => studio.Name);
+            query = NameMatchOrdering.Apply(query, findFilter?.Q,
+                studio => studio.Name,
+                studio => studio.Favorite,
+                studio => studio.Aliases.Select(alias => alias.Alias));
         var page = findFilter?.Page ?? 1;
         var pagedIds = await query
             .Skip((page - 1) * perPage)
@@ -3231,7 +3240,9 @@ public class GroupRepository : IGroupRepository
             _ => desc ? query.OrderByDescending(g => g.UpdatedAt).ThenByDescending(g => g.Id) : query.OrderBy(g => g.UpdatedAt).ThenBy(g => g.Id),
             };
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(_db, query, findFilter?.Q, group => group.Name);
+            query = NameMatchOrdering.Apply(query, findFilter?.Q,
+                group => group.Name,
+                aliasTextSelector: group => group.Aliases);
         var page = findFilter?.Page ?? 1;
         var perPage = findFilter?.PerPage ?? 25;
         if (perPage <= 0)

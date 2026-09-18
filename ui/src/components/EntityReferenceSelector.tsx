@@ -27,6 +27,7 @@ export interface EntityReferenceOption {
   id: number;
   label: string;
   secondaryLabel?: string;
+  favorite?: boolean;
 }
 
 type ReferenceAutocompleteValue = { kind: "entity"; option: EntityReferenceOption } | { kind: "create"; query: string };
@@ -55,6 +56,8 @@ function buildReferenceAutocompleteItems(
 const REFERENCE_TYPES = new Set<string>(["tag", "performer", "studio", "video", "gallery", "image", "group", "face"]);
 
 const CREATABLE_TYPES = new Set<EntityReferenceType>(["tag", "performer", "group", "studio", "gallery"]);
+
+const NAME_MATCH_ENTITY_TYPES = new Set<EntityReferenceType>(["tag", "performer", "studio", "group"]);
 
 const ENTITY_LABELS: Record<EntityReferenceType, { singular: string; plural: string; sort: string }> = {
   tag: { singular: "tag", plural: "tags", sort: "name" },
@@ -723,7 +726,11 @@ async function searchEntityReferences(
 ): Promise<EntityReferenceOption[]> {
   const query = searchText || undefined;
   const labels = getEntityReferenceLabel(entityType);
-  const filter = { q: query, perPage: 100, sort: labels.sort, direction: "asc" as const };
+  // Tags, performers, studios and groups page by favorite-then-match-quality while searching so
+  // the best match is on the first page. Without a search term "relevance" falls back to
+  // updated-at order on the server, so the unsearched list keeps its alphabetical sort.
+  const sort = query && NAME_MATCH_ENTITY_TYPES.has(entityType) ? "relevance" : labels.sort;
+  const filter = { q: query, perPage: 100, sort, direction: "asc" as const };
 
   switch (entityType) {
     // includeCounts=false skips the per-tag usage-count aggregates server-side; the dropdown only
@@ -769,13 +776,14 @@ async function getEntityReference(entityType: EntityReferenceType, id: number): 
 }
 
 function toTagOption(tag: Tag): EntityReferenceOption {
-  return { id: tag.id, label: tag.name };
+  return { id: tag.id, label: tag.name, favorite: tag.favorite };
 }
 
 function toPerformerOption(performer: Performer): EntityReferenceOption {
   return {
     id: performer.id,
     label: performer.name,
+    favorite: performer.favorite,
     secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
   };
 }
@@ -791,7 +799,7 @@ function toFaceOption(face: Face): EntityReferenceOption {
 }
 
 function toStudioOption(studio: Studio): EntityReferenceOption {
-  return { id: studio.id, label: studio.name };
+  return { id: studio.id, label: studio.name, favorite: studio.favorite };
 }
 
 function toVideoOption(video: Video): EntityReferenceOption {

@@ -266,7 +266,7 @@ describe("PerformerEditModal", () => {
       expect(mocks.tagsFind).toHaveBeenLastCalledWith({
         q: "sha",
         perPage: 20,
-        sort: "name",
+        sort: "relevance",
         direction: "asc",
       });
     });

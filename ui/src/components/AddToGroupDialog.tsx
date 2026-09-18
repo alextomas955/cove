@@ -36,7 +36,13 @@ export function AddToGroupDialog({ open, onClose, items, onAdded }: Props) {
   const existingGroupQuery = useQuery({
     queryKey: ["groups", "picker", groupSearch],
     queryFn: () =>
-      groups.find({ page: 1, perPage: 20, sort: "name", direction: "asc", q: groupSearch.trim() || undefined }),
+      groups.find({
+        page: 1,
+        perPage: 20,
+        sort: groupSearch.trim() ? "relevance" : "name",
+        direction: "asc",
+        q: groupSearch.trim() || undefined,
+      }),
     enabled: open,
   });
 
