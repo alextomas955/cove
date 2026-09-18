@@ -1476,6 +1476,8 @@ query Me {
                 fieldProvenance["performers"] = appliedPerformerNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
+        await VideoRelationshipEdits.ApplyAsync(_db, video, importConfig?.AddedTagIds, importConfig?.RemovedTagIds, importConfig?.AddedPerformerIds, importConfig?.RemovedPerformerIds, _tagProvenanceService, ct);
+
         // Download video cover image. An auto-generated frame cover (ImageBlobId == null) is always
         // replaceable; an explicitly set cover is preserved unless the caller opted to overwrite it.
         var hasExplicitCover = !string.IsNullOrWhiteSpace(video.ImageBlobId);

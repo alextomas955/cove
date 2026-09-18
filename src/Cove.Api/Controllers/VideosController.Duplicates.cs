@@ -328,7 +328,14 @@ public partial class VideosController
                 group.RemovedBytes,
                 reclaimable,
                 [],
-                []);
+                [])
+            {
+                // Copies a person keeps in another group are never removed by this group's resolution.
+                KeptElsewhereVideoIds = members
+                    .Where(item => !item.Keep && keptElsewhere[item.VideoId].Any(groupId => groupId != group.Id))
+                    .Select(item => item.VideoId)
+                    .ToList(),
+            };
         }).ToList();
 
         return Ok(new DuplicateGroupPage(items, totalCount, page, perPage));
@@ -651,9 +658,9 @@ public partial class VideosController
         var removalIds = await DuplicateSearchJobService
             .EffectiveUnkeptVideoIds(db, searchId, db.DuplicateSearchGroups.Where(group => eligibleGroupIds.Contains(group.Id)))
             .ToArrayAsync(ct);
-        // Field-level choices name one source side, so they only make sense for one group folding one copy.
-        if (request.Metadata is not null && (eligibleGroupIds.Length != 1 || removalIds.Length != 1))
-            return BadRequest("Metadata choices apply to a single group with one video to remove.");
+        // Field-level choices come from reviewing one group; the merge reads the "source" side across its copies.
+        if (request.Metadata is not null && eligibleGroupIds.Length != 1)
+            return BadRequest("Metadata choices apply to a single group.");
         var deletionScopeIds = await VideoHierarchyQueries.ExpandDeletionScopeAsync(db, removalIds, ct);
         if (authorizationService is not null)
         {

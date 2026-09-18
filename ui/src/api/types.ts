@@ -898,6 +898,8 @@ export interface DuplicateSearchGroup {
   status: DuplicateGroupStatus;
   videos: Video[];
   keepVideoIds: number[];
+  /** Non-keepers that another group of the same search keeps; resolving this group never removes them. */
+  keptElsewhereVideoIds?: number[];
   decisionSource?: "auto" | "manual" | null;
   decisionRule?: DuplicateKeeperRuleType | "tiebreak" | null;
   resolutionAction?: DuplicateResolutionAction | null;
@@ -933,7 +935,7 @@ export interface DuplicateResolveRequest {
   action: DuplicateResolutionAction;
   deleteFiles: boolean;
   deleteGenerated: boolean;
-  /** Review choices; honoured only when one group with one video to remove is merged. */
+  /** Review choices; honoured only when a single group is resolved with the merge action. */
   metadata?: VideoMergeMetadata;
 }
 
@@ -2527,6 +2529,10 @@ export interface ApplyVideoScrapeAttemptRequest {
   selectedCandidateIndex?: number;
   tagSelections?: ScrapeCollectionItemSelection[];
   performerSelections?: ScrapeCollectionItemSelection[];
+  addedTagIds?: number[];
+  removedTagIds?: number[];
+  addedPerformerIds?: number[];
+  removedPerformerIds?: number[];
 }
 
 export type ApplyScrapeAttemptRequest = ApplyVideoScrapeAttemptRequest;
@@ -2820,6 +2826,12 @@ export interface MetadataServerVideoImportRequest {
   performerOverrides?: MetadataServerVideoEntityOverride[];
   tagOverrides?: MetadataServerVideoEntityOverride[];
   fieldStrategies?: Record<string, "ignore" | "merge" | "overwrite">;
+  // Hand edits made in the review, as the edit form would make them: library ids added through search
+  // and current ids taken off. Applied after the import, whatever the collection modes.
+  addedTagIds?: number[];
+  removedTagIds?: number[];
+  addedPerformerIds?: number[];
+  removedPerformerIds?: number[];
 }
 
 // ===== Filter Criteria =====
@@ -3997,4 +4009,11 @@ export interface VideoMergeFileHandling {
   mode: "attach" | "remove";
   deleteFiles: boolean;
   deleteGenerated: boolean;
+}
+
+/** What removing a source video's files would do to its markers and timed group items. */
+export interface VideoMergeAssessment {
+  videoId: number;
+  filesEquivalent: boolean;
+  timelineItemCount: number;
 }

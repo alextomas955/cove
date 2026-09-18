@@ -265,6 +265,7 @@ public class ScrapeAttemptService(CoveContext db, ScraperService scraperService,
         if (dto.HydratePerformers)
             await HydratePerformersAsync(root, dto.CreateMissingPerformers, dto.CreateMissingTags, performerSelections, createdPerformerIds, ct);
         await ApplyStudioAsync(video, root, collectionModes, dto.CreateMissingStudio, ct);
+        await VideoRelationshipEdits.ApplyAsync(db, video, dto.AddedTagIds, dto.RemovedTagIds, dto.AddedPerformerIds, dto.RemovedPerformerIds, tagProvenanceService, ct);
 
         var fieldProvenance = BuildAppliedVideoFieldProvenance(root, replaceFields, collectionModes, tagSelections, performerSelections);
         if (fieldProvenance.Count > 0 && fieldProvenanceService != null)

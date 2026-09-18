@@ -74,7 +74,11 @@ public sealed record DuplicateGroupView(
     long ReclaimableBytes,
     // A group from a "files" search shows its single video in Videos and lists the files under review here.
     IReadOnlyList<int> FileIds,
-    IReadOnlyList<int> KeepFileIds);
+    IReadOnlyList<int> KeepFileIds)
+{
+    /// <summary>Non-keepers that another group of the same search keeps; resolving this group never removes them.</summary>
+    public IReadOnlyList<int> KeptElsewhereVideoIds { get; init; } = [];
+}
 
 /// <summary>Keepers for a video group, or <paramref name="KeepFileIds"/> for a group from a "files" search.</summary>
 public sealed record DuplicateKeeperDecisionRequest(IReadOnlyList<int> KeepVideoIds, IReadOnlyList<int>? KeepFileIds = null);
@@ -93,8 +97,8 @@ public sealed record DuplicateResolveRequest(
     bool DeleteGenerated = true)
 {
     /// <summary>
-    /// Field-level choices from the merge review. Honoured only when exactly one group with one video to
-    /// remove is resolved with the merge action; absent choices follow the default merge policy. Not a
+    /// Field-level choices from the merge review. Honoured only when exactly one group is resolved with the
+    /// merge action; the "source" side reads across its copies. Absent choices follow the default policy. Not a
     /// positional parameter, so already-compiled callers keep binding to the original constructor.
     /// </summary>
     public Cove.Core.DTOs.VideoMergeMetadataDto? Metadata { get; init; }

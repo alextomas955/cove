@@ -1,4 +1,4 @@
-import type { VideoMergeFileHandling, VideoMergeMetadata } from "./types";
+import type { VideoMergeAssessment, VideoMergeFileHandling, VideoMergeMetadata } from "./types";
 import type {
   AlignmentState,
   AlignmentAnalysis,
@@ -638,6 +638,12 @@ export const videos = {
     request<Video>("/videos/merge", {
       method: "POST",
       body: JSON.stringify({ targetId, sourceIds, metadata, fileHandling }),
+    }),
+  assessMerge: (targetId: number, sourceIds: number[], signal?: AbortSignal) =>
+    request<VideoMergeAssessment[]>("/videos/merge/assess", {
+      method: "POST",
+      body: JSON.stringify({ targetId, sourceIds }),
+      signal,
     }),
   recordPlay: (id: number) => request<void>(`/videos/${id}/play`, { method: "POST" }),
   incrementLike: (id: number) => request<number>(`/videos/${id}/like`, { method: "POST" }),

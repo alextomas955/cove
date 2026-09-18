@@ -28,6 +28,7 @@ vi.mock("../api/client", () => ({
 }));
 
 vi.mock("../state/AppConfigContext", () => ({
+  useOptionalAppConfig: () => undefined,
   useAppConfig: () => ({
     config: {
       scraping: {
@@ -138,12 +139,12 @@ describe("VideoTagger", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Refresh from First provider" }));
     expect((await screen.findAllByText("First provider result")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Apply \d+ changes?$/ })).toBeInTheDocument();
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "metadata-server:https://second.example/graphql");
+    await userEvent.selectOptions(screen.getAllByRole("combobox").filter((element) => element.tagName === "SELECT")[0], "metadata-server:https://second.example/graphql");
 
     await waitFor(() => expect(screen.queryAllByText("First provider result")).toHaveLength(0));
-    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
   });
 
   it("imports a result through the provider that returned it", async () => {
@@ -164,9 +165,9 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "metadata-server:https://second.example/graphql");
+    await userEvent.selectOptions(screen.getAllByRole("combobox").filter((element) => element.tagName === "SELECT")[0], "metadata-server:https://second.example/graphql");
     await userEvent.click(screen.getByRole("button", { name: "Refresh from First provider" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
 
     await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
     expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(
@@ -200,7 +201,7 @@ describe("VideoTagger", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Refresh from First provider" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
 
     expect(await screen.findByText(/Saved with warnings: Skipped remote alias/i)).toBeInTheDocument();
     expect(screen.getByText("Saved successfully")).toBeInTheDocument();

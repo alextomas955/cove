@@ -103,6 +103,24 @@ public sealed class VideoMergeApiTests(
     }
 
     [Fact]
+    [CoversEndpoint("POST", "/api/videos/merge/assess")]
+    public async Task GivenCopiesWithDifferentRunningTimes_WhenAssessed_ThenTheMarkersThatWouldNotFollowAreReported()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var targetPath = AsTestFileSystem().CreateTextFile("The kept copy's file.");
+        var sourcePath = AsTestFileSystem().CreateTextFile("A copy whose file has a different length.");
+        var target = await AsUser().CreateVideoFromFileAsync(targetPath, ct);
+        var source = await AsUser().CreateVideoFromFileAsync(sourcePath, ct);
+        await AsUser().CreateVideoSegmentAsync(source, new SegmentCreateDto(
+            StartSec: 5, EndSec: null, TagId: null, Kind: null, RefId: null, Payload: null,
+            SourceKey: "user", SourceRunId: null, Confidence: null, Title: "Marker on the copy", ColorHint: null), ct);
+
+        var assessment = await AsUser().AssessVideoMergeAsync(target, [source], ct);
+
+        assessment.Should().ContainSingle().Which.Should().BeEquivalentTo(new VideoMergeAssessmentDto(source.Id, false, 1));
+    }
+
+    [Fact]
     public async Task GivenDeleteFilesWithAttachHandling_WhenMerged_ThenTheRequestIsRejected()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -113,6 +131,23 @@ public sealed class VideoMergeApiTests(
             new VideoMergeDto(target.Id, [source.Id]) { FileHandling = new VideoMergeFileHandlingDto(DeleteFiles: true) }, ct);
 
         (await AsUser().GetVideoByIdAsync(source.Id, ct)).Id.Should().Be(source.Id);
+    }
+
+    [Fact]
+    public async Task GivenRelationshipsFromElsewhereInTheLibrary_WhenChosen_ThenTheKeptVideoGainsThem()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var performer = await AsUser().CreatePerformerAsync(new PerformerBuilder().WithName("Added performer").Build(), ct);
+        var gallery = await AsUser().CreateGalleryAsync(new GalleryBuilder().WithTitle("Added gallery").Build(), ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target").WithUrl("https://merge.example/target").Build(), ct);
+
+        var merged = await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(
+            PerformerIds: [performer.Id], GalleryIds: [gallery.Id], Urls: ["https://merge.example/target", "https://merge.example/added-in-review"]), ct);
+
+        merged.Performers.Select(item => item.Id).Should().Equal(performer.Id);
+        merged.Galleries.Select(item => item.Id).Should().Equal(gallery.Id);
+        merged.Urls.Should().BeEquivalentTo("https://merge.example/target", "https://merge.example/added-in-review");
     }
 
     [Fact]
@@ -225,7 +260,9 @@ public sealed class VideoMergeApiTests(
             new VideoMergeMetadataDto(Fields: new() { ["primaryFileId"] = "source" }),
             new VideoMergeMetadataDto(TagIds: [int.MaxValue]),
             new VideoMergeMetadataDto(Fields: new() { ["cover"] = "source" }),
-            new VideoMergeMetadataDto(Urls: ["https://unrelated.example"]),
+            new VideoMergeMetadataDto(PerformerIds: [int.MaxValue]),
+            new VideoMergeMetadataDto(Urls: ["   "]),
+            new VideoMergeMetadataDto(RemoteIds: [new("https://unrelated.example", "nope")]),
             new VideoMergeMetadataDto(CustomFields: new() { ["unknown"] = "source" }) })
         {
             var merge = () => AsUser().MergeVideoMetadataAsync(target, source, choices, ct);

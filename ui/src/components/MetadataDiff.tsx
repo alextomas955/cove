@@ -16,11 +16,15 @@ export type DiffSelection = Record<string, DiffSide | string[]>;
 export interface DiffRecord {
   /** Column heading, e.g. "Kept video" or "From StashDB". */
   label: string;
+  /** How the side reads inside a sentence ("StashDB", "the kept video"); defaults to the lowercased label. */
+  sentenceLabel?: string;
   /** Missing keys are unavailable; null is an explicitly empty value. */
   values: Record<string, unknown>;
   /** Optional provenance label per field key, shown next to the value ("StashDB", "Edited by you"). */
   provenance?: Record<string, string | undefined>;
 }
+
+const sentenceLabel = (record: DiffRecord) => record.sentenceLabel ?? record.label.toLowerCase();
 export interface DiffField {
   key: string;
   label: string;
@@ -36,12 +40,24 @@ export interface DiffField {
   itemLabel?: (value: unknown) => string;
   /** Chip content for one list item. Defaults to `render` / plain text. */
   renderItem?: (value: unknown) => ReactNode;
+  /** An incoming item that does not exist in the library yet and will be created when included (amber chip). */
+  itemIsNew?: (value: unknown) => boolean;
   additionalItems?: unknown[];
   renderListEditor?: (selected: string[], onChange: (selected: string[]) => void, disabled: boolean) => ReactNode;
+  /**
+   * Replaces the chip list entirely, for a relationship edited the way the entity's own edit form does
+   * it: the app's selector with its chips, x buttons and search-to-add. Ids outside the compared sides
+   * are new additions and count as added.
+   */
+  renderList?: (selected: string[], onChange: (selected: string[]) => void, disabled: boolean) => ReactNode;
+  /** Only the Combine / Only kept / Only incoming presets, no per-item toggles (the writer takes a mode, not items). */
+  modesOnly?: boolean;
+  /** Items already on the kept side cannot be dropped one by one, only through the "Only incoming" preset. */
+  lockKeptItems?: boolean;
 }
 
 export type ScalarStatus = "identical" | "filled" | "conflict" | "keptOnly" | "unavailable";
-export type ListItemState = "both" | "kept" | "added" | "excluded";
+export type ListItemState = "both" | "kept" | "added" | "new" | "excluded";
 
 export const isEmptyValue = (value: unknown) =>
   value == null || value === "" || (Array.isArray(value) && value.length === 0);
@@ -125,8 +141,8 @@ export function summarizeDiff(fields: DiffField[], source: DiffRecord, target: D
   const changes: DiffChange[] = [];
   const identical: string[] = [];
   let changeCount = 0;
-  const incoming = source.label.toLowerCase();
-  const kept = target.label.toLowerCase();
+  const incoming = sentenceLabel(source);
+  const kept = sentenceLabel(target);
   const filled: string[] = [];
   const taken: string[] = [];
   const conflictKept: string[] = [];
@@ -134,7 +150,10 @@ export function summarizeDiff(fields: DiffField[], source: DiffRecord, target: D
     if (field.kind === "list") {
       const items = diffListItems(field, source, target);
       const selected = new Set(Array.isArray(value[field.key]) ? (value[field.key] as string[]) : []);
-      const added = items.filter((item) => !item.inTarget && selected.has(item.id)).length;
+      const known = new Set(items.map((item) => item.id));
+      const added =
+        items.filter((item) => !item.inTarget && selected.has(item.id)).length +
+        [...selected].filter((id) => !known.has(id)).length;
       const removed = items.filter((item) => item.inTarget && !selected.has(item.id)).length;
       const leftOut = items.filter((item) => !item.inTarget && !selected.has(item.id)).length;
       if (added) {
@@ -253,12 +272,14 @@ export function MetadataDiff({
       }),
     [fields, source, target],
   );
-  const identicalRows = rows.filter((row) => row.identical && !row.field.alwaysVisible && !row.field.renderListEditor);
+  const identicalRows = rows.filter(
+    (row) => row.identical && !row.field.alwaysVisible && !row.field.renderListEditor && !row.field.renderList,
+  );
   const visibleRows = rows.filter((row) => !identicalRows.includes(row));
   const differenceCount = visibleRows.filter((row) => row.kind === "scalar").length;
   const listCount = visibleRows.filter((row) => row.kind === "list").length;
-  const incoming = source.label.toLowerCase();
-  const kept = target.label.toLowerCase();
+  const incoming = sentenceLabel(source);
+  const kept = sentenceLabel(target);
 
   return (
     <div className="flex flex-col gap-3">
@@ -291,8 +312,8 @@ export function MetadataDiff({
               field={row.field}
               items={row.items}
               selected={Array.isArray(value[row.field.key]) ? (value[row.field.key] as string[]) : []}
-              sourceLabel={source.label}
-              targetLabel={target.label}
+              sourceLabel={sentenceLabel(source)}
+              targetLabel={sentenceLabel(target)}
               disabled={disabled}
               onChange={(selected) => onChange({ ...value, [row.field.key]: selected })}
             />
@@ -336,8 +357,8 @@ export function MetadataDiff({
                       field={row.field}
                       items={row.items}
                       selected={Array.isArray(value[row.field.key]) ? (value[row.field.key] as string[]) : []}
-                      sourceLabel={source.label}
-                      targetLabel={target.label}
+                      sourceLabel={sentenceLabel(source)}
+                      targetLabel={sentenceLabel(target)}
                       disabled={disabled}
                       onChange={(selected) => onChange({ ...value, [row.field.key]: selected })}
                     />
@@ -429,8 +450,8 @@ function ScalarRow({
           <StatusPill
             status={status}
             chosen={chosen}
-            incoming={source.label.toLowerCase()}
-            kept={target.label.toLowerCase()}
+            incoming={sentenceLabel(source)}
+            kept={sentenceLabel(target)}
           />
         </span>
       </div>
@@ -440,8 +461,8 @@ function ScalarRow({
         <StatusPill
           status={status}
           chosen={chosen}
-          incoming={source.label.toLowerCase()}
-          kept={target.label.toLowerCase()}
+          incoming={sentenceLabel(source)}
+          kept={sentenceLabel(target)}
         />
       </div>
     </fieldset>
@@ -493,6 +514,14 @@ function ListRow({
 }) {
   const renderItem = field.renderItem ?? field.render ?? renderDiffValue;
   const label = (item: (typeof items)[number]) => field.itemLabel?.(item.result) ?? item.id;
+  // Ids chosen through the row editor that neither side had (a tag or URL added in the review) are
+  // shown as added chips too.
+  const shown = [
+    ...items,
+    ...selected
+      .filter((id) => !items.some((item) => item.id === id))
+      .map((id) => ({ id, source: undefined, target: undefined, result: id as unknown, inSource: false, inTarget: false })),
+  ];
   const modes = [
     {
       key: "combined",
@@ -501,18 +530,18 @@ function ListRow({
     },
     {
       key: "target",
-      label: `Only ${targetLabel.toLowerCase()}`,
+      label: `Only ${targetLabel}`,
       ids: items.filter((item) => item.inTarget).map((item) => item.id),
     },
     {
       key: "source",
-      label: `Only ${sourceLabel.toLowerCase()}`,
+      label: `Only ${sourceLabel}`,
       ids: items.filter((item) => item.inSource).map((item) => item.id),
     },
   ];
-  const kept = items.filter((item) => item.inTarget && selected.includes(item.id)).length;
-  const added = items.filter((item) => !item.inTarget && selected.includes(item.id)).length;
-  const leftOut = items.filter((item) => !selected.includes(item.id)).length;
+  const kept = shown.filter((item) => item.inTarget && selected.includes(item.id)).length;
+  const added = shown.filter((item) => !item.inTarget && selected.includes(item.id)).length;
+  const leftOut = shown.filter((item) => !selected.includes(item.id)).length;
   const counts = [
     kept ? `${kept} kept` : null,
     added ? (
@@ -533,13 +562,18 @@ function ListRow({
         ? "both"
         : item.inTarget
           ? "kept"
-          : "added";
+          : field.itemIsNew?.(item.result)
+            ? "new"
+            : "added";
+  // The same chip as the entity edit forms use, with the review state on its border.
   const chipClass: Record<ListItemState, string> = {
-    both: "border-transparent bg-card-hover text-foreground",
-    kept: "border-transparent bg-card-hover text-foreground",
-    added: "border-green-400/45 bg-green-400/10 text-green-400",
+    both: "border-border bg-card text-foreground",
+    kept: "border-border bg-card text-foreground",
+    added: "border-green-400/50 bg-card text-green-300",
+    new: "border-amber-400/50 bg-card text-amber-300",
     excluded: "border-dashed border-border bg-transparent text-muted line-through",
   };
+  const created = shown.filter((item) => stateOf(item) === "new").length;
   return (
     <fieldset
       disabled={disabled}
@@ -560,34 +594,52 @@ function ListRow({
         </span>
       </div>
       <div className="flex min-w-0 flex-col gap-2">
+        {field.renderList ? (
+          field.renderList(selected, onChange, disabled)
+        ) : (
         <div className="flex flex-wrap gap-1.5">
-          {items.map((item) => {
+          {shown.map((item) => {
             const state = stateOf(item);
             const included = state !== "excluded";
             const toggle = () => {
               if (!disabled) onChange(included ? selected.filter((id) => id !== item.id) : [...selected, item.id]);
             };
+            const togglable = !field.modesOnly && !(field.lockKeptItems && item.inTarget);
             return (
               <span
                 key={item.id}
                 data-state={state}
-                className={`inline-flex max-w-full items-center gap-1.5 rounded-full border py-0.5 pl-2.5 pr-1 text-xs ${chipClass[state]}`}
+                title={state === "new" ? "Not in your library yet; will be created" : undefined}
+                className={`inline-flex max-w-full items-center gap-1.5 rounded border py-0.5 ${togglable ? "pl-2 pr-1" : "px-2"} text-xs ${chipClass[state]}`}
               >
-                {state === "added" ? <Plus className="h-3 w-3 shrink-0" /> : null}
-                <span className="min-w-0 truncate">{renderItem(item.result)}</span>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={toggle}
-                  aria-label={`${included ? "Remove" : "Add"} ${field.label}: ${label(item)}`}
-                  className="inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
-                >
-                  {included ? <X className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
-                </button>
+                {state === "added" || state === "new" ? (
+                  <Plus className="h-3 w-3 shrink-0" />
+                ) : null}
+                <span className="min-w-0 truncate">
+                  {renderItem(item.result)}
+                </span>
+                {togglable ? (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={toggle}
+                    aria-label={`${included ? "Remove" : "Add"} ${field.label}: ${label(item)}`}
+                    className="inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+                  >
+                    {included ? <X className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                  </button>
+                ) : null}
               </span>
             );
           })}
         </div>
+        )}
+        {created ? (
+          <span className="text-[11px] text-amber-300">
+            {created === 1 ? "1 amber item does" : `${created} amber items do`} not exist in your library yet and will be
+            created.
+          </span>
+        ) : null}
         {field.renderListEditor?.(selected, onChange, disabled)}
       </div>
       <div className="flex items-start md:justify-end">

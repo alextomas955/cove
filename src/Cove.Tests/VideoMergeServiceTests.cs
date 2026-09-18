@@ -205,6 +205,60 @@ public sealed class VideoMergeServiceTests
     }
 
     [Fact]
+    public async Task AssessmentNamesCopiesWhoseTimelineItemsWouldNotFollow()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (kept, removed) = await harness.SeedPairAsync(keptDuration: 60, removedDuration: 90);
+        await harness.AddTimelineItemsAsync(removed.Id);
+
+        await using var db = harness.CreateContext();
+        var service = new VideoMergeService(db, new CustomFieldService(db), NoOp<IBlobService>.Create(), NoOp<IStreamService>.Create(), new EventBus());
+        var assessment = Assert.Single(await service.AssessAsync(kept.Id, [removed.Id, kept.Id, 0], CancellationToken.None));
+
+        Assert.Equal(removed.Id, assessment.VideoId);
+        Assert.False(assessment.FilesEquivalent);
+        // One user marker and one timed group item; the whole-video membership does not depend on the timeline.
+        Assert.Equal(2, assessment.TimelineItemCount);
+    }
+
+    [Fact]
+    public async Task AssessmentReportsEquivalentFilesSoMarkersFollow()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (kept, removed) = await harness.SeedPairAsync(keptDuration: 60, removedDuration: 60.5, phash: "00ff00ff00ff00ff");
+        await harness.AddTimelineItemsAsync(removed.Id);
+
+        await using var db = harness.CreateContext();
+        var service = new VideoMergeService(db, new CustomFieldService(db), NoOp<IBlobService>.Create(), NoOp<IStreamService>.Create(), new EventBus());
+        var assessment = Assert.Single(await service.AssessAsync(kept.Id, [removed.Id], CancellationToken.None));
+
+        Assert.True(assessment.FilesEquivalent);
+        Assert.Equal(2, assessment.TimelineItemCount);
+    }
+
+    [Fact]
+    public async Task ChoicesCanAddAUrlNextToTheOnesTheVideosAlreadyHave()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (kept, removed) = await harness.SeedPairAsync(keptDuration: 60, removedDuration: 60);
+        await using (var db = harness.CreateContext())
+        {
+            db.AddRange(
+                new VideoUrl { VideoId = kept.Id, Url = "https://kept.example/a" },
+                new VideoUrl { VideoId = removed.Id, Url = "https://removed.example/b" });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await harness.MergeAsync(new VideoMergePlan(kept.Id, [removed.Id], Metadata: new VideoMergeMetadataDto(
+            Urls: ["https://kept.example/a", "https://removed.example/b", "https://example.test/added-in-review"])));
+
+        Assert.Equal(VideoMergeOutcome.Merged, result.Outcome);
+        await using var verify = harness.CreateContext();
+        var urls = await verify.Set<VideoUrl>().Where(url => url.VideoId == kept.Id).Select(url => url.Url).OrderBy(url => url).ToListAsync();
+        Assert.Equal(["https://example.test/added-in-review", "https://kept.example/a", "https://removed.example/b"], urls);
+    }
+
+    [Fact]
     public async Task MetadataChoicesAreRejectedWhenARemovedVideoIsMissing()
     {
         await using var harness = await Harness.CreateAsync();

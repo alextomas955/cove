@@ -115,6 +115,47 @@ describe("MetadataDiff", () => {
     fireEvent.click(screen.getByRole("button", { name: /1 identical/ }));
     expect(screen.getByRole("group", { name: "Same field" })).toBeInTheDocument();
   });
+  it("supports sentence labels, will-create chips, mode-only lists and locked kept items", () => {
+    const applyFields: DiffField[] = [
+      {
+        key: "tags",
+        label: "Tags",
+        kind: "list",
+        itemKey: (item) => String(item).toLowerCase(),
+        itemIsNew: (item) => item === "Brand new",
+        lockKeptItems: true,
+      },
+      { key: "urls", label: "URLs", kind: "list", itemKey: (item) => String(item), modesOnly: true },
+    ];
+    const incoming: DiffRecord = {
+      label: "From StashDB",
+      sentenceLabel: "StashDB",
+      values: { tags: ["Shared", "Brand new"], urls: ["https://a"] },
+    };
+    const current: DiffRecord = {
+      label: "Current",
+      sentenceLabel: "current",
+      values: { tags: ["shared", "Existing"], urls: ["https://b"] },
+    };
+    function ApplyHarness() {
+      const [value, onChange] = useState(() => defaultDiffSelection(applyFields, incoming, current));
+      return <MetadataDiff {...{ fields: applyFields, source: incoming, target: current, value, onChange }} />;
+    }
+    render(<ApplyHarness />);
+    const tags = screen.getByRole("group", { name: "Tags" });
+    expect(tags.querySelector('[data-state="new"]')).toHaveTextContent("Brand new");
+    expect(within(tags).getByText(/1 amber item does not exist in your library yet/)).toBeInTheDocument();
+    expect(within(tags).queryByRole("button", { name: "Remove Tags: existing" })).not.toBeInTheDocument();
+    expect(within(tags).getByRole("button", { name: "Remove Tags: brand new" })).toBeInTheDocument();
+    expect(within(tags).getByRole("button", { name: "Use source Tags" })).toHaveTextContent("Only StashDB");
+    expect(within(tags).getByRole("button", { name: "Use target Tags" })).toHaveTextContent("Only current");
+    const urls = screen.getByRole("group", { name: "URLs" });
+    expect(within(urls).queryByRole("button", { name: /Remove URLs/ })).not.toBeInTheDocument();
+    expect(within(urls).getByRole("button", { name: "Use combined URLs" })).toBeInTheDocument();
+    const summary = summarizeDiff(applyFields, incoming, current, defaultDiffSelection(applyFields, incoming, current));
+    expect(summary.changes.map((change) => change.text)).toEqual(["1 tag added", "1 url added"]);
+  });
+
   it("summarises what the selection will do", () => {
     const value = defaultDiffSelection(fields, source, target);
     const summary = summarizeDiff(fields, source, target, value);

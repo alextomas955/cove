@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   startDuplicateSearch: vi.fn(),
   updateDuplicateSearchDecision: vi.fn(),
   resolveDuplicateGroups: vi.fn(),
+  assessMerge: vi.fn(),
   ignoreDuplicateGroup: vi.fn(),
   registerKeyboardActions: vi.fn(),
 }));
@@ -31,6 +32,7 @@ vi.mock("../api/client", () => ({
     startDuplicateSearch: mocks.startDuplicateSearch,
     updateDuplicateSearchDecision: mocks.updateDuplicateSearchDecision,
     resolveDuplicateGroups: mocks.resolveDuplicateGroups,
+    assessMerge: mocks.assessMerge,
     ignoreDuplicateGroup: mocks.ignoreDuplicateGroup,
     restoreDuplicateGroup: vi.fn(),
     autoSelectDuplicateKeepers: vi.fn(),
@@ -172,6 +174,7 @@ describe("DuplicateFinderPage", () => {
     mocks.getDuplicateSearchGroups.mockResolvedValue({ items: [group], totalCount: 1, page: 1, perPage: 10 });
     mocks.updateDuplicateSearchDecision.mockResolvedValue(undefined);
     mocks.resolveDuplicateGroups.mockResolvedValue({ queuedGroupCount: 1, jobId: "resolve-job" });
+    mocks.assessMerge.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -275,14 +278,21 @@ describe("DuplicateFinderPage", () => {
     );
   });
 
-  it("asks once before resolving a group and remembers the choice", async () => {
+  it("reviews a merge field by field, warns about markers that stay behind, and remembers the choice", async () => {
     window.history.replaceState({}, "", "/duplicates?search=saved-search");
+    mocks.assessMerge.mockResolvedValue([{ videoId: 2, filesEquivalent: false, timelineItemCount: 2 }]);
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: /Merge & remove 1/ }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "Merge videos" });
+    expect(within(dialog).getByText("Keep")).toBeInTheDocument();
+    expect(within(dialog).getByRole("region", { name: "Files" })).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/Attach/)).not.toBeInTheDocument();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("2 timeline items on Candidate 2 will not be carried over");
+    expect(mocks.assessMerge).toHaveBeenCalledWith(1, [2], expect.anything());
+    fireEvent.click(within(dialog).getByLabelText("Title from source"));
     fireEvent.click(within(dialog).getByLabelText(/Don't ask again/));
-    fireEvent.click(within(dialog).getByRole("button", { name: /Merge & remove 1 copy/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Merge & remove 1 copy/ }));
 
     await waitFor(() =>
       expect(mocks.resolveDuplicateGroups).toHaveBeenCalledWith("saved-search", {
@@ -290,9 +300,70 @@ describe("DuplicateFinderPage", () => {
         action: "merge",
         deleteFiles: false,
         deleteGenerated: true,
+        metadata: expect.objectContaining({ fields: expect.objectContaining({ title: "source" }) }),
       }),
     );
     expect(JSON.parse(window.localStorage.getItem("cove.duplicates.resolution.v2")!).confirmEachGroup).toBe(false);
+  });
+
+  it("shows a failed reviewed merge in the review and leaves the group reviewable", async () => {
+    window.history.replaceState({}, "", "/duplicates?search=saved-search");
+    mocks.resolveDuplicateGroups.mockRejectedValue(new Error("The video to keep no longer exists."));
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Merge & remove 1/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Merge videos" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Merge & remove 1 copy/ }));
+
+    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Merge videos" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Merge & remove 1/ })).toBeEnabled();
+  });
+
+  it("leaves out of the review a copy that another group keeps", async () => {
+    window.history.replaceState({}, "", "/duplicates?search=saved-search");
+    mocks.getDuplicateSearchGroups.mockResolvedValue({
+      items: [
+        {
+          ...group,
+          videos: [group.videos[0], group.videos[1], video(3, 1280, 720, "h264", 2_000_000)],
+          keptElsewhereVideoIds: [3],
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+      perPage: 10,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Merge & remove/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Merge videos" });
+
+    expect(await within(dialog).findByRole("button", { name: /Merge & remove 1 copy/ })).toBeInTheDocument();
+    expect(within(dialog).queryByText("Candidate 3")).not.toBeInTheDocument();
+  });
+
+  it("keeps the policy dialog for a plain removal", async () => {
+    window.history.replaceState({}, "", "/duplicates?search=saved-search");
+    window.localStorage.setItem(
+      "cove.duplicates.resolution.v2",
+      JSON.stringify({ action: "remove", deleteFiles: false, deleteGenerated: true, confirmEachGroup: true }),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Remove 1/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Resolve this group" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Remove 1 copy/ }));
+
+    await waitFor(() =>
+      expect(mocks.resolveDuplicateGroups).toHaveBeenCalledWith("saved-search", {
+        groupIds: [7],
+        action: "remove",
+        deleteFiles: false,
+        deleteGenerated: true,
+      }),
+    );
   });
 
   it("scrolls the next group below the sticky navigation and duplicate controls after resolving", async () => {
@@ -324,7 +395,7 @@ describe("DuplicateFinderPage", () => {
 
       fireEvent.click(within(firstArticle).getByRole("button", { name: /Merge & remove 1/ }));
       const dialog = await screen.findByRole("dialog");
-      const confirm = within(dialog).getByRole("button", { name: /Merge & remove 1 copy/ });
+      const confirm = await within(dialog).findByRole("button", { name: /Merge & remove 1 copy/ });
       const realGetComputedStyle = window.getComputedStyle;
       computedStyle = vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudoElement) => {
         const style = realGetComputedStyle(element, pseudoElement);

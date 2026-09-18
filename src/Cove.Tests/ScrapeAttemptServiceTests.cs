@@ -71,6 +71,60 @@ public class ScrapeAttemptServiceTests
     }
 
     [Fact]
+    public async Task ApplyAttemptAsync_AppliesReviewEditsOnTopOfTheScrape()
+    {
+        var dbName = $"scrape-attempt-service-{Guid.NewGuid():N}";
+        await using var db = CreateDbContext(dbName);
+
+        var currentTag = new Tag { Name = "Current" };
+        var libraryTag = new Tag { Name = "From the library" };
+        var currentPerformer = new Performer { Name = "Current Performer" };
+        var libraryPerformer = new Performer { Name = "Library Performer" };
+        var video = new Video
+        {
+            Title = "Current Title",
+            VideoTags = [new VideoTag { Tag = currentTag }],
+            VideoPerformers = [new VideoPerformer { Performer = currentPerformer }],
+            TagIds = [],
+            PerformerIds = [],
+        };
+        db.AddRange(libraryTag, libraryPerformer, video);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var attempt = new ScrapeAttempt
+        {
+            ScraperId = "tests.fake-scraper/video",
+            EntityType = EntityKinds.Video,
+            EntityId = video.Id,
+            InputKind = "url",
+            InputJson = JsonSerializer.Serialize(new { url = "https://example.com/scene" }),
+            ResultJson = JsonSerializer.Serialize(new Dictionary<string, object?> { ["Tags"] = new[] { new { Name = "Scraped" } } }),
+        };
+        db.ScrapeAttempts.Add(attempt);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var service = new ScrapeAttemptService(db, null!, null!, null!, new NoOpTagProvenanceService(), null!, new EventBus(), NullLogger<ScrapeAttemptService>.Instance);
+
+        // The scrape adds "Scraped"; the review also picked a library tag and performer through search and
+        // took the current tag and performer off, as the edit form would. An unknown id is ignored.
+        var result = await service.ApplyAttemptAsync(
+            attempt.Id,
+            new ApplyVideoScrapeAttemptDto(ReplaceFields: [], CollectionModes: new Dictionary<string, string> { ["tags"] = "merge" }, CreateMissingTags: true)
+            {
+                AddedTagIds = [libraryTag.Id, int.MaxValue],
+                RemovedTagIds = [currentTag.Id],
+                AddedPerformerIds = [libraryPerformer.Id],
+                RemovedPerformerIds = [currentPerformer.Id],
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        var tagNames = video.VideoTags.Select(link => link.Tag?.Name ?? db.Tags.Find(link.TagId)!.Name).OrderBy(name => name).ToList();
+        Assert.Equal(["From the library", "Scraped"], tagNames);
+        Assert.Equal(libraryPerformer.Id, Assert.Single(video.VideoPerformers).PerformerId);
+    }
+
+    [Fact]
     public async Task ApplyAttemptAsync_HydratesNewNamedVideoPerformer()
     {
         var dbName = $"scrape-attempt-service-{Guid.NewGuid():N}";

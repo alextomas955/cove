@@ -1520,6 +1520,21 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
 
     // ===== Merge =====
 
+    /// <summary>
+    /// Tells a merge review, before anything changes, which source videos have markers or timed group items
+    /// that would not follow them onto the target if their files were removed.
+    /// </summary>
+    [HttpPost("merge/assess")]
+    [RequiresEntityAccess(EntityKinds.Video, Permissions.VideosRead, ActionArgumentName = "dto", PropertyName = "TargetId")]
+    [RequiresEntityAccess(EntityKinds.Video, Permissions.VideosRead, ActionArgumentName = "dto", PropertyName = "SourceIds")]
+    public async Task<ActionResult<IReadOnlyList<VideoMergeAssessmentDto>>> AssessMerge([FromBody] VideoMergeAssessRequestDto dto, CancellationToken ct)
+    {
+        var merge = videoMergeService ?? throw new InvalidOperationException("The video merge service is not registered.");
+        if (!await db.Videos.AsNoTracking().AnyAsync(video => video.Id == dto.TargetId, ct))
+            return NotFound("Target video not found");
+        return Ok(await merge.AssessAsync(dto.TargetId, dto.SourceIds ?? [], ct));
+    }
+
     [HttpPost("merge")]
     [RequiresPermission(Permissions.VideosWrite, Permissions.VideosDelete)]
     [RequiresEntityAccess(EntityKinds.Video, Permissions.VideosWrite, ActionArgumentName = "dto", PropertyName = "TargetId")]

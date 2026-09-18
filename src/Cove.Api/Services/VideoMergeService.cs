@@ -271,6 +271,31 @@ public sealed class VideoMergeService(
         return new VideoMergeResult(VideoMergeOutcome.Merged) { MergedVideoIds = mergedIds, TimelineKeptVideoIds = timelineKeptIds.Order().ToArray() };
     }
 
+    /// <summary>
+    /// What a merge that removes the sources' files would do to their timeline-bound items, so a review can
+    /// say before confirming which markers will not be carried over. Reads only; nothing is computed.
+    /// </summary>
+    public async Task<IReadOnlyList<VideoMergeAssessmentDto>> AssessAsync(int keptVideoId, IReadOnlyList<int> removedVideoIds, CancellationToken ct)
+    {
+        var removedIds = removedVideoIds.Where(id => id > 0 && id != keptVideoId).Distinct().Order().ToArray();
+        if (removedIds.Length == 0)
+            return [];
+        var equivalentIds = await FindTimelineEquivalentAsync(keptVideoId, removedIds, ct);
+        var markers = await db.Segments.AsNoTracking()
+            .Where(segment => segment.HostType == SegmentHostType.Video && removedIds.Contains(segment.HostId) && segment.SourceKey == "user")
+            .GroupBy(segment => segment.HostId)
+            .Select(group => new { VideoId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.VideoId, row => row.Count, ct);
+        var timedItems = await db.GroupItems.AsNoTracking()
+            .Where(item => item.VideoId.HasValue && removedIds.Contains(item.VideoId.Value) && (item.StartSec != null || item.EndSec != null))
+            .GroupBy(item => item.VideoId!.Value)
+            .Select(group => new { VideoId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.VideoId, row => row.Count, ct);
+        return removedIds
+            .Select(id => new VideoMergeAssessmentDto(id, equivalentIds.Contains(id), markers.GetValueOrDefault(id) + timedItems.GetValueOrDefault(id)))
+            .ToArray();
+    }
+
     // ----- Timeline equivalence -----
 
     /// <summary>
@@ -331,12 +356,15 @@ public sealed class VideoMergeService(
         if (choices.Fields?.Any(item => !MergeScalarFields.Contains(item.Key) || item.Value is not ("source" or "target")) == true
             || choices.CustomFields?.Any(item => item.Value is not ("source" or "target")) == true)
             return "Unknown metadata field or selection side.";
+        // Tags, performers and galleries may come from anywhere the caller can read, as when editing one
+        // video; the review adds them the same way. Remote IDs stay bound to the compared videos.
         if (!ValidSelection(choices.TagIds, visibleTags)
-            || !ValidSelection(choices.PerformerIds, compared.SelectMany(video => video.VideoPerformers).Select(item => item.PerformerId).Intersect(visiblePerformers))
-            || !ValidSelection(choices.GalleryIds, compared.SelectMany(video => video.VideoGalleries).Select(item => item.GalleryId).Intersect(visibleGalleries)))
-            return "Selected relationships must be readable items from the compared videos.";
-        if (!ValidSelection(choices.Urls, compared.SelectMany(video => video.Urls).Select(item => item.Url), StringComparer.OrdinalIgnoreCase)
-            || !ValidSelection(choices.RemoteIds?.Select(item => (item.Endpoint, item.RemoteId)),
+            || !ValidSelection(choices.PerformerIds, visiblePerformers)
+            || !ValidSelection(choices.GalleryIds, visibleGalleries))
+            return "Selected relationships must be readable items.";
+        if (choices.Urls?.Any(url => string.IsNullOrWhiteSpace(url)) == true)
+            return "Selected links must not be empty.";
+        if (!ValidSelection(choices.RemoteIds?.Select(item => (item.Endpoint, item.RemoteId)),
                 compared.SelectMany(video => video.RemoteIds).Select(item => (item.Endpoint, item.RemoteId)), RemoteIdKeyComparer.Instance))
             return "Selected links must belong to one of the compared videos.";
         if (choices.CustomFields != null)
@@ -677,18 +705,27 @@ public sealed class VideoMergeService(
     {
         // Fix up relationships moved by changing their foreign key before pruning the combined sets.
         db.ChangeTracker.DetectChanges();
-        if (choices.TagIds != null)
-        {
-            var existing = target.VideoTags.Select(item => item.TagId).ToHashSet();
-            foreach (var id in choices.TagIds.Distinct().Where(id => !existing.Contains(id)))
-                target.VideoTags.Add(new VideoTag { VideoId = target.Id, TagId = id });
-        }
+        // The review can add relationships the compared videos did not have, as editing one video can.
+        AddMissing(target.VideoTags, choices.TagIds, item => item.TagId, id => new VideoTag { VideoId = target.Id, TagId = id });
+        AddMissing(target.VideoPerformers, choices.PerformerIds, item => item.PerformerId, id => new VideoPerformer { VideoId = target.Id, PerformerId = id });
+        AddMissing(target.VideoGalleries, choices.GalleryIds, item => item.GalleryId, id => new VideoGallery { VideoId = target.Id, GalleryId = id });
+        var urls = choices.Urls?.Select(url => url.Trim()).ToArray();
+        AddMissing(target.Urls, urls, item => item.Url, url => new VideoUrl { VideoId = target.Id, Url = url }, StringComparer.OrdinalIgnoreCase);
         PruneCollection(target.VideoTags, choices.TagIds, item => item.TagId, visibleTags);
         PruneCollection(target.VideoPerformers, choices.PerformerIds, item => item.PerformerId, visiblePerformers);
         PruneCollection(target.VideoGalleries, choices.GalleryIds, item => item.GalleryId, visibleGalleries);
-        PruneCollection(target.Urls, choices.Urls, item => item.Url, comparer: StringComparer.OrdinalIgnoreCase);
+        PruneCollection(target.Urls, urls, item => item.Url, comparer: StringComparer.OrdinalIgnoreCase);
         PruneCollection(target.RemoteIds, choices.RemoteIds?.Select(item => (item.Endpoint, item.RemoteId)),
             item => (item.Endpoint, item.RemoteId), comparer: RemoteIdKeyComparer.Instance);
+    }
+
+    private static void AddMissing<T, TKey>(ICollection<T> items, IEnumerable<TKey>? selected, Func<T, TKey> key,
+        Func<TKey, T> create, IEqualityComparer<TKey>? comparer = null)
+    {
+        if (selected == null) return;
+        var existing = items.Select(key).ToHashSet(comparer);
+        foreach (var id in selected.Distinct(comparer).Where(id => !existing.Contains(id)))
+            items.Add(create(id));
     }
 
     private void PruneCollection<T, TKey>(ICollection<T> items, IEnumerable<TKey>? selected,

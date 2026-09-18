@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, GitMerge, Loader2, Trash2 } from "lucide-react";
 import { formatFileSize } from "../shared";
+import { MERGE_POLICY_SUMMARY } from "../VideoMergeReview";
 import { DuplicateDialog } from "./DuplicateDialog";
 import type { ResolutionPreferences } from "./duplicateModel";
 
@@ -107,7 +108,7 @@ export function DuplicateResolveDialog({
               disabled={!canMerge}
               onSelect={() => update({ action: "merge" })}
               title="Merge metadata into the kept copy"
-              description="Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, play counts and your markers carry over. Empty fields are filled; nothing on the kept copy is overwritten."
+              description={`${MERGE_POLICY_SUMMARY} Markers and timed group items move only when the files are equivalent.`}
               recommended
             />
             <OptionCard

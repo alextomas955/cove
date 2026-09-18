@@ -216,27 +216,26 @@ public sealed class DuplicateSearchControllerTests
         var controller = CreateController(db, principalAccessor, memoryCache, jobs);
         var metadata = new Cove.Core.DTOs.VideoMergeMetadataDto(Fields: new() { ["title"] = "source" });
 
-        // Choices need the merge action, a single group, and a single video to remove in it.
+        // Choices need the merge action and a single group; that group may remove several copies.
         Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
             new DuplicateResolveRequest([groups[0].Id], "remove") { Metadata = metadata }, CancellationToken.None)).Result);
         Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
             new DuplicateResolveRequest(null, "merge") { Metadata = metadata }, CancellationToken.None)).Result);
-        Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
-            new DuplicateResolveRequest([groups[2].Id], "merge") { Metadata = metadata }, CancellationToken.None)).Result);
         var oversized = new Cove.Core.DTOs.VideoMergeMetadataDto(Urls: Enumerable.Range(0, 2_000).Select(index => $"https://example.test/{index}").ToList());
         Assert.IsType<BadRequestObjectResult>((await controller.ResolveDuplicateGroups(search.Id,
             new DuplicateResolveRequest([groups[0].Id], "merge") { Metadata = oversized }, CancellationToken.None)).Result);
         Assert.Equal(0, jobs.EnqueueCount);
 
+        // A group removing several copies takes choices too; the merge reads the source side across them.
         var result = await controller.ResolveDuplicateGroups(search.Id,
-            new DuplicateResolveRequest([groups[0].Id], "merge") { Metadata = metadata }, CancellationToken.None);
+            new DuplicateResolveRequest([groups[2].Id], "merge") { Metadata = metadata }, CancellationToken.None);
 
         Assert.IsType<AcceptedResult>(result.Result);
         db.ChangeTracker.Clear();
         var stored = await db.DuplicateSearchGroups.OrderBy(group => group.Position).ToListAsync();
-        Assert.Equal(DuplicateGroupStatus.Queued, stored[0].Status);
-        Assert.Equal("source", DuplicateResolutionService.ParseMergeMetadata(stored[0].MergeMetadataJson)?.Fields?["title"]);
-        Assert.Null(stored[1].MergeMetadataJson);
+        Assert.Equal(DuplicateGroupStatus.Queued, stored[2].Status);
+        Assert.Equal("source", DuplicateResolutionService.ParseMergeMetadata(stored[2].MergeMetadataJson)?.Fields?["title"]);
+        Assert.Null(stored[0].MergeMetadataJson);
     }
 
     [Fact]

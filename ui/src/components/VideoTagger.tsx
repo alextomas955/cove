@@ -12,7 +12,7 @@ import type {
   ScraperSummary,
   ScrapeCollectionItemSelection,
 } from "../api/types";
-import { useAppConfig } from "../state/AppConfigContext";
+import { useAppConfig, useOptionalAppConfig } from "../state/AppConfigContext";
 import { formatDuration, getResolutionLabel } from "./shared";
 import { createNestedRouteLinkProps } from "./cardNavigation";
 import {
@@ -27,15 +27,20 @@ import {
   buildMatchInfo,
   buildRelationSelectionPayload,
   relationKey,
-  ScrapeRelationChoices,
   type ScrapeRelationActionMap,
 } from "./ScrapeRelationChoices";
 import { invalidateVideoMetadataQueries } from "./videoMetadataQueryInvalidation";
+import { MetadataDiff, summarizeDiff } from "./MetadataDiff";
+import { metadataServerLabel } from "./MetadataServerLinks";
 import {
-  CompactCollectionDecision,
-  CompactImageDecision,
-  CompactListValue,
-  CompactScalarDecision,
+  applyTaggerSelectionChange,
+  buildTaggerReview,
+  isHandEdited,
+  type TaggerRelationshipEdits,
+  type TaggerRelationshipKey,
+  type TaggerReviewInput,
+} from "./VideoTaggerReview";
+import {
   DEFAULT_TAGGER_BLACKLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
@@ -131,6 +136,9 @@ interface VideoSearchState {
   forceIncludeStudio?: boolean;
   fieldStrategies?: Record<string, VideoFieldStrategy>;
   collectionModes?: Record<string, CollectionMode>;
+  // Hand edits made in the review beside the scrape, as the edit form would make them.
+  tagEdits?: TaggerRelationshipEdits;
+  performerEdits?: TaggerRelationshipEdits;
 }
 
 type VideoFieldStrategy = "ignore" | "merge" | "overwrite";
@@ -359,8 +367,12 @@ function buildDefaultVideoFieldStrategies(video: Video, result: UnifiedVideoMatc
   const strategies: Record<string, VideoFieldStrategy> = {};
   for (const field of fields) {
     if (!field.scraped) continue;
+    const current = normalizeDecisionValue(field.current);
+    // A value the person typed by hand is kept unless they choose otherwise; anything else gives way.
     strategies[field.key] =
-      normalizeDecisionValue(field.current) === normalizeDecisionValue(field.scraped) ? "ignore" : "overwrite";
+      current === normalizeDecisionValue(field.scraped) || (current && isHandEdited(video, field.key))
+        ? "ignore"
+        : "overwrite";
   }
   return strategies;
 }
@@ -530,6 +542,18 @@ function buildScraperVideoApplyRequest(
             action: performerActions[relationKey(choice.key)] ?? "exclude",
           }))
         : undefined,
+    ...relationshipEditFields(state),
+  };
+}
+
+// The review's hand edits, in the shape both apply requests take; absent when there are none.
+function relationshipEditFields(state: VideoSearchState | undefined) {
+  const ids = (list: number[] | undefined) => (list && list.length > 0 ? list : undefined);
+  return {
+    addedTagIds: ids(state?.tagEdits?.added),
+    removedTagIds: ids(state?.tagEdits?.removed),
+    addedPerformerIds: ids(state?.performerEdits?.added),
+    removedPerformerIds: ids(state?.performerEdits?.removed),
   };
 }
 
@@ -765,6 +789,8 @@ export function VideoTagger({
         warning: undefined,
         results: undefined,
         saved: false,
+        tagEdits: undefined,
+        performerEdits: undefined,
       });
       try {
         let results: UnifiedVideoMatch[] = [];
@@ -828,6 +854,8 @@ export function VideoTagger({
         warning: undefined,
         results: undefined,
         saved: false,
+        tagEdits: undefined,
+        performerEdits: undefined,
       });
       try {
         if (selectedSource?.kind !== "metadata-server")
@@ -859,6 +887,8 @@ export function VideoTagger({
         warning: undefined,
         results: undefined,
         saved: false,
+        tagEdits: undefined,
+        performerEdits: undefined,
       });
       try {
         const results = (await videos.findMetadataServerByIds({ endpoint, ids: [remoteId] })).map((match) => ({
@@ -1430,6 +1460,7 @@ function TaggerVideoRow({
         tagOverrides,
         studioOverride,
         fieldStrategies: buildVideoFieldStrategies(video, selectedResult, state, taggerConfig),
+        ...relationshipEditFields(state),
       };
       return videos.importFromMetadataServer(video.id, importReq);
     },
@@ -1694,6 +1725,8 @@ function TaggerVideoRow({
                         forceIncludedPerformers: undefined,
                         forceIncludedTags: undefined,
                         forceIncludeStudio: undefined,
+                        tagEdits: undefined,
+                        performerEdits: undefined,
                       },
                 )
               }
@@ -1721,38 +1754,33 @@ function TaggerVideoRow({
                   collectionModes: { ...getVideoCollectionModes(selectedResult, state, taggerConfig), [field]: mode },
                 });
               }}
-              onTogglePerformer={(name) => {
-                const perf =
-                  selectedResult == null
-                    ? undefined
-                    : getPerformerChoices(selectedResult).find((choice) => choice.key === name)?.candidate;
-                const willSkipByDefault = taggerConfig.onlyExistingPerformers && perf && !perf.existsLocally;
-                if (willSkipByDefault) {
-                  const current = new Set(state.forceIncludedPerformers ?? []);
-                  if (current.has(name)) current.delete(name);
-                  else current.add(name);
-                  onUpdateState({ forceIncludedPerformers: current });
-                } else {
-                  const current = new Set(state.excludedPerformers ?? []);
-                  if (current.has(name)) current.delete(name);
-                  else current.add(name);
-                  onUpdateState({ excludedPerformers: current });
+              onTogglePerformer={(names) => {
+                // Several chips can change in one review action, so every toggle lands in one state update.
+                const forceIncluded = new Set(state.forceIncludedPerformers ?? []);
+                const excluded = new Set(state.excludedPerformers ?? []);
+                for (const name of Array.isArray(names) ? names : [names]) {
+                  const perf =
+                    selectedResult == null
+                      ? undefined
+                      : getPerformerChoices(selectedResult).find((choice) => choice.key === name)?.candidate;
+                  const willSkipByDefault = taggerConfig.onlyExistingPerformers && perf && !perf.existsLocally;
+                  const target = willSkipByDefault ? forceIncluded : excluded;
+                  if (target.has(name)) target.delete(name);
+                  else target.add(name);
                 }
+                onUpdateState({ forceIncludedPerformers: forceIncluded, excludedPerformers: excluded });
               }}
-              onToggleTag={(name) => {
-                const tag = selectedResult?.tagCandidates.find((t) => t.name === name);
-                const willSkipByDefault = taggerConfig.onlyExistingTags && tag && !tag.existsLocally;
-                if (willSkipByDefault) {
-                  const current = new Set(state.forceIncludedTags ?? []);
-                  if (current.has(name)) current.delete(name);
-                  else current.add(name);
-                  onUpdateState({ forceIncludedTags: current });
-                } else {
-                  const current = new Set(state.excludedTags ?? []);
-                  if (current.has(name)) current.delete(name);
-                  else current.add(name);
-                  onUpdateState({ excludedTags: current });
+              onToggleTag={(names) => {
+                const forceIncluded = new Set(state.forceIncludedTags ?? []);
+                const excluded = new Set(state.excludedTags ?? []);
+                for (const name of Array.isArray(names) ? names : [names]) {
+                  const tag = selectedResult?.tagCandidates.find((t) => t.name === name);
+                  const willSkipByDefault = taggerConfig.onlyExistingTags && tag && !tag.existsLocally;
+                  const target = willSkipByDefault ? forceIncluded : excluded;
+                  if (target.has(name)) target.delete(name);
+                  else target.add(name);
                 }
+                onUpdateState({ forceIncludedTags: forceIncluded, excludedTags: excluded });
               }}
               onToggleStudio={() => {
                 const willSkipByDefault =
@@ -1765,6 +1793,11 @@ function TaggerVideoRow({
                   onUpdateState({ skipStudio: !state.skipStudio });
                 }
               }}
+              tagEdits={state.tagEdits}
+              performerEdits={state.performerEdits}
+              onRelationshipEditsChange={(key, edits) =>
+                onUpdateState(key === "tags" ? { tagEdits: edits } : { performerEdits: edits })
+              }
               taggerConfig={taggerConfig}
             />
           )}
@@ -1811,9 +1844,12 @@ interface TaggerResultsProps {
   collectionModes: Record<string, CollectionMode>;
   onFieldStrategyChange: (field: string, strategy: VideoFieldStrategy) => void;
   onCollectionModeChange: (field: string, mode: CollectionMode) => void;
-  onTogglePerformer: (name: string) => void;
-  onToggleTag: (name: string) => void;
+  onTogglePerformer: (names: string | string[]) => void;
+  onToggleTag: (names: string | string[]) => void;
   onToggleStudio: () => void;
+  tagEdits?: TaggerRelationshipEdits;
+  performerEdits?: TaggerRelationshipEdits;
+  onRelationshipEditsChange: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
 }
 
@@ -1841,6 +1877,9 @@ function TaggerResults({
   onTogglePerformer,
   onToggleTag,
   onToggleStudio,
+  tagEdits,
+  performerEdits,
+  onRelationshipEditsChange,
   taggerConfig,
 }: TaggerResultsProps) {
   return (
@@ -1871,6 +1910,9 @@ function TaggerResults({
           onTogglePerformer={i === selectedIndex ? onTogglePerformer : undefined}
           onToggleTag={i === selectedIndex ? onToggleTag : undefined}
           onToggleStudio={i === selectedIndex ? onToggleStudio : undefined}
+          tagEdits={tagEdits}
+          performerEdits={performerEdits}
+          onRelationshipEditsChange={i === selectedIndex ? onRelationshipEditsChange : undefined}
           taggerConfig={taggerConfig}
         />
       ))}
@@ -1902,6 +1944,9 @@ function TaggerResultRow({
   onTogglePerformer,
   onToggleTag,
   onToggleStudio,
+  tagEdits,
+  performerEdits,
+  onRelationshipEditsChange,
   taggerConfig,
 }: {
   video: Video;
@@ -1924,27 +1969,22 @@ function TaggerResultRow({
   collectionModes: Record<string, CollectionMode>;
   onFieldStrategyChange?: (field: string, strategy: VideoFieldStrategy) => void;
   onCollectionModeChange?: (field: string, mode: CollectionMode) => void;
-  onTogglePerformer?: (name: string) => void;
-  onToggleTag?: (name: string) => void;
+  onTogglePerformer?: (names: string | string[]) => void;
+  onToggleTag?: (names: string | string[]) => void;
   onToggleStudio?: () => void;
+  tagEdits?: TaggerRelationshipEdits;
+  performerEdits?: TaggerRelationshipEdits;
+  onRelationshipEditsChange?: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
 }) {
+  const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   const durationDiff =
     localDuration != null && result.duration != null ? Math.abs(localDuration - result.duration) : undefined;
   const durationMatch = durationDiff != null && durationDiff < 5;
-  const scalarRows = [
-    { key: "title", label: "Title", current: video.title, scraped: result.title },
-    { key: "code", label: "Code", current: video.code, scraped: result.code },
-    { key: "details", label: "Details", current: video.details, scraped: result.details, multiline: true },
-    { key: "director", label: "Director", current: video.director, scraped: result.director },
-    { key: "date", label: "Date", current: video.date, scraped: result.date },
-  ].filter((row) => Boolean(row.scraped));
   const currentTagNames = getVideoTagNames(video);
-  const currentPerformerNames = getVideoPerformerNames(video);
   const performerChoices = getPerformerChoices(result);
   const performerChoiceKeys = performerChoices.map((choice) => choice.key);
   const currentPerformerChoiceKeys = getCurrentPerformerChoiceKeys(video, performerChoices);
-  const performerChoiceDisplayNames = getPerformerChoiceDisplayNames(performerChoices);
   const existingTagNames = result.tagCandidates.filter((tag) => tag.existsLocally).map((tag) => tag.name);
   const existingPerformerChoiceKeys = performerChoices
     .filter((choice) => choice.candidate.existsLocally)
@@ -1965,6 +2005,32 @@ function TaggerResultRow({
     forceIncludedPerformers,
     !taggerConfig.onlyExistingPerformers,
   );
+  const reviewInput: TaggerReviewInput = {
+    video,
+    result,
+    sourceName:
+      result.serverName ||
+      (result.endpoint ? metadataServerLabel(result.endpoint, metadataServers ?? []) : "the scraper"),
+    metadataServers,
+    fieldStrategies,
+    imageReplace: (fieldStrategies.image ?? defaultVideoImageStrategy(video, taggerConfig)) === "overwrite",
+    collectionModes,
+    showStudio: taggerConfig.setStudio,
+    showTags: taggerConfig.setTags,
+    showPerformers: taggerConfig.setPerformers,
+    currentTagNames,
+    existingTagNames,
+    tagActions,
+    tagMatchInfo,
+    performerChoices,
+    currentPerformerChoiceKeys,
+    performerActions,
+    performerMatchInfo,
+    tagEdits,
+    performerEdits,
+  };
+  const review = isSelected ? buildTaggerReview(reviewInput) : null;
+  const summary = review ? summarizeDiff(review.fields, review.source, review.target, review.selection) : null;
 
   return (
     <div
@@ -2068,99 +2134,37 @@ function TaggerResultRow({
             className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60 flex-shrink-0"
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-            Save
+            {summary?.changeCount
+              ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+              : "Apply"}
           </button>
         )}
       </div>
 
-      {/* Expanded details — only for selected result */}
-      {isSelected && !saved && (
-        <div className="border-t border-border px-3 py-3 space-y-3">
-          {scalarRows.map((row) => (
-            <CompactScalarDecision
-              key={row.key}
-              label={row.label}
-              current={row.current}
-              scraped={row.scraped}
-              multiline={row.multiline}
-              replacing={fieldStrategies[row.key] === "overwrite"}
-              onChange={(shouldReplace) => onFieldStrategyChange?.(row.key, shouldReplace ? "overwrite" : "ignore")}
-            />
-          ))}
-
-          {result.imageUrl && (
-            <CompactImageDecision
-              currentImageUrl={video.imagePath || videos.screenshotUrl(video.id, video.updatedAt)}
-              scrapedImageUrl={result.imageUrl}
-              replacing={(fieldStrategies.image ?? defaultVideoImageStrategy(video, taggerConfig)) === "overwrite"}
-              onChange={(shouldReplace) => onFieldStrategyChange?.("image", shouldReplace ? "overwrite" : "ignore")}
-            />
-          )}
-
-          {result.studioName && taggerConfig.setStudio && (
-            <CompactScalarDecision
-              label="Studio"
-              current={video.studioName}
-              scraped={result.studioName}
-              replacing={collectionModes.studio === "replace"}
-              onChange={(shouldReplace) => onCollectionModeChange?.("studio", shouldReplace ? "replace" : "skip")}
-            />
-          )}
-
-          {result.urls.length > 0 && (
-            <CompactCollectionDecision
-              label="URLs"
-              current={video.urls}
-              mode={collectionModes.urls}
-              onModeChange={(mode) => onCollectionModeChange?.("urls", mode)}
-              scraped={<CompactListValue values={result.urls} breakAll />}
-            />
-          )}
-
-          {performerChoices.length > 0 && taggerConfig.setPerformers && (
-            <CompactCollectionDecision
-              label="Performers"
-              current={currentPerformerNames}
-              mode={collectionModes.performers}
-              onModeChange={(mode) => onCollectionModeChange?.("performers", mode)}
-              scraped={
-                <div onClick={(event) => event.stopPropagation()}>
-                  <ScrapeRelationChoices
-                    names={performerChoiceKeys}
-                    currentNames={currentPerformerChoiceKeys}
-                    existingNames={existingPerformerChoiceKeys}
-                    displayNames={performerChoiceDisplayNames}
-                    matchInfo={performerMatchInfo}
-                    actions={performerActions}
-                    disabled={collectionModes.performers === "skip"}
-                    onActionChange={(name) => onTogglePerformer?.(name)}
-                  />
-                </div>
-              }
-            />
-          )}
-
-          {result.tagNames.length > 0 && taggerConfig.setTags && (
-            <CompactCollectionDecision
-              label="Tags"
-              current={currentTagNames}
-              mode={collectionModes.tags}
-              onModeChange={(mode) => onCollectionModeChange?.("tags", mode)}
-              scraped={
-                <div onClick={(event) => event.stopPropagation()}>
-                  <ScrapeRelationChoices
-                    names={result.tagNames}
-                    currentNames={currentTagNames}
-                    existingNames={existingTagNames}
-                    matchInfo={tagMatchInfo}
-                    actions={tagActions}
-                    disabled={collectionModes.tags === "skip"}
-                    onActionChange={(name) => onToggleTag?.(name)}
-                  />
-                </div>
-              }
-            />
-          )}
+      {/* Expanded details — only for selected result: the same review rows a merge uses */}
+      {review && !saved && (
+        <div className="border-t border-border px-3 py-3" onClick={(event) => event.stopPropagation()}>
+          <MetadataDiff
+            fields={review.fields}
+            source={review.source}
+            target={review.target}
+            value={review.selection}
+            onChange={(next) =>
+              applyTaggerSelectionChange(reviewInput, review.selection, next, {
+                onFieldStrategyChange,
+                onCollectionModeChange,
+                onToggleTag,
+                onTogglePerformer,
+                onRelationshipEditsChange,
+              })
+            }
+            disabled={saving}
+          />
+          {summary ? (
+            <p className="mt-3 text-[11px] leading-relaxed text-muted">
+              {summary.changes.map((change) => change.text).join(" · ")}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

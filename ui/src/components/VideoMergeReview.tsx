@@ -1,14 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ArrowRight, Check, GitMerge, Info, X } from "lucide-react";
-import { tags, videos } from "../api/client";
-import type { MetadataServer, Tag, Video, VideoMergeFileHandling, VideoMergeMetadata } from "../api/types";
+import { AlertTriangle, ArrowLeftRight, ArrowRight, Check, GitMerge, Info, X } from "lucide-react";
+import { videos } from "../api/client";
+import type { MetadataServer, Tag, Video, VideoMergeAssessment, VideoMergeFileHandling, VideoMergeMetadata } from "../api/types";
 import { useOptionalAppConfig } from "../state/AppConfigContext";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { getEditableTagIds } from "../utils/tags";
 import { COMPARISON_ROWS, folderOf, primaryFile, rowTones, type ComparisonRow } from "./duplicates/duplicateModel";
 import { metadataServerLabel } from "./MetadataServerLinks";
-import { GroupedTagOptionList } from "./TagSelector";
+import { EntityReferenceMultiSelector, type EntityReferenceOption } from "./EntityReferenceSelector";
 import { formatDuration } from "./shared";
 import {
   MetadataDiff,
@@ -58,6 +58,39 @@ export const REMOVE_FILES: VideoMergeFileHandling = { mode: "remove", deleteFile
 export interface VideoMergeChoices {
   metadata: VideoMergeMetadata;
   fileHandling: VideoMergeFileHandling;
+}
+
+/**
+ * The default merge policy in one sentence, shared by the review's Result panel and the duplicate finder's
+ * policy dialogs so every entry point promises the same thing.
+ */
+export const MERGE_POLICY_FILL = "Empty fields are filled from the merged copies and conflicts keep the kept video's values.";
+export const MERGE_POLICY_LISTS =
+  "Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, bookmarks and play history are combined.";
+export const MERGE_POLICY_SUMMARY = `${MERGE_POLICY_FILL} ${MERGE_POLICY_LISTS}`;
+
+/**
+ * The Result panel's closing statement for a given files decision. The fill rule is left out on purpose:
+ * the panel above it lists what the person chose, conflicts included.
+ */
+export function describeMergeOutcome({
+  removedVideos,
+  removedFiles,
+  fileHandling,
+}: {
+  removedVideos: number;
+  removedFiles: number;
+  fileHandling: VideoMergeFileHandling;
+}) {
+  const videos = removedVideos === 1 ? "video" : "videos";
+  const removal = `The merged ${removedVideos === 1 ? "video is" : "videos are"} removed. Timestamps do not change.`;
+  if (fileHandling.mode === "remove") {
+    const files = `${removedFiles} ${removedFiles === 1 ? "file" : "files"}`;
+    const leave = removedFiles === 1 ? "leaves" : "leave";
+    const deleted = fileHandling.deleteFiles ? ` and ${removedFiles === 1 ? "is" : "are"} deleted from disk` : "";
+    return `The merged ${removedVideos === 1 ? "video's" : "videos'"} ${files} ${leave} Cove${deleted}. ${MERGE_POLICY_LISTS} Markers and timed group items move only when the files are equivalent. Derived tags stay managed by their providers. ${removal}`;
+  }
+  return `${removedVideos === 1 ? "Both videos'" : "All"} files stay and attach to the kept video, which keeps its primary file. ${MERGE_POLICY_LISTS} Segments, detections, group memberships and child clips move with the ${videos}. Derived tags stay managed by their providers. ${removal}`;
 }
 
 export const coverUrl = (video: Video) => video.imagePath ?? videos.screenshotUrl(video.id, video.updatedAt);
@@ -144,7 +177,7 @@ export function buildVideoMergeDiff(
       </span>
     );
   };
-  fields.push({ key: "urls", label: "URLs", kind: "list", itemKey: (item) => String(item).toUpperCase() });
+  fields.push({ key: "urls", label: "URLs", kind: "list", itemKey: (item) => String(item).trim() });
   fields.push({
     key: "remoteIds",
     label: "Remote IDs",
@@ -272,7 +305,7 @@ export function buildVideoMergeDiff(
 export function videoMergeMetadata(selection: DiffSelection, sources: Video[], target: Video): VideoMergeMetadata {
   const keys = (key: string) => selection[key] as string[];
   const all = [...sources, target];
-  const chosenUrls = new Map(all.flatMap((video) => video.urls).map((url) => [url.toUpperCase(), url]));
+
   const chosenRemoteIds = new Map(all.flatMap((video) => video.remoteIds).map((item) => [remoteKey(item), item]));
   return {
     fields: Object.fromEntries(
@@ -286,7 +319,7 @@ export function videoMergeMetadata(selection: DiffSelection, sources: Video[], t
     tagIds: keys("tags").map(Number),
     performerIds: keys("performers").map(Number),
     galleryIds: keys("galleries").map(Number),
-    urls: keys("urls").map((key) => chosenUrls.get(key)!),
+    urls: keys("urls"),
     remoteIds: keys("remoteIds").map((key) => chosenRemoteIds.get(key)!),
   };
 }
@@ -371,6 +404,16 @@ function VideosCard({ role, videos: list }: { role: string; videos: Video[] }) {
   );
 }
 
+/** The removed copies whose markers or timed group items would stay behind if their files were removed. */
+export function timelineWarnings(removed: Video[], assessments: VideoMergeAssessment[]) {
+  return assessments
+    .filter((item) => !item.filesEquivalent && item.timelineItemCount > 0)
+    .flatMap((item) => {
+      const video = removed.find((candidate) => candidate.id === item.videoId);
+      return video ? [{ video, count: item.timelineItemCount }] : [];
+    });
+}
+
 const toneClass = (tone: string, kept: boolean) =>
   tone === "best"
     ? "text-emerald-300"
@@ -387,6 +430,8 @@ function FilesSection({
   removed,
   fileHandling,
   canDeleteFiles,
+  allowAttach,
+  assessments,
   disabled,
   onChange,
 }: {
@@ -394,6 +439,8 @@ function FilesSection({
   removed: Video[];
   fileHandling: VideoMergeFileHandling;
   canDeleteFiles: boolean;
+  allowAttach: boolean;
+  assessments: VideoMergeAssessment[];
   disabled: boolean;
   onChange: (next: VideoMergeFileHandling) => void;
 }) {
@@ -402,6 +449,7 @@ function FilesSection({
   const removedFiles = removed.reduce((sum, video) => sum + video.files.length, 0);
   const remove = fileHandling.mode === "remove";
   const update = (patch: Partial<VideoMergeFileHandling>) => onChange({ ...fileHandling, ...patch });
+  const keptTimelines = remove ? timelineWarnings(removed, assessments) : [];
   return (
     <section aria-label="Files" className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -451,27 +499,29 @@ function FilesSection({
       </div>
       <fieldset disabled={disabled} className="flex flex-col gap-2">
         <legend className="sr-only">Files decision</legend>
-        <div className="grid gap-2 md:grid-cols-2">
-          <label
-            className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${
-              !remove ? "border-accent bg-accent/10" : "border-border bg-card"
-            }`}
-          >
-            <input
-              type="radio"
-              name="video-merge-files"
-              checked={!remove}
-              onChange={() => update({ mode: "attach", deleteFiles: false })}
-              className="mt-0.5 accent-accent"
-            />
-            <span>
-              <span className="block text-sm">Attach {plural(removedFiles, "file")} to the kept video</span>
-              <span className="block text-xs text-muted">
-                Every file stays in Cove. The kept video ends up with {kept.files.length + removedFiles} files and keeps
-                its primary file.
+        <div className={`grid gap-2 ${allowAttach ? "md:grid-cols-2" : ""}`}>
+          {allowAttach ? (
+            <label
+              className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${
+                !remove ? "border-accent bg-accent/10" : "border-border bg-card"
+              }`}
+            >
+              <input
+                type="radio"
+                name="video-merge-files"
+                checked={!remove}
+                onChange={() => update({ mode: "attach", deleteFiles: false })}
+                className="mt-0.5 accent-accent"
+              />
+              <span>
+                <span className="block text-sm">Attach {plural(removedFiles, "file")} to the kept video</span>
+                <span className="block text-xs text-muted">
+                  Every file stays in Cove. The kept video ends up with {kept.files.length + removedFiles} files and
+                  keeps its primary file.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          ) : null}
           <label
             className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${
               remove ? "border-accent bg-accent/10" : "border-border bg-card"
@@ -495,6 +545,20 @@ function FilesSection({
             </span>
           </label>
         </div>
+        {keptTimelines.length > 0 ? (
+          <ul role="alert" className="flex flex-col gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            {keptTimelines.map((warning) => (
+              <li key={warning.video.id} className="flex items-start gap-1.5">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {plural(warning.count, "timeline item")} on {videoTitle(warning.video)} will not be carried over
+                  (markers and timed group memberships): its file is not equivalent to the kept video's.
+                  {allowAttach ? " Attach the file instead to keep them." : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {remove ? (
           <div className="flex flex-col gap-1.5 pl-1">
             {canDeleteFiles ? (
@@ -538,6 +602,8 @@ export function VideoMergeReview({
   removed,
   fileHandling: initialFileHandling = ATTACH_FILES,
   canDeleteFiles = false,
+  allowAttach = true,
+  footerExtra,
   onSwap,
   onClose,
   onConfirm,
@@ -549,6 +615,10 @@ export function VideoMergeReview({
   /** The entry point's default for the copies' files. */
   fileHandling?: VideoMergeFileHandling;
   canDeleteFiles?: boolean;
+  /** The duplicate finder always removes the copies' files, so it hides the attach option. */
+  allowAttach?: boolean;
+  /** Extra controls in the footer, such as the duplicate finder's "Don't ask again". */
+  footerExtra?: ReactNode;
   /** Offered when exactly one video is merged in: the kept and merged roles trade places. */
   onSwap?: () => void;
   onClose: () => void;
@@ -561,7 +631,6 @@ export function VideoMergeReview({
     () => [...new Map(removed.map((video) => [video.id, video])).values()].sort((a, b) => a.id - b.id),
     [removed],
   );
-  const [addedTags, setAddedTags] = useState<Tag[]>([]);
   const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   const [unavailableCovers, setUnavailableCovers] = useState<string[]>([]);
   const [fileHandling, setFileHandlingState] = useState<VideoMergeFileHandling>(initialFileHandling);
@@ -583,20 +652,55 @@ export function VideoMergeReview({
       },
       metadataServers,
     );
-    const tagField = comparison.fields.find((field) => field.key === "tags")!;
-    tagField.additionalItems = addedTags;
-    tagField.renderListEditor = (selected, onChange, disabled) => (
-      <MergeTagSearch
-        selected={selected}
-        disabled={disabled}
-        onAdd={(tag) => {
-          setAddedTags((current) => (current.some((item) => item.id === tag.id) ? current : [...current, tag]));
-          onChange([...new Set([...selected, String(tag.id)])]);
-        }}
-      />
+    // Relationships are edited as on the video's own edit form: the app's selector with its chips,
+    // x buttons and search-to-add, seeded with what the compared videos already have.
+    const all = [kept, ...sources];
+    const relationship = (
+      key: "tags" | "performers" | "galleries",
+      entityType: "tag" | "performer" | "gallery",
+      options: EntityReferenceOption[],
+      placeholder: string,
+    ) => {
+      const labelOf = new Map(options.map((option) => [option.id, option.label]));
+      // Alphabetical, as the edit form lists them; a search-added id without a known label goes last.
+      const ordered = (ids: number[]) =>
+        [...ids].sort((left, right) =>
+          (labelOf.get(left) ?? "\uffff").localeCompare(labelOf.get(right) ?? "\uffff", undefined, { sensitivity: "base" }),
+        );
+      comparison.fields.find((field) => field.key === key)!.renderList = (selected, onChange, disabled) => (
+        <EntityReferenceMultiSelector
+          entityType={entityType}
+          values={ordered(selected.map(Number))}
+          onChange={(ids) => onChange(ids.map(String))}
+          placeholder={placeholder}
+          seedOptions={options}
+          disabled={disabled}
+        />
+      );
+    };
+    relationship(
+      "tags",
+      "tag",
+      all.flatMap((video) => video.tags.map((tag) => ({ id: tag.id, label: tag.name, secondaryLabel: tag.tagGroupName ?? undefined }))),
+      "Search tags...",
+    );
+    relationship(
+      "performers",
+      "performer",
+      all.flatMap((video) => video.performers.map((performer) => ({ id: performer.id, label: performer.name }))),
+      "Search performers...",
+    );
+    relationship(
+      "galleries",
+      "gallery",
+      all.flatMap((video) => video.galleries.map((gallery) => ({ id: gallery.id, label: gallery.title ?? `Gallery ${gallery.id}` }))),
+      "Search galleries...",
+    );
+    comparison.fields.find((field) => field.key === "urls")!.renderListEditor = (selected, onChange, disabled) => (
+      <AddUrl disabled={disabled} onAdd={(url) => onChange([...new Set([...selected, url])])} />
     );
     return comparison;
-  }, [sources, kept, addedTags, unavailableCovers, metadataServers]);
+  }, [sources, kept, unavailableCovers, metadataServers]);
   const [selection, setSelection] = useState(() =>
     defaultDiffSelection(comparison.fields, comparison.source, comparison.target),
   );
@@ -608,6 +712,22 @@ export function VideoMergeReview({
     meta: { suppressGlobalError: true },
     mutationFn: () => onConfirm({ metadata: videoMergeMetadata(selection, sources, kept), fileHandling }),
   });
+  // Only asked when the copies' files would go: it says which markers would not follow them.
+  const assessment = useQuery({
+    queryKey: ["video-merge-assessment", kept.id, ...sources.map((video) => video.id)],
+    queryFn: ({ signal }) =>
+      videos.assessMerge(
+        kept.id,
+        sources.map((video) => video.id),
+        signal,
+      ),
+    enabled: fileHandling.mode === "remove",
+    staleTime: 60_000,
+    retry: false,
+  });
+  const assessments = assessment.data ?? [];
+  // Until the check answers, a click could merge before the warning appears.
+  const awaitingAssessment = fileHandling.mode === "remove" && assessment.isPending;
   const incoming = comparison.source;
   const pick = (key: string) => (selection[key] === "source" ? incoming.values[key] : comparison.target.values[key]);
   const resultTitle = pick("title") as string | null;
@@ -623,15 +743,8 @@ export function VideoMergeReview({
   const fileNote = remove
     ? `${plural(removedFiles, "file")} ${fileHandling.deleteFiles ? "deleted from disk" : "removed from Cove"}`
     : `${plural(removedFiles, "file")} attached`;
-  const outcomeText = remove
-    ? `The merged ${sources.length === 1 ? "video's" : "videos'"} ${plural(removedFiles, "file")} ${
-        removedFiles === 1 ? "leaves" : "leave"
-      } Cove${fileHandling.deleteFiles ? " and " + (removedFiles === 1 ? "is" : "are") + " deleted from disk" : ""}. Group memberships, ratings, favorites and play history are combined. Markers and timed group items move only when the files are equivalent. Derived tags stay managed by their providers. The merged ${
-        sources.length === 1 ? "video is" : "videos are"
-      } removed. Timestamps do not change.`
-    : `${sources.length === 1 ? "Both videos'" : "All"} files stay and attach to the kept video, which keeps its primary file. Segments, group memberships, detections, ratings, favorites, play history and child clips are combined. Derived tags stay managed by their providers. The merged ${
-        sources.length === 1 ? "video is" : "videos are"
-      } removed. Timestamps do not change.`;
+  const outcomeText = describeMergeOutcome({ removedVideos: sources.length, removedFiles, fileHandling });
+  const keptTimelines = remove ? timelineWarnings(sources, assessments) : [];
   const dotClass: Record<string, string> = {
     filled: "bg-green-400",
     listAdded: "bg-green-400",
@@ -677,6 +790,20 @@ export function VideoMergeReview({
         ))}
       </ul>
       <div className="h-px bg-border" />
+      {keptTimelines.map((warning) => (
+        <p key={warning.video.id} className="flex items-start gap-1.5 text-xs leading-snug text-amber-300">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {plural(warning.count, "timeline item")} on {videoTitle(warning.video)} not carried over
+          </span>
+        </p>
+      ))}
+      {remove && assessment.isError ? (
+        <p className="flex items-start gap-1.5 text-xs leading-snug text-amber-300">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>Could not check whether markers will follow the removed files.</span>
+        </p>
+      ) : null}
       <p className="text-[11px] leading-relaxed text-muted">{outcomeText}</p>
     </aside>
   );
@@ -728,6 +855,8 @@ export function VideoMergeReview({
             removed={sources}
             fileHandling={fileHandling}
             canDeleteFiles={canDeleteFiles}
+            allowAttach={allowAttach}
+            assessments={assessments}
             disabled={mutation.isPending}
             onChange={setFileHandling}
           />
@@ -759,6 +888,7 @@ export function VideoMergeReview({
             <Info className="h-3.5 w-3.5" />
             {plural(summary.changeCount, "change")} · {plural(sources.length, "video")} removed · {fileNote}
           </p>
+          {footerExtra}
           <div className="ml-auto flex gap-2">
             <button
               disabled={mutation.isPending}
@@ -768,14 +898,14 @@ export function VideoMergeReview({
               Back
             </button>
             <button
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || awaitingAssessment}
               onClick={() => mutation.mutate()}
               className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
                 remove && fileHandling.deleteFiles ? "bg-red-600 hover:bg-red-500" : "bg-accent hover:bg-accent-hover"
               }`}
             >
               <GitMerge className="h-3.5 w-3.5" />
-              {mutation.isPending ? "Merging…" : `Merge & remove ${copies}`}
+              {mutation.isPending ? "Merging…" : awaitingAssessment ? "Checking markers…" : `Merge & remove ${copies}`}
             </button>
           </div>
         </div>
@@ -784,50 +914,38 @@ export function VideoMergeReview({
   );
 }
 
-function MergeTagSearch({
-  selected,
-  onAdd,
-  disabled,
-}: {
-  selected: string[];
-  onAdd: (tag: Tag) => void;
-  disabled: boolean;
-}) {
-  const [search, setSearch] = useState("");
-  const results = useQuery({
-    queryKey: ["merge-tag-search", search],
-    queryFn: () => tags.find({ q: search, perPage: 30 }),
-    enabled: search.trim().length > 0,
-  });
+function AddUrl({ onAdd, disabled }: { onAdd: (url: string) => void; disabled: boolean }) {
+  const [draft, setDraft] = useState("");
+  const submit = () => {
+    const url = draft.trim();
+    if (!url) return;
+    onAdd(url);
+    setDraft("");
+  };
   return (
-    <div className="max-w-md">
+    <div className="flex max-w-md gap-1.5">
       <input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            submit();
+          }
+        }}
         disabled={disabled}
-        placeholder="Search tags…"
-        aria-label="Add a library tag to the result"
+        placeholder="Add a URL..."
+        aria-label="Add a URL to the result"
         className="w-full rounded-md border border-border bg-input px-2.5 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
       />
-      {search.trim() &&
-        (results.isError ? (
-          <p role="alert" className="mt-1 text-xs text-red-400">
-            Could not load tags.
-          </p>
-        ) : results.isLoading ? (
-          <p className="mt-1 text-xs text-secondary">Loading tags…</p>
-        ) : (
-          <GroupedTagOptionList
-            tags={results.data?.items ?? []}
-            selectedIds={selected.map(Number)}
-            onSelect={(tag) => {
-              if (!disabled) {
-                onAdd(tag);
-                setSearch("");
-              }
-            }}
-          />
-        ))}
+      <button
+        type="button"
+        onClick={submit}
+        disabled={disabled || !draft.trim()}
+        className="rounded-md border border-border px-2.5 py-1 text-xs text-secondary hover:text-foreground disabled:opacity-50"
+      >
+        Add
+      </button>
     </div>
   );
 }
