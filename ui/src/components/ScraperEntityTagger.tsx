@@ -166,20 +166,43 @@ async function runWithConcurrency<T>(
   await Promise.all(workers);
 }
 
+// YAML scrapers emit relationship fields (Tags, Performers, Studio) as `{ Name, URL }` objects, and
+// Studio as a one-item list of them. Extension scrapers emit plain strings. Both shapes must resolve
+// to names here, otherwise the tagger silently skips the relation.
+function asRelationName(value: Record<string, unknown>): string | undefined {
+  for (const key of ["Name", "name", "Title", "title"]) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  return undefined;
+}
+
 function asString(value: unknown): string | undefined {
   if (typeof value === "string") return value.trim() || undefined;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.length > 0 ? asString(value[0]) : undefined;
+  if (value && typeof value === "object") return asRelationName(value as Record<string, unknown>);
   return undefined;
 }
 
 function asStringList(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(asStringList).filter(Boolean);
+  if (value && typeof value === "object") {
+    const name = asRelationName(value as Record<string, unknown>);
+    return name ? [name] : [];
+  }
   const text = asString(value);
   if (!text) return [];
   return text
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function dedupeIgnoringCase(values: string[]) {
+  return values.filter(
+    (value, index, items) => items.findIndex((candidate) => candidate.toLowerCase() === value.toLowerCase()) === index,
+  );
 }
 
 function splitAliases(value?: string) {
@@ -230,7 +253,7 @@ function normalizeTagList(values: string[]) {
 }
 
 function getPerformerNamesForEntity(entityType: SupportedScraperEntity, rawResult: Record<string, unknown>) {
-  const explicit = pickStringList(rawResult, "Performers", "Performer", "PerformerNames");
+  const explicit = dedupeIgnoringCase(pickStringList(rawResult, "Performers", "Performer", "PerformerNames"));
   const legacyValues =
     entityType === "audio"
       ? pickStringList(rawResult, "Artist", "artist", "Creator", "creator", "Author", "author")

@@ -8,13 +8,16 @@ const mocks = vi.hoisted(() => ({
   findMetadataServerByIds: vi.fn(),
   importFromMetadataServer: vi.fn(),
   searchMetadataServer: vi.fn(),
+  listScrapers: vi.fn(),
+  createScrapeAttempt: vi.fn(),
+  resolveRelations: vi.fn(),
   videoObjectFit: "cover" as "cover" | "contain",
 }));
 
 vi.mock("../api/client", () => ({
   entityImages: { videoCoverUrl: vi.fn(() => "/video-cover.jpg") },
-  system: { listScrapers: vi.fn().mockResolvedValue([]) },
-  scrapeAttempts: { resolveRelations: vi.fn() },
+  system: { listScrapers: mocks.listScrapers },
+  scrapeAttempts: { create: mocks.createScrapeAttempt, resolveRelations: mocks.resolveRelations },
   videos: {
     previewUrl: vi.fn(() => "/video-preview.mp4"),
     screenshotUrl: vi.fn(() => "/video-cover.jpg"),
@@ -52,9 +55,14 @@ describe("VideoTagger", () => {
     mocks.findMetadataServerByIds.mockReset();
     mocks.importFromMetadataServer.mockReset();
     mocks.searchMetadataServer.mockReset();
+    mocks.listScrapers.mockReset();
+    mocks.createScrapeAttempt.mockReset();
+    mocks.resolveRelations.mockReset();
     mocks.videoObjectFit = "cover";
     mocks.importFromMetadataServer.mockResolvedValue({});
     mocks.searchMetadataServer.mockResolvedValue([]);
+    mocks.listScrapers.mockResolvedValue([]);
+    mocks.resolveRelations.mockResolvedValue({ tags: [], performers: [] });
     mocks.findMetadataServerByIds.mockResolvedValue([
       {
         id: "first-video-id",
@@ -330,5 +338,66 @@ describe("VideoTagger", () => {
         "fingerprint",
       ),
     );
+  });
+
+  it("offers tags, performers and studio from a YAML scraper's object-shaped result", async () => {
+    mocks.listScrapers.mockResolvedValue([
+      {
+        id: "pack/site:video",
+        name: "Site Scraper",
+        entityType: "video",
+        supportedScrapes: ["url"],
+        urls: ["site.example/watch/"],
+        sourcePath: "",
+      },
+    ]);
+    mocks.createScrapeAttempt.mockResolvedValue({
+      id: "attempt-1",
+      scraperId: "pack/site:video",
+      entityType: "video",
+      entityId: 123,
+      inputKind: "url",
+      status: "Success",
+      error: null,
+      candidateResultsJson: null,
+      resultJson: JSON.stringify({
+        Title: "Scraped title",
+        URL: "https://site.example/watch/1",
+        Tags: [
+          { Name: "Countdown", URL: "https://site.example/tag/countdown" },
+          { Name: "Edging" },
+          { Name: "countdown" },
+        ],
+        Performers: [{ Name: "Scraped Performer", URL: "https://site.example/model/1" }],
+        Studio: [{ Name: "Scraped Studio", URL: "https://site.example/store/1" }],
+      }),
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [{ duration: 60, basename: "video.mp4", path: "/library/video.mp4" }],
+      performers: [],
+      tags: [],
+      urls: ["https://site.example/watch/1"],
+      remoteIds: [],
+    } as any;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} mode="detail" />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("option", { name: "Site Scraper (Scraper)" });
+    await userEvent.selectOptions(screen.getByRole("combobox"), "scraper:pack/site:video");
+    await userEvent.type(screen.getByPlaceholderText("Video URL..."), "{Enter}");
+
+    await waitFor(() => expect(mocks.createScrapeAttempt).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("button", { name: /^Countdown:/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Edging:/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^countdown:/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scraped Performer:/ })).toBeInTheDocument();
+    expect(screen.getByText("Scraped Studio")).toBeInTheDocument();
   });
 });
