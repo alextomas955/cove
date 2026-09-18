@@ -2687,6 +2687,8 @@ export interface MetadataServerPerformerMatch {
   birthDate?: string;
   country?: string;
   imageUrl?: string;
+  /** Every image the source has for the performer, in its order; candidates to pick from, one is stored. */
+  imageUrls?: string[];
   deleted: boolean;
   mergedIntoId?: string;
   aliases: string[];
@@ -2697,6 +2699,8 @@ export interface MetadataServerPerformerImportRequest {
   endpoint: string;
   performerId: string;
   fieldStrategies?: Record<string, "ignore" | "merge" | "overwrite">;
+  /** The source image to store; must be one of the performer's images at the source. Defaults to the first. */
+  imageUrl?: string;
 }
 
 export interface MetadataServerFindByIdsRequest {

@@ -132,13 +132,13 @@ const matchHint = (info: Record<string, string> | undefined, id: string, label: 
 };
 
 /** The ids a collection mode selects, given what each side has. */
-function idsForMode(mode: CollectionMode, current: string[], incoming: string[]) {
+export function idsForMode(mode: CollectionMode, current: string[], incoming: string[]) {
   if (mode === "skip") return current;
   if (mode === "replace") return incoming;
   return [...new Set([...current, ...incoming])];
 }
 
-const sameSet = (left: Iterable<string>, right: Iterable<string>) => {
+export const sameSet = (left: Iterable<string>, right: Iterable<string>) => {
   const a = new Set(left);
   const b = new Set(right);
   return a.size === b.size && [...a].every((id) => b.has(id));
@@ -149,7 +149,7 @@ const sameSet = (left: Iterable<string>, right: Iterable<string>) => {
  * sets, so a scraped item that is also current (one id on both sides) cannot mask them; anything else
  * is a per-item change that keeps the current mode.
  */
-function modeForSelection(
+export function modeForSelection(
   selected: Iterable<string>,
   current: string[],
   incoming: string[],

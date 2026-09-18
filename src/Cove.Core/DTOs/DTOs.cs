@@ -1642,13 +1642,27 @@ public record MetadataServerPerformerMatchDto(
     string? MergedIntoId,
     List<string> Aliases,
     List<string> Urls
-);
+)
+{
+    /// <summary>
+    /// Every image the source has for the performer, in the source's order. They are candidates for the
+    /// person to pick from in the scrape review; Cove still stores a single performer image. An init
+    /// property rather than a positional parameter so the record keeps its constructor arity.
+    /// </summary>
+    public List<string> ImageUrls { get; init; } = [];
+}
 
 public record MetadataServerPerformerImportRequestDto
 {
     public string Endpoint { get; init; } = string.Empty;
     public string PerformerId { get; init; } = string.Empty;
     public Dictionary<string, string>? FieldStrategies { get; init; }
+
+    /// <summary>
+    /// The source image to store. Honoured only when it is one of the images the source lists for this
+    /// performer; anything else falls back to the source's first image.
+    /// </summary>
+    public string? ImageUrl { get; init; }
 }
 
 public record MetadataServerStudioMatchDto(

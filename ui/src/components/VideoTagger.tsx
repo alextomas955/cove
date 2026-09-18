@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, useRef } from "react";
+import { useCallback, useId, useMemo, useState, useRef, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -32,6 +32,7 @@ import {
 import { invalidateVideoMetadataQueries } from "./videoMetadataQueryInvalidation";
 import { MetadataDiff, scalarStatus, summarizeDiff, type DiffSelection } from "./MetadataDiff";
 import { MetadataDiffSummary } from "./MetadataDiffSummary";
+import { ReviewCoverPanel } from "./ReviewCoverPanel";
 import { metadataServerLabel } from "./MetadataServerLinks";
 import {
   applyTaggerSelectionChange,
@@ -2263,10 +2264,7 @@ function TaggerResultRow({
   );
 }
 
-/**
- * The cover, first and large, the way Stash leads its match card. A conflict shows both covers at the
- * same size side by side, the one that will be used framed; a fill or an identical cover shows one.
- */
+/** The video's cover decision, read from the review and shown through the shared cover panel. */
 function CoverPanel({
   review,
   onChange,
@@ -2276,81 +2274,17 @@ function CoverPanel({
   onChange: (next: DiffSelection) => void;
   disabled?: boolean;
 }) {
-  const name = `${useId()}-cover`;
   const field = review.fields.find((entry) => entry.key === "image");
   if (!field) return null;
-  const status = scalarStatus(field, review.source, review.target);
-  const chosen = review.selection.image === "source" ? "source" : "target";
-  const incoming = review.source.sentenceLabel ?? review.source.label;
-  const sourceUrl = String(review.source.values.image ?? "");
-  const targetUrl = review.target.values.image ? String(review.target.values.image) : null;
-  const choose = (side: "source" | "target") => onChange({ ...review.selection, image: side });
-  const imageClass = "aspect-video w-full rounded-md bg-black object-cover";
-
-  if (status !== "conflict") {
-    const note = status === "identical" ? "same cover" : status === "filled" ? "fills empty" : "keeping current";
-    return (
-      <div className="flex w-full shrink-0 flex-col gap-1.5 sm:w-60">
-        <CoverImage
-          src={chosen === "source" ? sourceUrl : (targetUrl ?? sourceUrl)}
-          alt="Cover"
-          className={imageClass}
-        />
-        <span className="inline-flex items-center gap-1 text-[11px] text-secondary">
-          <Check className="h-3 w-3 text-green-400" />
-          Cover · {note}
-        </span>
-      </div>
-    );
-  }
-
-  const option = (side: "source" | "target", url: string, label: string) => {
-    const active = chosen === side;
-    return (
-      <label
-        key={side}
-        className={`flex w-full cursor-pointer flex-col gap-1 rounded-lg border p-1 transition-colors sm:w-56 ${
-          active ? "border-accent bg-accent/10" : "border-transparent opacity-70 hover:opacity-100"
-        } ${disabled ? "cursor-default" : ""}`}
-      >
-        <CoverImage src={url} alt={`${label} cover`} className={imageClass} />
-        <span className="flex items-center gap-1.5 px-1 text-[11px]">
-          <input
-            type="radio"
-            name={name}
-            aria-label={label}
-            checked={active}
-            disabled={disabled}
-            onChange={() => choose(side)}
-            className="accent-accent"
-          />
-          <span className={active ? "text-foreground" : "text-secondary"}>{label}</span>
-          {active ? (
-            <span className="ml-auto rounded-full bg-accent/20 px-1.5 py-px text-[10px] font-semibold text-accent">
-              Will be used
-            </span>
-          ) : null}
-        </span>
-      </label>
-    );
-  };
   return (
-    <div role="radiogroup" aria-label="Cover choice" className="flex w-full shrink-0 flex-col gap-1 sm:w-auto">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {option("target", targetUrl ?? "", "Keep current")}
-        {option("source", sourceUrl, `Use ${incoming}`)}
-      </div>
-      <span className="inline-flex items-center gap-1 px-1 text-[11px] text-secondary">
-        <AlertTriangle className="h-3 w-3 text-amber-400" />
-        Cover · both have a value
-      </span>
-    </div>
+    <ReviewCoverPanel
+      status={scalarStatus(field, review.source, review.target)}
+      chosen={review.selection.image === "source" ? "source" : "target"}
+      currentUrl={review.target.values.image ? String(review.target.values.image) : null}
+      candidates={[String(review.source.values.image ?? "")]}
+      incomingLabel={review.source.sentenceLabel ?? review.source.label}
+      onChoose={(side) => onChange({ ...review.selection, image: side })}
+      disabled={disabled}
+    />
   );
-}
-
-/** A cover that simply disappears when its file cannot be loaded, instead of showing a broken image. */
-function CoverImage({ src, alt, className }: { src: string; alt: string; className: string }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  if (failed === src) return null;
-  return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(src)} />;
 }

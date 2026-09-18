@@ -359,7 +359,7 @@ query Me {
         }
 
         ApplyRemotePerformer(performer, box.Endpoint, remote, importConfig);
-        await DownloadPerformerImageAsync(performer, remote, GetMetadataFieldStrategy(importConfig?.FieldStrategies, "image", MetadataFieldStrategy.Merge), ct);
+        await DownloadPerformerImageAsync(performer, remote, GetMetadataFieldStrategy(importConfig?.FieldStrategies, "image", MetadataFieldStrategy.Merge), ct, importConfig?.ImageUrl);
         var fieldProvenance = BuildPerformerMetadataFieldProvenance(remote, importConfig, box.Endpoint);
         if (fieldProvenance.Count > 0 && _fieldProvenanceService != null)
             await _fieldProvenanceService.RecordManyAsync(AffinityHostType.Performer, performer.Id, fieldProvenance, BuildMetadataSourceKey(box.Endpoint), sourceRunId: box.Endpoint, cancellationToken: ct);
@@ -1871,7 +1871,8 @@ query Me {
         if (urls.Count > 0 && GetMetadataFieldStrategy(strategies, "urls", MetadataFieldStrategy.Merge) != MetadataFieldStrategy.Ignore)
             fields["urls"] = urls;
 
-        var imageUrl = remote.Images.FirstOrDefault()?.Url;
+        // Provenance names the image that was actually stored: the one picked in the review, else the first.
+        var imageUrl = ResolvePerformerImageUrl(remote.Images.Select(image => image.Url), importConfig?.ImageUrl);
         if (!string.IsNullOrWhiteSpace(imageUrl) && GetMetadataFieldStrategy(strategies, "image", MetadataFieldStrategy.Merge) != MetadataFieldStrategy.Ignore)
             fields["image_url"] = imageUrl.Trim();
 
@@ -2053,7 +2054,22 @@ query Me {
     // imageStrategy gates the cover: Ignore skips entirely; Merge keeps an existing cover and only fills
     // when missing (the default, and what the auto face-import relies on); Overwrite replaces any existing
     // cover with the remote one (the user picked "Replace" in the tagger).
-    private async Task DownloadPerformerImageAsync(Performer performer, MetadataServerRemotePerformer remote, MetadataFieldStrategy imageStrategy, CancellationToken ct)
+    /// <summary>
+    /// The image to store for a performer import: the requested one when the source actually lists it
+    /// (the review lets the person pick among the source's images), otherwise the source's first. A URL
+    /// the source does not list is never fetched, so the request cannot point the server elsewhere.
+    /// </summary>
+    internal static string? ResolvePerformerImageUrl(IEnumerable<string> remoteImageUrls, string? requestedImageUrl)
+    {
+        // Both sides are trimmed, so an image the source lists with stray whitespace is still recognised.
+        var urls = remoteImageUrls.Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url.Trim()).ToList();
+        if (urls.Count == 0)
+            return null;
+        var requested = requestedImageUrl?.Trim();
+        return !string.IsNullOrEmpty(requested) && urls.Contains(requested, StringComparer.Ordinal) ? requested : urls[0];
+    }
+
+    private async Task DownloadPerformerImageAsync(Performer performer, MetadataServerRemotePerformer remote, MetadataFieldStrategy imageStrategy, CancellationToken ct, string? requestedImageUrl = null)
     {
         if (imageStrategy == MetadataFieldStrategy.Ignore || remote.Images.Count == 0)
             return;
@@ -2078,7 +2094,8 @@ query Me {
 
         try
         {
-            var imageUrl = remote.Images[0].Url;
+            var imageUrl = ResolvePerformerImageUrl(remote.Images.Select(image => image.Url), requestedImageUrl);
+            if (imageUrl == null) return;
             using var response = await _httpClient.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode) return;
 
@@ -2858,7 +2875,15 @@ query Me {
                 .Where(url => !string.IsNullOrWhiteSpace(url))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList()
-        );
+        )
+        {
+            ImageUrls = performer.Images
+                .Select(image => image.Url)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Select(url => url.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+        };
     }
 
     private async Task<MetadataServerVideoMatchDto> ToVideoMatchDtoAsync(MetadataServerInstance box, MetadataServerRemoteVideo video, IReadOnlyCollection<FileFingerprint>? localFingerprints, CancellationToken ct)
