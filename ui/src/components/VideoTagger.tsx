@@ -49,6 +49,7 @@ import {
   cleanTaggerQueryString,
   type TaggerQueryMode,
   type TaggerRunAllOption,
+  DismissibleMenu,
 } from "./TaggerShared";
 import {
   Search,
@@ -1030,7 +1031,7 @@ export function VideoTagger({
               </div>
               <p className="text-[10px] text-muted mt-1">
                 {VIDEO_METADATA_SEARCH_STRATEGIES.find((strategy) => strategy.value === bulkStrategyDraft)?.description}{" "}
-                Use the menu beside Scrape All for a one-time override.
+                Use the menu beside Search all for a one-time override.
               </p>
             </div>
           )}
@@ -1638,7 +1639,7 @@ function TaggerVideoRow({
             </button>
             {source?.kind === "metadata-server" && (
               // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
-              <details className="relative shrink-0">
+              <DismissibleMenu className="relative shrink-0">
                 <summary
                   role="button"
                   aria-label="More actions"
@@ -1706,7 +1707,7 @@ function TaggerVideoRow({
                     Submit as draft
                   </button>
                 </div>
-              </details>
+              </DismissibleMenu>
             )}
           </div>
 

@@ -160,7 +160,7 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
         batchSearching={batchSearching}
         onCancelBatch={cancelBatchSearch}
         onRunAll={searchAll}
-        runAllLabel="Search All"
+        runAllLabel="Search all"
         showRunAll={mode === "bulk"}
         countLabel={`${visibleTags.length} tag${visibleTags.length !== 1 ? "s" : ""}`}
         settingsOpen={showSettings}

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronDown,
@@ -147,6 +147,36 @@ export function cleanTaggerQueryString(input: string, blacklist: string[]): stri
   return cleaned.replace(/ +/g, " ").trim();
 }
 
+/**
+ * A `<details>` menu that also closes on a click outside it or on Escape, the way a menu is expected
+ * to, instead of staying open until its summary is clicked again.
+ */
+export function DismissibleMenu({ className, children }: { className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const close = () => element.removeAttribute("open");
+    const onPointerDown = (event: PointerEvent) => {
+      if (element.open && !element.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && element.open) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+  return (
+    <details ref={ref} className={className}>
+      {children}
+    </details>
+  );
+}
+
 export function TaggerToolbar({
   sources,
   selectedSource,
@@ -156,7 +186,7 @@ export function TaggerToolbar({
   onCancelBatch,
   onRunAll,
   runAllOptions,
-  runAllLabel = "Scrape All",
+  runAllLabel = "Search all",
   showRunAll = true,
   countLabel,
   settingsOpen,
@@ -219,11 +249,11 @@ export function TaggerToolbar({
               {runAllLabel}
             </button>
             {runAllOptions?.length ? (
-              <details className="relative">
+              <DismissibleMenu className="relative">
                 <summary
                   role="button"
                   className="flex h-full list-none items-center rounded-r border-l border-white/20 bg-accent px-1.5 text-white hover:bg-accent-hover cursor-pointer"
-                  aria-label="Choose scrape strategy"
+                  aria-label="Choose search strategy"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </summary>
@@ -243,7 +273,7 @@ export function TaggerToolbar({
                     </button>
                   ))}
                 </div>
-              </details>
+              </DismissibleMenu>
             ) : null}
           </div>
         ))}
@@ -252,7 +282,7 @@ export function TaggerToolbar({
 
       {(showToggle || onToggleSettings) && (
         // Everything that is not "pick a source and scrape" sits behind one menu.
-        <details className="relative">
+        <DismissibleMenu className="relative">
           <summary
             role="button"
             aria-label="More tagger options"
@@ -299,7 +329,7 @@ export function TaggerToolbar({
               </button>
             )}
           </div>
-        </details>
+        </DismissibleMenu>
       )}
     </div>
   );

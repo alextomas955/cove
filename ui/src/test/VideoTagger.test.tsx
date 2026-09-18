@@ -219,7 +219,7 @@ describe("VideoTagger", () => {
     expect(screen.getByText("Saved successfully")).toBeInTheDocument();
   });
 
-  it("can override Scrape All with fingerprint-only matching", async () => {
+  it("can override Search all with fingerprint-only matching", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const videos = [
       { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
@@ -232,7 +232,7 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Choose scrape strategy" }));
+    await userEvent.click(screen.getByRole("button", { name: "Choose search strategy" }));
     await userEvent.click(screen.getByRole("button", { name: /Fingerprint only/ }));
 
     await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
@@ -272,7 +272,7 @@ describe("VideoTagger", () => {
     await userEvent.click(screen.getByTitle("Tagger settings"));
     await userEvent.selectOptions(screen.getByLabelText("Default bulk match strategy"), "remote-id");
     await userEvent.click(screen.getByRole("button", { name: "Save default" }));
-    await userEvent.click(screen.getByRole("button", { name: "Scrape All" }));
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
 
     await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledOnce());
     expect(mocks.searchMetadataServer).toHaveBeenCalledWith(
@@ -282,6 +282,33 @@ describe("VideoTagger", () => {
       "remote-id",
     );
     expect(JSON.parse(localStorage.getItem("cove-tagger-config") ?? "{}").bulkMatchStrategy).toBe("remote-id");
+  });
+
+  it("closes the toolbar menu on an outside click and on Escape", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+    const menu = screen.getByRole("button", { name: "More tagger options" }).closest("details")!;
+    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
+    expect(menu.open).toBe(true);
+    await userEvent.click(document.body);
+    expect(menu.open).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
+    expect(menu.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(menu.open).toBe(false);
   });
 
   it("uses text only for the row search field", async () => {
@@ -332,7 +359,7 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Scrape All" }));
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
     await waitFor(() =>
       expect(mocks.searchMetadataServer).toHaveBeenCalledWith(
         123,
