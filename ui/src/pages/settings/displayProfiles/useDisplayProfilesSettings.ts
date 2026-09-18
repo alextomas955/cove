@@ -24,6 +24,7 @@ import {
   type RuleFormState,
 } from "./types";
 import { bulkCreateDisplayProfileRules } from "./bulkCreateRules";
+import { compareNatural } from "../../../utils/naturalCompare";
 
 export function useDisplayProfilesSettings() {
   const queryClient = useQueryClient();
@@ -134,7 +135,7 @@ export function useDisplayProfilesSettings() {
         (left, right) =>
           Number(right.isDefault) - Number(left.isDefault) ||
           Number(left.userId != null) - Number(right.userId != null) ||
-          left.name.localeCompare(right.name),
+          compareNatural(left.name, right.name),
       ),
     [profiles],
   );

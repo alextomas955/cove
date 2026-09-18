@@ -54,7 +54,7 @@ public sealed class UserService : IUserService
     {
         var users = await _db.Users.AsNoTracking()
             .Include(u => u.Roles).ThenInclude(r => r.Role)
-            .OrderBy(u => u.Username)
+            .OrderBy(u => NaturalSort.Key(u.Username))
             .ToListAsync(ct);
         return users.Select(Map).ToList();
     }
@@ -966,7 +966,7 @@ public sealed class RoleService : IRoleService
         var roles = await _db.Roles.AsNoTracking()
             .Include(r => r.Permissions)
             .Include(r => r.Users)
-            .OrderBy(r => r.Name)
+            .OrderBy(r => NaturalSort.Key(r.Name))
             .ToListAsync(ct);
         return roles.Select(Map).ToList();
     }

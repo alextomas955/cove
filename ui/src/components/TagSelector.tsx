@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Tag, TagProvenance } from "../api/types";
 import { TagProvenanceHover } from "./TagProvenanceHover";
 import { rankByLabel } from "../utils/searchRanking";
+import { compareNatural } from "../utils/naturalCompare";
 
 export type SelectableTag = Pick<
   Tag,
@@ -38,7 +39,7 @@ export function groupTagsForSelector<TTag extends SelectableTag>(tags: TTag[]): 
     .map((group) => ({
       ...group,
       tags: [...group.tags].sort((left, right) =>
-        (left.sortName ?? left.name).localeCompare(right.sortName ?? right.name),
+        compareNatural(left.sortName ?? left.name, right.sortName ?? right.name),
       ),
     }))
     .sort((left, right) => {

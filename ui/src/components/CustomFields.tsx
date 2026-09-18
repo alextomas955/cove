@@ -21,6 +21,7 @@ import {
 import { useCustomFieldDefinitions } from "../hooks/useCustomFieldDefinitions";
 import { formatDate } from "../utils/dateFormat";
 import { IsoDateInput } from "./IsoDateInput";
+import { compareNatural } from "../utils/naturalCompare";
 
 export function CustomFieldsDisplay({
   customFields,
@@ -934,7 +935,7 @@ function getDisplayEntries(customFields: Record<string, unknown> | undefined, de
   const orderedKeys = definitions.map((definition) => definition.key);
   const extraKeys = Object.keys(customFields)
     .filter((key) => !definitionMap.has(key))
-    .sort((left, right) => left.localeCompare(right));
+    .sort(compareNatural);
 
   return [...orderedKeys, ...extraKeys]
     .filter((key) => Object.prototype.hasOwnProperty.call(customFields, key))

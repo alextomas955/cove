@@ -117,6 +117,7 @@ import { sortSeededRandom } from "../utils/seededRandomSort";
 import { PerformerExternalLinks } from "../components/PerformerExternalLinks";
 import { getPerformerAge, getUtcToday, hasDeathOccurred } from "../utils/performerAge";
 import { getFirstDetailTabByMenuItems, orderDetailTabsByMenuItems } from "../utils/detailTabOrder";
+import { compareNatural } from "../utils/naturalCompare";
 
 interface Props {
   id: number;
@@ -838,7 +839,7 @@ function PerformerAttributeSimilarityPanel({
         (left, right) =>
           right.reasons.length - left.reasons.length ||
           right.performer.videoCount - left.performer.videoCount ||
-          left.performer.name.localeCompare(right.performer.name),
+          compareNatural(left.performer.name, right.performer.name),
       )
       .slice(0, 12);
   }, [attributeQueries, performer.id, queryResults]);

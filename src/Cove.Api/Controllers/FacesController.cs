@@ -637,7 +637,7 @@ public class FacesController(
             .Include(face => face.Performer)
             .Where(face => face.PerformerId == performerId && face.MergedIntoFaceId == null)
             .OrderByDescending(face => face.AppearanceCount)
-            .ThenBy(face => face.Label)
+            .ThenBy(face => NaturalSort.Key(face.Label))
             .ThenBy(face => face.Id)
             .ToListAsync(cancellationToken);
 
@@ -1595,10 +1595,10 @@ public class FacesController(
 
         return normalized switch
         {
-            "label" => OrderFacesBy(query, face => face.Label ?? (face.Performer != null ? face.Performer.Name : string.Empty), descending),
+            "label" => OrderFacesBy(query, face => NaturalSort.Key(face.Label ?? (face.Performer != null ? face.Performer.Name : string.Empty)), descending),
             "performer_name" => descending
-                ? query.OrderByDescending(face => face.Performer != null ? face.Performer.Name : string.Empty).ThenByDescending(face => face.Label).ThenByDescending(face => face.Id)
-                : query.OrderBy(face => face.Performer != null ? face.Performer.Name : string.Empty).ThenBy(face => face.Label).ThenBy(face => face.Id),
+                ? query.OrderByDescending(face => NaturalSort.Key(face.Performer != null ? face.Performer.Name : string.Empty)).ThenByDescending(face => NaturalSort.Key(face.Label)).ThenByDescending(face => face.Id)
+                : query.OrderBy(face => NaturalSort.Key(face.Performer != null ? face.Performer.Name : string.Empty)).ThenBy(face => NaturalSort.Key(face.Label)).ThenBy(face => face.Id),
             "primary_source_key" => OrderFacesBy(query, face => face.PrimarySourceKey ?? string.Empty, descending),
             "ignored" => OrderFacesBy(query, face => face.Ignored, descending),
             "merged" => OrderFacesBy(query, face => face.MergedIntoFaceId != null, descending),
@@ -1700,12 +1700,12 @@ public class FacesController(
         return normalized switch
         {
             "random" => OrderSeededRandom(items, item => item.AppearanceId, seed, ascending).ToList(),
-            "title" => OrderBy(items, item => item.Title, ascending).ThenBy(item => item.HostId).ToList(),
-            "host_type" => OrderBy(items, item => item.HostType, ascending).ThenBy(item => item.Title).ToList(),
-            "sample_count" => OrderBy(items, item => item.FrameSampleCount, ascending).ThenBy(item => item.Title).ToList(),
-            "confidence" => OrderBy(items, item => item.TopConfidence ?? float.MinValue, ascending).ThenBy(item => item.Title).ToList(),
-            "first_seen" => OrderBy(items, item => item.FirstSeenAtSec ?? double.MinValue, ascending).ThenBy(item => item.Title).ToList(),
-            _ => OrderBy(items, item => item.LastSeenAtSec ?? item.FirstSeenAtSec ?? double.MinValue, ascending).ThenBy(item => item.Title).ToList(),
+            "title" => (ascending ? items.OrderBy(item => item.Title, NaturalStringComparer.Instance) : items.OrderByDescending(item => item.Title, NaturalStringComparer.Instance)).ThenBy(item => item.HostId).ToList(),
+            "host_type" => OrderBy(items, item => item.HostType, ascending).ThenBy(item => item.Title, NaturalStringComparer.Instance).ToList(),
+            "sample_count" => OrderBy(items, item => item.FrameSampleCount, ascending).ThenBy(item => item.Title, NaturalStringComparer.Instance).ToList(),
+            "confidence" => OrderBy(items, item => item.TopConfidence ?? float.MinValue, ascending).ThenBy(item => item.Title, NaturalStringComparer.Instance).ToList(),
+            "first_seen" => OrderBy(items, item => item.FirstSeenAtSec ?? double.MinValue, ascending).ThenBy(item => item.Title, NaturalStringComparer.Instance).ToList(),
+            _ => OrderBy(items, item => item.LastSeenAtSec ?? item.FirstSeenAtSec ?? double.MinValue, ascending).ThenBy(item => item.Title, NaturalStringComparer.Instance).ToList(),
         };
     }
 

@@ -15,6 +15,7 @@ using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Helpers;
 using Cove.Core.Interfaces;
+using Cove.Data;
 using Cove.Data.Repositories;
 using Cove.Data.Services;
 
@@ -741,8 +742,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         var ordered = sort switch
         {
             "title" or "name" => desc
-                ? query.OrderByDescending(item => item.Title)
-                : query.OrderBy(item => item.Title),
+                ? query.OrderByDescending(item => NaturalSort.Key(item.Title))
+                : query.OrderBy(item => NaturalSort.Key(item.Title)),
             "date" => desc
                 ? query.OrderByDescending(item => item.Date ?? DateOnly.MinValue)
                 : query.OrderBy(item => item.Date ?? DateOnly.MinValue),
@@ -1043,8 +1044,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             .ThenBy(application => application.ContextId)
             .ThenBy(application => application.Tag!.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(application => application.Tag!.TagGroup != null ? application.Tag.TagGroup.SortOrder : int.MaxValue)
-            .ThenBy(application => application.Tag!.TagGroup != null ? application.Tag.TagGroup.Name : null)
-            .ThenBy(application => application.Tag!.SortName ?? application.Tag.Name)
+            .ThenBy(application => NaturalSort.Key(application.Tag!.TagGroup != null ? application.Tag.TagGroup.Name : null))
+            .ThenBy(application => NaturalSort.Key(application.Tag!.SortName ?? application.Tag.Name))
             .ThenBy(application => application.TagId)
             .ToListAsync(ct);
 

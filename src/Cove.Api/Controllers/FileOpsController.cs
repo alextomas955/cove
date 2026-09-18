@@ -195,7 +195,7 @@ public class FileOpsController(
             return Forbid();
         }
 
-        return Ok(entries.OrderBy(e => !e.IsDirectory).ThenBy(e => e.Path).ToList());
+        return Ok(entries.OrderBy(e => !e.IsDirectory).ThenBy(e => e.Path, NaturalStringComparer.Instance).ToList());
     }
 
     [HttpPost("{id:int}/reveal")]
