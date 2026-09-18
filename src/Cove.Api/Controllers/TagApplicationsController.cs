@@ -2,6 +2,7 @@ using Cove.Api.Services;
 using Cove.Core.Auth;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
+using Cove.Data;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,8 +27,8 @@ public sealed class TagApplicationsController(TagApplicationService service) : C
             .ThenBy(item => item.ContextId)
             .ThenBy(item => item.Tag!.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.SortOrder : int.MaxValue)
-            .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null)
-            .ThenBy(item => item.Tag!.SortName ?? item.Tag.Name)
+            .ThenBy(item => NaturalSort.Key(item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null))
+            .ThenBy(item => NaturalSort.Key(item.Tag!.SortName ?? item.Tag.Name))
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 

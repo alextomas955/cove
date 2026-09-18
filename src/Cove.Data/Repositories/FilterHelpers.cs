@@ -137,7 +137,7 @@ public static class FilterHelpers
         if (CustomFieldTypes.IsDateLike(type)) return SortByCustomField(query, values, value => value.DateValue, desc);
         if (CustomFieldTypes.IsTimestampLike(type)) return SortByCustomField(query, values, value => value.TimestampValue, desc);
         if (CustomFieldTypes.IsReference(type)) return SortByCustomField(query, values, value => value.IntegerValue, desc);
-        return SortByCustomField(query, values, value => value.TextValue, desc);
+        return SortByCustomField(query, values, value => NaturalSort.Key(value.TextValue), desc);
     }
 
     public static IQueryable<T> ApplyProjectedCustomFieldSort<T>(this IQueryable<T> query, CoveContext db, string entityType, string? sort, bool desc)
@@ -157,7 +157,7 @@ public static class FilterHelpers
         if (CustomFieldTypes.IsDateLike(type)) return SortProjectedByCustomField(query, values, value => value.DateValue, desc);
         if (CustomFieldTypes.IsTimestampLike(type)) return SortProjectedByCustomField(query, values, value => value.TimestampValue, desc);
         if (CustomFieldTypes.IsReference(type)) return SortProjectedByCustomField(query, values, value => value.IntegerValue, desc);
-        return SortProjectedByCustomField(query, values, value => value.TextValue, desc);
+        return SortProjectedByCustomField(query, values, value => NaturalSort.Key(value.TextValue), desc);
     }
 
     public static bool TryParseCustomFieldSort(string? sort, out string key, out string type)

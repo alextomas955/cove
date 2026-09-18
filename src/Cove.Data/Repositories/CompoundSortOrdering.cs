@@ -194,6 +194,9 @@ public sealed class CompoundSortQuery<TEntity> where TEntity : class
         var rowParameter = Expression.Parameter(typeof(SortRow), "row");
         var entity = Expression.Property(rowParameter, nameof(SortRow.Entity));
         var body = new ReplaceExpressionVisitor(keySelector.Parameters[0], entity).Visit(keySelector.Body)!;
+        // Text clauses sort naturally: digit runs by value, case only as a tiebreak.
+        if (typeof(TKey) == typeof(string))
+            body = Expression.Call(NaturalSort.KeyMethod, body);
         var rowSelector = Expression.Lambda<Func<SortRow, TKey>>(body, rowParameter);
         _ordered = CompoundSortOrdering.Append(_query, _ordered, rowSelector, descending);
     }

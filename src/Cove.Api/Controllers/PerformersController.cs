@@ -11,6 +11,7 @@ using Cove.Core.Enums;
 using Cove.Core.Helpers;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
+using Cove.Data;
 using Cove.Data.Repositories;
 using IAuthorizationService = Cove.Core.Auth.IAuthorizationService;
 
@@ -210,9 +211,9 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var desc = direction == "desc";
         query = sort switch
         {
-            "name" => desc ? query.OrderByDescending(item => item.Name) : query.OrderBy(item => item.Name),
+            "name" => desc ? query.OrderByDescending(item => NaturalSort.Key(item.Name)) : query.OrderBy(item => NaturalSort.Key(item.Name)),
             "random" => SeededRandomOrdering.OrderBy(query, seed, item => item.PerformerId, desc),
-            _ => query.OrderByDescending(item => item.VideoCount).ThenBy(item => item.Name),
+            _ => query.OrderByDescending(item => item.VideoCount).ThenBy(item => NaturalSort.Key(item.Name)),
         };
 
         var totalCount = await query.CountAsync(ct);
@@ -644,7 +645,7 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         "created_at" => desc ? query.OrderByDescending(group => group.CreatedAt) : query.OrderBy(group => group.CreatedAt),
         "updated_at" => desc ? query.OrderByDescending(group => group.UpdatedAt) : query.OrderBy(group => group.UpdatedAt),
         "item_count" => desc ? query.OrderByDescending(group => group.GroupItems.Count) : query.OrderBy(group => group.GroupItems.Count),
-        _ => desc ? query.OrderByDescending(group => group.Name) : query.OrderBy(group => group.Name),
+        _ => desc ? query.OrderByDescending(group => NaturalSort.Key(group.Name)) : query.OrderBy(group => NaturalSort.Key(group.Name)),
     };
 
     private GroupDto MapGroupToDto(Group group, Dictionary<string, object>? customFieldValues = null) => new(

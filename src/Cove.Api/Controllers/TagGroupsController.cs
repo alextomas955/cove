@@ -24,7 +24,7 @@ public sealed class TagGroupsController(CoveContext db) : ControllerBase
                 TagCount = group.Tags.Count,
             })
             .OrderBy(item => item.Group.SortOrder)
-            .ThenBy(item => item.Group.Name)
+            .ThenBy(item => NaturalSort.Key(item.Group.Name))
             .ToListAsync(ct);
 
         return Ok(groups.Select(item => Map(item.Group, item.TagCount)).ToList());

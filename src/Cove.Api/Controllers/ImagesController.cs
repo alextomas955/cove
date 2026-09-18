@@ -12,6 +12,7 @@ using Cove.Core.Helpers;
 using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
+using Cove.Data;
 
 namespace Cove.Api.Controllers;
 
@@ -357,8 +358,8 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
             .ThenBy(item => item.ContextId)
             .ThenBy(item => item.Tag!.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.SortOrder : int.MaxValue)
-            .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null)
-            .ThenBy(item => item.Tag!.SortName ?? item.Tag.Name)
+            .ThenBy(item => NaturalSort.Key(item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null))
+            .ThenBy(item => NaturalSort.Key(item.Tag!.SortName ?? item.Tag.Name))
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 

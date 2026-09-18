@@ -724,7 +724,7 @@ public class PerformerRepository : IPerformerRepository
             ? query.ApplyCustomFieldSort(_db, CustomFieldEntityTypes.Performer, sort, desc)
             : sort switch
             {
-            "name" => desc ? query.OrderByDescending(p => p.Name).ThenByDescending(p => p.Id) : query.OrderBy(p => p.Name).ThenBy(p => p.Id),
+            "name" => desc ? query.OrderByDescending(p => NaturalSort.Key(p.Name)).ThenByDescending(p => p.Id) : query.OrderBy(p => NaturalSort.Key(p.Name)).ThenBy(p => p.Id),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), RatingHostType.Performer, desc),
             "created_at" => desc ? query.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id) : query.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id),
             "birthdate" => desc ? query.OrderByDescending(p => p.Birthdate).ThenByDescending(p => p.Id) : query.OrderBy(p => p.Birthdate).ThenBy(p => p.Id),
@@ -927,7 +927,7 @@ public class TagRepository : ITagRepository
             .GetValueOrDefault(TagNameRules.NormalizeAlias(name) ?? string.Empty);
 
     public async Task<IReadOnlyList<Tag>> GetAllAsync(CancellationToken ct = default)
-        => await _db.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync(ct);
+        => await _db.Tags.AsNoTracking().OrderBy(t => NaturalSort.Key(t.Name)).ToListAsync(ct);
 
     public async Task<Tag> AddAsync(Tag entity, CancellationToken ct = default)
     {
@@ -1049,7 +1049,7 @@ public class TagRepository : ITagRepository
             ? query.ApplyCustomFieldSort(_db, CustomFieldEntityTypes.Tag, sort, desc)
             : sort switch
             {
-            "name" => ApplyStableTagSort(query, t => t.Name, desc),
+            "name" => ApplyStableTagSort(query, t => NaturalSort.Key(t.Name), desc),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), RatingHostType.Tag, desc),
             "tag_group" => ApplyTagGroupSort(query, desc),
             "video_count" => ApplyStableTagSort(query, t => t.VideoCount, desc),
@@ -1109,8 +1109,8 @@ public class TagRepository : ITagRepository
         });
 
         return desc
-            ? sortQuery.OrderBy(item => item.HasGroup ? 0 : 1).ThenByDescending(item => item.GroupSortOrder).ThenByDescending(item => item.GroupName).ThenByDescending(item => item.Name).ThenByDescending(item => item.Tag.Id).Select(item => item.Tag)
-            : sortQuery.OrderBy(item => item.HasGroup ? 0 : 1).ThenBy(item => item.GroupSortOrder).ThenBy(item => item.GroupName).ThenBy(item => item.Name).ThenBy(item => item.Tag.Id).Select(item => item.Tag);
+            ? sortQuery.OrderBy(item => item.HasGroup ? 0 : 1).ThenByDescending(item => item.GroupSortOrder).ThenByDescending(item => NaturalSort.Key(item.GroupName)).ThenByDescending(item => NaturalSort.Key(item.Name)).ThenByDescending(item => item.Tag.Id).Select(item => item.Tag)
+            : sortQuery.OrderBy(item => item.HasGroup ? 0 : 1).ThenBy(item => item.GroupSortOrder).ThenBy(item => NaturalSort.Key(item.GroupName)).ThenBy(item => NaturalSort.Key(item.Name)).ThenBy(item => item.Tag.Id).Select(item => item.Tag);
     }
 
     private static IOrderedQueryable<Tag> ApplyStableTagSort<TKey>(
@@ -1510,7 +1510,7 @@ public class StudioRepository : IStudioRepository
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<IReadOnlyList<Studio>> GetAllAsync(CancellationToken ct = default)
-        => await _db.Studios.AsNoTracking().OrderBy(s => s.Name).ToListAsync(ct);
+        => await _db.Studios.AsNoTracking().OrderBy(s => NaturalSort.Key(s.Name)).ToListAsync(ct);
 
     public async Task<Studio> AddAsync(Studio entity, CancellationToken ct = default)
     {
@@ -1626,7 +1626,7 @@ public class StudioRepository : IStudioRepository
             ? query.ApplyCustomFieldSort(_db, CustomFieldEntityTypes.Studio, sort, desc)
             : sort switch
             {
-            "name" => desc ? query.OrderByDescending(s => s.Name).ThenByDescending(s => s.Id) : query.OrderBy(s => s.Name).ThenBy(s => s.Id),
+            "name" => desc ? query.OrderByDescending(s => NaturalSort.Key(s.Name)).ThenByDescending(s => s.Id) : query.OrderBy(s => NaturalSort.Key(s.Name)).ThenBy(s => s.Id),
             "video_count" => desc ? query.OrderByDescending(s => s.VideoCount).ThenByDescending(s => s.Id) : query.OrderBy(s => s.VideoCount).ThenBy(s => s.Id),
             "gallery_count" => desc ? query.OrderByDescending(s => s.GalleryCount).ThenByDescending(s => s.Id) : query.OrderBy(s => s.GalleryCount).ThenBy(s => s.Id),
             "image_count" => desc ? query.OrderByDescending(s => s.ImageCount).ThenByDescending(s => s.Id) : query.OrderBy(s => s.ImageCount).ThenBy(s => s.Id),
@@ -1950,9 +1950,9 @@ public class GalleryRepository : IGalleryRepository
             "file_mod_time" => ApplyGalleryFileModTimeSort(query, desc),
             "file_count" => desc ? query.OrderByDescending(g => g.Files.Count).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Files.Count).ThenBy(g => g.Id),
             "path" => ApplyGalleryPathSort(query, desc),
-            "title" => desc ? query.OrderByDescending(g => g.Title).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Title).ThenBy(g => g.Id),
-            "code" => desc ? query.OrderByDescending(g => g.Code).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Code).ThenBy(g => g.Id),
-            "photographer" => desc ? query.OrderByDescending(g => g.Photographer).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Photographer).ThenBy(g => g.Id),
+            "title" => desc ? query.OrderByDescending(g => NaturalSort.Key(g.Title)).ThenByDescending(g => g.Id) : query.OrderBy(g => NaturalSort.Key(g.Title)).ThenBy(g => g.Id),
+            "code" => desc ? query.OrderByDescending(g => NaturalSort.Key(g.Code)).ThenByDescending(g => g.Id) : query.OrderBy(g => NaturalSort.Key(g.Code)).ThenBy(g => g.Id),
+            "photographer" => desc ? query.OrderByDescending(g => NaturalSort.Key(g.Photographer)).ThenByDescending(g => g.Id) : query.OrderBy(g => NaturalSort.Key(g.Photographer)).ThenBy(g => g.Id),
             "organized" => desc ? query.OrderByDescending(g => g.Organized).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Organized).ThenBy(g => g.Id),
             "image_count" => desc ? query.OrderByDescending(g => g.ImageCount).ThenByDescending(g => g.Id) : query.OrderBy(g => g.ImageCount).ThenBy(g => g.Id),
             "video_count" => desc ? query.OrderByDescending(g => g.VideoCount).ThenByDescending(g => g.Id) : query.OrderBy(g => g.VideoCount).ThenBy(g => g.Id),
@@ -2040,7 +2040,7 @@ public class GalleryRepository : IGalleryRepository
             },
             ["file_mod_time"] = (compound, desc) => compound.Append(gallery => gallery.Files.Select(file => (DateTime?)file.ModTime).Max() ?? (gallery.Folder != null ? (DateTime?)gallery.Folder.ModTime : null), desc),
             ["file_count"] = (compound, desc) => compound.Append(gallery => gallery.Files.Count, desc),
-            ["path"] = (compound, desc) => compound.Append(gallery => gallery.Folder != null ? gallery.Folder.Path : gallery.Files.Select(file => file.Path).OrderBy(path => path).FirstOrDefault(), desc),
+            ["path"] = (compound, desc) => compound.Append(gallery => gallery.Folder != null ? gallery.Folder.Path : gallery.Files.Select(file => file.Path).OrderBy(path => NaturalSort.Key(path)).FirstOrDefault(), desc),
             ["title"] = (compound, desc) => compound.Append(gallery => gallery.Title, desc),
             ["code"] = (compound, desc) => compound.Append(gallery => gallery.Code, desc),
             ["photographer"] = (compound, desc) => compound.Append(gallery => gallery.Photographer, desc),
@@ -2096,8 +2096,8 @@ public class GalleryRepository : IGalleryRepository
         });
 
         return desc
-            ? sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenByDescending(item => item.StudioName).ThenByDescending(item => item.Gallery.Id).Select(item => item.Gallery)
-            : sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenBy(item => item.StudioName).ThenBy(item => item.Gallery.Id).Select(item => item.Gallery);
+            ? sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenByDescending(item => NaturalSort.Key(item.StudioName)).ThenByDescending(item => item.Gallery.Id).Select(item => item.Gallery)
+            : sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenBy(item => NaturalSort.Key(item.StudioName)).ThenBy(item => item.Gallery.Id).Select(item => item.Gallery);
     }
 
     private static IQueryable<Gallery> ApplyGalleryPathSort(IQueryable<Gallery> query, bool desc)
@@ -2111,12 +2111,12 @@ public class GalleryRepository : IGalleryRepository
                 Gallery = gallery,
                 Path = gallery.Folder != null
                     ? gallery.Folder.Path
-                    : gallery.Files.Select(file => file.Path).OrderByDescending(path => path).FirstOrDefault(),
+                    : gallery.Files.Select(file => file.Path).OrderByDescending(path => NaturalSort.Key(path)).FirstOrDefault(),
             });
 
             return descendingQuery
                 .OrderBy(item => item.Path == null ? 1 : 0)
-                .ThenByDescending(item => item.Path)
+                .ThenByDescending(item => NaturalSort.Key(item.Path))
                 .ThenByDescending(item => item.Gallery.Id)
                 .Select(item => item.Gallery);
         }
@@ -2126,12 +2126,12 @@ public class GalleryRepository : IGalleryRepository
             Gallery = gallery,
             Path = gallery.Folder != null
                 ? gallery.Folder.Path
-                : gallery.Files.Select(file => file.Path).OrderBy(path => path).FirstOrDefault(),
+                : gallery.Files.Select(file => file.Path).OrderBy(path => NaturalSort.Key(path)).FirstOrDefault(),
         });
 
         return ascendingQuery
             .OrderBy(item => item.Path == null ? 1 : 0)
-            .ThenBy(item => item.Path)
+            .ThenBy(item => NaturalSort.Key(item.Path))
             .ThenBy(item => item.Gallery.Id)
             .Select(item => item.Gallery);
     }
@@ -2362,7 +2362,7 @@ public class ImageRepository : IImageRepository
         image.Title != null && image.Title != ""
             ? image.Title
             : image.Files
-                .OrderBy(file => file.Basename)
+                .OrderBy(file => NaturalSort.Key(file.Basename))
                 .Select(file => file.Basename)
                 .FirstOrDefault();
 
@@ -2848,14 +2848,14 @@ public class ImageRepository : IImageRepository
                 DisplayTitle = image.Title != null && image.Title != ""
                     ? image.Title
                     : image.Files
-                        .OrderByDescending(file => file.Basename)
+                        .OrderByDescending(file => NaturalSort.Key(file.Basename))
                         .Select(file => file.Basename)
                         .FirstOrDefault(),
             });
 
             return descendingQuery
                 .OrderBy(item => item.DisplayTitle == null ? 1 : 0)
-                .ThenByDescending(item => item.DisplayTitle)
+                .ThenByDescending(item => NaturalSort.Key(item.DisplayTitle))
                 .ThenByDescending(item => item.Image.Id)
                 .Select(item => item.Image);
         }
@@ -2866,14 +2866,14 @@ public class ImageRepository : IImageRepository
             DisplayTitle = image.Title != null && image.Title != ""
                 ? image.Title
                 : image.Files
-                    .OrderBy(file => file.Basename)
+                    .OrderBy(file => NaturalSort.Key(file.Basename))
                     .Select(file => file.Basename)
                     .FirstOrDefault(),
         });
 
         return ascendingQuery
             .OrderBy(item => item.DisplayTitle == null ? 1 : 0)
-            .ThenBy(item => item.DisplayTitle)
+            .ThenBy(item => NaturalSort.Key(item.DisplayTitle))
             .ThenBy(item => item.Image.Id)
             .Select(item => item.Image);
     }
@@ -2888,8 +2888,8 @@ public class ImageRepository : IImageRepository
     private static IQueryable<Image> ApplyPathSort(IQueryable<Image> query, bool desc)
     {
         return desc
-            ? query.OrderBy(image => image.MaxPath == null ? 1 : 0).ThenByDescending(image => image.MaxPath).ThenByDescending(image => image.Id)
-            : query.OrderBy(image => image.MinPath).ThenBy(image => image.Id);
+            ? query.OrderBy(image => image.MaxPath == null ? 1 : 0).ThenByDescending(image => NaturalSort.Key(image.MaxPath)).ThenByDescending(image => image.Id)
+            : query.OrderBy(image => NaturalSort.Key(image.MinPath)).ThenBy(image => image.Id);
     }
 
     private static IQueryable<Image> ApplyFingerprintCriterion(IQueryable<Image> query, StringCriterion? criterion, string fingerprintType)
@@ -3061,7 +3061,7 @@ public class GroupRepository : IGroupRepository
             .FirstOrDefaultAsync(g => g.Id == id, ct);
 
     public async Task<IReadOnlyList<Group>> GetAllAsync(CancellationToken ct = default)
-        => await _db.Groups.AsNoTracking().OrderBy(g => g.Name).ToListAsync(ct);
+        => await _db.Groups.AsNoTracking().OrderBy(g => NaturalSort.Key(g.Name)).ToListAsync(ct);
 
     public async Task<Group> AddAsync(Group entity, CancellationToken ct = default)
     {
@@ -3209,10 +3209,10 @@ public class GroupRepository : IGroupRepository
             ? query.ApplyCustomFieldSort(_db, CustomFieldEntityTypes.Group, sort, desc)
             : sort switch
             {
-            "name" => desc ? query.OrderByDescending(g => g.Name).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Name).ThenBy(g => g.Id),
+            "name" => desc ? query.OrderByDescending(g => NaturalSort.Key(g.Name)).ThenByDescending(g => g.Id) : query.OrderBy(g => NaturalSort.Key(g.Name)).ThenBy(g => g.Id),
             "sort_order" or "sortOrder" => desc
-                ? query.OrderByDescending(g => g.SortOrder).ThenByDescending(g => g.Name).ThenByDescending(g => g.Id)
-                : query.OrderBy(g => g.SortOrder).ThenBy(g => g.Name).ThenBy(g => g.Id),
+                ? query.OrderByDescending(g => g.SortOrder).ThenByDescending(g => NaturalSort.Key(g.Name)).ThenByDescending(g => g.Id)
+                : query.OrderBy(g => g.SortOrder).ThenBy(g => NaturalSort.Key(g.Name)).ThenBy(g => g.Id),
             "date" => desc ? query.OrderByDescending(g => g.Date ?? DateOnly.MinValue).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Date ?? DateOnly.MinValue).ThenBy(g => g.Id),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), RatingHostType.Group, desc),
             "created_at" => desc ? query.OrderByDescending(g => g.CreatedAt).ThenByDescending(g => g.Id) : query.OrderBy(g => g.CreatedAt).ThenBy(g => g.Id),
@@ -3233,9 +3233,9 @@ public class GroupRepository : IGroupRepository
             "containing_group_count" => ApplyGroupIntSort(query, g => g.ContainingGroupRelations.Count, desc),
             "cached_item_count" => ApplyGroupIntSort(query, g => g.CachedItemCount ?? 0, desc),
             "last_resolved_at" => desc ? query.OrderByDescending(g => g.LastResolvedAt).ThenByDescending(g => g.Id) : query.OrderBy(g => g.LastResolvedAt).ThenBy(g => g.Id),
-            "query_source_key" => desc ? query.OrderByDescending(g => g.QuerySourceKey).ThenByDescending(g => g.Id) : query.OrderBy(g => g.QuerySourceKey).ThenBy(g => g.Id),
+            "query_source_key" => desc ? query.OrderByDescending(g => NaturalSort.Key(g.QuerySourceKey)).ThenByDescending(g => g.Id) : query.OrderBy(g => NaturalSort.Key(g.QuerySourceKey)).ThenBy(g => g.Id),
             "show_in_video_lists" => desc ? query.OrderByDescending(g => g.ShowInVideoLists).ThenByDescending(g => g.Id) : query.OrderBy(g => g.ShowInVideoLists).ThenBy(g => g.Id),
-            "aliases" => desc ? query.OrderByDescending(g => g.Aliases ?? g.Name).ThenByDescending(g => g.Id) : query.OrderBy(g => g.Aliases ?? g.Name).ThenBy(g => g.Id),
+            "aliases" => desc ? query.OrderByDescending(g => NaturalSort.Key(g.Aliases ?? g.Name)).ThenByDescending(g => g.Id) : query.OrderBy(g => NaturalSort.Key(g.Aliases ?? g.Name)).ThenBy(g => g.Id),
             "random" => SeededRandomOrdering.OrderBy(query, findFilter?.Seed, g => g.Id, desc),
             _ => desc ? query.OrderByDescending(g => g.UpdatedAt).ThenByDescending(g => g.Id) : query.OrderBy(g => g.UpdatedAt).ThenBy(g => g.Id),
             };

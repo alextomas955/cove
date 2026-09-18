@@ -657,13 +657,13 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
             "end_sec" => OrderBy(query, item => item.Segment.EndSec ?? item.Segment.StartSec, descending),
             "duration" => OrderBy(query, item => (item.Segment.EndSec ?? item.Segment.StartSec) - item.Segment.StartSec, descending),
             "confidence" => OrderBy(query, item => item.Segment.Confidence ?? -1f, descending),
-            "title" => OrderBy(query, item => item.Segment.Title ?? item.Segment.Kind ?? item.TagName ?? string.Empty, descending),
-            "video_title" => OrderBy(query, item => item.VideoTitle ?? string.Empty, descending),
-            "kind" => OrderBy(query, item => item.Segment.Kind ?? string.Empty, descending),
-            "source_key" => OrderBy(query, item => item.Segment.SourceKey, descending),
-            "tag_name" => OrderBy(query, item => item.TagName ?? string.Empty, descending),
-            "performer" => OrderBy(query, item => item.PerformerName ?? string.Empty, descending),
-            "ref" => OrderBy(query, item => item.RefLabel ?? item.PerformerName ?? string.Empty, descending),
+            "title" => OrderBy(query, item => NaturalSort.Key(item.Segment.Title ?? item.Segment.Kind ?? item.TagName ?? string.Empty), descending),
+            "video_title" => OrderBy(query, item => NaturalSort.Key(item.VideoTitle ?? string.Empty), descending),
+            "kind" => OrderBy(query, item => NaturalSort.Key(item.Segment.Kind ?? string.Empty), descending),
+            "source_key" => OrderBy(query, item => NaturalSort.Key(item.Segment.SourceKey), descending),
+            "tag_name" => OrderBy(query, item => NaturalSort.Key(item.TagName ?? string.Empty), descending),
+            "performer" => OrderBy(query, item => NaturalSort.Key(item.PerformerName ?? string.Empty), descending),
+            "ref" => OrderBy(query, item => NaturalSort.Key(item.RefLabel ?? item.PerformerName ?? string.Empty), descending),
             _ => OrderBy(query, item => item.Segment.UpdatedAt, descending),
         };
     }
@@ -880,8 +880,8 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
 
         videoQuery = (sort, descending) switch
         {
-            ("title", false) => videoQuery.OrderBy(s => s.Title),
-            ("title", true) => videoQuery.OrderByDescending(s => s.Title),
+            ("title", false) => videoQuery.OrderBy(s => NaturalSort.Key(s.Title)),
+            ("title", true) => videoQuery.OrderByDescending(s => NaturalSort.Key(s.Title)),
             ("created_at", false) => videoQuery.OrderBy(s => s.CreatedAt),
             ("created_at", true) => videoQuery.OrderByDescending(s => s.CreatedAt),
             (_, false) => videoQuery.OrderBy(s => s.UpdatedAt),

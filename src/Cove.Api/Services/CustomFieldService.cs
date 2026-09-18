@@ -43,7 +43,7 @@ public sealed class CustomFieldService(
             .AsNoTracking()
             .Include(definition => definition.JsonPaths)
             .OrderBy(definition => definition.DisplayOrder)
-            .ThenBy(definition => definition.Label)
+            .ThenBy(definition => NaturalSort.Key(definition.Label))
             .ToListAsync(ct);
 
         if (normalizedEntityType != null)

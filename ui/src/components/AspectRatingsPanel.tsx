@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { InteractiveRating } from "./Rating";
+import { compareNatural } from "../utils/naturalCompare";
 import { useEntityEngagement } from "../hooks/useEntityEngagement";
 import { useEntityRatings } from "../hooks/useEntityRatings";
 import type { AffinityHostType } from "../api/types";
@@ -88,7 +89,7 @@ export function AspectRatingsPanel({
     const defaultKeys = new Set(defaults.map((aspect) => aspect.key));
     const extras = Object.keys(ratings)
       .filter((key) => key !== "overall" && !defaultKeys.has(key))
-      .sort((left, right) => left.localeCompare(right))
+      .sort(compareNatural)
       .map((key) => ({ key, label: formatAspectLabel(key) }));
     return [...defaults, ...extras];
   }, [hostType, ratings]);

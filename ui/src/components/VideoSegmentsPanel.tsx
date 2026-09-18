@@ -19,6 +19,7 @@ import type { ResolvedSpan, Segment, SegmentDisplayProfile } from "../api/types"
 import { AddToGroupDialog, type AddToGroupEntry } from "./AddToGroupDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EntityReferenceSelector, EntityReferenceMultiSelector } from "./EntityReferenceSelector";
+import { compareNatural } from "../utils/naturalCompare";
 import {
   type SegmentFilterState,
   type SegmentFilterContext,
@@ -109,7 +110,7 @@ export function VideoSegmentsPanel({
   const orderedProfiles = useMemo(
     () =>
       [...profiles].sort(
-        (left, right) => Number(right.isDefault) - Number(left.isDefault) || left.name.localeCompare(right.name),
+        (left, right) => Number(right.isDefault) - Number(left.isDefault) || compareNatural(left.name, right.name),
       ),
     [profiles],
   );
@@ -692,7 +693,7 @@ function GroupedList({
         items,
         totalSec: items.reduce((sum, span) => sum + Math.max(0, span.endSec - span.startSec), 0),
       }))
-      .sort((left, right) => right.totalSec - left.totalSec || left.label.localeCompare(right.label));
+      .sort((left, right) => right.totalSec - left.totalSec || compareNatural(left.label, right.label));
   }, [spans, rawSegmentsById]);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
