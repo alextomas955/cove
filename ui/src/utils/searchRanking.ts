@@ -1,5 +1,7 @@
 export interface LabelledSearchOption {
   label: string;
+  /** Favorites rank ahead of everything else, and only then by how well the label matches. */
+  favorite?: boolean;
 }
 
 export function rankSearchOptions<T extends LabelledSearchOption>(options: T[], searchText: string): T[] {
@@ -9,6 +11,10 @@ export function rankSearchOptions<T extends LabelledSearchOption>(options: T[], 
   }
 
   return [...options].sort((left, right) => {
+    const leftFavorite = left.favorite === true;
+    const rightFavorite = right.favorite === true;
+    if (leftFavorite !== rightFavorite) return leftFavorite ? -1 : 1;
+
     const leftLabel = normalizeSearchText(left.label);
     const rightLabel = normalizeSearchText(right.label);
     const leftRank = getSearchRank(leftLabel, needle);
@@ -20,9 +26,14 @@ export function rankSearchOptions<T extends LabelledSearchOption>(options: T[], 
   });
 }
 
-export function rankByLabel<T>(items: T[], searchText: string, getLabel: (item: T) => string): T[] {
+export function rankByLabel<T>(
+  items: T[],
+  searchText: string,
+  getLabel: (item: T) => string,
+  isFavorite?: (item: T) => boolean,
+): T[] {
   return rankSearchOptions(
-    items.map((item) => ({ item, label: getLabel(item) })),
+    items.map((item) => ({ item, label: getLabel(item), favorite: isFavorite?.(item) === true })),
     searchText,
   ).map((entry) => entry.item);
 }

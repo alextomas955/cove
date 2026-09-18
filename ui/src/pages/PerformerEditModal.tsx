@@ -83,7 +83,7 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     isPlaceholderData: tagResultsPlaceholder,
   } = useQuery({
     queryKey: ["performer-tags-search", trimmedTagSearch],
-    queryFn: () => tagsApi.find({ q: trimmedTagSearch, perPage: 20, sort: "name", direction: "asc" }),
+    queryFn: () => tagsApi.find({ q: trimmedTagSearch, perPage: 20, sort: "relevance", direction: "asc" }),
     enabled: trimmedTagSearch.length > 0,
     staleTime: 60000,
     placeholderData: (previousData) => previousData,
