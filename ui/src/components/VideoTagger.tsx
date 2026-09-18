@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useRef } from "react";
+import { useCallback, useId, useMemo, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -30,7 +30,8 @@ import {
   type ScrapeRelationActionMap,
 } from "./ScrapeRelationChoices";
 import { invalidateVideoMetadataQueries } from "./videoMetadataQueryInvalidation";
-import { MetadataDiff, summarizeDiff } from "./MetadataDiff";
+import { MetadataDiff, scalarStatus, summarizeDiff, type DiffSelection } from "./MetadataDiff";
+import { MetadataDiffSummary } from "./MetadataDiffSummary";
 import { metadataServerLabel } from "./MetadataServerLinks";
 import {
   applyTaggerSelectionChange,
@@ -64,6 +65,9 @@ import {
   Eye,
   Upload,
   CloudUpload,
+  MoreHorizontal,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { toggleOptionsFromEvent, withOrderedToggle, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
 import { VideoPreviewThumbnail } from "./VideoPreviewThumbnail";
@@ -1366,6 +1370,7 @@ function TaggerVideoRow({
     onNavigate?.(video.id),
   );
   const isScraperSource = source?.kind === "scraper";
+  const isFragmentInput = isScraperSource && scraperInputKind === "fragment";
   const videoUrls = (video.urls ?? []).filter((url) => url.trim());
   const selectedUrlOption = videoUrls.includes(query) ? query : "__custom";
   const searchPlaceholder = isScraperSource
@@ -1505,13 +1510,14 @@ function TaggerVideoRow({
   });
 
   return (
-    <div className={`px-3 py-2 ${selected ? "bg-accent/5" : ""}`}>
-      <div className="flex gap-3">
+    <div className={`px-3 py-2.5 ${selected ? "bg-accent/5" : ""}`}>
+      {/* Wraps: thumbnail + title, the query beside them when there is room, and every result full width. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {onSelect && (
           <button
             type="button"
             onClick={(event) => onSelect(video.id, toggleOptionsFromEvent(event))}
-            className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] ${selected ? "border-accent bg-accent text-white" : selecting ? "border-accent/60 text-accent" : "border-border text-transparent hover:border-accent hover:text-accent"}`}
+            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] ${selected ? "border-accent bg-accent text-white" : selecting ? "border-accent/60 text-accent" : "border-border text-transparent hover:border-accent hover:text-accent"}`}
             aria-label={selected ? "Deselect video" : "Select video"}
             title={selected ? "Deselect" : "Select"}
           >
@@ -1521,42 +1527,48 @@ function TaggerVideoRow({
         {/* Video preview */}
         <a
           {...videoLinkProps}
-          className="video-card-preview-trigger block w-[10.5rem] flex-shrink-0 group/video"
+          className="video-card-preview-trigger group/video flex min-w-0 flex-[1_1_14rem] items-center gap-2.5"
           title={`Open video ${video.title || file?.basename || "Untitled"}`}
         >
-          <VideoPreviewThumbnail
-            video={video}
-            fit={videoPreviewObjectFit}
-            surface="list"
-            coverWidth={640}
-            className="rounded bg-card"
-          >
-            {file && file.duration > 0 && (
-              <span className="video-specs-overlay absolute bottom-0.5 right-0.5 z-[5] rounded bg-black/70 px-0.5 text-[8px] text-white transition-opacity">
-                {formatDuration(file.duration)}
-              </span>
-            )}
-          </VideoPreviewThumbnail>
-          <p className="text-[11px] text-accent mt-0.5 truncate font-medium leading-snug group-hover/video:underline">
-            {video.title || file?.basename || "Untitled"}
-          </p>
-          <p className="text-[9px] text-muted truncate leading-snug">
-            {[video.studioName, file && getResolutionLabel(file.width, file.height)].filter(Boolean).join(" · ")}
-          </p>
+          <div className="w-24 shrink-0">
+            <VideoPreviewThumbnail
+              video={video}
+              fit={videoPreviewObjectFit}
+              surface="list"
+              coverWidth={640}
+              className="rounded bg-card"
+            >
+              {file && file.duration > 0 && (
+                <span className="video-specs-overlay absolute bottom-0.5 right-0.5 z-[5] rounded bg-black/70 px-0.5 text-[8px] text-white transition-opacity">
+                  {formatDuration(file.duration)}
+                </span>
+              )}
+            </VideoPreviewThumbnail>
+          </div>
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-xs font-medium leading-snug text-accent group-hover/video:underline">
+              {video.title || file?.basename || "Untitled"}
+            </span>
+            <span className="truncate text-[11px] leading-snug text-muted">
+              {[video.studioName, file && getResolutionLabel(file.width, file.height)].filter(Boolean).join(" · ")}
+            </span>
+          </div>
         </a>
 
-        {/* Search + Results */}
-        <div className="flex-1 min-w-0">
+        {/* Search + Results: laid out by the row's own flex so the query can sit beside the title */}
+        <div className="contents">
           {detailMode && (
-            <RemoteRefreshButtons
-              remoteIds={video.remoteIds}
-              servers={metadataServers}
-              busyEndpoint={refreshBusyEndpoint}
-              onRefresh={handleRefreshFromRemote}
-            />
+            <div className="w-full">
+              <RemoteRefreshButtons
+                remoteIds={video.remoteIds}
+                servers={metadataServers}
+                busyEndpoint={refreshBusyEndpoint}
+                onRefresh={handleRefreshFromRemote}
+              />
+            </div>
           )}
           {isScraperSource && (
-            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            <div className="flex w-full flex-wrap items-center gap-1.5">
               <select
                 value={scraperInputKind}
                 onChange={(event) => onScraperInputKindChange(event.target.value as InputKind)}
@@ -1593,8 +1605,8 @@ function TaggerVideoRow({
             </div>
           )}
           {/* Search input — inline and compact */}
-          <div className="flex gap-1.5 mb-1.5">
-            {isScraperSource && scraperInputKind === "fragment" ? (
+          <div className="flex min-w-0 flex-[1_1_100%] gap-1.5 md:flex-[1_1_22rem]">
+            {isFragmentInput ? (
               <textarea
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
@@ -1615,78 +1627,109 @@ function TaggerVideoRow({
             <button
               onClick={onSearch}
               disabled={state?.loading}
-              className="flex h-fit items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
+              aria-label="Search"
+              // Stretch to the one-line input's height; beside the multi-line fragment box, stay compact at the top.
+              className={`flex shrink-0 items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60 ${
+                isFragmentInput ? "h-fit" : ""
+              }`}
             >
               {state?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+              <span className="hidden sm:inline">Search</span>
             </button>
             {source?.kind === "metadata-server" && (
-              <button
-                onClick={onSearchFingerprints}
-                disabled={state?.loading}
-                className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
-                title="Search by fingerprint only"
-              >
-                <Fingerprint className="w-3 h-3" />
-              </button>
-            )}
-            {source?.kind === "metadata-server" && (
-              <button
-                onClick={() => submitFingerprintsMut.mutate()}
-                disabled={submitFingerprintsMut.isPending || !canSubmitFingerprints}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors disabled:opacity-60 ${
-                  shouldHighlightFingerprintSubmit
-                    ? "border-accent/30 bg-accent/10 text-accent hover:border-accent/50 hover:bg-accent/15 hover:text-accent"
-                    : "bg-surface border-border text-muted hover:text-foreground"
-                }`}
-                title={
-                  canSubmitFingerprints
-                    ? "Submit your fingerprints for this video to the metadata server"
-                    : "Link this video to a metadata-server entry before submitting fingerprints"
-                }
-              >
-                {submitFingerprintsMut.isPending ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Upload className="w-3 h-3" />
-                )}
-              </button>
-            )}
-            {source?.kind === "metadata-server" && (
-              <button
-                onClick={() => submitDraftMut.mutate()}
-                disabled={submitDraftMut.isPending}
-                className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
-                title="Submit this video as a draft entry to the metadata server"
-              >
-                {submitDraftMut.isPending ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <CloudUpload className="w-3 h-3" />
-                )}
-              </button>
+              // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
+              <details className="relative shrink-0">
+                <summary
+                  role="button"
+                  aria-label="More actions"
+                  title="More actions"
+                  className={`flex h-full cursor-pointer list-none items-center rounded border px-1.5 text-muted hover:text-foreground [&::-webkit-details-marker]:hidden ${
+                    shouldHighlightFingerprintSubmit
+                      ? "border-accent/40 bg-accent/10 text-accent"
+                      : "border-border bg-surface"
+                  }`}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </summary>
+                <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded border border-border bg-card shadow-xl">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      onSearchFingerprints();
+                    }}
+                    disabled={state?.loading}
+                    title="Search by fingerprint only"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface disabled:opacity-60"
+                  >
+                    <Fingerprint className="h-3.5 w-3.5 text-muted" />
+                    Search by fingerprint only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      submitFingerprintsMut.mutate();
+                    }}
+                    disabled={submitFingerprintsMut.isPending || !canSubmitFingerprints}
+                    title={
+                      canSubmitFingerprints
+                        ? "Submit your fingerprints for this video to the metadata server"
+                        : "Link this video to a metadata-server entry before submitting fingerprints"
+                    }
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface disabled:opacity-60 ${
+                      shouldHighlightFingerprintSubmit ? "text-accent" : "text-foreground"
+                    }`}
+                  >
+                    {submitFingerprintsMut.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5 text-muted" />
+                    )}
+                    Submit fingerprints
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      submitDraftMut.mutate();
+                    }}
+                    disabled={submitDraftMut.isPending}
+                    title="Submit this video as a draft entry to the metadata server"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface disabled:opacity-60"
+                  >
+                    {submitDraftMut.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CloudUpload className="h-3.5 w-3.5 text-muted" />
+                    )}
+                    Submit as draft
+                  </button>
+                </div>
+              </details>
             )}
           </div>
 
           {submitFingerprintsMut.isError && (
-            <p className="text-xs text-red-400 mb-2">
+            <p className="w-full text-xs text-red-400">
               <AlertCircle className="w-3 h-3 inline mr-1" />
               {submitFingerprintsMut.error.message}
             </p>
           )}
           {submitFingerprintsMut.isSuccess && (
-            <p className="text-xs text-green-400 mb-2">
+            <p className="w-full text-xs text-green-400">
               <Check className="w-3 h-3 inline mr-1" />
               Fingerprints submitted to the metadata server.
             </p>
           )}
           {submitDraftMut.isError && (
-            <p className="text-xs text-red-400 mb-2">
+            <p className="w-full text-xs text-red-400">
               <AlertCircle className="w-3 h-3 inline mr-1" />
               {submitDraftMut.error.message}
             </p>
           )}
           {submitDraftMut.isSuccess && (
-            <p className="text-xs text-green-400 mb-2">
+            <p className="w-full text-xs text-green-400">
               <Check className="w-3 h-3 inline mr-1" />
               Video draft submitted{submitDraftMut.data.draftId ? ` (${submitDraftMut.data.draftId})` : ""}.
             </p>
@@ -1694,14 +1737,16 @@ function TaggerVideoRow({
 
           {/* Error */}
           {state?.error && (
-            <p className="text-xs text-red-400 mb-2">
+            <p className="w-full text-xs text-red-400">
               <AlertCircle className="w-3 h-3 inline mr-1" />
               {state.error}
             </p>
           )}
 
           {/* No results */}
-          {state?.results && state.results.length === 0 && <p className="text-xs text-muted">No matches found.</p>}
+          {state?.results && state.results.length === 0 && (
+            <p className="w-full text-xs text-muted">No matches found.</p>
+          )}
 
           {/* Results */}
           {state?.results && state.results.length > 0 && (
@@ -1804,13 +1849,13 @@ function TaggerVideoRow({
 
           {/* Saved indicator */}
           {state?.saved && (
-            <div className="flex items-center gap-1 mt-2 text-xs text-green-400">
+            <div className="flex w-full items-center gap-1 text-xs text-green-400">
               <Check className="w-3.5 h-3.5" />
               Saved successfully
             </div>
           )}
           {state?.warning && (
-            <div className="mt-2 flex items-start gap-1 text-xs text-amber-300">
+            <div className="flex w-full items-start gap-1 text-xs text-amber-300">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>Saved with warnings: {state.warning}</span>
             </div>
@@ -1882,40 +1927,54 @@ function TaggerResults({
   onRelationshipEditsChange,
   taggerConfig,
 }: TaggerResultsProps) {
+  const current = results[selectedIndex] ? selectedIndex : 0;
+  const row = (result: UnifiedVideoMatch, i: number) => (
+    <TaggerResultRow
+      key={`${result.endpoint}-${result.id}`}
+      video={video}
+      result={result}
+      tagMatchInfo={tagMatchInfo}
+      performerMatchInfo={performerMatchInfo}
+      isSelected={i === current}
+      showSelector={results.length > 1}
+      onClick={() => onSelect(i)}
+      onSave={i === current ? onSave : undefined}
+      saving={i === current ? saving : false}
+      saved={saved}
+      localDuration={localDuration}
+      excludedPerformers={excludedPerformers}
+      excludedTags={excludedTags}
+      skipStudio={skipStudio}
+      forceIncludedPerformers={forceIncludedPerformers}
+      forceIncludedTags={forceIncludedTags}
+      forceIncludeStudio={forceIncludeStudio}
+      fieldStrategies={fieldStrategies}
+      collectionModes={collectionModes}
+      onFieldStrategyChange={i === current ? onFieldStrategyChange : undefined}
+      onCollectionModeChange={i === current ? onCollectionModeChange : undefined}
+      onTogglePerformer={i === current ? onTogglePerformer : undefined}
+      onToggleTag={i === current ? onToggleTag : undefined}
+      onToggleStudio={i === current ? onToggleStudio : undefined}
+      tagEdits={tagEdits}
+      performerEdits={performerEdits}
+      onRelationshipEditsChange={i === current ? onRelationshipEditsChange : undefined}
+      taggerConfig={taggerConfig}
+    />
+  );
+  const others = results.map((result, i) => ({ result, i })).filter(({ i }) => i !== current);
+  // The chosen match is the review; the alternatives stay one click away instead of stacking below it.
   return (
-    <div className="space-y-1">
-      {results.map((result, i) => (
-        <TaggerResultRow
-          key={`${result.endpoint}-${result.id}`}
-          video={video}
-          result={result}
-          tagMatchInfo={tagMatchInfo}
-          performerMatchInfo={performerMatchInfo}
-          isSelected={i === selectedIndex}
-          onClick={() => onSelect(i)}
-          onSave={i === selectedIndex ? onSave : undefined}
-          saving={i === selectedIndex ? saving : false}
-          saved={saved}
-          localDuration={localDuration}
-          excludedPerformers={excludedPerformers}
-          excludedTags={excludedTags}
-          skipStudio={skipStudio}
-          forceIncludedPerformers={forceIncludedPerformers}
-          forceIncludedTags={forceIncludedTags}
-          forceIncludeStudio={forceIncludeStudio}
-          fieldStrategies={fieldStrategies}
-          collectionModes={collectionModes}
-          onFieldStrategyChange={i === selectedIndex ? onFieldStrategyChange : undefined}
-          onCollectionModeChange={i === selectedIndex ? onCollectionModeChange : undefined}
-          onTogglePerformer={i === selectedIndex ? onTogglePerformer : undefined}
-          onToggleTag={i === selectedIndex ? onToggleTag : undefined}
-          onToggleStudio={i === selectedIndex ? onToggleStudio : undefined}
-          tagEdits={tagEdits}
-          performerEdits={performerEdits}
-          onRelationshipEditsChange={i === selectedIndex ? onRelationshipEditsChange : undefined}
-          taggerConfig={taggerConfig}
-        />
-      ))}
+    <div className="flex w-full flex-col gap-1.5">
+      {results[current] ? row(results[current], current) : null}
+      {others.length > 0 && (
+        <details className="group/others">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 px-1 text-xs text-accent hover:underline [&::-webkit-details-marker]:hidden">
+            {others.length} other {others.length === 1 ? "match" : "matches"}
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/others:rotate-180" />
+          </summary>
+          <div className="mt-1.5 flex flex-col gap-1.5">{others.map(({ result, i }) => row(result, i))}</div>
+        </details>
+      )}
     </div>
   );
 }
@@ -1926,6 +1985,7 @@ function TaggerResultRow({
   tagMatchInfo,
   performerMatchInfo,
   isSelected,
+  showSelector,
   onClick,
   onSave,
   saving,
@@ -1954,6 +2014,7 @@ function TaggerResultRow({
   tagMatchInfo?: Record<string, string>;
   performerMatchInfo?: Record<string, string>;
   isSelected: boolean;
+  showSelector: boolean;
   onClick: () => void;
   onSave?: () => void;
   saving?: boolean;
@@ -1978,6 +2039,9 @@ function TaggerResultRow({
   taggerConfig: TaggerConfig;
 }) {
   const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
+  // Accept-all is the common case, so the review opens as a list of facts; the full side-by-side
+  // rows are one click away for per-item chips and hand edits.
+  const [adjusting, setAdjusting] = useState(false);
   const durationDiff =
     localDuration != null && result.duration != null ? Math.abs(localDuration - result.duration) : undefined;
   const durationMatch = durationDiff != null && durationDiff < 5;
@@ -2031,142 +2095,261 @@ function TaggerResultRow({
   };
   const review = isSelected ? buildTaggerReview(reviewInput) : null;
   const summary = review ? summarizeDiff(review.fields, review.source, review.target, review.selection) : null;
+  const handleSelectionChange = (next: DiffSelection) => {
+    if (!review) return;
+    applyTaggerSelectionChange(reviewInput, review.selection, next, {
+      onFieldStrategyChange,
+      onCollectionModeChange,
+      onToggleTag,
+      onTogglePerformer,
+      onRelationshipEditsChange,
+    });
+  };
+  const matchedAlgorithms = [...new Set(result.fingerprintAlgorithms.map((algorithm) => algorithm.toUpperCase()))];
+  const fingerprintNote =
+    result.fingerprints.length === 0
+      ? null
+      : result.matchCount > 0
+        ? `${result.matchCount} fingerprint ${result.matchCount === 1 ? "match" : "matches"}${
+            matchedAlgorithms.length ? ` (${matchedAlgorithms.join(", ")})` : ""
+          }`
+        : "No fingerprint matches";
+  const identity = [result.studioName, result.date].filter(Boolean).join(" · ");
+  const facts = [
+    ...(isSelected
+      ? []
+      : [
+          identity || null,
+          result.code ? (
+            <span key="code" className="font-mono text-muted">
+              {result.code}
+            </span>
+          ) : null,
+        ]),
+    result.duration != null ? (
+      <span key="duration">
+        {formatDuration(result.duration)}
+        {durationDiff != null && (
+          <span
+            className={durationMatch ? " text-green-400" : durationDiff < 30 ? " text-yellow-400" : " text-red-400"}
+          >
+            {" "}
+            {durationDiff < 1 ? "exact" : `${Math.round(durationDiff)}s off`}
+          </span>
+        )}
+      </span>
+    ) : null,
+    fingerprintNote ? (
+      <span
+        key="fingerprints"
+        title={`Remote fingerprints: ${[...new Set(result.fingerprints.map((fp) => fp.algorithm.toUpperCase()))].join(", ")}`}
+        className={`inline-flex items-center gap-1 ${result.matchCount > 0 ? "text-green-400" : "text-muted"}`}
+      >
+        <Fingerprint className="h-3 w-3" />
+        {fingerprintNote}
+      </span>
+    ) : null,
+    !isSelected && performerChoices.length > 0 ? performerChoices.map((choice) => choice.label).join(", ") : null,
+  ].filter(Boolean);
 
   return (
     <div
       onClick={onClick}
-      className={`rounded border cursor-pointer transition-colors ${
-        isSelected ? "border-accent bg-card" : "border-border bg-surface hover:border-accent/50"
+      className={`rounded-lg border transition-colors ${
+        isSelected ? "border-accent/70 bg-card" : "cursor-pointer border-border bg-surface hover:border-accent/50"
       }`}
     >
-      {/* Header row — always visible for all results */}
-      <div className="flex items-center gap-3 p-2">
-        {/* Radio selector for multiple results */}
-        <div className="flex-shrink-0">
+      {/* Header: what matched, in one line of facts */}
+      <div
+        role={showSelector && !isSelected ? "button" : undefined}
+        tabIndex={showSelector && !isSelected ? 0 : undefined}
+        aria-label={showSelector && !isSelected ? `Use ${result.title || "this match"}` : undefined}
+        onKeyDown={(event) => {
+          if (showSelector && !isSelected && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onClick();
+          }
+        }}
+        className="flex flex-wrap items-center gap-2.5 px-3 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        {showSelector && (
           <div
-            className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-accent" : "border-border"}`}
+            aria-hidden="true"
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-accent" : "border-border"}`}
           >
-            {isSelected && <div className="w-2 h-2 rounded-full bg-accent" />}
+            {isSelected && <div className="h-2 w-2 rounded-full bg-accent" />}
           </div>
-        </div>
-
-        {/* Cover thumbnail */}
-        {result.imageUrl && (
-          <img src={result.imageUrl} alt="" className="w-20 h-12 object-cover rounded flex-shrink-0" loading="lazy" />
         )}
-
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground truncate">
+        {!isSelected && result.imageUrl && (
+          <img src={result.imageUrl} alt="" className="h-9 w-16 shrink-0 rounded object-cover" loading="lazy" />
+        )}
+        {isSelected && review ? (
+          <CoverPanel review={review} onChange={handleSelectionChange} disabled={saving} />
+        ) : null}
+        <div className="min-w-0 flex-1 self-start">
+          <p
+            className={`text-foreground ${isSelected ? "text-base font-semibold leading-snug" : "truncate text-[13px] font-semibold"}`}
+          >
             {result.title || "Untitled"}
-            {result.code && <span className="text-muted ml-1">({result.code})</span>}
           </p>
-          {result.details && (
-            <p className="mt-1 text-[11px] leading-relaxed text-secondary line-clamp-2">{result.details}</p>
-          )}
-          <div className="flex items-center gap-3 text-[10px] text-muted mt-0.5">
-            {result.date && (
-              <span>
-                Date: <span className="text-foreground">{result.date}</span>
+          {isSelected && identity ? <p className="text-sm text-secondary">{identity}</p> : null}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-secondary">
+            {facts.map((fact, index) => (
+              <span key={index} className="min-w-0 truncate">
+                {fact}
               </span>
-            )}
-            {result.director && (
-              <span>
-                Director: <span className="text-foreground">{result.director}</span>
-              </span>
-            )}
-            {result.duration != null && (
-              <span>
-                Duration: <span className="text-foreground">{formatDuration(result.duration)}</span>
-                {durationDiff != null && (
-                  <span
-                    className={
-                      durationMatch ? " text-green-400" : durationDiff < 30 ? " text-yellow-400" : " text-red-400"
-                    }
-                  >
-                    {" "}
-                    ({durationDiff < 1 ? "exact" : `${Math.round(durationDiff)}s diff`})
-                  </span>
-                )}
-              </span>
-            )}
-            {performerChoices.length > 0 && (
-              <span className="truncate">{performerChoices.map((choice) => choice.label).join(", ")}</span>
-            )}
+            ))}
           </div>
         </div>
-
-        {/* Fingerprint indicators — shows which algorithms the remote video has, with match status */}
-        {result.fingerprints.length > 0 &&
-          (() => {
-            const remoteAlgos = [...new Set(result.fingerprints.map((fp) => fp.algorithm.toUpperCase()))];
-            const matchedSet = new Set(result.fingerprintAlgorithms.map((a) => a.toUpperCase()));
-            return (
-              <span
-                className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded bg-surface flex-shrink-0"
-                title={
-                  result.matchCount > 0
-                    ? `${result.matchCount} fingerprint match${result.matchCount !== 1 ? "es" : ""}`
-                    : "No fingerprint matches"
-                }
-              >
-                <Fingerprint className={`w-3 h-3 ${result.matchCount > 0 ? "text-green-400" : "text-muted"}`} />
-                {remoteAlgos.map((alg, i) => (
-                  <span key={alg} className={`font-semibold ${matchedSet.has(alg) ? "text-green-300" : "text-muted"}`}>
-                    {i > 0 && " · "}
-                    {alg}
-                  </span>
-                ))}
-                {result.matchCount > 0 && (
-                  <span className="text-green-300 opacity-70 ml-0.5">({result.matchCount})</span>
-                )}
-              </span>
-            );
-          })()}
-
-        {/* Save button (inline for selected) */}
-        {isSelected && onSave && !saved && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSave();
-            }}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60 flex-shrink-0"
-          >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-            {summary?.changeCount
-              ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
-              : "Apply"}
-          </button>
-        )}
       </div>
 
-      {/* Expanded details — only for selected result: the same review rows a merge uses */}
+      {/* Expanded review — only for the selected result */}
       {review && !saved && (
-        <div className="border-t border-border px-3 py-3" onClick={(event) => event.stopPropagation()}>
-          <MetadataDiff
-            fields={review.fields}
-            source={review.source}
-            target={review.target}
-            value={review.selection}
-            onChange={(next) =>
-              applyTaggerSelectionChange(reviewInput, review.selection, next, {
-                onFieldStrategyChange,
-                onCollectionModeChange,
-                onToggleTag,
-                onTogglePerformer,
-                onRelationshipEditsChange,
-              })
-            }
-            disabled={saving}
-          />
-          {summary ? (
-            <p className="mt-3 text-[11px] leading-relaxed text-muted">
-              {summary.changes.map((change) => change.text).join(" · ")}
-            </p>
-          ) : null}
+        <div className="border-t border-border" onClick={(event) => event.stopPropagation()}>
+          {adjusting ? (
+            <div className="px-3 py-3">
+              <MetadataDiff
+                fields={review.fields}
+                source={review.source}
+                target={review.target}
+                value={review.selection}
+                onChange={handleSelectionChange}
+                disabled={saving}
+              />
+            </div>
+          ) : (
+            <div className="py-1">
+              <MetadataDiffSummary
+                fields={review.fields.filter((field) => field.key !== "image")}
+                source={review.source}
+                target={review.target}
+                value={review.selection}
+                onChange={handleSelectionChange}
+                disabled={saving}
+              />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface/60 px-3 py-2">
+            {onSave && (
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {summary?.changeCount
+                  ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+                  : "Apply"}
+              </button>
+            )}
+            {summary ? (
+              <span className="hidden min-w-0 flex-1 truncate text-[11px] text-muted sm:inline">
+                {summary.changes.map((change) => change.text).join(" · ")}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              aria-expanded={adjusting}
+              onClick={() => setAdjusting((current) => !current)}
+              className="ml-auto text-xs text-accent hover:underline"
+            >
+              {adjusting ? "Done adjusting" : "Adjust…"}
+            </button>
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * The cover, first and large, the way Stash leads its match card. A conflict shows both covers at the
+ * same size side by side, the one that will be used framed; a fill or an identical cover shows one.
+ */
+function CoverPanel({
+  review,
+  onChange,
+  disabled,
+}: {
+  review: ReturnType<typeof buildTaggerReview>;
+  onChange: (next: DiffSelection) => void;
+  disabled?: boolean;
+}) {
+  const name = `${useId()}-cover`;
+  const field = review.fields.find((entry) => entry.key === "image");
+  if (!field) return null;
+  const status = scalarStatus(field, review.source, review.target);
+  const chosen = review.selection.image === "source" ? "source" : "target";
+  const incoming = review.source.sentenceLabel ?? review.source.label;
+  const sourceUrl = String(review.source.values.image ?? "");
+  const targetUrl = review.target.values.image ? String(review.target.values.image) : null;
+  const choose = (side: "source" | "target") => onChange({ ...review.selection, image: side });
+  const imageClass = "aspect-video w-full rounded-md bg-black object-cover";
+
+  if (status !== "conflict") {
+    const note = status === "identical" ? "same cover" : status === "filled" ? "fills empty" : "keeping current";
+    return (
+      <div className="flex w-full shrink-0 flex-col gap-1.5 sm:w-60">
+        <CoverImage
+          src={chosen === "source" ? sourceUrl : (targetUrl ?? sourceUrl)}
+          alt="Cover"
+          className={imageClass}
+        />
+        <span className="inline-flex items-center gap-1 text-[11px] text-secondary">
+          <Check className="h-3 w-3 text-green-400" />
+          Cover · {note}
+        </span>
+      </div>
+    );
+  }
+
+  const option = (side: "source" | "target", url: string, label: string) => {
+    const active = chosen === side;
+    return (
+      <label
+        key={side}
+        className={`flex w-full cursor-pointer flex-col gap-1 rounded-lg border p-1 transition-colors sm:w-56 ${
+          active ? "border-accent bg-accent/10" : "border-transparent opacity-70 hover:opacity-100"
+        } ${disabled ? "cursor-default" : ""}`}
+      >
+        <CoverImage src={url} alt={`${label} cover`} className={imageClass} />
+        <span className="flex items-center gap-1.5 px-1 text-[11px]">
+          <input
+            type="radio"
+            name={name}
+            aria-label={label}
+            checked={active}
+            disabled={disabled}
+            onChange={() => choose(side)}
+            className="accent-accent"
+          />
+          <span className={active ? "text-foreground" : "text-secondary"}>{label}</span>
+          {active ? (
+            <span className="ml-auto rounded-full bg-accent/20 px-1.5 py-px text-[10px] font-semibold text-accent">
+              Will be used
+            </span>
+          ) : null}
+        </span>
+      </label>
+    );
+  };
+  return (
+    <div role="radiogroup" aria-label="Cover choice" className="flex w-full shrink-0 flex-col gap-1 sm:w-auto">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {option("target", targetUrl ?? "", "Keep current")}
+        {option("source", sourceUrl, `Use ${incoming}`)}
+      </div>
+      <span className="inline-flex items-center gap-1 px-1 text-[11px] text-secondary">
+        <AlertTriangle className="h-3 w-3 text-amber-400" />
+        Cover · both have a value
+      </span>
+    </div>
+  );
+}
+
+/** A cover that simply disappears when its file cannot be loaded, instead of showing a broken image. */
+function CoverImage({ src, alt, className }: { src: string; alt: string; className: string }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (failed === src) return null;
+  return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(src)} />;
 }

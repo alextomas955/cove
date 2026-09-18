@@ -1,5 +1,16 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronDown, CloudDownload, Eye, EyeOff, Loader2, RefreshCw, Settings2, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  CloudDownload,
+  Eye,
+  EyeOff,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  Settings2,
+  X,
+} from "lucide-react";
 import type { CollectionMode } from "./videoScrapeUtils";
 
 // Reduce an endpoint to its registrable domain (last two labels, "www." dropped) so a remote id stored
@@ -187,17 +198,6 @@ export function TaggerToolbar({
         </select>
       </div>
 
-      {showToggle && (
-        <button
-          type="button"
-          onClick={() => showToggle.onChange(!showToggle.value)}
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs border border-border bg-input text-secondary hover:text-foreground"
-        >
-          {showToggle.value ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-          {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
-        </button>
-      )}
-
       {showRunAll &&
         (batchSearching ? (
           <button
@@ -250,15 +250,56 @@ export function TaggerToolbar({
 
       <span className="ml-auto text-xs text-muted">{countLabel}</span>
 
-      {onToggleSettings && (
-        <button
-          type="button"
-          onClick={onToggleSettings}
-          className={`flex items-center gap-1 px-2 py-1 rounded text-xs border bg-input ${settingsOpen ? "border-accent text-accent" : "border-border text-secondary hover:text-foreground"}`}
-          title="Tagger settings"
-        >
-          <Settings2 className="w-3.5 h-3.5" />
-        </button>
+      {(showToggle || onToggleSettings) && (
+        // Everything that is not "pick a source and scrape" sits behind one menu.
+        <details className="relative">
+          <summary
+            role="button"
+            aria-label="More tagger options"
+            title="More tagger options"
+            className={`flex cursor-pointer list-none items-center rounded border px-1.5 py-1 [&::-webkit-details-marker]:hidden ${
+              settingsOpen
+                ? "border-accent bg-input text-accent"
+                : "border-border bg-input text-secondary hover:text-foreground"
+            }`}
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </summary>
+          <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded border border-border bg-card shadow-xl">
+            {showToggle && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.currentTarget.closest("details")?.removeAttribute("open");
+                  showToggle.onChange(!showToggle.value);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface"
+              >
+                {showToggle.value ? (
+                  <Eye className="w-3.5 h-3.5 text-muted" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5 text-muted" />
+                )}
+                {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
+              </button>
+            )}
+            {onToggleSettings && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.currentTarget.closest("details")?.removeAttribute("open");
+                  onToggleSettings();
+                }}
+                title="Tagger settings"
+                aria-expanded={settingsOpen}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface ${settingsOpen ? "text-accent" : "text-foreground"}`}
+              >
+                <Settings2 className="w-3.5 h-3.5 text-muted" />
+                Tagger settings
+              </button>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

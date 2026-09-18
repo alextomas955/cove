@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoTagger } from "../components/VideoTagger";
@@ -140,8 +140,17 @@ describe("VideoTagger", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Refresh from First provider" }));
     expect((await screen.findAllByText("First provider result")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /^Apply \d+ changes?$/ })).toBeInTheDocument();
+    // The compact facts open by default; the full side-by-side rows sit behind Adjust.
+    expect(screen.queryByText(/Empty fields are filled from/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Adjust…" }));
+    expect(screen.getByText(/Empty fields are filled from/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Done adjusting" }));
+    expect(screen.queryByText(/Empty fields are filled from/)).not.toBeInTheDocument();
 
-    await userEvent.selectOptions(screen.getAllByRole("combobox").filter((element) => element.tagName === "SELECT")[0], "metadata-server:https://second.example/graphql");
+    await userEvent.selectOptions(
+      screen.getAllByRole("combobox").filter((element) => element.tagName === "SELECT")[0],
+      "metadata-server:https://second.example/graphql",
+    );
 
     await waitFor(() => expect(screen.queryAllByText("First provider result")).toHaveLength(0));
     expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
@@ -165,7 +174,10 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.selectOptions(screen.getAllByRole("combobox").filter((element) => element.tagName === "SELECT")[0], "metadata-server:https://second.example/graphql");
+    await userEvent.selectOptions(
+      screen.getAllByRole("combobox").filter((element) => element.tagName === "SELECT")[0],
+      "metadata-server:https://second.example/graphql",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Refresh from First provider" }));
     await userEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
 
@@ -256,6 +268,7 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
+    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
     await userEvent.click(screen.getByTitle("Tagger settings"));
     await userEvent.selectOptions(screen.getByLabelText("Default bulk match strategy"), "remote-id");
     await userEvent.click(screen.getByRole("button", { name: "Save default" }));
@@ -330,6 +343,7 @@ describe("VideoTagger", () => {
     );
 
     mocks.searchMetadataServer.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     await userEvent.click(screen.getByTitle("Search by fingerprint only"));
     await waitFor(() =>
       expect(mocks.searchMetadataServer).toHaveBeenCalledWith(
@@ -395,10 +409,14 @@ describe("VideoTagger", () => {
     await userEvent.type(screen.getByPlaceholderText("Video URL..."), "{Enter}");
 
     await waitFor(() => expect(mocks.createScrapeAttempt).toHaveBeenCalledOnce());
-    expect(await screen.findByRole("button", { name: /^Countdown:/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Edging:/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^countdown:/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Scraped Performer:/ })).toBeInTheDocument();
-    expect(screen.getByText("Scraped Studio")).toBeInTheDocument();
+    // The compact review lists every scraped tag and performer as an added chip, deduplicated by name,
+    // and the studio as a field that fills the empty current one.
+    expect((await screen.findByText("Countdown")).closest("[data-state]")).toHaveAttribute("data-state", "new");
+    expect(screen.getByText("Edging").closest("[data-state]")).toHaveAttribute("data-state", "new");
+    expect(screen.queryByText("countdown")).not.toBeInTheDocument();
+    expect(screen.getByText("Scraped Performer").closest("[data-state]")).toHaveAttribute("data-state", "new");
+    const studio = screen.getByText("Studio").closest("[data-tone]")!;
+    expect(studio).toHaveAttribute("data-tone", "ok");
+    expect(within(studio as HTMLElement).getByText("Scraped Studio")).toBeInTheDocument();
   });
 });
