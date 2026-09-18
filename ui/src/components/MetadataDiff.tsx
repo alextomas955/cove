@@ -447,23 +447,13 @@ function ScalarRow({
       <div className="flex items-center justify-between gap-2 md:block md:pt-2.5">
         <span className="text-sm font-semibold">{field.label}</span>
         <span className="md:hidden">
-          <StatusPill
-            status={status}
-            chosen={chosen}
-            incoming={sentenceLabel(source)}
-            kept={sentenceLabel(target)}
-          />
+          <StatusPill status={status} chosen={chosen} incoming={sentenceLabel(source)} kept={sentenceLabel(target)} />
         </span>
       </div>
       {option("source", source)}
       {option("target", target)}
       <div className="hidden items-start justify-end md:flex md:pt-2.5">
-        <StatusPill
-          status={status}
-          chosen={chosen}
-          incoming={sentenceLabel(source)}
-          kept={sentenceLabel(target)}
-        />
+        <StatusPill status={status} chosen={chosen} incoming={sentenceLabel(source)} kept={sentenceLabel(target)} />
       </div>
     </fieldset>
   );
@@ -520,7 +510,14 @@ function ListRow({
     ...items,
     ...selected
       .filter((id) => !items.some((item) => item.id === id))
-      .map((id) => ({ id, source: undefined, target: undefined, result: id as unknown, inSource: false, inTarget: false })),
+      .map((id) => ({
+        id,
+        source: undefined,
+        target: undefined,
+        result: id as unknown,
+        inSource: false,
+        inTarget: false,
+      })),
   ];
   const modes = [
     {
@@ -597,47 +594,43 @@ function ListRow({
         {field.renderList ? (
           field.renderList(selected, onChange, disabled)
         ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {shown.map((item) => {
-            const state = stateOf(item);
-            const included = state !== "excluded";
-            const toggle = () => {
-              if (!disabled) onChange(included ? selected.filter((id) => id !== item.id) : [...selected, item.id]);
-            };
-            const togglable = !field.modesOnly && !(field.lockKeptItems && item.inTarget);
-            return (
-              <span
-                key={item.id}
-                data-state={state}
-                title={state === "new" ? "Not in your library yet; will be created" : undefined}
-                className={`inline-flex max-w-full items-center gap-1.5 rounded border py-0.5 ${togglable ? "pl-2 pr-1" : "px-2"} text-xs ${chipClass[state]}`}
-              >
-                {state === "added" || state === "new" ? (
-                  <Plus className="h-3 w-3 shrink-0" />
-                ) : null}
-                <span className="min-w-0 truncate">
-                  {renderItem(item.result)}
+          <div className="flex flex-wrap gap-1.5">
+            {shown.map((item) => {
+              const state = stateOf(item);
+              const included = state !== "excluded";
+              const toggle = () => {
+                if (!disabled) onChange(included ? selected.filter((id) => id !== item.id) : [...selected, item.id]);
+              };
+              const togglable = !field.modesOnly && !(field.lockKeptItems && item.inTarget);
+              return (
+                <span
+                  key={item.id}
+                  data-state={state}
+                  title={state === "new" ? "Not in your library yet; will be created" : undefined}
+                  className={`inline-flex max-w-full items-center gap-1.5 rounded border py-0.5 ${togglable ? "pl-2 pr-1" : "px-2"} text-xs ${chipClass[state]}`}
+                >
+                  {state === "added" || state === "new" ? <Plus className="h-3 w-3 shrink-0" /> : null}
+                  <span className="min-w-0 truncate">{renderItem(item.result)}</span>
+                  {togglable ? (
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={toggle}
+                      aria-label={`${included ? "Remove" : "Add"} ${field.label}: ${label(item)}`}
+                      className="inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+                    >
+                      {included ? <X className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                    </button>
+                  ) : null}
                 </span>
-                {togglable ? (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={toggle}
-                    aria-label={`${included ? "Remove" : "Add"} ${field.label}: ${label(item)}`}
-                    className="inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
-                  >
-                    {included ? <X className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
-                  </button>
-                ) : null}
-              </span>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
         )}
         {created ? (
           <span className="text-[11px] text-amber-300">
-            {created === 1 ? "1 amber item does" : `${created} amber items do`} not exist in your library yet and will be
-            created.
+            {created === 1 ? "1 amber item does" : `${created} amber items do`} not exist in your library yet and will
+            be created.
           </span>
         ) : null}
         {field.renderListEditor?.(selected, onChange, disabled)}

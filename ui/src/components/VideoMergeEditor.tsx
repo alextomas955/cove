@@ -1,9 +1,35 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { videos } from "../api/client";
+import { videoAlignments, videos } from "../api/client";
 import type { Video, VideoMergeFileHandling } from "../api/types";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { VideoAlignmentDialog } from "./VideoAlignmentDialog";
 import { ATTACH_FILES, VideoMergeReview } from "./VideoMergeReview";
+
+/**
+ * Makes a merged copy's file the kept video's primary once the merge is through, the way the video's
+ * own set-as-primary flow does: nothing when the merge already adopted it (a kept video without a
+ * primary takes the first copy's), a direct switch when the files are equivalent or nothing timed is
+ * affected, otherwise the alignment dialog. Returns whether the dialog is still needed.
+ */
+async function switchPrimaryFile(videoId: number, fileId: number): Promise<"done" | "dialog"> {
+  try {
+    const kept = await videos.get(videoId);
+    if (kept.primaryFileId === fileId) return "done";
+    const assessment = await videoAlignments.assess(videoId, fileId);
+    if (!assessment.equivalent && assessment.dependencyCount > 0) return "dialog";
+    await videoAlignments.apply(videoId, {
+      fileId,
+      resolution: "direct",
+      expectedPrimaryFileId: assessment.sourceFileId,
+    });
+    return "done";
+  } catch (error) {
+    // The merge already happened; the dialog shows what went wrong and offers the choices.
+    console.warn("Setting the primary file after the merge did not go through directly.", error);
+    return "dialog";
+  }
+}
 
 /**
  * The library merge: loads the kept video and the videos to merge into it, shows the review shell and
@@ -30,20 +56,46 @@ export function VideoMergeEditor({
   const [swapped, setSwapped] = useState(false);
   // Kept here so a swap, which remounts the review, does not forget the files decision.
   const [fileHandling, setFileHandling] = useState(initialFileHandling);
+  // The merged copy's file still to be made primary through the alignment dialog, after the merge.
+  const [aligning, setAligning] = useState<{ videoId: number; fileId: number }>();
   const canSwap = sourceIds.length === 1;
   const keptId = swapped && canSwap ? sourceIds[0] : targetId;
   const removedIds = swapped && canSwap ? [targetId] : [...sourceIds].sort((a, b) => a - b);
   const ids = [targetId, ...sourceIds];
+  const comparisonKey = ["video-merge-comparison", ...ids];
   const data = useQuery({
-    queryKey: ["video-merge-comparison", ...ids],
+    queryKey: comparisonKey,
     queryFn: async () => {
       const loaded = await Promise.all(ids.map((id) => videos.get(id)));
       return Object.fromEntries(loaded.map((video) => [video.id, video])) as Record<number, Video>;
     },
     staleTime: 0,
     refetchOnWindowFocus: false,
+    enabled: aligning == null,
   });
   const qc = useQueryClient();
+  const refresh = () =>
+    Promise.all(
+      [...queryKeys, ["videos"], comparisonKey, ...ids.map((id) => ["video", id])].map((queryKey) =>
+        qc.invalidateQueries({ queryKey }),
+      ),
+    );
+  const finish = async () => {
+    await refresh();
+    onMerged?.(keptId);
+    onClose();
+  };
+  // Once the videos are merged, only the primary-file step is left: the review would show stale
+  // copies and could merge them again, so the alignment dialog takes its place.
+  if (aligning)
+    return (
+      <VideoAlignmentDialog
+        videoId={aligning.videoId}
+        targetFileId={aligning.fileId}
+        onClose={() => void finish()}
+        onApplied={() => void refresh()}
+      />
+    );
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 sm:p-3">
       <div
@@ -62,15 +114,13 @@ export function VideoMergeEditor({
             canDeleteFiles={canDeleteFiles}
             onSwap={canSwap ? () => setSwapped((current) => !current) : undefined}
             onClose={onClose}
-            onConfirm={async ({ metadata, fileHandling: chosenFileHandling }) => {
+            onConfirm={async ({ metadata, fileHandling: chosenFileHandling, primaryFileId }) => {
               await videos.merge(keptId, removedIds, metadata, chosenFileHandling);
-              await Promise.all(
-                [...queryKeys, ["videos"], ...ids.map((id) => ["video", id])].map((queryKey) =>
-                  qc.invalidateQueries({ queryKey }),
-                ),
-              );
-              onMerged?.(keptId);
-              onClose();
+              if (primaryFileId != null && (await switchPrimaryFile(keptId, primaryFileId)) === "dialog") {
+                setAligning({ videoId: keptId, fileId: primaryFileId });
+                return;
+              }
+              await finish();
             }}
           />
         ) : (

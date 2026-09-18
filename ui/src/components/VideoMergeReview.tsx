@@ -2,7 +2,14 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeftRight, ArrowRight, Check, GitMerge, Info, X } from "lucide-react";
 import { videos } from "../api/client";
-import type { MetadataServer, Tag, Video, VideoMergeAssessment, VideoMergeFileHandling, VideoMergeMetadata } from "../api/types";
+import type {
+  MetadataServer,
+  Tag,
+  Video,
+  VideoMergeAssessment,
+  VideoMergeFileHandling,
+  VideoMergeMetadata,
+} from "../api/types";
 import { useOptionalAppConfig } from "../state/AppConfigContext";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { getEditableTagIds } from "../utils/tags";
@@ -58,13 +65,16 @@ export const REMOVE_FILES: VideoMergeFileHandling = { mode: "remove", deleteFile
 export interface VideoMergeChoices {
   metadata: VideoMergeMetadata;
   fileHandling: VideoMergeFileHandling;
+  /** A merged copy's file to make the kept video's primary after the merge; null keeps the kept video's own. */
+  primaryFileId: number | null;
 }
 
 /**
  * The default merge policy in one sentence, shared by the review's Result panel and the duplicate finder's
  * policy dialogs so every entry point promises the same thing.
  */
-export const MERGE_POLICY_FILL = "Empty fields are filled from the merged copies and conflicts keep the kept video's values.";
+export const MERGE_POLICY_FILL =
+  "Empty fields are filled from the merged copies and conflicts keep the kept video's values.";
 export const MERGE_POLICY_LISTS =
   "Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, bookmarks and play history are combined.";
 export const MERGE_POLICY_SUMMARY = `${MERGE_POLICY_FILL} ${MERGE_POLICY_LISTS}`;
@@ -77,10 +87,13 @@ export function describeMergeOutcome({
   removedVideos,
   removedFiles,
   fileHandling,
+  newPrimaryFile,
 }: {
   removedVideos: number;
   removedFiles: number;
   fileHandling: VideoMergeFileHandling;
+  /** The basename of a merged copy's file that becomes primary after the merge, when one was chosen. */
+  newPrimaryFile?: string;
 }) {
   const videos = removedVideos === 1 ? "video" : "videos";
   const removal = `The merged ${removedVideos === 1 ? "video is" : "videos are"} removed. Timestamps do not change.`;
@@ -90,7 +103,10 @@ export function describeMergeOutcome({
     const deleted = fileHandling.deleteFiles ? ` and ${removedFiles === 1 ? "is" : "are"} deleted from disk` : "";
     return `The merged ${removedVideos === 1 ? "video's" : "videos'"} ${files} ${leave} Cove${deleted}. ${MERGE_POLICY_LISTS} Markers and timed group items move only when the files are equivalent. Derived tags stay managed by their providers. ${removal}`;
   }
-  return `${removedVideos === 1 ? "Both videos'" : "All"} files stay and attach to the kept video, which keeps its primary file. ${MERGE_POLICY_LISTS} Segments, detections, group memberships and child clips move with the ${videos}. Derived tags stay managed by their providers. ${removal}`;
+  const primary = newPrimaryFile
+    ? `and ${newPrimaryFile} becomes its primary file after the merge, through alignment when the files differ and timed content is affected.`
+    : "which keeps its primary file.";
+  return `${removedVideos === 1 ? "Both videos'" : "All"} files stay and attach to the kept video, ${primary} ${MERGE_POLICY_LISTS} Segments, detections, group memberships and child clips move with the ${videos}. Derived tags stay managed by their providers. ${removal}`;
 }
 
 export const coverUrl = (video: Video) => video.imagePath ?? videos.screenshotUrl(video.id, video.updatedAt);
@@ -109,19 +125,13 @@ export function buildVideoMergeDiff(
   onUnavailable?: (url: string) => void,
   metadataServers: Pick<MetadataServer, "endpoint" | "name">[] = [],
 ) {
-  const customKeys = [
-    ...new Set([target, ...sources].flatMap((video) => Object.keys(video.customFields ?? {}))),
-  ];
+  const customKeys = [...new Set([target, ...sources].flatMap((video) => Object.keys(video.customFields ?? {})))];
   const fields: DiffField[] = Object.entries(scalarLabels).map(([key, label]) => ({ key, label }));
   const studioNames = new Map<number, string | undefined>(
     [target, ...sources].filter((video) => video.studioId != null).map((video) => [video.studioId!, video.studioName]),
   );
   fields.find((field) => field.key === "studioId")!.render = (value) =>
-    value == null ? (
-      <span className="text-muted italic">Empty</span>
-    ) : (
-      (studioNames.get(Number(value)) ?? "Studio")
-    );
+    value == null ? <span className="text-muted italic">Empty</span> : (studioNames.get(Number(value)) ?? "Studio");
   // The backend keeps a kept video organized when any merged copy was; showing that as a fill rather
   // than a conflict makes the review's default match what a merge without choices does.
   fields.find((field) => field.key === "organized")!.isEmpty = (value) => value !== true;
@@ -269,7 +279,9 @@ export function buildVideoMergeDiff(
       const withValue = holders.filter((entry) => hasValue(entry.video, key));
       const origin = withValue[0] ?? holders[0];
       values[key] = origin.values[key];
-      const disagree = withValue.some((entry) => JSON.stringify(entry.values[key]) !== JSON.stringify(origin.values[key]));
+      const disagree = withValue.some(
+        (entry) => JSON.stringify(entry.values[key]) !== JSON.stringify(origin.values[key]),
+      );
       provenance[key] = disagree ? `From ${videoTitle(origin.video)}` : origin.provenance[key];
     }
     const union = <T,>(items: T[], key: (item: T) => string) => {
@@ -286,10 +298,22 @@ export function buildVideoMergeDiff(
           sources.flatMap((video) => video.tags.filter((tag) => getEditableTagIds(video.tags).includes(tag.id))),
           (tag) => String(tag.id),
         ),
-        performers: union(sources.flatMap((video) => video.performers), (item) => String(item.id)),
-        galleries: union(sources.flatMap((video) => video.galleries), (item) => String(item.id)),
-        urls: union(sources.flatMap((video) => video.urls), (url) => url.toUpperCase()),
-        remoteIds: union(sources.flatMap((video) => video.remoteIds), remoteKey),
+        performers: union(
+          sources.flatMap((video) => video.performers),
+          (item) => String(item.id),
+        ),
+        galleries: union(
+          sources.flatMap((video) => video.galleries),
+          (item) => String(item.id),
+        ),
+        urls: union(
+          sources.flatMap((video) => video.urls),
+          (url) => url.toUpperCase(),
+        ),
+        remoteIds: union(
+          sources.flatMap((video) => video.remoteIds),
+          remoteKey,
+        ),
       },
       provenance,
     };
@@ -434,6 +458,8 @@ function FilesSection({
   assessments,
   disabled,
   onChange,
+  primaryFileId,
+  onPrimaryFileChange,
 }: {
   kept: Video;
   removed: Video[];
@@ -443,6 +469,8 @@ function FilesSection({
   assessments: VideoMergeAssessment[];
   disabled: boolean;
   onChange: (next: VideoMergeFileHandling) => void;
+  primaryFileId: number | null;
+  onPrimaryFileChange: (fileId: number | null) => void;
 }) {
   const columns = [...removed, kept];
   const rows = FILE_ROWS.map((row) => ({ row, ...rowTones(row, columns, new Map()) }));
@@ -494,6 +522,45 @@ function FilesSection({
                 ))}
               </tr>
             ))}
+            {allowAttach && !remove ? (
+              <tr role="radiogroup" aria-label="Primary file after the merge">
+                <th scope="row" className="py-1.5 pr-3 text-left font-semibold text-secondary">
+                  Primary file
+                </th>
+                {columns.map((video, index) => {
+                  const isKept = index === columns.length - 1;
+                  const file = primaryFile(video);
+                  const fileId = isKept ? null : (file?.id ?? null);
+                  const chosen = isKept ? primaryFileId == null : fileId != null && primaryFileId === fileId;
+                  return (
+                    <td key={video.id} className="py-1.5 pr-3">
+                      {isKept || fileId != null ? (
+                        <label
+                          className={`flex cursor-pointer items-center gap-1.5 ${chosen ? "text-foreground" : "text-secondary"}`}
+                        >
+                          <input
+                            type="radio"
+                            name="video-merge-primary"
+                            checked={chosen}
+                            disabled={disabled}
+                            onChange={() => onPrimaryFileChange(fileId)}
+                            aria-label={
+                              isKept
+                                ? `Keep ${file?.basename ?? "the kept video's file"} as the primary file`
+                                : `Make ${file?.basename ?? `video ${video.id}'s file`} the primary file`
+                            }
+                            className="accent-accent"
+                          />
+                          {isKept ? "Stays primary" : "Make this the primary file"}
+                        </label>
+                      ) : (
+                        <span className="text-muted">No file</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -516,8 +583,8 @@ function FilesSection({
               <span>
                 <span className="block text-sm">Attach {plural(removedFiles, "file")} to the kept video</span>
                 <span className="block text-xs text-muted">
-                  Every file stays in Cove. The kept video ends up with {kept.files.length + removedFiles} files and
-                  keeps its primary file.
+                  Every file stays in Cove. The kept video ends up with {kept.files.length + removedFiles} files
+                  {primaryFileId == null ? " and keeps its primary file" : "; the chosen file becomes primary"}.
                 </span>
               </span>
             </label>
@@ -546,7 +613,10 @@ function FilesSection({
           </label>
         </div>
         {keptTimelines.length > 0 ? (
-          <ul role="alert" className="flex flex-col gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+          <ul
+            role="alert"
+            className="flex flex-col gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200"
+          >
             {keptTimelines.map((warning) => (
               <li key={warning.video.id} className="flex items-start gap-1.5">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -570,7 +640,9 @@ function FilesSection({
                   className="mt-0.5 accent-red-500"
                 />
                 <span>
-                  <span className={`block ${fileHandling.deleteFiles ? "text-red-300" : ""}`}>Delete the files from disk</span>
+                  <span className={`block ${fileHandling.deleteFiles ? "text-red-300" : ""}`}>
+                    Delete the files from disk
+                  </span>
                   <span className="block text-xs text-muted">
                     {fileHandling.deleteFiles
                       ? "This cannot be undone."
@@ -634,9 +706,13 @@ export function VideoMergeReview({
   const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   const [unavailableCovers, setUnavailableCovers] = useState<string[]>([]);
   const [fileHandling, setFileHandlingState] = useState<VideoMergeFileHandling>(initialFileHandling);
+  // The kept video's primary file stays unless a merged copy's file is chosen here; removing the
+  // copies' files takes that choice away again.
+  const [primaryFileId, setPrimaryFileId] = useState<number | null>(null);
   const setFileHandling = (next: VideoMergeFileHandling) => {
     setFileHandlingState(next);
     onFileHandlingChange?.(next);
+    if (next.mode === "remove") setPrimaryFileId(null);
   };
   const comparison = useMemo(() => {
     const comparison = buildVideoMergeDiff(
@@ -665,7 +741,9 @@ export function VideoMergeReview({
       // Alphabetical, as the edit form lists them; a search-added id without a known label goes last.
       const ordered = (ids: number[]) =>
         [...ids].sort((left, right) =>
-          (labelOf.get(left) ?? "\uffff").localeCompare(labelOf.get(right) ?? "\uffff", undefined, { sensitivity: "base" }),
+          (labelOf.get(left) ?? "\uffff").localeCompare(labelOf.get(right) ?? "\uffff", undefined, {
+            sensitivity: "base",
+          }),
         );
       comparison.fields.find((field) => field.key === key)!.renderList = (selected, onChange, disabled) => (
         <EntityReferenceMultiSelector
@@ -681,7 +759,9 @@ export function VideoMergeReview({
     relationship(
       "tags",
       "tag",
-      all.flatMap((video) => video.tags.map((tag) => ({ id: tag.id, label: tag.name, secondaryLabel: tag.tagGroupName ?? undefined }))),
+      all.flatMap((video) =>
+        video.tags.map((tag) => ({ id: tag.id, label: tag.name, secondaryLabel: tag.tagGroupName ?? undefined })),
+      ),
       "Search tags...",
     );
     relationship(
@@ -693,7 +773,9 @@ export function VideoMergeReview({
     relationship(
       "galleries",
       "gallery",
-      all.flatMap((video) => video.galleries.map((gallery) => ({ id: gallery.id, label: gallery.title ?? `Gallery ${gallery.id}` }))),
+      all.flatMap((video) =>
+        video.galleries.map((gallery) => ({ id: gallery.id, label: gallery.title ?? `Gallery ${gallery.id}` })),
+      ),
       "Search galleries...",
     );
     comparison.fields.find((field) => field.key === "urls")!.renderListEditor = (selected, onChange, disabled) => (
@@ -710,7 +792,8 @@ export function VideoMergeReview({
   );
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: () => onConfirm({ metadata: videoMergeMetadata(selection, sources, kept), fileHandling }),
+    mutationFn: () =>
+      onConfirm({ metadata: videoMergeMetadata(selection, sources, kept), fileHandling, primaryFileId }),
   });
   // Only asked when the copies' files would go: it says which markers would not follow them.
   const assessment = useQuery({
@@ -733,7 +816,9 @@ export function VideoMergeReview({
   const resultTitle = pick("title") as string | null;
   const resultStudioId = pick("studioId") as number | null;
   const resultStudio =
-    resultStudioId == null ? null : ([kept, ...sources].find((video) => video.studioId === resultStudioId)?.studioName ?? "Studio");
+    resultStudioId == null
+      ? null
+      : ([kept, ...sources].find((video) => video.studioId === resultStudioId)?.studioName ?? "Studio");
   const resultDate = pick("date") as string | null;
   const performerCount = (selection.performers as string[]).length;
   const removedFiles = sources.reduce((sum, video) => sum + video.files.length, 0);
@@ -743,7 +828,16 @@ export function VideoMergeReview({
   const fileNote = remove
     ? `${plural(removedFiles, "file")} ${fileHandling.deleteFiles ? "deleted from disk" : "removed from Cove"}`
     : `${plural(removedFiles, "file")} attached`;
-  const outcomeText = describeMergeOutcome({ removedVideos: sources.length, removedFiles, fileHandling });
+  const newPrimary =
+    primaryFileId == null
+      ? undefined
+      : sources.flatMap((video) => video.files).find((item) => item.id === primaryFileId);
+  const outcomeText = describeMergeOutcome({
+    removedVideos: sources.length,
+    removedFiles,
+    fileHandling,
+    newPrimaryFile: newPrimary?.basename,
+  });
   const keptTimelines = remove ? timelineWarnings(sources, assessments) : [];
   const dotClass: Record<string, string> = {
     filled: "bg-green-400",
@@ -804,6 +898,13 @@ export function VideoMergeReview({
           <span>Could not check whether markers will follow the removed files.</span>
         </p>
       ) : null}
+      {newPrimary ? (
+        <p className="text-xs leading-snug text-secondary">
+          <span className="font-semibold text-foreground">{newPrimary.basename}</span> becomes the primary file after
+          the merge. If it does not match the current one and timed content is affected, the set-primary-file dialog
+          opens.
+        </p>
+      ) : null}
       <p className="text-[11px] leading-relaxed text-muted">{outcomeText}</p>
     </aside>
   );
@@ -859,6 +960,8 @@ export function VideoMergeReview({
             assessments={assessments}
             disabled={mutation.isPending}
             onChange={setFileHandling}
+            primaryFileId={primaryFileId}
+            onPrimaryFileChange={setPrimaryFileId}
           />
           <section aria-label="Fields" className="min-w-0">
             <MetadataDiff {...comparison} value={selection} onChange={setSelection} disabled={mutation.isPending} />

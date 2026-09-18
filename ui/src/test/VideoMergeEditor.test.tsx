@@ -8,10 +8,23 @@ import { defaultDiffSelection } from "../components/MetadataDiff";
 import { MergeDialog } from "../components/MergeDialog";
 import type { Video, VideoFile } from "../api/types";
 
-const api = vi.hoisted(() => ({ get: vi.fn(), merge: vi.fn(), assessMerge: vi.fn(), findTags: vi.fn() }));
+const api = vi.hoisted(() => ({
+  get: vi.fn(),
+  merge: vi.fn(),
+  assessMerge: vi.fn(),
+  findTags: vi.fn(),
+  assess: vi.fn(),
+  apply: vi.fn(),
+}));
 vi.mock("../api/client", () => ({
-  videos: { get: api.get, merge: api.merge, assessMerge: api.assessMerge, screenshotUrl: (id: number) => `/cover/${id}` },
+  videos: {
+    get: api.get,
+    merge: api.merge,
+    assessMerge: api.assessMerge,
+    screenshotUrl: (id: number) => `/cover/${id}`,
+  },
   tags: { find: api.findTags },
+  videoAlignments: { assess: api.assess, apply: api.apply },
 }));
 const file = (id: number, overrides: Partial<VideoFile> = {}): VideoFile => ({
   id,
@@ -62,6 +75,17 @@ beforeEach(() => {
   api.merge.mockResolvedValue(video(2));
   api.assessMerge.mockResolvedValue([]);
   api.findTags.mockResolvedValue({ items: [{ id: 9, name: "Added tag" }] });
+  api.assess.mockResolvedValue({
+    sourceFileId: 2,
+    targetFileId: 1,
+    sourceDuration: 600,
+    targetDuration: 600,
+    equivalent: true,
+    canAlign: true,
+    dependencyCount: 0,
+    dependencyCounts: {},
+  });
+  api.apply.mockResolvedValue({ primaryFileId: 1 });
 });
 describe("VideoMergeEditor", () => {
   it("labels remote IDs with configured server names without changing merge identity", () => {
@@ -86,7 +110,10 @@ describe("VideoMergeEditor", () => {
     );
   });
   it("saves mixed choices and a library tag in a single merge request", async () => {
-    api.get.mockImplementation(async (id: number) => ({ ...video(id), urls: id === 2 ? ["https://merge.example/target"] : [] }));
+    api.get.mockImplementation(async (id: number) => ({
+      ...video(id),
+      urls: id === 2 ? ["https://merge.example/target"] : [],
+    }));
     const { onMerged } = setup();
     fireEvent.click(await screen.findByLabelText("Title from source"));
     // Relationships are edited with the same selector as the video's edit form: search, add, x to drop.
@@ -227,7 +254,10 @@ describe("VideoMergeEditor", () => {
       expect(api.merge).toHaveBeenCalledWith(
         2,
         [1, 3],
-        expect.objectContaining({ tagIds: expect.arrayContaining([10, 20, 30]), fields: expect.objectContaining({ title: "source" }) }),
+        expect.objectContaining({
+          tagIds: expect.arrayContaining([10, 20, 30]),
+          fields: expect.objectContaining({ title: "source" }),
+        }),
         attach,
       ),
     );
@@ -307,5 +337,102 @@ describe("MergeDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compare metadata" }));
     expect(renderReview).toHaveBeenCalledWith(6, [5, 7], expect.any(Function));
     expect(screen.getByText("review")).toBeInTheDocument();
+  });
+});
+
+describe("VideoMergeEditor primary file", () => {
+  const withFiles = () =>
+    api.get.mockImplementation(async (id: number) => ({ ...video(id), files: [file(id)], primaryFileId: id }));
+
+  it("keeps the kept video's primary file by default and switches directly when the files are equivalent", async () => {
+    withFiles();
+    const { onMerged, onClose } = setup();
+    expect(await screen.findByLabelText("Keep video-2.mp4 as the primary file")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Make video-1.mp4 the primary file"));
+    expect(screen.getAllByText(/becomes the primary file after the merge/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    await waitFor(() => expect(onMerged).toHaveBeenCalledWith(2));
+    expect(api.merge).toHaveBeenCalledWith(2, [1], expect.anything(), attach);
+    expect(api.assess).toHaveBeenCalledWith(2, 1);
+    expect(api.apply).toHaveBeenCalledWith(2, { fileId: 1, resolution: "direct", expectedPrimaryFileId: 2 });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("opens the alignment dialog after the merge when the files differ and timed content is affected", async () => {
+    withFiles();
+    api.assess.mockResolvedValue({
+      sourceFileId: 2,
+      targetFileId: 1,
+      sourceDuration: 600,
+      targetDuration: 660,
+      equivalent: false,
+      canAlign: true,
+      dependencyCount: 2,
+      dependencyCounts: { segment: 2 },
+    });
+    const { onMerged, onClose } = setup();
+    fireEvent.click(await screen.findByLabelText("Make video-1.mp4 the primary file"));
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    expect(await screen.findByRole("heading", { name: "Set primary video file" })).toBeInTheDocument();
+    expect(api.merge).toHaveBeenCalledTimes(1);
+    expect(api.apply).not.toHaveBeenCalled();
+    expect(onMerged).not.toHaveBeenCalled();
+    // Leaving the dialog still closes the merge: the videos are merged already.
+    fireEvent.click(screen.getAllByRole("button", { name: "Cancel" })[0]);
+    await waitFor(() => expect(onMerged).toHaveBeenCalledWith(2));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("drops the primary choice when the copy's file is removed instead of attached", async () => {
+    withFiles();
+    setup();
+    fireEvent.click(await screen.findByLabelText("Make video-1.mp4 the primary file"));
+    fireEvent.click(screen.getByLabelText(/Remove the merged video's 1 file/));
+    expect(screen.queryByLabelText("Make video-1.mp4 the primary file")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Attach 1 file to the kept video/));
+    expect(screen.getByLabelText("Keep video-2.mp4 as the primary file")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    await waitFor(() => expect(api.merge).toHaveBeenCalled());
+    expect(api.assess).not.toHaveBeenCalled();
+  });
+
+  it("names each copy's file in a merge of several videos", async () => {
+    withFiles();
+    setup({ sourceIds: [1, 3], targetId: 2 });
+    expect(await screen.findByLabelText("Make video-1.mp4 the primary file")).toBeInTheDocument();
+    expect(screen.getByLabelText("Make video-3.mp4 the primary file")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Primary file after the merge" })).toBeInTheDocument();
+  });
+
+  it("is done without assessing when the merge already adopted the chosen file as primary", async () => {
+    api.get.mockImplementation(async (id: number) => ({
+      ...video(id),
+      files: [file(id)],
+      primaryFileId: id === 2 ? null : id,
+    }));
+    const { onMerged } = setup();
+    fireEvent.click(await screen.findByLabelText("Make video-1.mp4 the primary file"));
+    // After the merge the kept video reports the copy's file as its primary.
+    api.merge.mockImplementation(async () => {
+      api.get.mockImplementation(async (id: number) => ({ ...video(id), files: [file(1), file(2)], primaryFileId: 1 }));
+      return video(2);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    await waitFor(() => expect(onMerged).toHaveBeenCalledWith(2));
+    expect(api.assess).not.toHaveBeenCalled();
+    expect(api.apply).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the dialog when the direct switch is refused, without merging again", async () => {
+    withFiles();
+    api.apply.mockRejectedValue(new Error("The primary file changed while this dialog was open."));
+    const { onMerged } = setup();
+    fireEvent.click(await screen.findByLabelText("Make video-1.mp4 the primary file"));
+    fireEvent.click(screen.getByRole("button", { name: "Merge & remove 1 copy" }));
+    expect(await screen.findByRole("heading", { name: "Set primary video file" })).toBeInTheDocument();
+    // The review is gone with the merged copies: nothing can merge them a second time.
+    expect(screen.queryByRole("button", { name: "Merge & remove 1 copy" })).not.toBeInTheDocument();
+    expect(api.merge).toHaveBeenCalledTimes(1);
+    expect(onMerged).not.toHaveBeenCalled();
   });
 });

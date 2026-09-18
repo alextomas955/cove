@@ -200,7 +200,9 @@ const performerIdentity = (performer: { name: string; disambiguation?: string | 
 
 function performerItems(input: TaggerReviewInput) {
   const matched = new Set(input.currentPerformerChoiceKeys.map(relationKey));
-  const byIdentity = new Map(input.video.performers.map((performer) => [relationKey(performerIdentity(performer)), performer.id]));
+  const byIdentity = new Map(
+    input.video.performers.map((performer) => [relationKey(performerIdentity(performer)), performer.id]),
+  );
   const choices = input.performerChoices.map((choice) => ({
     ...item(
       relationKey(choice.key),
@@ -218,12 +220,22 @@ function performerItems(input: TaggerReviewInput) {
   const linkedIds = new Set(matchedChoices.map((choice) => choice.localId).filter((id) => id != null));
   const linkedNames = new Set(matchedChoices.map((choice) => relationKey(performerIdentity(choice.candidate))));
   const current = byLabel([
-    ...matchedChoices.map((choice) => ({ ...item(choice.id, choice.label, false, undefined, choice.localId), inTarget: true })),
+    ...matchedChoices.map((choice) => ({
+      ...item(choice.id, choice.label, false, undefined, choice.localId),
+      inTarget: true,
+    })),
     ...input.video.performers
-      .filter((performer) => !linkedIds.has(performer.id) && !linkedNames.has(relationKey(performerIdentity(performer))))
-      .map((performer) => ({ ...item(`local:${performer.id}`, performerIdentity(performer), false, undefined, performer.id), inTarget: true })),
+      .filter(
+        (performer) => !linkedIds.has(performer.id) && !linkedNames.has(relationKey(performerIdentity(performer))),
+      )
+      .map((performer) => ({
+        ...item(`local:${performer.id}`, performerIdentity(performer), false, undefined, performer.id),
+        inTarget: true,
+      })),
   ]);
-  const included = choices.filter((choice) => input.performerActions[choice.id] !== "exclude").map((choice) => choice.id);
+  const included = choices
+    .filter((choice) => input.performerActions[choice.id] !== "exclude")
+    .map((choice) => choice.id);
   return {
     current,
     incoming: byLabel(choices),
@@ -304,11 +316,15 @@ function RelationshipEditor({
 }) {
   const chosen = new Set(selected);
   const current = items.filter((entry) => entry.inTarget && entry.localId != null);
-  const libraryIds = selected.map(libraryIdOf).filter((id): id is number => id != null && !current.some((entry) => entry.localId === id));
+  const libraryIds = selected
+    .map(libraryIdOf)
+    .filter((id): id is number => id != null && !current.some((entry) => entry.localId === id));
   const seedOptions: EntityReferenceOption[] = current.map((entry) => ({ id: entry.localId!, label: entry.label }));
   const labelOf = new Map(seedOptions.map((option) => [option.id, option.label]));
-  const values = [...new Set([...current.filter((entry) => chosen.has(entry.id)).map((entry) => entry.localId!), ...libraryIds])].sort(
-    (left, right) => (labelOf.get(left) ?? "￿").localeCompare(labelOf.get(right) ?? "￿", undefined, { sensitivity: "base" }),
+  const values = [
+    ...new Set([...current.filter((entry) => chosen.has(entry.id)).map((entry) => entry.localId!), ...libraryIds]),
+  ].sort((left, right) =>
+    (labelOf.get(left) ?? "￿").localeCompare(labelOf.get(right) ?? "￿", undefined, { sensitivity: "base" }),
   );
   const lockedIds = current.filter((entry) => entry.locked).map((entry) => entry.localId!);
   const scraped = incomingHidden ? [] : items.filter((entry) => !entry.inTarget);
@@ -386,7 +402,9 @@ export function buildTaggerReview(input: TaggerReviewInput) {
       key: "image",
       label: "Cover",
       alwaysVisible: true,
-      render: (value) => <img src={String(value)} alt="Video cover" className="max-h-40 w-full rounded object-contain" />,
+      render: (value) => (
+        <img src={String(value)} alt="Video cover" className="max-h-40 w-full rounded object-contain" />
+      ),
     });
     sourceValues.image = result.imageUrl;
     targetValues.image = video.imagePath || videos.screenshotUrl(video.id, video.updatedAt);
@@ -458,14 +476,27 @@ export function buildTaggerReview(input: TaggerReviewInput) {
   // when neither side has an item yet.
   if (input.showPerformers) {
     const performers = performerItems(input);
-    relationship("performers", "Performers", "performer", "Search performers...", performers.current, performers.incoming, performers.included, input.performerEdits);
+    relationship(
+      "performers",
+      "Performers",
+      "performer",
+      "Search performers...",
+      performers.current,
+      performers.incoming,
+      performers.included,
+      input.performerEdits,
+    );
   }
   if (input.showTags) {
     const tags = tagItems(input);
     relationship("tags", "Tags", "tag", "Search tags...", tags.current, tags.incoming, tags.included, input.tagEdits);
   }
 
-  const source: DiffRecord = { label: `From ${input.sourceName}`, sentenceLabel: input.sourceName, values: sourceValues };
+  const source: DiffRecord = {
+    label: `From ${input.sourceName}`,
+    sentenceLabel: input.sourceName,
+    values: sourceValues,
+  };
   const target: DiffRecord = { label: "Current", sentenceLabel: "current", values: targetValues, provenance };
   return { fields, source, target, selection };
 }
@@ -515,7 +546,9 @@ export function applyTaggerSelectionChange(
       const added = rawSelected.map(libraryIdOf).filter((id): id is number => id != null);
       const removed = isPreset
         ? []
-        : current.filter((entry) => entry.localId != null && !sideIds.includes(entry.id)).map((entry) => entry.localId!);
+        : current
+            .filter((entry) => entry.localId != null && !sideIds.includes(entry.id))
+            .map((entry) => entry.localId!);
       const nextEdits = { added: [...new Set(added)], removed: [...new Set(removed)] };
       const same = (left: number[], right: number[]) => sameSet(left.map(String), right.map(String));
       if (!same(nextEdits.added, edits?.added ?? []) || !same(nextEdits.removed, edits?.removed ?? []))
@@ -550,7 +583,8 @@ export function applyTaggerSelectionChange(
     "tags",
     tags.current,
     tags.incoming,
-    (ids) => handlers.onToggleTag?.(ids.map((id) => tags.names.get(id)).filter((name): name is string => Boolean(name))),
+    (ids) =>
+      handlers.onToggleTag?.(ids.map((id) => tags.names.get(id)).filter((name): name is string => Boolean(name))),
     input.tagEdits,
   );
   const performers = performerItems(input);

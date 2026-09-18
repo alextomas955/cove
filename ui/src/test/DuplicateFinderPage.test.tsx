@@ -288,7 +288,9 @@ describe("DuplicateFinderPage", () => {
     expect(within(dialog).getByText("Keep")).toBeInTheDocument();
     expect(within(dialog).getByRole("region", { name: "Files" })).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/Attach/)).not.toBeInTheDocument();
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("2 timeline items on Candidate 2 will not be carried over");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "2 timeline items on Candidate 2 will not be carried over",
+    );
     expect(mocks.assessMerge).toHaveBeenCalledWith(1, [2], expect.anything());
     fireEvent.click(within(dialog).getByLabelText("Title from source"));
     fireEvent.click(within(dialog).getByLabelText(/Don't ask again/));
