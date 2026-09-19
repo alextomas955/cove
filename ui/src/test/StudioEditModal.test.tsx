@@ -80,4 +80,42 @@ describe("StudioEditModal", () => {
       expect(mocks.studiosUpdate).toHaveBeenCalledWith(6, { parentId: undefined, clearFields: ["parentId"] }),
     );
   });
+
+  it("discards cancelled edits when reopened", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const renderWith = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <StudioEditModal studio={studio} open={open} onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(true));
+    fireEvent.change(screen.getByPlaceholderText("Studio name"), { target: { value: "Cancelled name" } });
+    rerender(renderWith(false));
+    rerender(renderWith(true));
+
+    expect(screen.getByPlaceholderText("Studio name")).toHaveValue("Original Studio");
+  });
+
+  it("keeps unsaved edits and follows other changes when the studio refetches", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const renderWith = (current: Studio) => (
+      <QueryClientProvider client={queryClient}>
+        <StudioEditModal studio={current} open onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(studio));
+    fireEvent.change(screen.getByPlaceholderText("Studio name"), { target: { value: "Draft name" } });
+    rerender(renderWith({ ...studio, details: "Scraped details" } as Studio));
+
+    expect(screen.getByPlaceholderText("Studio name")).toHaveValue("Draft name");
+    expect(screen.getByPlaceholderText("Studio description")).toHaveValue("Scraped details");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.studiosUpdate).toHaveBeenCalledWith(6, { name: "Draft name" }));
+  });
 });

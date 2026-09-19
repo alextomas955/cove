@@ -70,4 +70,41 @@ describe("ImageEditPanel", () => {
 
     await waitFor(() => expect(mocks.imagesUpdate).toHaveBeenCalledWith(12, { title: "Renamed Poster" }));
   });
+
+  it("keeps the user's edits when saving fails", async () => {
+    mocks.imagesUpdate.mockRejectedValue(new Error("Validation failed"));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ImageEditPanel image={image} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("Sunset Poster"), { target: { value: "Unsaved draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.imagesUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText(/Validation failed/)).toBeInTheDocument());
+    expect(screen.getByDisplayValue("Unsaved draft")).toBeInTheDocument();
+  });
+
+  it("keeps unsaved edits and follows other changes when the image refetches", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const renderWith = (current: Image) => (
+      <QueryClientProvider client={queryClient}>
+        <ImageEditPanel image={current} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(image));
+    fireEvent.change(screen.getByDisplayValue("Sunset Poster"), { target: { value: "Unsaved draft" } });
+    rerender(renderWith({ ...image, organized: true, photographer: "Scraped photographer" } as Image));
+
+    expect(screen.getByDisplayValue("Unsaved draft")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Scraped photographer")).toBeInTheDocument();
+  });
 });

@@ -237,6 +237,9 @@ describe("GalleryEditModal", () => {
     const { rerender } = render(renderWith(buildGallery({ videoIds: [] })));
     fireEvent.change(screen.getByDisplayValue("Summer Set"), { target: { value: "Renamed Set" } });
     rerender(renderWith(buildGallery({ videoIds: [30] })));
+    // The untouched video list follows the refetch; the typed title stays.
+    expect(screen.getByText("video selector: 30")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Renamed Set")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
@@ -253,10 +256,10 @@ describe("GalleryEditModal", () => {
       </QueryClientProvider>
     );
 
-    // Video 14 is unlinked elsewhere while the edit is open; the saved list still contains it.
+    // The user edits the video list, then video 14 is unlinked elsewhere; the saved list still contains it.
     const { rerender } = render(renderWith(buildGallery({ videoIds: [14] })));
-    rerender(renderWith(buildGallery({ videoIds: [] })));
     fireEvent.click(screen.getByRole("button", { name: "Add video 22" }));
+    rerender(renderWith(buildGallery({ videoIds: [] })));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledWith(21, { videoIds: [14, 22] }));

@@ -8,7 +8,9 @@ import { StringListEditor } from "../components/StringListEditor";
 import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../components/RemoteIdsEditor";
 import { EntityReferenceMultiSelector, EntityReferenceSelector } from "../components/EntityReferenceSelector";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
   studio: Studio;
@@ -29,7 +31,9 @@ function studioFormValues(studio: Studio) {
   };
 }
 
-function studioUpdatePayload(values: ReturnType<typeof studioFormValues>): StudioUpdate {
+type StudioFormValues = ReturnType<typeof studioFormValues>;
+
+function studioUpdatePayload(values: StudioFormValues): StudioUpdate {
   const clearFields = [!values.details && "details", values.parentId === undefined && "parentId"].filter(
     (field): field is string => Boolean(field),
   );
@@ -64,7 +68,10 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
   // The studio the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(studio);
 
+  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
+  // reopening after Cancel discards them.
   useEffect(() => {
+    if (!open) return;
     setBaseline(studio);
     setName(studio.name);
     setDetails(studio.details ?? "");
@@ -74,14 +81,45 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
     setSelectedTagIds(studio.tags.map((t) => t.id));
     setCustomFields({ ...(studio.customFields ?? {}) });
     setRemoteIds(studio.remoteIds.map((remoteId) => ({ ...remoteId })));
+  }, [studio.id, open]);
+
+  const currentValues: StudioFormValues = {
+    name,
+    details,
+    urls,
+    aliases,
+    parentId,
+    selectedTagIds,
+    customFields,
+    remoteIds,
+  };
+  const formSetters: FormFieldSetters<StudioFormValues> = {
+    name: setName,
+    details: setDetails,
+    urls: setUrls,
+    aliases: setAliases,
+    parentId: setParentId,
+    selectedTagIds: setSelectedTagIds,
+    customFields: setCustomFields,
+    remoteIds: setRemoteIds,
+  };
+  // When the studio refetches while the dialog is open, untouched fields follow it and the user's edits stay.
+  useEffect(() => {
+    if (!open || studio === baseline) return;
+    applyFormFields(
+      untouchedFieldUpdates(currentValues, studioFormValues(baseline), studioFormValues(studio)),
+      formSetters,
+    );
+    setBaseline(studio);
   }, [studio]);
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: StudioUpdate) => studios.update(studio.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["studio", studio.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["studios"] });
+      // Close once the saved studio is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["studio", studio.id]);
       onClose();
     },
   });
@@ -91,17 +129,9 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const current = studioUpdatePayload({
-      name,
-      details,
-      urls,
-      aliases,
-      parentId,
-      selectedTagIds,
-      customFields,
-      remoteIds,
-    });
-    mutation.mutate(changedUpdateFields(studioUpdatePayload(studioFormValues(baseline)), current));
+    mutation.mutate(
+      changedUpdateFields(studioUpdatePayload(studioFormValues(baseline)), studioUpdatePayload(currentValues)),
+    );
   };
 
   return (

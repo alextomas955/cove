@@ -5,6 +5,7 @@ import type { Audio, AudioUpdate, VideoGroupInput } from "../api/types";
 import { Field } from "../components/EditModal";
 import {
   PerformerContextTagEditor,
+  applyPerformerContextTagEdits,
   buildPerformerContextTagIds,
   syncPerformerContextTags,
 } from "../components/PerformerContextTags";
@@ -12,6 +13,7 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 import { IsoDateInput } from "../components/IsoDateInput";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
 import { getEditableTagIds, getLockedTagIds, mergeTagIds } from "../utils/tags";
@@ -33,10 +35,13 @@ function audioFormValues(audio: Audio) {
     selectedTagIds: getEditableTagIds(audio.tags),
     selectedPerformerIds: audio.performers.map((performer) => performer.id),
     selectedGroups: audio.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })) as VideoGroupInput[],
+    contextTagIdsByPerformer: buildPerformerContextTagIds(audio.contextTagApplications),
   };
 }
 
-function audioUpdatePayload(values: ReturnType<typeof audioFormValues>): AudioUpdate {
+type AudioFormValues = ReturnType<typeof audioFormValues>;
+
+function audioUpdatePayload(values: AudioFormValues): AudioUpdate {
   return {
     title: values.title.trim(),
     code: values.code.trim(),
@@ -77,19 +82,42 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
   );
   // The audio the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(audio);
+  const currentValues: AudioFormValues = {
+    title,
+    code,
+    details,
+    date,
+    studioId,
+    urls,
+    customFields,
+    selectedTagIds,
+    selectedPerformerIds,
+    selectedGroups,
+    contextTagIdsByPerformer,
+  };
+  const formSetters: FormFieldSetters<AudioFormValues> = {
+    title: setTitle,
+    code: setCode,
+    details: setDetails,
+    date: setDate,
+    studioId: setStudioId,
+    urls: setUrls,
+    customFields: setCustomFields,
+    selectedTagIds: setSelectedTagIds,
+    selectedPerformerIds: setSelectedPerformerIds,
+    selectedGroups: setSelectedGroups,
+    contextTagIdsByPerformer: setContextTagIdsByPerformer,
+  };
+  // When the audio refetches (after Mark organized, a scrape or a finished job), untouched fields follow it
+  // and the user's edits stay.
   useEffect(() => {
+    if (audio === baseline) return;
+    const next = audioFormValues(audio);
+    applyFormFields(
+      audio.id === baseline.id ? untouchedFieldUpdates(currentValues, audioFormValues(baseline), next) : next,
+      formSetters,
+    );
     setBaseline(audio);
-    setTitle(audio.title ?? "");
-    setCode(audio.code ?? "");
-    setDetails(audio.details ?? "");
-    setDate(audio.date ?? "");
-    setStudioId(audio.studioId ?? undefined);
-    setUrls(audio.urls.length > 0 ? audio.urls : [""]);
-    setCustomFields({ ...(audio.customFields ?? {}) });
-    setSelectedTagIds(getEditableTagIds(audio.tags));
-    setSelectedPerformerIds(audio.performers.map((performer) => performer.id));
-    setContextTagIdsByPerformer(buildPerformerContextTagIds(audio.contextTagApplications));
-    setSelectedGroups(audio.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })));
   }, [audio]);
 
   const mutation = useMutation({
@@ -100,12 +128,19 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
         "audio",
         audio.id,
         audio.contextTagApplications ?? [],
-        contextTagIdsByPerformer,
-        selectedPerformerIds,
+        // Apply only the user's context tag and performer edits, so ones changed elsewhere are kept.
+        applyPerformerContextTagEdits(
+          buildPerformerContextTagIds(audio.contextTagApplications),
+          buildPerformerContextTagIds(baseline.contextTagApplications),
+          contextTagIdsByPerformer,
+        ),
+        data.performerIds ?? audio.performers.map((performer) => performer.id),
       );
       return audios.get(audio.id);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Reopening Edit before the refetch lands must start from the saved audio.
+      queryClient.setQueryData(["audio", audio.id], saved);
       queryClient.invalidateQueries({ queryKey: ["audio", audio.id] });
       queryClient.invalidateQueries({ queryKey: ["audios"] });
       onSaved();
@@ -129,19 +164,9 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
   };
 
   const handleSave = () => {
-    const current = audioUpdatePayload({
-      title,
-      code,
-      details,
-      date,
-      studioId,
-      urls,
-      customFields,
-      selectedTagIds,
-      selectedPerformerIds,
-      selectedGroups,
-    });
-    mutation.mutate(changedUpdateFields(audioUpdatePayload(audioFormValues(baseline)), current));
+    mutation.mutate(
+      changedUpdateFields(audioUpdatePayload(audioFormValues(baseline)), audioUpdatePayload(currentValues)),
+    );
   };
 
   return (

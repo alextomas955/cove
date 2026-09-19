@@ -174,4 +174,43 @@ describe("TagEditModal", () => {
 
     expect(await sentBody()).toEqual({ showAsSegment: false });
   });
+
+  it("discards cancelled edits when reopened", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const renderWith = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <TagEditModal tag={tag} open={open} onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(true));
+    fireEvent.change(screen.getByPlaceholderText("Tag name"), { target: { value: "Cancelled name" } });
+    rerender(renderWith(false));
+    rerender(renderWith(true));
+
+    expect(screen.getByPlaceholderText("Tag name")).toHaveValue("Original");
+  });
+
+  it("keeps unsaved edits and follows other changes when the tag refetches", async () => {
+    mocks.tagsUpdate.mockResolvedValue({});
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const renderWith = (current: TagDetail) => (
+      <QueryClientProvider client={queryClient}>
+        <TagEditModal tag={current} open onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(tag));
+    fireEvent.change(screen.getByPlaceholderText("Tag name"), { target: { value: "Draft name" } });
+    rerender(renderWith({ ...tag, color: "#00ff00" } as TagDetail));
+
+    expect(screen.getByPlaceholderText("Tag name")).toHaveValue("Draft name");
+    expect(screen.getByPlaceholderText("#6ee7b7")).toHaveValue("#00ff00");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await sentBody()).toEqual({ name: "Draft name" });
+  });
 });

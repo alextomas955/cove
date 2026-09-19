@@ -14,6 +14,7 @@ import {
   defaultDynamicGroupFilterQueryJson,
 } from "../components/DynamicGroupFilterEditor";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 
 interface Props {
   group: Group;
@@ -151,8 +152,7 @@ export function GroupEditModal({ group, open, onClose }: Props) {
 
       return updated;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["group", group.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       queryClient.invalidateQueries({ queryKey: ["group-containinggroups", group.id] });
       const changedParentIds = new Set([
@@ -162,6 +162,8 @@ export function GroupEditModal({ group, open, onClose }: Props) {
       for (const parentId of changedParentIds) {
         queryClient.invalidateQueries({ queryKey: ["group-subgroups", parentId] });
       }
+      // Close once the saved group is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["group", group.id]);
       onClose();
     },
   });

@@ -10,10 +10,12 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../components/RemoteIdsEditor";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 import { SelectedTagChips, type SelectableTag } from "../components/TagSelector";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 import { CountrySelect } from "../components/Country";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
   performer: Performer;
@@ -179,7 +181,10 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
   // The performer the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(performer);
 
+  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
+  // reopening after Cancel discards them.
   useEffect(() => {
+    if (!open) return;
     setBaseline(performer);
     setName(performer.name);
     setDisambiguation(performer.disambiguation || "");
@@ -209,15 +214,86 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     setTagSearch("");
     setCustomFields({ ...(performer.customFields ?? {}) });
     setRemoteIds(performer.remoteIds.map((remoteId) => ({ ...remoteId })));
+  }, [performer.id, open]);
+
+  const currentValues: PerformerFormValues = {
+    name,
+    disambiguation,
+    gender,
+    birthdate,
+    ethnicity,
+    country,
+    eyeColor,
+    hairColor,
+    measurements,
+    tattoos,
+    piercings,
+    details,
+    deathDate,
+    fakeTits,
+    circumcised,
+    careerStart,
+    careerEnd,
+    heightCm,
+    weight,
+    penisLength,
+    rating,
+    urls,
+    aliases,
+    selectedTagIds,
+    customFields,
+    remoteIds,
+  };
+  const formSetters: FormFieldSetters<PerformerFormValues> = {
+    name: setName,
+    disambiguation: setDisambiguation,
+    gender: setGender,
+    birthdate: setBirthdate,
+    ethnicity: setEthnicity,
+    country: setCountry,
+    eyeColor: setEyeColor,
+    hairColor: setHairColor,
+    measurements: setMeasurements,
+    tattoos: setTattoos,
+    piercings: setPiercings,
+    details: setDetails,
+    deathDate: setDeathDate,
+    fakeTits: setFakeTits,
+    circumcised: setCircumcised,
+    careerStart: setCareerStart,
+    careerEnd: setCareerEnd,
+    heightCm: setHeightCm,
+    weight: setWeight,
+    penisLength: setPenisLength,
+    rating: setRating,
+    urls: setUrls,
+    aliases: setAliases,
+    customFields: setCustomFields,
+    remoteIds: setRemoteIds,
+    selectedTagIds: (tagIds) => {
+      setSelectedTagIds(tagIds);
+      setSelectedTagsById((current) => ({ ...current, ...buildSelectedTagLookup(performer.tags) }));
+    },
+  };
+  // When the performer refetches while the dialog is open, untouched fields follow it and the user's edits
+  // stay.
+  useEffect(() => {
+    if (!open || performer === baseline) return;
+    applyFormFields(
+      untouchedFieldUpdates(currentValues, performerFormValues(baseline), performerFormValues(performer)),
+      formSetters,
+    );
+    setBaseline(performer);
   }, [performer]);
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: PerformerUpdate) => performers.update(performer.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performer", performer.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["performers"] });
       queryClient.invalidateQueries({ queryKey: ["performer-country-options"] });
+      // Close once the saved performer is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["performer", performer.id]);
       onClose();
     },
   });
@@ -227,35 +303,9 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const current = performerUpdatePayload({
-      name,
-      disambiguation,
-      gender,
-      birthdate,
-      ethnicity,
-      country,
-      eyeColor,
-      hairColor,
-      measurements,
-      tattoos,
-      piercings,
-      details,
-      deathDate,
-      fakeTits,
-      circumcised,
-      careerStart,
-      careerEnd,
-      heightCm,
-      weight,
-      penisLength,
-      rating,
-      urls,
-      aliases,
-      selectedTagIds,
-      customFields,
-      remoteIds,
-    });
-    mutation.mutate(changedUpdateFields(performerUpdatePayload(performerFormValues(baseline)), current));
+    mutation.mutate(
+      changedUpdateFields(performerUpdatePayload(performerFormValues(baseline)), performerUpdatePayload(currentValues)),
+    );
   };
 
   const filteredTags = tagResults?.items.filter((tag) => !selectedTagIds.includes(tag.id)) ?? [];

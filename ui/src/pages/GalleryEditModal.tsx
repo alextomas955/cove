@@ -9,7 +9,9 @@ import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
 import { invalidateVideosForGalleryLinkChange } from "../utils/galleryVideoLinks";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { untouchedFieldUpdates } from "../utils/rebaseEditForm";
 
 interface Props {
   gallery: Gallery;
@@ -69,6 +71,15 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
     setForm(buildFormState(gallery));
     setCustomFieldsValid(true);
   }, [gallery.id, open]);
+  // When the gallery refetches while the dialog is open, untouched fields follow it and the user's edits stay.
+  useEffect(() => {
+    if (!open || gallery === baseline) return;
+    setForm((current) => ({
+      ...current,
+      ...untouchedFieldUpdates(current, buildFormState(baseline), buildFormState(gallery)),
+    }));
+    setBaseline(gallery);
+  }, [gallery]);
   const tagProvenanceById = buildTagProvenanceById(gallery.tags, gallery.fieldProvenance);
   // Seed chip labels from the loaded gallery so selected chips don't each re-fetch their name by id.
   const tagSeedOptions = gallery.tags.map((tag) => ({ id: tag.id, label: tag.name }));
@@ -80,16 +91,17 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
 
   const mutation = useMutation({
     mutationFn: (data: GalleryUpdate) => galleries.update(gallery.id, data),
-    onSuccess: (_updated, data) => {
+    onSuccess: async (_updated, data) => {
       // Links may have changed elsewhere since the edit started, so compare against both copies.
       if (data.videoIds) {
         invalidateVideosForGalleryLinkChange(qc, baseline.videoIds, data.videoIds);
         invalidateVideosForGalleryLinkChange(qc, gallery.videoIds, data.videoIds);
       }
-      qc.invalidateQueries({ queryKey: ["gallery", gallery.id] });
       qc.invalidateQueries({ queryKey: ["gallery-videos", gallery.id] });
       qc.invalidateQueries({ queryKey: ["gallery-like-count", gallery.id] });
       qc.invalidateQueries({ queryKey: ["galleries"] });
+      // Close once the saved gallery is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(qc, ["gallery", gallery.id]);
       onClose();
     },
   });

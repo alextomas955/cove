@@ -8,7 +8,9 @@ import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../comp
 import { StringListEditor } from "../components/StringListEditor";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
   tag: TagDetail;
@@ -128,12 +130,54 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   const parentTagProvenanceById = buildTagProvenanceById(tag.parents, tag.fieldProvenance, "parents");
   const childTagProvenanceById = buildTagProvenanceById(tag.children, tag.fieldProvenance, "children");
 
+  const currentValues: TagFormValues = {
+    name,
+    sortName,
+    description,
+    color,
+    tagGroupId,
+    minOccurrenceSec,
+    minOccurrencePercent,
+    playerBarMode,
+    segmentColorOverride,
+    segmentLaneOverride,
+    aliases,
+    selectedParentIds,
+    selectedChildIds,
+    remoteIds,
+    customFields,
+  };
+  const formSetters: FormFieldSetters<TagFormValues> = {
+    name: setName,
+    sortName: setSortName,
+    description: setDescription,
+    color: setColor,
+    tagGroupId: setTagGroupId,
+    minOccurrenceSec: setMinOccurrenceSec,
+    minOccurrencePercent: setMinOccurrencePercent,
+    playerBarMode: setPlayerBarMode,
+    segmentColorOverride: setSegmentColorOverride,
+    segmentLaneOverride: setSegmentLaneOverride,
+    aliases: setAliases,
+    selectedParentIds: setSelectedParentIds,
+    selectedChildIds: setSelectedChildIds,
+    remoteIds: setRemoteIds,
+    customFields: setCustomFields,
+  };
+  // When the tag refetches while the dialog is open, untouched fields follow it and the user's edits stay.
+  useEffect(() => {
+    if (!open || tag === baseline) return;
+    applyFormFields(untouchedFieldUpdates(currentValues, tagFormValues(baseline), tagFormValues(tag)), formSetters);
+    setBaseline(tag);
+  }, [tag]);
+
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: TagUpdate) => tags.update(tag.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tag", tag.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["tags"] });
+      // Close once the saved tag is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["tag", tag.id]);
       onClose();
     },
   });
@@ -141,7 +185,10 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   // The tag the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(tag);
 
+  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
+  // reopening after Cancel discards them.
   useEffect(() => {
+    if (!open) return;
     mutation.reset();
     setBaseline(tag);
     setName(tag.name);
@@ -159,7 +206,7 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     setSelectedChildIds(tag.children.map((t) => t.id));
     setRemoteIds(tag.remoteIds?.length ? tag.remoteIds : []);
     setCustomFields({ ...(tag.customFields ?? {}) });
-  }, [tag]);
+  }, [tag.id, open]);
 
   const handleClose = () => {
     mutation.reset();
@@ -168,23 +215,6 @@ export function TagEditModal({ tag, open, onClose }: Props) {
 
   const handleSave = () => {
     const baselineValues = tagFormValues(baseline);
-    const currentValues: TagFormValues = {
-      name,
-      sortName,
-      description,
-      color,
-      tagGroupId,
-      minOccurrenceSec,
-      minOccurrencePercent,
-      playerBarMode,
-      segmentColorOverride,
-      segmentLaneOverride,
-      aliases,
-      selectedParentIds,
-      selectedChildIds,
-      remoteIds,
-      customFields,
-    };
     const current = tagUpdatePayload(withVisibleSegmentOverrides(currentValues, baselineValues));
     mutation.mutate(changedUpdateFields(tagUpdatePayload(baselineValues), current));
   };

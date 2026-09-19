@@ -118,7 +118,11 @@ import { ListLoadError } from "../components/ListLoadError";
 import { MediaDetailLayout } from "../components/MediaDetailLayout/MediaDetailLayout";
 import { CoverImageDialog } from "../components/CoverImageDialog";
 import { PerformerTile, EntityRefBadge } from "../components/EntityCards";
-import { PerformerContextTagList, getPerformerContextTags } from "../components/PerformerContextTags";
+import {
+  PerformerContextTagList,
+  applyPerformerContextTagEdits,
+  getPerformerContextTags,
+} from "../components/PerformerContextTags";
 import { trackInteraction } from "../utils/interactionTracking";
 import { formatDateTime } from "../utils/dateFormat";
 import { faceDisplayName } from "../utils/faceDisplay";
@@ -137,6 +141,7 @@ import { getLoadError, isApiNotFoundError } from "../utils/queryLoadState";
 import { videoEditClearFields } from "../utils/videoEditClearFields";
 import { invalidateGalleriesForVideoLinkChange } from "../utils/galleryVideoLinks";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 import { LikeHistorySection } from "../components/LikeHistorySection";
 
 function directorVideosRoute(director: string) {
@@ -1188,6 +1193,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
       />
     ) : activeTab === "edit" ? (
       <VideoEditPanel
+        key={video.id}
         video={video}
         onCancel={() => setActiveTab("details")}
         onNavigate={onNavigate}
@@ -3100,10 +3106,13 @@ function videoFormValues(video: Video) {
     selectedPerformerIds: video.performers.map((p) => p.id),
     selectedGalleryIds: video.galleries.map((g) => g.id),
     selectedGroups: video.groups.map((g) => ({ groupId: g.id, videoIndex: g.videoIndex })),
+    contextTagIdsByPerformer: buildVideoEditPerformerContextTagIds(video),
   };
 }
 
-function videoUpdatePayload(values: ReturnType<typeof videoFormValues>): VideoUpdate {
+type VideoFormValues = ReturnType<typeof videoFormValues>;
+
+function videoUpdatePayload(values: VideoFormValues): VideoUpdate {
   return {
     title: values.title,
     code: values.code,
@@ -3161,39 +3170,76 @@ function VideoEditPanel({
   const [performerOccurrenceTagsOpen, setPerformerOccurrenceTagsOpen] = useState(false);
   // The video the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(video);
+  const currentValues: VideoFormValues = {
+    title,
+    code,
+    details,
+    director,
+    date,
+    isVr,
+    rating,
+    urls,
+    studioId,
+    remoteIds,
+    customFields,
+    selectedTagIds,
+    selectedPerformerIds,
+    selectedGalleryIds,
+    selectedGroups,
+    contextTagIdsByPerformer,
+  };
+  const formSetters: FormFieldSetters<VideoFormValues> = {
+    title: setTitle,
+    code: setCode,
+    details: setDetails,
+    director: setDirector,
+    date: setDate,
+    isVr: setIsVr,
+    rating: setRating,
+    urls: setUrls,
+    studioId: setStudioId,
+    remoteIds: setRemoteIds,
+    customFields: setCustomFields,
+    selectedTagIds: setSelectedTagIds,
+    selectedPerformerIds: setSelectedPerformerIds,
+    selectedGalleryIds: setSelectedGalleryIds,
+    selectedGroups: setSelectedGroups,
+    contextTagIdsByPerformer: setContextTagIdsByPerformer,
+  };
+  // When the video refetches (after a save, Mark organized, a scrape or a finished job), untouched
+  // fields follow it and the user's edits stay.
+  // After a save, the server may return what was sent in its own form (lists in display order, trimmed
+  // text), so fields untouched since the save take the saved video's values rather than looking edited.
+  const pendingValues = useRef<VideoFormValues | null>(null);
+  const submittedValues = useRef<VideoFormValues | null>(null);
   useEffect(() => {
+    if (video === baseline) return;
+    const next = videoFormValues(video);
+    const from = submittedValues.current ?? videoFormValues(baseline);
+    submittedValues.current = null;
+    applyFormFields(video.id === baseline.id ? untouchedFieldUpdates(currentValues, from, next) : next, formSetters);
     setBaseline(video);
-    setTitle(video.title || "");
-    setCode(video.code || "");
-    setDetails(video.details || "");
-    setDirector(video.director || "");
-    setDate(video.date || "");
-    setIsVr(video.isVr ?? false);
-    setRating(undefined);
-    setUrls(video.urls.length > 0 ? video.urls : [""]);
-    setStudioId(video.studioId ?? undefined);
-    setRemoteIds(video.remoteIds?.length ? video.remoteIds : []);
-    setCustomFields({ ...(video.customFields ?? {}) });
-    setSelectedTagIds(getEditableTagIds(video.tags));
-    setSelectedPerformerIds(video.performers.map((p) => p.id));
-    setSelectedGalleryIds(video.galleries.map((g) => g.id));
-    setSelectedGroups(video.groups.map((g) => ({ groupId: g.id, videoIndex: g.videoIndex })));
-    setContextTagIdsByPerformer(buildVideoEditPerformerContextTagIds(video));
   }, [video]);
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: async (data: VideoUpdate) => {
       const updated = await videos.update(video.id, data);
+      // Apply only the user's context tag and performer edits, so ones changed elsewhere are kept.
       await syncVideoEditPerformerContextTags(
         video.id,
         video.contextTagApplications ?? [],
-        contextTagIdsByPerformer,
-        selectedPerformerIds,
+        applyPerformerContextTagEdits(
+          buildVideoEditPerformerContextTagIds(video),
+          buildVideoEditPerformerContextTagIds(baseline),
+          contextTagIdsByPerformer,
+        ),
+        data.performerIds ?? video.performers.map((performer) => performer.id),
       );
       return updated;
     },
     onSuccess: (_updated, data) => {
+      submittedValues.current = pendingValues.current;
       queryClient.invalidateQueries({ queryKey: ["video", video.id] });
       queryClient.invalidateQueries({ queryKey: ["tagapplications"] });
       queryClient.invalidateQueries({ queryKey: ["videos"] });
@@ -3211,24 +3257,10 @@ function VideoEditPanel({
   });
 
   const handleSave = () => {
-    const current = videoUpdatePayload({
-      title,
-      code,
-      details,
-      director,
-      date,
-      isVr,
-      rating,
-      urls,
-      studioId,
-      remoteIds,
-      customFields,
-      selectedTagIds,
-      selectedPerformerIds,
-      selectedGalleryIds,
-      selectedGroups,
-    });
-    mutation.mutate(changedUpdateFields(videoUpdatePayload(videoFormValues(baseline)), current));
+    pendingValues.current = currentValues;
+    mutation.mutate(
+      changedUpdateFields(videoUpdatePayload(videoFormValues(baseline)), videoUpdatePayload(currentValues)),
+    );
   };
 
   const setPerformerContextTagIds = (performerId: number, tagIds: number[]) => {

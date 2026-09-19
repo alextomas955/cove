@@ -400,4 +400,31 @@ describe("PerformerEditModal", () => {
       ),
     );
   });
+
+  it("discards cancelled edits and keeps open edits across refetches", () => {
+    const performer = {
+      id: 1,
+      name: "Sample Performer",
+      urls: [],
+      aliases: [],
+      tags: [],
+      remoteIds: [],
+    } as unknown as Performer;
+    const queryClient = createAppQueryClient();
+    const renderWith = (current: Performer, open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <PerformerEditModal performer={current} open={open} onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(performer, true));
+    fireEvent.change(screen.getByDisplayValue("Sample Performer"), { target: { value: "Cancelled name" } });
+    rerender(renderWith(performer, false));
+    rerender(renderWith(performer, true));
+    expect(screen.getByDisplayValue("Sample Performer")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("Sample Performer"), { target: { value: "Draft name" } });
+    rerender(renderWith({ ...performer, favorite: true } as Performer, true));
+    expect(screen.getByDisplayValue("Draft name")).toBeInTheDocument();
+  });
 });

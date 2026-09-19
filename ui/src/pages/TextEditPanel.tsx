@@ -5,6 +5,7 @@ import type { VideoGroupInput, TextDocument, TextUpdate } from "../api/types";
 import { Field } from "../components/EditModal";
 import {
   PerformerContextTagEditor,
+  applyPerformerContextTagEdits,
   buildPerformerContextTagIds,
   syncPerformerContextTags,
 } from "../components/PerformerContextTags";
@@ -12,6 +13,7 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 import { IsoDateInput } from "../components/IsoDateInput";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
 
@@ -32,10 +34,13 @@ function textFormValues(text: TextDocument) {
     selectedTagIds: text.tags.map((tag) => tag.id),
     selectedPerformerIds: text.performers.map((performer) => performer.id),
     selectedGroups: text.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })) as VideoGroupInput[],
+    contextTagIdsByPerformer: buildPerformerContextTagIds(text.contextTagApplications),
   };
 }
 
-function textUpdatePayload(values: ReturnType<typeof textFormValues>): TextUpdate {
+type TextFormValues = ReturnType<typeof textFormValues>;
+
+function textUpdatePayload(values: TextFormValues): TextUpdate {
   return {
     title: values.title.trim(),
     code: values.code.trim(),
@@ -76,19 +81,42 @@ export function TextEditPanel({ text, onSaved }: Props) {
   );
   // The text the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(text);
+  const currentValues: TextFormValues = {
+    title,
+    code,
+    details,
+    date,
+    studioId,
+    urls,
+    customFields,
+    selectedTagIds,
+    selectedPerformerIds,
+    selectedGroups,
+    contextTagIdsByPerformer,
+  };
+  const formSetters: FormFieldSetters<TextFormValues> = {
+    title: setTitle,
+    code: setCode,
+    details: setDetails,
+    date: setDate,
+    studioId: setStudioId,
+    urls: setUrls,
+    customFields: setCustomFields,
+    selectedTagIds: setSelectedTagIds,
+    selectedPerformerIds: setSelectedPerformerIds,
+    selectedGroups: setSelectedGroups,
+    contextTagIdsByPerformer: setContextTagIdsByPerformer,
+  };
+  // When the text refetches (after Mark organized, a scrape or a finished job), untouched fields follow it
+  // and the user's edits stay.
   useEffect(() => {
+    if (text === baseline) return;
+    const next = textFormValues(text);
+    applyFormFields(
+      text.id === baseline.id ? untouchedFieldUpdates(currentValues, textFormValues(baseline), next) : next,
+      formSetters,
+    );
     setBaseline(text);
-    setTitle(text.title ?? "");
-    setCode(text.code ?? "");
-    setDetails(text.details ?? "");
-    setDate(text.date ?? "");
-    setStudioId(text.studioId ?? undefined);
-    setUrls(text.urls.length > 0 ? text.urls : [""]);
-    setCustomFields({ ...(text.customFields ?? {}) });
-    setSelectedTagIds(text.tags.map((tag) => tag.id));
-    setSelectedPerformerIds(text.performers.map((performer) => performer.id));
-    setContextTagIdsByPerformer(buildPerformerContextTagIds(text.contextTagApplications));
-    setSelectedGroups(text.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })));
   }, [text]);
 
   const mutation = useMutation({
@@ -99,12 +127,19 @@ export function TextEditPanel({ text, onSaved }: Props) {
         "text",
         text.id,
         text.contextTagApplications ?? [],
-        contextTagIdsByPerformer,
-        selectedPerformerIds,
+        // Apply only the user's context tag and performer edits, so ones changed elsewhere are kept.
+        applyPerformerContextTagEdits(
+          buildPerformerContextTagIds(text.contextTagApplications),
+          buildPerformerContextTagIds(baseline.contextTagApplications),
+          contextTagIdsByPerformer,
+        ),
+        data.performerIds ?? text.performers.map((performer) => performer.id),
       );
       return texts.get(text.id);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Reopening Edit before the refetch lands must start from the saved text.
+      queryClient.setQueryData(["text", text.id], saved);
       queryClient.invalidateQueries({ queryKey: ["text", text.id] });
       queryClient.invalidateQueries({ queryKey: ["texts"] });
       onSaved();
@@ -121,19 +156,7 @@ export function TextEditPanel({ text, onSaved }: Props) {
   const tagProvenanceById = buildTagProvenanceById(text.tags, text.fieldProvenance);
 
   const handleSave = () => {
-    const current = textUpdatePayload({
-      title,
-      code,
-      details,
-      date,
-      studioId,
-      urls,
-      customFields,
-      selectedTagIds,
-      selectedPerformerIds,
-      selectedGroups,
-    });
-    mutation.mutate(changedUpdateFields(textUpdatePayload(textFormValues(baseline)), current));
+    mutation.mutate(changedUpdateFields(textUpdatePayload(textFormValues(baseline)), textUpdatePayload(currentValues)));
   };
 
   return (

@@ -3,7 +3,7 @@
 // from reverting changes made elsewhere (another tab, another editor, a scraper) to fields it never
 // touched.
 
-function valuesEqual(left: unknown, right: unknown): boolean {
+export function valuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
     return (
