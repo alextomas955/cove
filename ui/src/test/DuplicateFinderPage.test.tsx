@@ -215,7 +215,9 @@ describe("DuplicateFinderPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Keep this instead/ }));
 
-    await waitFor(() => expect(mocks.updateDuplicateSearchDecision).toHaveBeenCalledWith("saved-search", 7, [2], false));
+    await waitFor(() =>
+      expect(mocks.updateDuplicateSearchDecision).toHaveBeenCalledWith("saved-search", 7, [2], false),
+    );
   });
 
   it("reviews the files attached to one video and keeps a file by its file id", async () => {

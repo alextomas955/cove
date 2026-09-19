@@ -2676,7 +2676,10 @@ export function SettingsPage() {
                       onClick={() =>
                         updateDraft((current) => ({
                           ...current,
-                          downloaderSiteCredentials: [...current.downloaderSiteCredentials, emptyDownloaderSiteCredential()],
+                          downloaderSiteCredentials: [
+                            ...current.downloaderSiteCredentials,
+                            emptyDownloaderSiteCredential(),
+                          ],
                         }))
                       }
                       className="inline-flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-sm text-secondary hover:text-foreground"

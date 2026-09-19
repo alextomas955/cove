@@ -30,7 +30,10 @@ function normalizeFilterEntityType(entityType: string) {
 }
 
 export function executableExtensionFilterKey(contribution: ExtensionListFilterContribution) {
-  if (!contribution.filterId || !EXECUTABLE_FILTER_ENTITY_TYPES.has(normalizeFilterEntityType(contribution.entityType))) {
+  if (
+    !contribution.filterId ||
+    !EXECUTABLE_FILTER_ENTITY_TYPES.has(normalizeFilterEntityType(contribution.entityType))
+  ) {
     return null;
   }
   return extensionFilterKey(contribution.extensionId, contribution.filterId);
