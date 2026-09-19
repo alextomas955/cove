@@ -43,22 +43,50 @@ function tagFormValues(tag: TagDetail) {
   };
 }
 
-function tagUpdatePayload(values: ReturnType<typeof tagFormValues>): TagUpdate {
-  const clearFields = [!values.sortName && "sortName", !values.description && "description"].filter(
-    (field): field is string => Boolean(field),
-  );
-  const segmentOverrides = values.playerBarMode === "always";
+type TagFormValues = ReturnType<typeof tagFormValues>;
+
+// Segment overrides are only editable while the tag always shows as a segment, but the server keeps (and
+// renders) them in every mode. Leave hidden ones as stored, and clear them when the user leaves "always".
+function withVisibleSegmentOverrides(values: TagFormValues, baseline: TagFormValues): TagFormValues {
+  if (values.playerBarMode === "always") return values;
+  if (baseline.playerBarMode === "always") {
+    return { ...values, segmentColorOverride: "", segmentLaneOverride: undefined };
+  }
+  return {
+    ...values,
+    segmentColorOverride: baseline.segmentColorOverride,
+    segmentLaneOverride: baseline.segmentLaneOverride,
+  };
+}
+
+function tagUpdatePayload(values: TagFormValues): TagUpdate {
+  const color = values.color.trim() || undefined;
+  const minOccurrencePercent = clampOptionalPercent(values.minOccurrencePercent);
+  const showAsSegment = values.playerBarMode === "default" ? undefined : values.playerBarMode === "always";
+  const segmentColorOverride = values.segmentColorOverride.trim() || undefined;
+  const segmentLaneOverride = values.segmentLaneOverride;
+  const clearFields = [
+    !values.sortName && "sortName",
+    !values.description && "description",
+    color === undefined && "color",
+    values.tagGroupId === undefined && "tagGroupId",
+    values.minOccurrenceSec === undefined && "minOccurrenceSec",
+    minOccurrencePercent === undefined && "minOccurrencePercent",
+    showAsSegment === undefined && "showAsSegment",
+    segmentColorOverride === undefined && "segmentColorOverride",
+    segmentLaneOverride === undefined && "segmentLaneOverride",
+  ].filter((field): field is string => Boolean(field));
   return {
     name: values.name,
     sortName: values.sortName || undefined,
     description: values.description || undefined,
-    color: values.color.trim() || null,
-    tagGroupId: values.tagGroupId ?? null,
-    minOccurrenceSec: values.minOccurrenceSec ?? null,
-    minOccurrencePercent: clampOptionalPercent(values.minOccurrencePercent) ?? null,
-    showAsSegment: values.playerBarMode === "default" ? null : segmentOverrides,
-    segmentColorOverride: segmentOverrides ? values.segmentColorOverride.trim() || null : null,
-    segmentLaneOverride: segmentOverrides ? (values.segmentLaneOverride ?? null) : null,
+    color,
+    tagGroupId: values.tagGroupId,
+    minOccurrenceSec: values.minOccurrenceSec,
+    minOccurrencePercent,
+    showAsSegment,
+    segmentColorOverride,
+    segmentLaneOverride,
     aliases: values.aliases.map((alias) => alias.trim()).filter(Boolean),
     parentIds: values.selectedParentIds,
     childIds: values.selectedChildIds,
@@ -139,7 +167,8 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const current = tagUpdatePayload({
+    const baselineValues = tagFormValues(baseline);
+    const currentValues: TagFormValues = {
       name,
       sortName,
       description,
@@ -155,18 +184,9 @@ export function TagEditModal({ tag, open, onClose }: Props) {
       selectedChildIds,
       remoteIds,
       customFields,
-    });
-    mutation.mutate({
-      ...changedUpdateFields(tagUpdatePayload(tagFormValues(baseline)), current),
-      // The tag update endpoint always writes these, clearing any that are omitted.
-      color: current.color,
-      tagGroupId: current.tagGroupId,
-      minOccurrenceSec: current.minOccurrenceSec,
-      minOccurrencePercent: current.minOccurrencePercent,
-      showAsSegment: current.showAsSegment,
-      segmentColorOverride: current.segmentColorOverride,
-      segmentLaneOverride: current.segmentLaneOverride,
-    });
+    };
+    const current = tagUpdatePayload(withVisibleSegmentOverrides(currentValues, baselineValues));
+    mutation.mutate(changedUpdateFields(tagUpdatePayload(baselineValues), current));
   };
 
   return (
