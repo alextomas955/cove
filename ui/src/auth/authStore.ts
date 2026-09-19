@@ -5,6 +5,9 @@ import type { AuthUserKind, UserUiPreferences } from "../api/types";
 
 const ACCESS_KEY = "cove_access_token";
 const REFRESH_KEY = "cove_refresh_token";
+// Local clock time the current access token arrived, so its refresh can be timed by its lifetime
+// rather than by comparing the server's expiry against a client clock that may be off.
+const ACCESS_RECEIVED_AT_KEY = "cove_access_token_received_at";
 const USER_KEY = "cove_user";
 const SHARE_TOKEN_KEY = "cove_share_token";
 const SHARE_PASSWORD_KEY = "cove_share_password";
@@ -56,6 +59,14 @@ export const authStore = {
       return null;
     }
   },
+  getAccessTokenReceivedAt(): number | null {
+    try {
+      const value = Number(localStorage.getItem(ACCESS_RECEIVED_AT_KEY));
+      return Number.isFinite(value) && value > 0 ? value : null;
+    } catch {
+      return null;
+    }
+  },
   getUser(): AuthUser | null {
     try {
       const raw = localStorage.getItem(USER_KEY);
@@ -80,8 +91,15 @@ export const authStore = {
   },
   setTokens(access: string | null, refresh: string | null) {
     try {
-      if (access) localStorage.setItem(ACCESS_KEY, access);
-      else localStorage.removeItem(ACCESS_KEY);
+      if (access) {
+        if (localStorage.getItem(ACCESS_KEY) !== access) {
+          localStorage.setItem(ACCESS_RECEIVED_AT_KEY, String(Date.now()));
+        }
+        localStorage.setItem(ACCESS_KEY, access);
+      } else {
+        localStorage.removeItem(ACCESS_KEY);
+        localStorage.removeItem(ACCESS_RECEIVED_AT_KEY);
+      }
       if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
       else localStorage.removeItem(REFRESH_KEY);
     } catch {
@@ -128,6 +146,7 @@ export const authStore = {
   clear() {
     try {
       localStorage.removeItem(ACCESS_KEY);
+      localStorage.removeItem(ACCESS_RECEIVED_AT_KEY);
       localStorage.removeItem(REFRESH_KEY);
       localStorage.removeItem(USER_KEY);
       sessionStorage.removeItem(SHARE_TOKEN_KEY);

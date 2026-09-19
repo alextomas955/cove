@@ -325,3 +325,30 @@ public class AuthorizationSurfaceTests
                 or AllowAnonymousAttribute
                 or AuthorizeAttribute);
 }
+
+public class AccessCookieOptionsTests
+{
+    private static readonly DateTime Now = new(2026, 9, 19, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void Access_cookie_lives_as_long_as_the_server_accepts_its_token()
+    {
+        var options = AuthController.AccessCookieOptions(Now.AddMinutes(15), Now, isHttps: true);
+
+        Assert.Equal(TimeSpan.FromMinutes(15) + TokenService.AccessTokenClockSkew, options.MaxAge);
+        Assert.Null(options.Expires);
+        Assert.True(options.HttpOnly);
+        Assert.True(options.Secure);
+        Assert.Equal(SameSiteMode.Strict, options.SameSite);
+        Assert.Equal("/", options.Path);
+    }
+
+    [Fact]
+    public void Access_cookie_for_an_expired_token_covers_only_the_clock_skew()
+    {
+        var options = AuthController.AccessCookieOptions(Now.AddSeconds(-5), Now, isHttps: false);
+
+        Assert.Equal(TokenService.AccessTokenClockSkew, options.MaxAge);
+        Assert.False(options.Secure);
+    }
+}

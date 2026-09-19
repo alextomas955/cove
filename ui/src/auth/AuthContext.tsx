@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { authStore, hasPermission as hasPermImpl } from "./authStore";
 import type { AuthUser } from "./authStore";
-import { auth } from "../api/client";
+import { auth, nextAccessTokenRefreshAt, refreshAccessTokenIfDue } from "../api/client";
 import type { MeResponse } from "../api/types";
 import { serverAwareFetch } from "../state/serverAvailability";
 
@@ -24,6 +24,12 @@ interface AuthContextValue extends AuthState {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// After a proactive refresh that did not rotate the token (offline, rate limited, server error),
+// try again after this delay instead of spinning; a 401 still refreshes reactively meanwhile.
+const PROACTIVE_REFRESH_RETRY_MS = 15_000;
+// Longest single wait before re-checking whether the session is due, since timers can stall.
+const PROACTIVE_REFRESH_RECHECK_MS = 60_000;
 
 interface LoginResponse {
   token: string;
@@ -126,6 +132,9 @@ export function AuthProvider({ children, authEnabled }: { children: ReactNode; a
         return;
       }
       captureShareCredentialsFromUrl();
+      // A stored token inside its final minute would pass /me yet lose its cookie mid-load, so the
+      // app would render with extension bundles and media that the server then rejects.
+      await refreshAccessTokenIfDue();
       await refreshMe();
       if (!cancelled) setLoading(false);
     })();
@@ -137,6 +146,49 @@ export function AuthProvider({ children, authEnabled }: { children: ReactNode; a
       unsub();
     };
   }, [authEnabled, refreshMe]);
+
+  // Refresh the session shortly before the access token expires, so the access cookie that media,
+  // images and extension bundles rely on never lapses while the page is in use. Timers are throttled
+  // in background tabs and can stall across sleep, so the timer re-checks at least every minute and
+  // becoming visible re-checks too; another tab's rotation reschedules.
+  useEffect(() => {
+    if (!authEnabled) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    let lastAttemptAt = Number.NEGATIVE_INFINITY;
+    const schedule = () => {
+      clearTimeout(timer);
+      const dueAt = nextAccessTokenRefreshAt();
+      if (dueAt === null || disposed) return;
+      const now = Date.now();
+      const wait = Math.max(0, dueAt - now, lastAttemptAt + PROACTIVE_REFRESH_RETRY_MS - now);
+      timer = setTimeout(attempt, Math.min(wait, PROACTIVE_REFRESH_RECHECK_MS));
+    };
+    const attempt = () => {
+      const dueAt = nextAccessTokenRefreshAt();
+      const now = Date.now();
+      if (dueAt === null || now < dueAt || now < lastAttemptAt + PROACTIVE_REFRESH_RETRY_MS) {
+        schedule();
+        return;
+      }
+      lastAttemptAt = now;
+      void refreshAccessTokenIfDue().finally(schedule);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") attempt();
+    };
+    schedule();
+    const unsubscribe = authStore.subscribe(schedule);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("storage", schedule);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("storage", schedule);
+    };
+  }, [authEnabled]);
 
   // Listen for global "auth required" events (from authedFetch on hard 401)
   useEffect(() => {
