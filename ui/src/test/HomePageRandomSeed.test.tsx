@@ -28,6 +28,7 @@ const { mockHomePageContent, mocks } = vi.hoisted(() => {
       galleriesFind: vi.fn(async () => emptyPage),
       galleriesFindFiltered: vi.fn(async () => emptyPage),
       groupsFind: vi.fn(async () => emptyPage),
+      groupsGet: vi.fn(async (id: number) => ({ id, name: "Group", kind: "dynamic" })),
       groupsFindFiltered: vi.fn(async () => emptyPage),
       audiosFind: vi.fn(async () => emptyPage),
       audiosFindFiltered: vi.fn(async () => emptyPage),
@@ -38,6 +39,9 @@ const { mockHomePageContent, mocks } = vi.hoisted(() => {
       groupItemsList: vi.fn(async () => []),
       groupItemsPage: vi.fn(async () => ({ ...emptyPage, page: 1, perPage: 12 })),
       savedFiltersGet: vi.fn(),
+      // The account has no dashboard until one is bootstrapped, which is what makes the home page
+      // send its locally stored layout.
+      dashboardCreated: false,
       dashboardWidgets: [] as Array<{
         instanceId: string;
         owner: string;
@@ -64,6 +68,7 @@ vi.mock("../api/client", () => ({
   groups: {
     find: mocks.groupsFind,
     findFiltered: mocks.groupsFindFiltered,
+    get: mocks.groupsGet,
     items: { list: mocks.groupItemsList, page: mocks.groupItemsPage },
   },
   audios: {
@@ -79,9 +84,14 @@ vi.mock("../api/client", () => ({
   dashboards: {
     bootstrap: vi.fn(async (widgets) => {
       mocks.dashboardWidgets = widgets;
+      mocks.dashboardCreated = true;
       return { id: 1, name: "Home", isDefault: true, version: 1, createdAt: "", updatedAt: "", widgets };
     }),
-    list: vi.fn(async () => [{ id: 1, name: "Home", isDefault: true, version: 1, createdAt: "", updatedAt: "" }]),
+    list: vi.fn(async () =>
+      mocks.dashboardCreated
+        ? [{ id: 1, name: "Home", isDefault: true, version: 1, createdAt: "", updatedAt: "" }]
+        : [],
+    ),
     get: vi.fn(async () => ({
       id: 1,
       name: "Home",
@@ -132,6 +142,8 @@ describe("HomePage random rows", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     localStorage.clear();
+    mocks.dashboardCreated = false;
+    mocks.dashboardWidgets = [];
     mockHomePageContent.value = JSON.stringify([
       { type: "custom", mode: "videos", sortBy: "random", direction: "asc", header: "Random Videos" },
     ]);
@@ -201,26 +213,25 @@ describe("HomePage random rows", () => {
   it("requests only the Continue Watching items shown on the home page", async () => {
     const onNavigate = vi.fn();
     mockHomePageContent.value = JSON.stringify([{ type: "continueWatching" }]);
-    mocks.groupsFind.mockResolvedValueOnce({
-      items: [{ id: 3, querySourceKey: "continue-watching" }],
-      totalCount: 1,
-      page: 1,
-      perPage: 100,
-    });
+    // The stored legacy row is converted to a reference to the built-in group before bootstrap.
+    const continueWatching = { id: 3, name: "Continue Watching", kind: "dynamic", querySourceKey: "continue-watching" };
+    mocks.groupsFindFiltered.mockResolvedValueOnce({ items: [continueWatching], totalCount: 1, page: 1, perPage: 1 });
+    mocks.groupsGet.mockResolvedValueOnce(continueWatching);
     mocks.groupItemsPage.mockResolvedValueOnce({
       items: [{ id: 1, groupId: 3, hostType: "video", hostId: 10, videoId: 10, title: "Resume item" }],
       totalCount: 30,
       page: 1,
-      perPage: 12,
+      perPage: 25,
     });
 
     renderHomePage(onNavigate);
 
     await waitFor(() => {
-      expect(mocks.groupItemsPage).toHaveBeenCalledWith(3, { page: 1, perPage: 12 });
+      expect(mocks.groupItemsPage).toHaveBeenCalledWith(3, { page: 1, perPage: 25 });
     });
     expect(mocks.groupItemsList).not.toHaveBeenCalled();
     expect(await screen.findByText("Resume item")).toBeInTheDocument();
+    expect(screen.getByText("Resume")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "View All" }));
     expect(onNavigate).toHaveBeenCalledWith({ page: "group", id: 3 });

@@ -66,7 +66,7 @@ export function BookmarkButton({
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       queryClient.invalidateQueries({ queryKey: ["group-items"] });
       queryClient.invalidateQueries({ queryKey: ["group-items-page"] });
-      queryClient.invalidateQueries({ queryKey: ["front-page-continue-watching"] });
+      queryClient.invalidateQueries({ queryKey: ["front-page-group-items"] });
     },
   });
   const busy = mutation.isPending || resolvingClick;

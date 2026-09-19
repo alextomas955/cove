@@ -68,7 +68,9 @@ const { state, mocks } = vi.hoisted(() => ({
     delete: vi.fn(),
     videosFind: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0 })),
     groupsFind: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0 })),
-    groupItemsPage: vi.fn(async () => ({ items: [], totalCount: 0, page: 1, perPage: 12 })),
+    groupItemsPage: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0, page: 1, perPage: 12 })),
+    groupGet: vi.fn(),
+    groupsFindFiltered: vi.fn(),
     savedFilterGet: vi.fn(),
     savedFiltersList: vi.fn(),
   },
@@ -84,9 +86,11 @@ vi.mock("../api/client", () => ({
   studios: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   tags: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   galleries: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
+  images: { thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
   groups: {
     find: mocks.groupsFind,
-    findFiltered: vi.fn(),
+    findFiltered: mocks.groupsFindFiltered,
+    get: mocks.groupGet,
     items: { list: vi.fn(async () => []), page: mocks.groupItemsPage },
   },
   savedFilters: { get: mocks.savedFilterGet, list: mocks.savedFiltersList },
@@ -166,7 +170,13 @@ describe("HomePage dashboards", () => {
     state.savedFilters = [];
     state.dashboards = [summary(1, "Home", true)];
     state.active = dashboard(1, "Home", true);
-    mocks.bootstrap.mockImplementation(async () => state.active);
+    mocks.bootstrap.mockImplementation(async (widgets) => {
+      if (state.dashboards.length === 0) {
+        state.dashboards = [summary(1, "Home", true)];
+        state.active = dashboard(1, "Home", true, widgets ?? []);
+      }
+      return state.active;
+    });
     mocks.list.mockImplementation(async () => state.dashboards);
     mocks.get.mockImplementation(async (id: number) => {
       if (state.active?.id === id) return state.active;
@@ -186,6 +196,17 @@ describe("HomePage dashboards", () => {
       uiOptions: "{}",
     }));
     mocks.savedFiltersList.mockImplementation(async () => state.savedFilters);
+    mocks.groupsFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
+    mocks.groupItemsPage.mockImplementation(async () => ({ items: [], totalCount: 0, page: 1, perPage: 12 }));
+    mocks.groupsFindFiltered.mockImplementation(async () => ({
+      items: [{ id: 3, name: "Continue Watching", kind: "dynamic", querySourceKey: "continue-watching" }],
+      totalCount: 1,
+    }));
+    mocks.groupGet.mockImplementation(async (id: number) =>
+      id === 3
+        ? { id, name: "Continue Watching", kind: "dynamic", querySourceKey: "continue-watching" }
+        : { id, name: "Weekend queue", kind: "dynamic" },
+    );
     mocks.delete.mockImplementation(async (id: number) => {
       state.dashboards = state.dashboards
         .filter((item) => item.id !== id)
@@ -204,6 +225,7 @@ describe("HomePage dashboards", () => {
   });
 
   it("bootstraps the first dashboard from the legacy home-page layout", async () => {
+    state.dashboards = [];
     state.legacyContent = JSON.stringify([
       { type: "continueWatching" },
       { type: "custom", mode: "videos", sortBy: "created_at", direction: "desc", header: "Recently Added Videos" },
@@ -215,9 +237,9 @@ describe("HomePage dashboards", () => {
     expect(mocks.bootstrap).toHaveBeenCalledWith([
       expect.objectContaining({
         owner: "cove.core",
-        widgetKey: "continue-watching",
+        widgetKey: "collection",
         label: "Continue Watching",
-        configuration: {},
+        configuration: { source: "group", groupId: 3 },
       }),
       expect.objectContaining({
         owner: "cove.core",
@@ -234,14 +256,25 @@ describe("HomePage dashboards", () => {
     ]);
   });
 
+  it("skips the bootstrap payload and its group lookup once the account has a dashboard", async () => {
+    state.legacyContent = JSON.stringify([{ type: "continueWatching" }]);
+
+    renderHome();
+
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(1));
+    expect(mocks.bootstrap).not.toHaveBeenCalled();
+    expect(mocks.groupsFindFiltered).not.toHaveBeenCalled();
+  });
+
   it("gives legacy saved-filter widgets an identifying fallback label", async () => {
+    state.dashboards = [];
     state.legacyContent = JSON.stringify([{ type: "continueWatching" }, { type: "saved", savedFilterId: 42 }]);
 
     renderHome();
 
     await waitFor(() => expect(mocks.bootstrap).toHaveBeenCalledOnce());
     expect(mocks.bootstrap).toHaveBeenCalledWith([
-      expect.objectContaining({ widgetKey: "continue-watching" }),
+      expect.objectContaining({ configuration: { source: "group", groupId: 3 } }),
       expect.objectContaining({
         owner: "cove.core",
         widgetKey: "collection",
@@ -271,7 +304,7 @@ describe("HomePage dashboards", () => {
     state.legacyContent = JSON.stringify([
       { type: "custom", mode: "videos", sortBy: "date", direction: "desc", header: "Recent Videos" },
     ]);
-    mocks.bootstrap.mockRejectedValueOnce(new Error("API Error 401: unauthorized"));
+    mocks.list.mockRejectedValueOnce(new Error("API Error 401: unauthorized"));
 
     renderHome();
 
@@ -302,9 +335,9 @@ describe("HomePage dashboards", () => {
       {
         instanceId: "continue",
         owner: "cove.core",
-        widgetKey: "continue-watching",
+        widgetKey: "collection",
         label: "Continue Watching",
-        configuration: {},
+        configuration: { source: "group", groupId: 3 },
       },
       {
         instanceId: "saved",
@@ -320,7 +353,7 @@ describe("HomePage dashboards", () => {
     });
     const first = renderHome(vi.fn(), undefined, client);
     await waitFor(() => expect(mocks.savedFilterGet).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.groupsFind).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.groupGet).toHaveBeenCalledTimes(1));
     first.unmount();
 
     state.userId = "8";
@@ -328,7 +361,7 @@ describe("HomePage dashboards", () => {
     renderHome(vi.fn(), undefined, client);
 
     await waitFor(() => expect(mocks.savedFilterGet).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(mocks.groupsFind).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.groupGet).toHaveBeenCalledTimes(2));
   });
 
   it("shows and retries a failed built-in collection widget", async () => {
@@ -363,15 +396,14 @@ describe("HomePage dashboards", () => {
   });
 
   it("shows and retries a failed Continue Watching widget", async () => {
-    mocks.groupsFind.mockRejectedValueOnce(new Error("Continue Watching request failed"));
-    mocks.groupsFind.mockResolvedValueOnce({ items: [], totalCount: 0 });
+    mocks.groupGet.mockRejectedValueOnce(new Error("Continue Watching request failed"));
     state.active = dashboard(1, "Home", true, [
       {
         instanceId: "continue",
         owner: "cove.core",
-        widgetKey: "continue-watching",
+        widgetKey: "collection",
         label: "Continue Watching",
-        configuration: {},
+        configuration: { source: "group", groupId: 3 },
       },
     ]);
 
@@ -381,20 +413,20 @@ describe("HomePage dashboards", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry Continue Watching" }));
 
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-    expect(mocks.groupsFind).toHaveBeenCalledTimes(2);
+    expect(mocks.groupGet).toHaveBeenCalledTimes(2);
+    expect(mocks.groupGet).toHaveBeenLastCalledWith(3);
   });
 
   it("shows and retries a failed Continue Watching item request", async () => {
-    mocks.groupsFind.mockResolvedValueOnce({ items: [{ id: 3, querySourceKey: "continue-watching" }], totalCount: 1 });
     mocks.groupItemsPage.mockRejectedValueOnce(new Error("Continue Watching items failed"));
     mocks.groupItemsPage.mockResolvedValueOnce({ items: [], totalCount: 0, page: 1, perPage: 12 });
     state.active = dashboard(1, "Home", true, [
       {
         instanceId: "continue",
         owner: "cove.core",
-        widgetKey: "continue-watching",
+        widgetKey: "collection",
         label: "Continue Watching",
-        configuration: {},
+        configuration: { source: "group", groupId: 3 },
       },
     ]);
 
@@ -682,8 +714,8 @@ describe("HomePage dashboards", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Add Widget" });
     const search = within(dialog).getByRole("searchbox", { name: "Search widgets" });
-    const firstWidget = within(dialog).getByRole("button", { name: /^Continue Watching/ });
-    const secondWidget = within(dialog).getByRole("button", { name: /^Recently Released Videos/ });
+    const firstWidget = within(dialog).getByRole("button", { name: /^Recently Released Videos/ });
+    const secondWidget = within(dialog).getByRole("button", { name: /^Recently Added Videos/ });
     await waitFor(() => expect(search).toHaveFocus());
 
     await user.keyboard("{ArrowDown}");
@@ -697,7 +729,7 @@ describe("HomePage dashboards", () => {
 
     await user.keyboard("{ArrowDown}{Enter}");
     expect(screen.queryByRole("dialog", { name: "Add Widget" })).not.toBeInTheDocument();
-    expect(screen.getByText("Continue Watching", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Recently Released Videos", { selector: "span" })).toBeInTheDocument();
   });
 
   it("manages focus and Escape for the widget configuration dialog", async () => {
@@ -861,6 +893,148 @@ describe("HomePage dashboards", () => {
     expect(screen.getByRole("button", { name: /Saved text/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Saved spans/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Saved raw segments/ })).toBeInTheDocument();
+  });
+
+  it("offers dynamic groups in the widget catalog and persists the selected group", async () => {
+    mocks.groupsFind.mockImplementation(async (_filter?: unknown, extra?: { kind?: string }) =>
+      extra?.kind === "dynamic"
+        ? {
+            items: [
+              { id: 9, name: "Weekend queue", kind: "dynamic", querySourceKey: "filter" },
+              { id: 3, name: "Continue Watching", kind: "dynamic", querySourceKey: "continue-watching" },
+            ],
+            totalCount: 2,
+          }
+        : { items: [], totalCount: 0 },
+    );
+    renderHome();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Customize/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Add Widget/ }));
+
+    const section = await screen.findByRole("region", { name: "Dynamic Groups" });
+    expect(mocks.groupsFind).toHaveBeenCalledWith(expect.objectContaining({ perPage: 1000 }), { kind: "dynamic" });
+    expect(within(section).getByRole("button", { name: /^Continue Watching/ })).toBeInTheDocument();
+    fireEvent.click(within(section).getByRole("button", { name: /^Weekend queue/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await waitFor(() => expect(mocks.update).toHaveBeenCalled());
+    expect(mocks.update.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({
+        widgets: [
+          expect.objectContaining({
+            owner: "cove.core",
+            widgetKey: "collection",
+            label: "Weekend queue",
+            configuration: { source: "group", groupId: 9 },
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("renders a dynamic group widget with its members and links View All to the group", async () => {
+    mocks.groupItemsPage.mockImplementation(async () => ({
+      items: [
+        {
+          id: -1,
+          groupId: 9,
+          orderIndex: 0,
+          kind: "video",
+          videoId: 41,
+          hostType: "video",
+          hostId: 41,
+          title: "First clip",
+        },
+        {
+          id: -2,
+          groupId: 9,
+          orderIndex: 1,
+          kind: "image",
+          imageId: 52,
+          hostType: "image",
+          hostId: 52,
+          title: "A picture",
+        },
+        { id: -3, groupId: 9, orderIndex: 2, kind: "text", hostType: "text", hostId: 63, title: "A story" },
+      ],
+      totalCount: 3,
+      page: 1,
+      perPage: 25,
+    }));
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "group",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Stale label",
+        configuration: { source: "group", groupId: 9 },
+      },
+    ]);
+
+    const { onNavigate } = renderHome();
+
+    expect(await screen.findByRole("heading", { name: "Weekend queue" })).toBeInTheDocument();
+    expect(mocks.groupItemsPage).toHaveBeenCalledWith(9, { page: 1, perPage: 25 });
+    expect(await screen.findByRole("link", { name: /First clip/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /A picture/ })).toBeInTheDocument();
+    expect(screen.queryByText("Resume")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: /A story/ }));
+    expect(onNavigate).toHaveBeenLastCalledWith({ page: "text", id: 63 });
+    fireEvent.click(screen.getByRole("button", { name: "View All" }));
+    expect(onNavigate).toHaveBeenLastCalledWith({ page: "group", id: 9 });
+  });
+
+  it("shows an empty dynamic group widget only while editing", async () => {
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "group",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Weekend queue",
+        configuration: { source: "group", groupId: 9 },
+      },
+    ]);
+
+    renderHome();
+
+    await waitFor(() => expect(mocks.groupItemsPage).toHaveBeenCalledWith(9, { page: 1, perPage: 25 }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Weekend queue" })).not.toBeInTheDocument());
+    fireEvent.click(await screen.findByRole("button", { name: /Customize/ }));
+    expect(await screen.findByText("This group has no items.")).toBeInTheDocument();
+  });
+
+  it("offers to remove a dynamic group widget whose group was deleted", async () => {
+    mocks.groupGet.mockRejectedValue(new Error("API Error 404: Not Found"));
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "group",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Weekend queue",
+        configuration: { source: "group", groupId: 9 },
+      },
+    ]);
+    mocks.update.mockImplementationOnce(
+      async (_id: number, request: { name: string; widgets: NonNullable<typeof state.active>["widgets"] }) => {
+        state.active = { ...state.active!, name: request.name, version: 2, widgets: request.widgets };
+        return state.active;
+      },
+    );
+
+    renderHome();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Weekend queue is unavailable");
+    expect(alert).toHaveTextContent("The group was deleted or is not visible to you.");
+    expect(alert).not.toHaveTextContent("API Error");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Weekend queue" }));
+
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith(1, { name: "Home", expectedVersion: 1, widgets: [] }),
+    );
   });
 
   it("persists a saved filter's name as its widget label", async () => {
