@@ -53,37 +53,40 @@ vi.mock("../components/StringListEditor", () => ({
   StringListEditor: () => <div>String List Editor</div>,
 }));
 
-function renderModal() {
-  const queryClient = new QueryClient({
+function buildGallery(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 21,
+    title: "Summer Set",
+    code: "SUM-21",
+    date: "2026-05-01",
+    details: "A bright summer gallery.",
+    photographer: "Riley Smith",
+    organized: true,
+    studioId: 9,
+    urls: ["https://example.com/gallery/21"],
+    tags: [{ id: 8, name: "Beach" }],
+    performers: [{ id: 5, name: "Alex" }],
+    videoIds: [14],
+    customFields: {},
+    ...overrides,
+  } as any;
+}
+
+function createQueryClient() {
+  return new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false },
     },
   });
+}
+
+function renderModal() {
+  const queryClient = createQueryClient();
 
   render(
     <QueryClientProvider client={queryClient}>
-      <GalleryEditModal
-        open
-        onClose={vi.fn()}
-        gallery={
-          {
-            id: 21,
-            title: "Summer Set",
-            code: "SUM-21",
-            date: "2026-05-01",
-            details: "A bright summer gallery.",
-            photographer: "Riley Smith",
-            organized: true,
-            studioId: 9,
-            urls: ["https://example.com/gallery/21"],
-            tags: [{ id: 8, name: "Beach" }],
-            performers: [{ id: 5, name: "Alex" }],
-            videoIds: [14],
-            customFields: {},
-          } as any
-        }
-      />
+      <GalleryEditModal open onClose={vi.fn()} gallery={buildGallery()} />
     </QueryClientProvider>,
   );
 
@@ -134,12 +137,16 @@ describe("GalleryEditModal", () => {
     await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gallery-videos", 21] }));
 
     expect(mockGalleries.update.mock.calls[0][1]).toHaveProperty("videoIds", [14, 22]);
+    // Refresh the videos whose gallery links changed so their editors do not resave the old links.
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["video", 22] });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: ["video", 14] });
   });
 
   it("removes existing video relationships", async () => {
     mockGalleries.update.mockResolvedValue({});
 
-    renderModal();
+    const queryClient = renderModal();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
     fireEvent.click(screen.getByRole("button", { name: "Remove video 14" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -147,6 +154,7 @@ describe("GalleryEditModal", () => {
     await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
 
     expect(mockGalleries.update.mock.calls[0][1]).toHaveProperty("videoIds", []);
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["video", 14] }));
   });
 
   it("marks a cleared date and studio for removal", async () => {
@@ -164,5 +172,46 @@ describe("GalleryEditModal", () => {
         clearFields: ["date", "studioId"],
       }),
     );
+  });
+
+  it("starts from the latest gallery each time it opens", async () => {
+    mockGalleries.update.mockResolvedValue({});
+    const queryClient = createQueryClient();
+    const renderWith = (gallery: unknown, open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <GalleryEditModal open={open} onClose={vi.fn()} gallery={gallery as any} />
+      </QueryClientProvider>
+    );
+
+    // The detail page keeps the closed modal mounted while the gallery refetches, for example after
+    // a video was linked to it from the video's own editor.
+    const { rerender } = render(renderWith(buildGallery({ videoIds: [] }), false));
+    rerender(renderWith(buildGallery({ videoIds: [30] }), false));
+    rerender(renderWith(buildGallery({ videoIds: [30] }), true));
+
+    expect(screen.getByText("video selector: 30")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("Summer Set"), { target: { value: "Renamed Set" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
+    expect(mockGalleries.update.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ title: "Renamed Set", videoIds: [30] }),
+    );
+  });
+
+  it("keeps unsaved edits when the gallery refetches while open", () => {
+    const queryClient = createQueryClient();
+    const renderWith = (gallery: unknown) => (
+      <QueryClientProvider client={queryClient}>
+        <GalleryEditModal open onClose={vi.fn()} gallery={gallery as any} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(buildGallery()));
+    fireEvent.change(screen.getByDisplayValue("Summer Set"), { target: { value: "Renamed Set" } });
+    rerender(renderWith(buildGallery()));
+
+    expect(screen.getByDisplayValue("Renamed Set")).toBeInTheDocument();
   });
 });

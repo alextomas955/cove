@@ -135,6 +135,7 @@ import { MetadataServerLinks } from "../components/MetadataServerLinks";
 import { normalizeStoredResumeTime } from "../utils/playbackResume";
 import { getLoadError, isApiNotFoundError } from "../utils/queryLoadState";
 import { videoEditClearFields } from "../utils/videoEditClearFields";
+import { invalidateGalleriesForVideoLinkChange } from "../utils/galleryVideoLinks";
 import { LikeHistorySection } from "../components/LikeHistorySection";
 
 function directorVideosRoute(director: string) {
@@ -3147,10 +3148,12 @@ function VideoEditPanel({
       );
       return updated;
     },
-    onSuccess: () => {
+    onSuccess: (_updated, data) => {
       queryClient.invalidateQueries({ queryKey: ["video", video.id] });
       queryClient.invalidateQueries({ queryKey: ["tagapplications"] });
       queryClient.invalidateQueries({ queryKey: ["videos"] });
+      const galleryIds = video.galleries.map((gallery) => gallery.id);
+      invalidateGalleriesForVideoLinkChange(queryClient, galleryIds, data.galleryIds ?? galleryIds);
     },
   });
 

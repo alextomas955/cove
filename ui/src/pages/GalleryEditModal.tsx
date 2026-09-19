@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { galleries } from "../api/client";
 import type { Gallery, GalleryUpdate } from "../api/types";
@@ -8,6 +8,7 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
+import { invalidateVideosForGalleryLinkChange } from "../utils/galleryVideoLinks";
 
 interface Props {
   gallery: Gallery;
@@ -15,9 +16,8 @@ interface Props {
   onClose: () => void;
 }
 
-export function GalleryEditModal({ gallery, open, onClose }: Props) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState({
+function buildFormState(gallery: Gallery) {
+  return {
     title: gallery.title ?? "",
     code: gallery.code ?? "",
     date: gallery.date ?? "",
@@ -28,9 +28,22 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
     tagIds: gallery.tags.map((t) => t.id),
     performerIds: gallery.performers.map((p) => p.id),
     videoIds: gallery.videoIds,
-  });
+  };
+}
+
+export function GalleryEditModal({ gallery, open, onClose }: Props) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState(() => buildFormState(gallery));
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(gallery.customFields ?? {}) });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
+  // The detail page keeps this modal mounted while the gallery refetches, so start every edit from the
+  // latest gallery rather than the one first loaded; saving a stale form would revert newer changes.
+  useEffect(() => {
+    if (!open) return;
+    setForm(buildFormState(gallery));
+    setCustomFields({ ...(gallery.customFields ?? {}) });
+    setCustomFieldsValid(true);
+  }, [gallery.id, open]);
   const tagProvenanceById = buildTagProvenanceById(gallery.tags, gallery.fieldProvenance);
   // Seed chip labels from the loaded gallery so selected chips don't each re-fetch their name by id.
   const tagSeedOptions = gallery.tags.map((tag) => ({ id: tag.id, label: tag.name }));
@@ -42,7 +55,8 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
 
   const mutation = useMutation({
     mutationFn: (data: GalleryUpdate) => galleries.update(gallery.id, data),
-    onSuccess: () => {
+    onSuccess: (_updated, data) => {
+      invalidateVideosForGalleryLinkChange(qc, gallery.videoIds, data.videoIds ?? gallery.videoIds);
       qc.invalidateQueries({ queryKey: ["gallery", gallery.id] });
       qc.invalidateQueries({ queryKey: ["gallery-videos", gallery.id] });
       qc.invalidateQueries({ queryKey: ["gallery-like-count", gallery.id] });
