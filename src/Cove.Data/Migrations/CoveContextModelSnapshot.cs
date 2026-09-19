@@ -21,6 +21,7 @@ namespace Cove.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasAnnotation("Npgsql:CollationDefinition:cove_natural", "und-u-kn,und-u-kn,icu,True")
                 .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -2679,6 +2680,14 @@ namespace Cove.Data.Migrations
 
                     b.HasIndex("UpdatedAt");
 
+                    b.HasIndex(new[] { "MaxPath" }, "IX_images_MaxPath_natural");
+
+                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MaxPath" }, "IX_images_MaxPath_natural"), new[] { "cove_natural" });
+
+                    b.HasIndex(new[] { "MinPath" }, "IX_images_MinPath_natural");
+
+                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MinPath" }, "IX_images_MinPath_natural"), new[] { "cove_natural" });
+
                     b.ToTable("images", (string)null);
                 });
 
@@ -4725,6 +4734,18 @@ namespace Cove.Data.Migrations
                     b.HasIndex("Title");
 
                     b.HasIndex("UpdatedAt");
+
+                    b.HasIndex(new[] { "MaxPath" }, "IX_videos_MaxPath_natural");
+
+                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MaxPath" }, "IX_videos_MaxPath_natural"), new[] { "cove_natural" });
+
+                    b.HasIndex(new[] { "MinPath" }, "IX_videos_MinPath_natural");
+
+                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MinPath" }, "IX_videos_MinPath_natural"), new[] { "cove_natural" });
+
+                    b.HasIndex(new[] { "Title" }, "IX_videos_Title_natural");
+
+                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "Title" }, "IX_videos_Title_natural"), new[] { "cove_natural" });
 
                     b.ToTable("videos", (string)null);
                 });

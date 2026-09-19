@@ -113,14 +113,26 @@ export function ImageSourceDownloadDialog({
     queryKey: ["image-source-download-groups", groupSearch],
     enabled: open && groupMode === "existing",
     queryFn: () =>
-      groups.find({ page: 1, perPage: 20, sort: "name", direction: "asc", q: groupSearch.trim() || undefined }),
+      groups.find({
+        page: 1,
+        perPage: 20,
+        sort: groupSearch.trim() ? "relevance" : "name",
+        direction: "asc",
+        q: groupSearch.trim() || undefined,
+      }),
   });
 
   const parentGroupOptionsQuery = useQuery({
     queryKey: ["image-source-download-parent-groups", parentGroupSearch],
     enabled: open && (galleryMode === "create" || groupMode === "create"),
     queryFn: () =>
-      groups.find({ page: 1, perPage: 20, sort: "name", direction: "asc", q: parentGroupSearch.trim() || undefined }),
+      groups.find({
+        page: 1,
+        perPage: 20,
+        sort: parentGroupSearch.trim() ? "relevance" : "name",
+        direction: "asc",
+        q: parentGroupSearch.trim() || undefined,
+      }),
   });
 
   useEffect(() => {

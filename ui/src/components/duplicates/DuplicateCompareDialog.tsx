@@ -22,6 +22,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { videos as videosApi } from "../../api/client";
+import { transcodeSource } from "../../utils/transcodeSource";
 import type { Video } from "../../api/types";
 import { formatDuration, formatFileSize } from "../shared";
 import {
@@ -268,10 +269,10 @@ function SyncedComparison({
   const sources = useMemo(
     () => ({
       a: transcoded.a
-        ? videosApi.transcodeUrl(left.id, undefined, 0, primaryFile(left)?.id)
+        ? transcodeSource(left.id, undefined, 0, primaryFile(left)?.id).url
         : videosApi.streamUrl(left.id, primaryFile(left)?.id),
       b: transcoded.b
-        ? videosApi.transcodeUrl(right.id, undefined, 0, primaryFile(right)?.id)
+        ? transcodeSource(right.id, undefined, 0, primaryFile(right)?.id).url
         : videosApi.streamUrl(right.id, primaryFile(right)?.id),
     }),
     [left, right, transcoded],

@@ -1709,6 +1709,40 @@ describe("FilterDialog", () => {
     { criterion: "tags", searchName: "Search tags", mockFind: tagsFind },
     { criterion: "performers", searchName: "Search performers", mockFind: performersFind },
     { criterion: "studios", searchName: "Search studios", mockFind: studiosFind },
+  ])(
+    "requests $criterion by relevance only while a search term is present",
+    async ({ criterion, searchName, mockFind }) => {
+      const user = userEvent.setup();
+      mockFind.mockResolvedValue({ items: [] });
+      renderWithQueryClient(
+        <FilterDialog
+          open
+          onClose={vi.fn()}
+          criteria={VIDEO_CRITERIA}
+          activeFilter={{}}
+          onApply={vi.fn()}
+          preselectCriterion={criterion}
+        />,
+      );
+
+      const search = await screen.findByRole("combobox", { name: searchName });
+      await waitFor(() => expect(mockFind).toHaveBeenCalled());
+      expect(mockFind.mock.calls[0][0]).toEqual(expect.objectContaining({ q: undefined, sort: "name" }));
+
+      await user.type(search, "needle");
+      await waitFor(() =>
+        expect(mockFind).toHaveBeenLastCalledWith(
+          expect.objectContaining({ q: "needle", perPage: 50, sort: "relevance" }),
+          ...(criterion === "tags" ? [expect.anything()] : []),
+        ),
+      );
+    },
+  );
+
+  it.each([
+    { criterion: "tags", searchName: "Search tags", mockFind: tagsFind },
+    { criterion: "performers", searchName: "Search performers", mockFind: performersFind },
+    { criterion: "studios", searchName: "Search studios", mockFind: studiosFind },
   ])("places $criterion match modes above entity selection", async ({ criterion, searchName, mockFind }) => {
     mockFind.mockResolvedValue({ items: [] });
     renderWithQueryClient(

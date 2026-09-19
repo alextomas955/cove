@@ -11,6 +11,7 @@ using Cove.Core.Enums;
 using Cove.Core.Helpers;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
+using Cove.Data;
 using Cove.Data.Repositories;
 using IAuthorizationService = Cove.Core.Auth.IAuthorizationService;
 
@@ -210,9 +211,9 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var desc = direction == "desc";
         query = sort switch
         {
-            "name" => desc ? query.OrderByDescending(item => item.Name) : query.OrderBy(item => item.Name),
+            "name" => desc ? query.OrderByDescending(item => NaturalSort.Key(item.Name)) : query.OrderBy(item => NaturalSort.Key(item.Name)),
             "random" => SeededRandomOrdering.OrderBy(query, seed, item => item.PerformerId, desc),
-            _ => query.OrderByDescending(item => item.VideoCount).ThenBy(item => item.Name),
+            _ => query.OrderByDescending(item => item.VideoCount).ThenBy(item => NaturalSort.Key(item.Name)),
         };
 
         var totalCount = await query.CountAsync(ct);
@@ -644,7 +645,7 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         "created_at" => desc ? query.OrderByDescending(group => group.CreatedAt) : query.OrderBy(group => group.CreatedAt),
         "updated_at" => desc ? query.OrderByDescending(group => group.UpdatedAt) : query.OrderBy(group => group.UpdatedAt),
         "item_count" => desc ? query.OrderByDescending(group => group.GroupItems.Count) : query.OrderBy(group => group.GroupItems.Count),
-        _ => desc ? query.OrderByDescending(group => group.Name) : query.OrderBy(group => group.Name),
+        _ => desc ? query.OrderByDescending(group => NaturalSort.Key(group.Name)) : query.OrderBy(group => NaturalSort.Key(group.Name)),
     };
 
     private GroupDto MapGroupToDto(Group group, Dictionary<string, object>? customFieldValues = null) => new(
@@ -853,20 +854,45 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
             .Where(p => dto.Ids.Contains(p.Id))
             .ToListAsync(ct);
 
+        var clearFields = dto.ClearFields?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        var customFieldChangedIds = new HashSet<int>();
+
+        // Validate and stage custom field values before any relationship work so a rejected key leaves nothing applied.
+        var customFieldClears = clearFields
+            .Where(field => field.StartsWith(CustomFieldClearPrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(field => field[CustomFieldClearPrefix.Length..])
+            .ToList();
+        if (dto.CustomFields != null || customFieldClears.Count > 0)
+        {
+            try
+            {
+                customFieldChangedIds.UnionWith(await _customFields.ApplyBulkValuesAsync(
+                    CustomFieldEntityTypes.Performer,
+                    performers.Select(performer => performer.Id).ToList(),
+                    dto.CustomFields,
+                    dto.CustomFieldMode,
+                    customFieldClears,
+                    ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         foreach (var p in performers)
         {
             if (dto.Favorite.HasValue) p.Favorite = dto.Favorite.Value;
             if (dto.Gender != null) p.Gender = ParseEnum<GenderEnum>(dto.Gender);
             if (dto.Country != null) p.Country = dto.Country;
             if (dto.Details != null) p.Details = dto.Details;
+            if (clearFields.Contains("country")) p.Country = null;
 
-            foreach (var field in dto.ClearFields?.Distinct(StringComparer.OrdinalIgnoreCase) ?? [])
-            {
-                if (field.Equals("country", StringComparison.OrdinalIgnoreCase))
-                    p.Country = null;
-            }
+            var relationshipsChanged = customFieldChangedIds.Contains(p.Id);
+            if (dto.TagIds != null)
+                relationshipsChanged |= MetadataCollectionUpdater.ApplyBulkUpdate(p.PerformerTags, dto.TagIds, dto.TagMode, item => item.TagId, tagId => new PerformerTag { TagId = tagId, PerformerId = p.Id });
 
-            if (dto.TagIds != null && MetadataCollectionUpdater.ApplyBulkUpdate(p.PerformerTags, dto.TagIds, dto.TagMode, item => item.TagId, tagId => new PerformerTag { TagId = tagId, PerformerId = p.Id }))
+            if (relationshipsChanged)
                 MetadataCollectionUpdater.Touch(p);
         }
 
@@ -878,6 +904,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         }
         return Ok(new BulkUpdateResult(performers.Select(performer => performer.Id).ToList()));
     }
+
+    private const string CustomFieldClearPrefix = "customFields.";
 
     [HttpDelete("bulk")]
     [RequiresPermission(Permissions.PerformersDelete)]

@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../api/client", () => ({
   auth: { me: mocks.me },
+  nextAccessTokenRefreshAt: () => null,
+  refreshAccessTokenIfDue: async () => {},
 }));
 
 vi.mock("../state/serverAvailability", () => ({

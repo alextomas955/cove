@@ -1227,6 +1227,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
             posterUrl={alternateFileId == null ? videos.screenshotUrl(video.id, video.updatedAt) : undefined}
             format={file.format}
             duration={file.duration}
+            videoCodec={file.videoCodec}
             audioCodec={file.audioCodec}
             resumeTime={alternateFileId == null ? effectiveVideoResumeTime : undefined}
             seekTo={alternateFileId == null ? initialSeekTo : undefined}

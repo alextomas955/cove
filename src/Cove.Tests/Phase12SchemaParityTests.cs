@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -46,9 +47,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task NameRuleEnforcementMigration_UpgradesAFullyCleanedCheckpoint()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_namespace_clean_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -143,9 +142,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task NameRuleEnforcementPreflight_BlocksAPartiallyCleanedCheckpoint()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_namespace_partial_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -182,9 +179,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task NameRuleEnforcementMigration_RejectsANonemptyCheckpointWithoutStaging()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"name_rules_unstaged_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -213,9 +208,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task TagRepository_RetriesAConcurrentSharedNamespaceInsertAfterEnforcement()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_namespace_repository_race_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -230,11 +223,11 @@ public sealed class Phase12SchemaParityTests
             await using var first = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(barrier));
+                interceptor: new TagNamespaceLockBarrierInterceptor(barrier));
             await using var second = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(barrier));
+                interceptor: new TagNamespaceLockBarrierInterceptor(barrier));
 
             var results = await Task.WhenAll(
                 new TagRepository(first).FindOrCreateByNamesAsync(
@@ -266,8 +259,8 @@ public sealed class Phase12SchemaParityTests
         if (managedRoot == null)
         {
             var devConnectionString = Environment.GetEnvironmentVariable("COVE_DEV_SOURCE_DATABASE_URL");
-            if (!string.IsNullOrWhiteSpace(devConnectionString))
-                await AssertOptimizeDatabaseAsync(devConnectionString);
+            Assert.SkipWhen(string.IsNullOrWhiteSpace(devConnectionString), "Requires a managed PostgreSQL installation or COVE_DEV_SOURCE_DATABASE_URL.");
+            await AssertOptimizeDatabaseAsync(devConnectionString!);
             return;
         }
 
@@ -393,9 +386,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task TagPerformerAndStudioWrites_TranslateConcurrentConstraintConflictsAfterEnforcement()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"name_rule_write_race_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -410,11 +401,11 @@ public sealed class Phase12SchemaParityTests
             await using (var first = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(tagBarrier)))
+                interceptor: new TagNamespaceLockBarrierInterceptor(tagBarrier)))
             await using (var second = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(tagBarrier)))
+                interceptor: new TagNamespaceLockBarrierInterceptor(tagBarrier)))
             {
                 var errors = await Task.WhenAll(
                     Record.ExceptionAsync(() => new TagRepository(first)
@@ -423,8 +414,12 @@ public sealed class Phase12SchemaParityTests
                         .AddAsync(new Tag { Name = " concurrent TAG " }, TestContext.Current.CancellationToken)).AsTask());
                 Assert.Single(errors, error => error == null);
                 var conflict = Assert.IsType<TagNameConflictException>(Assert.Single(errors, error => error != null));
+                // Tag writes are serialized by the shared namespace lock, so the loser observes the
+                // winner's persisted claim during validation rather than a constraint violation.
+                Assert.False(conflict.ExistingClaimIsAlias);
+                Assert.Contains(conflict.ExistingClaimName, new[] { "Concurrent tag", "concurrent TAG" });
                 Assert.Equal(
-                    "A tag with that name or alias already exists. Tag names and tag aliases must be unique.",
+                    $"A tag with name \"{conflict.ExistingClaimName}\" already exists. Tag names and tag aliases must be unique.",
                     conflict.Message);
             }
 
@@ -432,11 +427,11 @@ public sealed class Phase12SchemaParityTests
             await using (var first = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(performerBarrier)))
+                interceptor: new FirstSaveBarrierInterceptor(performerBarrier)))
             await using (var second = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(performerBarrier)))
+                interceptor: new FirstSaveBarrierInterceptor(performerBarrier)))
             {
                 first.Performers.Add(new Performer { Name = "Concurrent performer", Disambiguation = "Role" });
                 second.Performers.Add(new Performer { Name = " concurrent PERFORMER ", Disambiguation = " role " });
@@ -455,11 +450,11 @@ public sealed class Phase12SchemaParityTests
             await using (var first = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(studioBarrier)))
+                interceptor: new FirstSaveBarrierInterceptor(studioBarrier)))
             await using (var second = CreateContext(
                 environment.Port,
                 databaseName,
-                saveChangesInterceptor: new FirstSaveBarrierInterceptor(studioBarrier)))
+                interceptor: new FirstSaveBarrierInterceptor(studioBarrier)))
             {
                 first.Studios.Add(new Studio { Name = "Concurrent studio" });
                 second.Studios.Add(new Studio { Name = " concurrent STUDIO " });
@@ -488,9 +483,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task PerformerAndStudioMerges_ContinueToTransferRelationshipsAfterEnforcement()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"name_rules_merge_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -554,9 +547,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task NameRuleEnforcementPreflight_BlocksACheckpointThatSkippedCleanup()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_namespace_skipped_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -610,9 +601,7 @@ public sealed class Phase12SchemaParityTests
     [InlineData("studio")]
     public async Task NameRuleEnforcementMigration_AbortsWhenIdentitiesChangeAfterPreflight(string changedEntityType)
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_namespace_concurrent_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -660,9 +649,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task V1BaselineMigration_CreatesFreshDatabaseSchema()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"v1_baseline_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -693,9 +680,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task NameRuleEnforcementPreflight_AllowsAFreshEmptyDatabase()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"name_rule_fresh_preflight_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -722,9 +707,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task TagExternalReferenceInspector_InventoriesAndRepairsForeignKeysOutsideTheCoreMergeContract()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_external_refs_{Guid.NewGuid():N}";
         var restrictedRoleName = $"tag_external_refs_role_{Guid.NewGuid():N}";
@@ -943,9 +926,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task TagMergeService_TransfersRowsHiddenFromTheInitiatingPrincipal()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"tag_merge_filter_bypass_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -1015,9 +996,7 @@ public sealed class Phase12SchemaParityTests
     [Fact]
     public async Task ExternalReferenceInspectors_DoNotExcludeExtensionForeignKeysAddedToCoreTables()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"extension_core_table_refs_{Guid.NewGuid():N}";
         await using var environment = await CreateEnvironmentAsync(managedRoot);
@@ -1279,7 +1258,7 @@ public sealed class Phase12SchemaParityTests
         int port,
         string databaseName,
         ICurrentPrincipalAccessor? principalAccessor = null,
-        SaveChangesInterceptor? saveChangesInterceptor = null,
+        IInterceptor? interceptor = null,
         bool enableRetry = true)
     {
         var optionsBuilder = new DbContextOptionsBuilder<CoveContext>()
@@ -1290,8 +1269,8 @@ public sealed class Phase12SchemaParityTests
                     npgsqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
             })
             .ReplaceService<IModelCacheKeyFactory, CoveModelCacheKeyFactory>();
-        if (saveChangesInterceptor != null)
-            optionsBuilder.AddInterceptors(saveChangesInterceptor);
+        if (interceptor != null)
+            optionsBuilder.AddInterceptors(interceptor);
 
         return new CoveContext(optionsBuilder.Options, principalAccessor, includeDataExtensionsInModel: false);
     }
@@ -1502,6 +1481,13 @@ public sealed class Phase12SchemaParityTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
+    private static string RequireManagedPostgresRoot()
+    {
+        var managedRoot = ResolveManagedPostgresRoot();
+        Assert.SkipWhen(managedRoot == null, "Requires a managed PostgreSQL installation (pgsql/bin/pg_ctl under artifacts/backup-verify-data or the local Cove data directory).");
+        return managedRoot;
+    }
+
     private static string? ResolveManagedPostgresRoot()
     {
         var repoArtifactRoot = Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "backup-verify-data");
@@ -1542,6 +1528,30 @@ public sealed class Phase12SchemaParityTests
         {
             if (Interlocked.Exchange(ref _hasSignaled, 1) == 0)
                 await barrier.SignalAndWaitAsync(cancellationToken);
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Rendezvous when the context requests the shared tag-namespace advisory lock. Tag and alias
+    /// writes are serialized behind that lock, so a barrier inside the save itself would hold the lock
+    /// while the other writer waits for it and never arrives.
+    /// </summary>
+    private sealed class TagNamespaceLockBarrierInterceptor(AsyncTwoPartyBarrier barrier) : DbCommandInterceptor
+    {
+        private int _hasSignaled;
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("pg_advisory_lock(", StringComparison.Ordinal)
+                && Interlocked.Exchange(ref _hasSignaled, 1) == 0)
+            {
+                await barrier.SignalAndWaitAsync(cancellationToken);
+            }
             return result;
         }
     }

@@ -15,6 +15,7 @@ using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Helpers;
 using Cove.Core.Interfaces;
+using Cove.Data;
 using Cove.Data.Repositories;
 using Cove.Data.Services;
 
@@ -863,8 +864,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         var ordered = sort switch
         {
             "title" or "name" => desc
-                ? query.OrderByDescending(item => item.Title)
-                : query.OrderBy(item => item.Title),
+                ? query.OrderByDescending(item => NaturalSort.Key(item.Title))
+                : query.OrderBy(item => NaturalSort.Key(item.Title)),
             "date" => desc
                 ? query.OrderByDescending(item => item.Date ?? DateOnly.MinValue)
                 : query.OrderBy(item => item.Date ?? DateOnly.MinValue),
@@ -1165,8 +1166,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             .ThenBy(application => application.ContextId)
             .ThenBy(application => application.Tag!.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(application => application.Tag!.TagGroup != null ? application.Tag.TagGroup.SortOrder : int.MaxValue)
-            .ThenBy(application => application.Tag!.TagGroup != null ? application.Tag.TagGroup.Name : null)
-            .ThenBy(application => application.Tag!.SortName ?? application.Tag.Name)
+            .ThenBy(application => NaturalSort.Key(application.Tag!.TagGroup != null ? application.Tag.TagGroup.Name : null))
+            .ThenBy(application => NaturalSort.Key(application.Tag!.SortName ?? application.Tag.Name))
             .ThenBy(application => application.TagId)
             .ToListAsync(ct);
 
@@ -1372,11 +1373,35 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             .Where(s => dto.Ids.Contains(s.Id))
             .ToListAsync(ct);
         var clearFields = dto.ClearFields?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        var customFieldChangedIds = new HashSet<int>();
+
+        // Validate and stage custom field values before any relationship work so a rejected key leaves nothing applied.
+        var customFieldClears = clearFields
+            .Where(field => field.StartsWith(CustomFieldClearPrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(field => field[CustomFieldClearPrefix.Length..])
+            .ToList();
+        if (dto.CustomFields != null || customFieldClears.Count > 0)
+        {
+            try
+            {
+                customFieldChangedIds.UnionWith(await customFields.ApplyBulkValuesAsync(
+                    CustomFieldEntityTypes.Video,
+                    videos.Select(video => video.Id).ToList(),
+                    dto.CustomFields,
+                    dto.CustomFieldMode,
+                    customFieldClears,
+                    ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
 
         foreach (var video in videos)
         {
             var previousTagIds = dto.TagIds != null ? video.VideoTags.Select(videoTag => videoTag.TagId).ToArray() : [];
-            var relationshipsChanged = false;
+            var relationshipsChanged = customFieldChangedIds.Contains(video.Id);
 
             if (clearFields.Contains("studioId")) video.StudioId = null;
             if (clearFields.Contains("date")) video.Date = null;
@@ -1450,6 +1475,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         }
         return Ok(new BulkUpdateResult(videos.Select(video => video.Id).ToList()));
     }
+
+    private const string CustomFieldClearPrefix = "customFields.";
 
     private static List<GroupSummaryDto> MapWholeVideoGroups(Video video)
         => video.GroupItems

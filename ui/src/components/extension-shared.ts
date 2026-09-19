@@ -139,3 +139,10 @@ export type { DragHandleProps } from "./SortableList";
 
 export { EntityDetailTabs } from "./EntityDetailTabs";
 export type { EntityDetailTab } from "./EntityDetailTabs";
+
+// ─── Custom field filtering ───────────────────────────────────────────────
+// The "Custom Fields" filter-dialog section the native list pages generate for an entity type. Pass the result as
+// `customSections` to a FilterDialog an extension renders itself; DetailListToolbar builds it internally from
+// `customFieldEntityType`.
+export { useCustomFieldFilterSection } from "./CustomFieldFilterSection";
+export type { CustomFieldEntityType } from "../api/types";

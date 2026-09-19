@@ -5,6 +5,7 @@ import { EntityMultiSelector } from "../../components/EntityMultiSelector";
 import type { FilterDialogCustomSection } from "../../components/filterCriteriaTypes";
 import type { SegmentDerivedQueryDescriptor, SegmentSpanOperand, SegmentSpanOperator } from "../../api/types";
 import type { AppliedDerivedQuery, DerivedSpanOperandFilterValue, DerivedSpanQueryFilterValue } from "./types";
+import { compareNatural } from "../../utils/naturalCompare";
 
 export function createDerivedSpanCustomFilterSection(scopeVideoIds: number[]): FilterDialogCustomSection {
   return {
@@ -247,12 +248,12 @@ function DerivedSpanQueryEditor({
             .map((segment) => segment.sourceKey?.trim())
             .filter((option): option is string => Boolean(option)),
         ),
-      ).sort((left, right) => left.localeCompare(right));
+      ).sort(compareNatural);
       const kinds = Array.from(
         new Set(
           response.items.map((segment) => segment.kind?.trim()).filter((option): option is string => Boolean(option)),
         ),
-      ).sort((left, right) => left.localeCompare(right));
+      ).sort(compareNatural);
 
       return { sourceKeys, kinds };
     },

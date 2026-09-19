@@ -672,7 +672,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         return (sort ?? string.Empty).Trim().ToLowerInvariant() switch
         {
             "random" => Cove.Data.Repositories.SeededRandomOrdering.OrderBy(query, seed, text => text.Id, descending),
-            "title" => descending ? query.OrderByDescending(text => text.Title).ThenByDescending(text => text.Id) : query.OrderBy(text => text.Title).ThenBy(text => text.Id),
+            "title" => descending ? query.OrderByDescending(text => NaturalSort.Key(text.Title)).ThenByDescending(text => text.Id) : query.OrderBy(text => NaturalSort.Key(text.Title)).ThenBy(text => text.Id),
             "date" => descending ? query.OrderByDescending(text => text.Date).ThenByDescending(text => text.Id) : query.OrderBy(text => text.Date).ThenBy(text => text.Id),
             "words" => descending ? query.OrderByDescending(text => text.MaxWordCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxWordCount).ThenBy(text => text.Id),
             "pages" => descending ? query.OrderByDescending(text => text.MaxPageCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxPageCount).ThenBy(text => text.Id),
@@ -684,7 +684,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
             "file_size" => descending ? query.OrderByDescending(text => text.MaxFileSize).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxFileSize).ThenBy(text => text.Id),
             "file_mod_time" => descending ? query.OrderByDescending(text => text.MaxFileModTime).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxFileModTime).ThenBy(text => text.Id),
             "file_count" => descending ? query.OrderByDescending(text => text.FileCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.FileCount).ThenBy(text => text.Id),
-            "path" => descending ? query.OrderByDescending(text => text.MaxPath).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MinPath).ThenBy(text => text.Id),
+            "path" => descending ? query.OrderByDescending(text => NaturalSort.Key(text.MaxPath)).ThenByDescending(text => text.Id) : query.OrderBy(text => NaturalSort.Key(text.MinPath)).ThenBy(text => text.Id),
             "tag_count" => descending ? query.OrderByDescending(text => text.TextTags.Count).ThenByDescending(text => text.Id) : query.OrderBy(text => text.TextTags.Count).ThenBy(text => text.Id),
             "performer_count" => descending ? query.OrderByDescending(text => text.TextPerformers.Count).ThenByDescending(text => text.Id) : query.OrderBy(text => text.TextPerformers.Count).ThenBy(text => text.Id),
             "updatedat" or "updated_at" => descending ? query.OrderByDescending(text => text.UpdatedAt).ThenByDescending(text => text.Id) : query.OrderBy(text => text.UpdatedAt).ThenBy(text => text.Id),
@@ -936,8 +936,8 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
             .ThenBy(item => item.ContextId)
             .ThenBy(item => item.Tag!.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.SortOrder : int.MaxValue)
-            .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null)
-            .ThenBy(item => item.Tag!.SortName ?? item.Tag.Name)
+            .ThenBy(item => NaturalSort.Key(item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null))
+            .ThenBy(item => NaturalSort.Key(item.Tag!.SortName ?? item.Tag.Name))
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 

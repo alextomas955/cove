@@ -95,8 +95,8 @@ public class GroupItemsController(
             staticQuery = (findFilter.Sort ?? "order") switch
             {
                 "title" => desc
-                    ? staticQuery.OrderByDescending(item => item.Title ?? item.Video!.Title ?? item.Image!.Title ?? item.ChildGroup!.Name).ThenByDescending(item => item.Id)
-                    : staticQuery.OrderBy(item => item.Title ?? item.Video!.Title ?? item.Image!.Title ?? item.ChildGroup!.Name).ThenBy(item => item.Id),
+                    ? staticQuery.OrderByDescending(item => NaturalSort.Key(item.Title ?? item.Video!.Title ?? item.Image!.Title ?? item.ChildGroup!.Name)).ThenByDescending(item => item.Id)
+                    : staticQuery.OrderBy(item => NaturalSort.Key(item.Title ?? item.Video!.Title ?? item.Image!.Title ?? item.ChildGroup!.Name)).ThenBy(item => item.Id),
                 "kind" => desc
                     ? staticQuery.OrderByDescending(item => item.Kind).ThenByDescending(item => item.OrderIndex)
                     : staticQuery.OrderBy(item => item.Kind).ThenBy(item => item.OrderIndex),

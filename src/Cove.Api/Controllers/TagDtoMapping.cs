@@ -1,5 +1,6 @@
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
+using Cove.Data;
 
 namespace Cove.Api.Controllers;
 
@@ -11,8 +12,8 @@ internal static class TagDtoMapping
         => tags
             .OrderBy(tag => tag.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(tag => tag.TagGroupSortOrder ?? int.MaxValue)
-            .ThenBy(tag => tag.TagGroupName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(tag => tag.SortName ?? tag.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(tag => tag.TagGroupName, NaturalStringComparer.Instance)
+            .ThenBy(tag => tag.SortName ?? tag.Name, NaturalStringComparer.Instance)
             .ThenBy(tag => tag.Id);
 
     public static TagDto MapTagDto(Tag tag, List<TagProvenanceDto>? provenance = null)

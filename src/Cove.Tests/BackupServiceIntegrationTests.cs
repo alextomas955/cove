@@ -74,9 +74,7 @@ public class BackupServiceIntegrationTests
     [Fact]
     public async Task CreateBackupAndRestore_RestoresDatabaseToBackupPoint()
     {
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"backup_verify_{Guid.NewGuid():N}";
         var postgresConfig = new PostgresConfig
@@ -153,9 +151,7 @@ public class BackupServiceIntegrationTests
         // later `DROP CONSTRAINT "PK_tags"` then fails. The restore must reset the schema first so every
         // constraint is removed regardless of its name. We simulate the mismatch by renaming the FK on
         // the live DB after the backup is taken.
-        var managedRoot = ResolveManagedPostgresRoot();
-        if (managedRoot == null)
-            return;
+        var managedRoot = RequireManagedPostgresRoot();
 
         var databaseName = $"backup_fk_verify_{Guid.NewGuid():N}";
         var postgresConfig = new PostgresConfig
@@ -243,6 +239,13 @@ public class BackupServiceIntegrationTests
             names.Add(reader.GetString(0));
 
         return [.. names];
+    }
+
+    private static string RequireManagedPostgresRoot()
+    {
+        var managedRoot = ResolveManagedPostgresRoot();
+        Assert.SkipWhen(managedRoot == null, "Requires a managed PostgreSQL installation (pgsql/bin/pg_ctl under artifacts/backup-verify-data or the local Cove data directory).");
+        return managedRoot;
     }
 
     private static string? ResolveManagedPostgresRoot()

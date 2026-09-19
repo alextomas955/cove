@@ -631,7 +631,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         return (sort ?? string.Empty).Trim().ToLowerInvariant() switch
         {
             "random" => Cove.Data.Repositories.SeededRandomOrdering.OrderBy(query, seed, audio => audio.Id, descending),
-            "title" => descending ? query.OrderByDescending(audio => audio.Title).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Title).ThenBy(audio => audio.Id),
+            "title" => descending ? query.OrderByDescending(audio => NaturalSort.Key(audio.Title)).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => NaturalSort.Key(audio.Title)).ThenBy(audio => audio.Id),
             "date" => descending ? query.OrderByDescending(audio => audio.Date).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Date).ThenBy(audio => audio.Id),
             "duration" => descending ? query.OrderByDescending(audio => audio.MaxDuration).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxDuration).ThenBy(audio => audio.Id),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(db, query, EngagementQueryHelpers.CurrentUserId(db), RatingHostType.Audio, descending),
@@ -642,7 +642,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             "file_size" => descending ? query.OrderByDescending(audio => audio.MaxFileSize).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxFileSize).ThenBy(audio => audio.Id),
             "file_mod_time" => descending ? query.OrderByDescending(audio => audio.MaxFileModTime).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxFileModTime).ThenBy(audio => audio.Id),
             "file_count" => descending ? query.OrderByDescending(audio => audio.FileCount).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.FileCount).ThenBy(audio => audio.Id),
-            "path" => descending ? query.OrderByDescending(audio => audio.MaxPath).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MinPath).ThenBy(audio => audio.Id),
+            "path" => descending ? query.OrderByDescending(audio => NaturalSort.Key(audio.MaxPath)).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => NaturalSort.Key(audio.MinPath)).ThenBy(audio => audio.Id),
             "bitrate" or "bit_rate" => descending ? query.OrderByDescending(audio => audio.MaxBitRate).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxBitRate).ThenBy(audio => audio.Id),
             "has_video" or "has_video_files" => descending ? query.OrderByDescending(audio => audio.HasVideoFiles).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.HasVideoFiles).ThenBy(audio => audio.Id),
             "track_count" => descending ? query.OrderByDescending(audio => audio.Tracks.Count).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Tracks.Count).ThenBy(audio => audio.Id),
@@ -779,8 +779,8 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             .ThenBy(item => item.ContextId)
             .ThenBy(item => item.Tag!.TagGroupId.HasValue ? 0 : 1)
             .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.SortOrder : int.MaxValue)
-            .ThenBy(item => item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null)
-            .ThenBy(item => item.Tag!.SortName ?? item.Tag.Name)
+            .ThenBy(item => NaturalSort.Key(item.Tag!.TagGroup != null ? item.Tag.TagGroup.Name : null))
+            .ThenBy(item => NaturalSort.Key(item.Tag!.SortName ?? item.Tag.Name))
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 

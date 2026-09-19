@@ -27,6 +27,7 @@ import type {
   BulkTagUpdate,
   BulkTextUpdate,
   BulkDeletionJobStart,
+  CustomFieldEntityType,
   DeleteEntityOptions,
   Video,
 } from "../api/types";
@@ -91,6 +92,15 @@ const ENTITY_RESOURCE_MAP = {
 } as const;
 
 type BulkSelectionEntityType = keyof typeof FIELDS_MAP;
+
+/**
+ * Entities whose bulk endpoint accepts custom field values. Only these get the Custom fields section in the
+ * bulk edit dialog; the others stay without it until their bulk DTOs gain `customFields` and `customFieldMode`.
+ */
+const BULK_CUSTOM_FIELD_ENTITY_TYPES: Partial<Record<BulkSelectionEntityType, CustomFieldEntityType>> = {
+  videos: "video",
+  performers: "performer",
+};
 type BulkUpdatePayloadByEntity = {
   videos: BulkVideoUpdate;
   images: BulkImageUpdate;
@@ -607,6 +617,7 @@ export function BulkSelectionActions({
           title={`Bulk Edit ${selectedIds.size} ${entityType}`}
           selectedCount={selectedIds.size}
           fields={fields}
+          customFieldEntityType={BULK_CUSTOM_FIELD_ENTITY_TYPES[entityType]}
           onApply={(values) => bulkEditMut.mutate(values)}
           isPending={bulkEditMut.isPending}
         />

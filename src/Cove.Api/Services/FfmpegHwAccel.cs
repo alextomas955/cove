@@ -173,7 +173,10 @@ internal static class FfmpegHwAccel
             // (see VideoFilterForEncoder) and set a -vaapi_device on the input.
             "h264_vaapi" => $"-c:v h264_vaapi -rc_mode CQP -qp {quality}",
             "h264_videotoolbox" => $"-c:v h264_videotoolbox -q:v {Math.Clamp(65 - quality, 1, 100)}",
-            _ => $"-c:v libx264 -preset {softwarePreset} -crf {quality}",
+            // Force 8-bit 4:2:0 output: a 10-bit source (common for HEVC) would otherwise yield
+            // High 10 H.264, which Safari's hardware decoder rejects even though Chromium software-
+            // decodes it.
+            _ => $"-c:v libx264 -preset {softwarePreset} -crf {quality} -pix_fmt yuv420p",
         };
     }
 

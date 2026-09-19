@@ -25,6 +25,9 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 - Filters contributed by extensions now run on the Videos list, not only on Tags, so an extension can narrow the normal video list (with previews, sorting, and every built-in filter) to the videos it knows about. List totals count the same rows the list shows.
 - Changing a video's primary file to another copy of the same footage now keeps its cover, sprite, and previews instead of clearing them, so list thumbnails and hover previews keep working without waiting for a new generate run. Aligning a timeline to different footage still clears them.
 - A batch download no longer stops when one URL cannot be matched to a downloader, such as a link whose page has been taken down. That URL is reported as a failed item in the job summary and the rest of the batch continues.
+- Bulk video and performer updates can now add, remove, set, or clear custom field values on every selected item in one request, the same way they already handle tags and performers. Only the named fields are touched, unknown fields or values of the wrong type reject the whole request, and the last-updated time changes only on items whose values actually changed.
+- The bulk Edit dialog for selected videos and performers now includes a collapsible Custom fields section. Expand it, tick a field, enter a value with the same control the single-record editor uses, choose Overwrite, Add, or Remove for the group, or clear a field on every selected item. Untouched fields are left alone.
+
 
 ## [1.4.1] - 2026-09-07
 

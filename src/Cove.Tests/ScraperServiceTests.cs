@@ -180,7 +180,190 @@ public class ScraperServiceTests
         }
     }
 
-    private static async Task<ExtensionManager> CreateYamlScraperPackExtensionManagerAsync(string root)
+    [Fact]
+    public async Task ScrapeUrlAsync_YamlRelationshipField_AppliesConcatPostProcessAndSplitLikeStash()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"cove-yaml-scraper-pack-{Guid.NewGuid():N}");
+
+        try
+        {
+            // Mirrors the upstream IWantClips tag selector: every matched node is joined with a comma,
+            // a replacement referencing a group that does not exist must render as empty (Go semantics),
+            // and the joined value is split back into individual tags.
+            var extensionManager = await CreateYamlScraperPackExtensionManagerAsync(root, """
+                name: Example YAML
+                videoByURL:
+                  - action: scrapeXPath
+                    url:
+                      - example.com/watch/
+                    scraper: videoScraper
+                xPathScrapers:
+                  videoScraper:
+                    video:
+                      Title: //h1
+                      Tags:
+                        Name:
+                          selector: //div[@class="hashtags"]/span/em | //div[@class="category"]/a
+                          concat: ","
+                          postProcess:
+                            - replace:
+                                - regex: "Keywords:"
+                                  with: $1
+                                - regex: ',\s+'
+                                  with: ","
+                          split: ","
+                """);
+            var service = CreateService(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["https://example.com/watch/123"] = """
+                        <html><body>
+                          <h1>Clip</h1>
+                          <div class="hashtags"><span><em>Keywords: Countdown, Edging,  Games</em></span></div>
+                          <div class="category"><a href="/fetish/joi">JOI</a></div>
+                        </body></html>
+                        """,
+                },
+                extensionManager: extensionManager);
+
+            var result = await service.ScrapeUrlAsync($"{YamlScraperPackId}/Example:video", "video", "https://example.com/watch/123", TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            var tags = Assert.IsType<List<Dictionary<string, string>>>(result!["Tags"]);
+            Assert.Equal(["Countdown", "Edging", "Games", "JOI"], tags.Select(tag => tag["Name"]).ToList());
+            Assert.All(tags, tag => Assert.False(tag.ContainsKey("URL")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScrapeUrlAsync_YamlScalarField_ConcatenatesNodesAndExpandsGoReplacementGroups()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"cove-yaml-scraper-pack-{Guid.NewGuid():N}");
+
+        try
+        {
+            var extensionManager = await CreateYamlScraperPackExtensionManagerAsync(root, """
+                name: Example YAML
+                videoByURL:
+                  - action: scrapeXPath
+                    url:
+                      - example.com/watch/
+                    scraper: videoScraper
+                xPathScrapers:
+                  videoScraper:
+                    video:
+                      Title:
+                        selector: //h1/text()
+                        concat: " - "
+                        postProcess:
+                          - replace:
+                              - regex: ^Title:\s*
+                                with: $1
+                              - regex: (\w+) \((\d+)\)
+                                with: ${2}$$ ${1}x$9
+                      Details:
+                        selector: //p
+                        postProcess:
+                          - replace:
+                              - regex: (\d+)
+                                with: "#$1"
+                """);
+            var service = CreateService(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["https://example.com/watch/123"] = """
+                        <html><body>
+                          <h1>Title: Part (1)</h1>
+                          <h1>Encore</h1>
+                          <p>Episode 7</p>
+                        </body></html>
+                        """,
+                },
+                extensionManager: extensionManager);
+
+            var result = await service.ScrapeUrlAsync($"{YamlScraperPackId}/Example:video", "video", "https://example.com/watch/123", TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            Assert.Equal("1$ Partx - Encore", Assert.IsType<string>(result!["Title"]));
+            Assert.Equal("Episode #7", Assert.IsType<string>(result["Details"]));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScrapeUrlAsync_YamlSelectorOptions_IgnoreEmptyConcatKeepSingleNodeHrefAndMatchGoExpansionEdges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"cove-yaml-scraper-pack-{Guid.NewGuid():N}");
+
+        try
+        {
+            var extensionManager = await CreateYamlScraperPackExtensionManagerAsync(root, """
+                name: Example YAML
+                videoByURL:
+                  - action: scrapeXPath
+                    url:
+                      - example.com/watch/
+                    scraper: videoScraper
+                xPathScrapers:
+                  videoScraper:
+                    video:
+                      Title:
+                        selector: //h1/text()
+                        postProcess:
+                          - replace:
+                              - regex: (\d)
+                                with: "[${}|${a b}|${1|$01|$1]"
+                      Details:
+                        selector: //p
+                        concat: ""
+                      Studio:
+                        Name:
+                          selector: //a[@class="studio"]
+                          concat: " "
+                """);
+            var service = CreateService(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["https://example.com/watch/123"] = """
+                        <html><body>
+                          <h1>Take 7</h1>
+                          <p>First paragraph.</p>
+                          <p>Second paragraph.</p>
+                          <a class="studio" href="/studio/1">Studio One</a>
+                        </body></html>
+                        """,
+                },
+                extensionManager: extensionManager);
+
+            var result = await service.ScrapeUrlAsync($"{YamlScraperPackId}/Example:video", "video", "https://example.com/watch/123", TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            // `${}` and `${a b}` are not valid Go group references and stay literal; `${1` is unterminated;
+            // `$01` is the (missing) named group "01"; `$1` expands.
+            Assert.Equal("Take [${}|${a b}|${1||7]", Assert.IsType<string>(result!["Title"]));
+            // An empty `concat` means "no concat" upstream, so the paragraphs keep the default list handling.
+            Assert.DoesNotContain("paragraph.Second", Assert.IsType<string>(result["Details"]));
+            var studio = Assert.Single(Assert.IsType<List<Dictionary<string, string>>>(result["Studio"]));
+            Assert.Equal("Studio One", studio["Name"]);
+            Assert.Equal("/studio/1", studio["URL"]);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<ExtensionManager> CreateYamlScraperPackExtensionManagerAsync(string root, string? scraperYaml = null)
     {
         var dataDir = Path.Combine(root, "data");
         var extensionsDir = Path.Combine(root, "extensions");
@@ -197,7 +380,7 @@ public class ScraperServiceTests
             MinCoveVersion = "0.0.16",
             Categories = ["scraper", "metadata", "yaml-scraper"],
         }));
-        await File.WriteAllTextAsync(Path.Combine(scraperDir, "Example.yml"), """
+        await File.WriteAllTextAsync(Path.Combine(scraperDir, "Example.yml"), scraperYaml ?? """
             name: Example YAML
             videoByURL:
               - action: scrapeXPath

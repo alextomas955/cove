@@ -2129,7 +2129,7 @@ public partial class ScraperService
 
         var navigator = scope.CreateNavigator();
         var iterator = navigator.Select(selector);
-        var values = new List<XPathValueEntry>();
+        var rawEntries = new List<XPathValueEntry>();
 
         while (iterator.MoveNext())
         {
@@ -2138,18 +2138,65 @@ public partial class ScraperService
             if (string.IsNullOrWhiteSpace(rawValue))
                 continue;
 
-            var value = ApplyPostProcesses(HtmlEntity.DeEntitize(rawValue.Trim()), selectorObj);
-            if (string.IsNullOrWhiteSpace(value))
-                continue;
-
             var href = current?.Name == "href"
                 ? current.Value
                 : current?.GetAttribute("href", string.Empty);
 
-            values.Add(new XPathValueEntry(value, string.IsNullOrWhiteSpace(href) ? null : href.Trim()));
+            rawEntries.Add(new XPathValueEntry(HtmlEntity.DeEntitize(rawValue.Trim()), string.IsNullOrWhiteSpace(href) ? null : href.Trim()));
+        }
+
+        if (rawEntries.Count == 0)
+            return [];
+
+        // `concat` joins every matched node into one value before post-processing. A value joined from
+        // several nodes no longer belongs to a single link, so it carries an href only when one node matched.
+        var concat = GetSelectorOption(selectorObj, "concat");
+        if (!string.IsNullOrEmpty(concat) && rawEntries.Count > 1)
+            rawEntries = [new XPathValueEntry(string.Join(concat, rawEntries.Select(entry => entry.Value)), null)];
+
+        var values = new List<XPathValueEntry>();
+        foreach (var entry in rawEntries)
+        {
+            foreach (var value in PostProcessAndSplit(entry.Value, selectorObj))
+                values.Add(new XPathValueEntry(value, entry.Href));
         }
 
         return values;
+    }
+
+    private static string? GetSelectorOption(object selectorObj, string name)
+        => selectorObj is Dictionary<object, object> dict && dict.TryGetValue(name, out var value) && value != null
+            ? value.ToString()
+            : null;
+
+    // Mirrors the upstream Stash order for a selector's value pipeline: `concat` (handled by the callers,
+    // because it needs every matched node) → `postProcess` → `split`.
+    private static List<string> PostProcessAndSplit(string rawValue, object selectorObj)
+    {
+        var processed = ApplyPostProcesses(rawValue, selectorObj);
+        if (string.IsNullOrWhiteSpace(processed))
+            return [];
+
+        var split = GetSelectorOption(selectorObj, "split");
+        if (string.IsNullOrEmpty(split))
+            return [processed];
+
+        return processed
+            .Split(split)
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0)
+            .ToList();
+    }
+
+    private static List<string> FinalizeSelectorValues(List<string> rawValues, object selectorObj)
+    {
+        if (rawValues.Count == 0)
+            return [];
+
+        var concat = GetSelectorOption(selectorObj, "concat");
+        IEnumerable<string> values = !string.IsNullOrEmpty(concat) ? [string.Join(concat, rawValues)] : rawValues;
+
+        return values.SelectMany(value => PostProcessAndSplit(value, selectorObj)).ToList();
     }
 
     private static List<Dictionary<string, string>> ExtractJsonRelationshipItems(JsonElement scope, object selectorObj, Dictionary<string, string> common)
@@ -2202,13 +2249,10 @@ public partial class ScraperService
         {
             var current = iterator.Current?.Value;
             if (!string.IsNullOrWhiteSpace(current))
-                values.Add(current.Trim());
+                values.Add(HtmlEntity.DeEntitize(current.Trim()));
         }
 
-        return values
-            .Select(value => ApplyPostProcesses(HtmlEntity.DeEntitize(value), selectorObj))
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .ToList();
+        return FinalizeSelectorValues(values, selectorObj);
     }
 
     private static List<string> ExtractJsonValues(JsonElement scope, object selectorObj, Dictionary<string, string> common, bool treatPlainStringsAsFixed)
@@ -2220,10 +2264,7 @@ public partial class ScraperService
         if (string.IsNullOrWhiteSpace(selector))
             return [];
 
-        return GetJsonValues(scope, selector)
-            .Select(value => ApplyPostProcesses(value, selectorObj))
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .ToList();
+        return FinalizeSelectorValues(GetJsonValues(scope, selector), selectorObj);
     }
 
     private static Dictionary<string, object> ResolveSubSelectorDefinitions(object selectorObj)
@@ -2331,10 +2372,82 @@ public partial class ScraperService
             if (string.IsNullOrWhiteSpace(pattern))
                 continue;
 
-            current = Regex.Replace(current, pattern, replaceWith, RegexOptions.Singleline);
+            current = Regex.Replace(current, pattern, match => ExpandGoReplacement(match, replaceWith), RegexOptions.Singleline);
         }
 
         return current;
+    }
+
+    // Scraper YAML is written against Stash's Go regexp engine, whose `$name` / `${name}` expansion
+    // renders a reference to a missing group as empty text and treats `$$` as a literal dollar sign.
+    // .NET would leave an unmatched `$1` in the output verbatim, which then leaks into tag names.
+    private static string ExpandGoReplacement(Match match, string template)
+    {
+        if (!template.Contains('$'))
+            return template;
+
+        var builder = new StringBuilder(template.Length);
+        for (var index = 0; index < template.Length; index++)
+        {
+            var character = template[index];
+            if (character != '$' || index + 1 >= template.Length)
+            {
+                builder.Append(character);
+                continue;
+            }
+
+            var next = template[index + 1];
+            if (next == '$')
+            {
+                builder.Append('$');
+                index++;
+                continue;
+            }
+
+            string name;
+            int end;
+            if (next == '{')
+            {
+                var close = template.IndexOf('}', index + 2);
+                name = close < 0 ? string.Empty : template[(index + 2)..close];
+                if (name.Length == 0 || !name.All(symbol => char.IsLetterOrDigit(symbol) || symbol == '_'))
+                {
+                    builder.Append(character);
+                    continue;
+                }
+
+                end = close;
+            }
+            else
+            {
+                var cursor = index + 1;
+                while (cursor < template.Length && (char.IsLetterOrDigit(template[cursor]) || template[cursor] == '_'))
+                    cursor++;
+
+                if (cursor == index + 1)
+                {
+                    builder.Append(character);
+                    continue;
+                }
+
+                name = template[(index + 1)..cursor];
+                end = cursor - 1;
+            }
+
+            // Go only treats a name as a group number when it has no leading zero ("$01" is the named group "01").
+            // .NET resolves "01" to group 1 by name as well, so a leading zero must be rejected explicitly.
+            var allDigits = name.All(char.IsDigit);
+            if (!allDigits || name.Length == 1 || name[0] != '0')
+            {
+                var group = allDigits && int.TryParse(name, out var number) ? match.Groups[number] : match.Groups[name];
+                if (group.Success)
+                    builder.Append(group.Value);
+            }
+
+            index = end;
+        }
+
+        return builder.ToString();
     }
 
     private static string ApplyParseDate(string value, string? format)
