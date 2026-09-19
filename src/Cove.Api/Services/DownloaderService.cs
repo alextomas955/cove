@@ -344,8 +344,11 @@ public partial class DownloaderService(
         var expansion = await ExpandBatchItemsAsync(items, ct);
         items = expansion.ItemsToQueue;
 
+        var expansionFailedCount = expansion.Issues.Count(issue => string.Equals(issue.Kind, "failed", StringComparison.OrdinalIgnoreCase));
+        var expansionSkippedCount = expansion.Issues.Count - expansionFailedCount;
+
         if (items.Count == 0)
-            return new DownloaderBatchExecutionSummary(0, 0, expansion.Issues.Count, 0, null, expansion.Issues.Select(issue => $"{issue.Label}: {issue.Reason}").ToList());
+            return new DownloaderBatchExecutionSummary(expansion.Issues.Count, 0, expansionSkippedCount, expansionFailedCount, null, expansion.Issues.Select(issue => $"{issue.Label}: {issue.Reason}").ToList());
 
         followUp ??= new DownloaderBatchFollowUpDto();
 
@@ -356,8 +359,8 @@ public partial class DownloaderService(
         var reservedDownloads = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         var processed = 0;
         var succeeded = 0;
-        var skipped = 0;
-        var failed = 0;
+        var skipped = expansionSkippedCount;
+        var failed = expansionFailedCount;
 
         logger.LogInformation("Starting batch download of {ItemCount} item(s); maxConcurrency={MaxConcurrency}", batchItems.Count, ResolveMaxConcurrentDownloads());
 
@@ -433,7 +436,7 @@ public partial class DownloaderService(
 
         var followUpJobId = TryQueueFollowUpGenerateJob(followUp.Generate, importedPaths, progress);
         var summary = new DownloaderBatchExecutionSummary(
-            batchItems.Count,
+            batchItems.Count + expansion.Issues.Count,
             succeeded,
             skipped,
             failed,
@@ -532,9 +535,25 @@ public partial class DownloaderService(
                 continue;
             }
 
-            var matches = (await MatchUrlAsync(item.Url, ct))
-                .Where(match => string.Equals(match.SupportedEntity, entity.ToString(), StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            List<DownloaderMatchDto> matches;
+            try
+            {
+                matches = (await MatchUrlAsync(item.Url, ct))
+                    .Where(match => string.Equals(match.SupportedEntity, entity.ToString(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One unmatchable URL must not abort the rest of the batch: record it and keep expanding.
+                var label = BuildBatchItemLabel(item, index);
+                logger.LogDebug(ex, "Batch download expansion failed to match {Url}", item.Url);
+                issues.Add(new DownloaderBatchStartIssueDto("failed", label, ex.Message));
+                continue;
+            }
 
             if (matches.Count == 0)
             {

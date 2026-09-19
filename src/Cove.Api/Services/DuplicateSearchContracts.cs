@@ -71,9 +71,13 @@ public sealed record DuplicateGroupView(
     DateTime? ResolvedAt,
     int RemovedVideoCount,
     long RemovedBytes,
-    long ReclaimableBytes);
+    long ReclaimableBytes,
+    // A group from a "files" search shows its single video in Videos and lists the files under review here.
+    IReadOnlyList<int> FileIds,
+    IReadOnlyList<int> KeepFileIds);
 
-public sealed record DuplicateKeeperDecisionRequest(IReadOnlyList<int> KeepVideoIds);
+/// <summary>Keepers for a video group, or <paramref name="KeepFileIds"/> for a group from a "files" search.</summary>
+public sealed record DuplicateKeeperDecisionRequest(IReadOnlyList<int> KeepVideoIds, IReadOnlyList<int>? KeepFileIds = null);
 
 public sealed record DuplicateAutoSelectRequest(
     IReadOnlyList<DuplicateKeeperRule>? Rules,

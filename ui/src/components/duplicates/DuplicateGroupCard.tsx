@@ -18,18 +18,23 @@ import { formatFileSize } from "../shared";
 import { VideoPreviewThumbnail } from "../VideoPreviewThumbnail";
 import {
   COMPARISON_ROWS,
+  copyKey,
   describeDecision,
   describeSimilarity,
   displayTitle,
   folderOf,
+  isFileCopy,
+  isFileGroup,
   primaryFile,
   rowTones,
   totalSize,
+  type DuplicateCopy,
   type ResolutionPreferences,
 } from "./duplicateModel";
 
 interface Props {
   group: DuplicateSearchGroup;
+  /** Keys of the members to keep: video ids, or file ids for a group from a files search. */
   keepVideoIds: Set<number>;
   engagement: Map<number, EntityEngagement>;
   resolution: ResolutionPreferences;
@@ -39,12 +44,12 @@ interface Props {
   canResolve: boolean;
   canIgnore: boolean;
   onFocus: () => void;
-  onKeepOnly: (videoId: number) => void;
-  onToggleKeep: (videoId: number) => void;
+  onKeepOnly: (memberKey: number) => void;
+  onToggleKeep: (memberKey: number) => void;
   onResolve: () => void;
   onIgnore: () => void;
   onRestore: () => void;
-  onCompare: (videoIds?: [number, number]) => void;
+  onCompare: (memberKeys?: [number, number]) => void;
   onQuickView: (videoId: number) => void;
   onNavigate: (route: any) => void;
 }
@@ -80,10 +85,11 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
 ) {
   const inFlight = group.status === "queued" || group.status === "processing";
   const locked = inFlight || busy;
-  const videos = group.videos;
-  const removeCount = videos.filter((video) => !keepVideoIds.has(video.id)).length;
+  const videos: DuplicateCopy[] = group.videos;
+  const fileGroup = isFileGroup(group);
+  const removeCount = videos.filter((video) => !keepVideoIds.has(copyKey(video))).length;
   const reclaimable = videos
-    .filter((video) => !keepVideoIds.has(video.id))
+    .filter((video) => !keepVideoIds.has(copyKey(video)))
     .reduce((sum, video) => sum + totalSize(video), 0);
   const similarity = useMemo(() => describeSimilarity(videos), [videos]);
   const rows = useMemo(
@@ -94,8 +100,8 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
   const identical = rows.filter((entry) => entry.allSame);
   const visibleRows = showIdenticalRows ? rows : differing;
   const decision = describeDecision(group.decisionRule, group.decisionSource);
-  const firstKeeper = videos.find((video) => keepVideoIds.has(video.id));
-  const firstRemoval = videos.find((video) => !keepVideoIds.has(video.id));
+  const firstKeeper = videos.find((video) => keepVideoIds.has(copyKey(video)));
+  const firstRemoval = videos.find((video) => !keepVideoIds.has(copyKey(video)));
   // Bounded tracks: copies stay side by side at a comfortable size and scroll horizontally on narrow
   // screens, without the grid growing to a cover image's intrinsic width.
   const gridStyle = {
@@ -118,7 +124,11 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-foreground">Group {group.position + 1}</span>
-            <span className="text-sm text-muted">· {videos.length} copies</span>
+            <span className="text-sm text-muted">
+              {fileGroup
+                ? `· ${videos.length} files on ${videos[0]?.title || "one video"}`
+                : `· ${videos.length} copies`}
+            </span>
             <SimilarityBadges similarity={similarity} />
             {inFlight ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">
@@ -137,7 +147,7 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
           <HeaderButton
             onClick={(event) => {
               event.stopPropagation();
-              onCompare(firstKeeper && firstRemoval ? [firstKeeper.id, firstRemoval.id] : undefined);
+              onCompare(firstKeeper && firstRemoval ? [copyKey(firstKeeper), copyKey(firstRemoval)] : undefined);
             }}
             title="Compare side by side (c)"
           >
@@ -151,10 +161,14 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
                 onIgnore();
               }}
               disabled={locked}
-              title="These are different videos. They won't be grouped again. (x)"
+              title={
+                fileGroup
+                  ? "Keep every file on this video. These files won't be grouped again. (x)"
+                  : "These are different videos. They won't be grouped again. (x)"
+              }
             >
               <EyeOff className="h-4 w-4" />
-              Not duplicates
+              {fileGroup ? "Keep all files" : "Not duplicates"}
             </HeaderButton>
           ) : null}
           {canResolve ? (
@@ -165,7 +179,9 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
                 onResolve();
               }}
               disabled={locked || removeCount === 0}
-              title={removeCount === 0 ? "Every copy is marked to keep" : `${resolveLabel} (r)`}
+              title={
+                removeCount === 0 ? `Every ${fileGroup ? "file" : "copy"} is marked to keep` : `${resolveLabel} (r)`
+              }
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40 ${
                 resolution.deleteFiles ? "bg-red-600 hover:bg-red-500" : "bg-accent hover:bg-accent-hover"
               }`}
@@ -192,14 +208,14 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
           <div className="border-b border-r border-border/60 bg-surface/30" />
           {videos.map((video, index) => (
             <MemberHeader
-              key={video.id}
+              key={copyKey(video)}
               index={index}
               video={video}
-              keep={keepVideoIds.has(video.id)}
-              soleKeeper={keepVideoIds.has(video.id) && keepVideoIds.size === 1}
+              keep={keepVideoIds.has(copyKey(video))}
+              soleKeeper={keepVideoIds.has(copyKey(video)) && keepVideoIds.size === 1}
               locked={locked}
-              onKeepOnly={() => onKeepOnly(video.id)}
-              onToggleKeep={() => onToggleKeep(video.id)}
+              onKeepOnly={() => onKeepOnly(copyKey(video))}
+              onToggleKeep={() => onToggleKeep(copyKey(video))}
               onQuickView={() => onQuickView(video.id)}
               onNavigate={onNavigate}
             />
@@ -212,9 +228,9 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
                 const value = row.render(video, engagement.get(video.id));
                 return (
                   <div
-                    key={video.id}
+                    key={copyKey(video)}
                     title={row.title?.(video)}
-                    className={`truncate border-b border-l border-border/40 px-3 py-1.5 text-sm tabular-nums ${cellTone(tone, keepVideoIds.has(video.id))}`}
+                    className={`truncate border-b border-l border-border/40 px-3 py-1.5 text-sm tabular-nums ${cellTone(tone, keepVideoIds.has(copyKey(video)))}`}
                   >
                     {tone === "best" ? <Check className="mr-1 inline h-3.5 w-3.5 -translate-y-px" /> : null}
                     {value}
@@ -230,9 +246,9 @@ const ReviewGroup = forwardRef<HTMLElement, Props>(function ReviewGroup(
               const folder = folderOf(file?.path);
               return (
                 <div
-                  key={video.id}
+                  key={copyKey(video)}
                   title={file?.path || file?.basename}
-                  className={`min-w-0 border-l border-border/40 px-3 py-2 text-xs ${keepVideoIds.has(video.id) ? "" : "opacity-80"}`}
+                  className={`min-w-0 border-l border-border/40 px-3 py-2 text-xs ${keepVideoIds.has(copyKey(video)) ? "" : "opacity-80"}`}
                 >
                   <div className="truncate font-medium text-foreground">{file?.basename ?? "No file"}</div>
                   {folder ? <div className="truncate text-muted">{folder}</div> : null}
@@ -269,7 +285,7 @@ function MemberHeader({
   onNavigate,
 }: {
   index: number;
-  video: Video;
+  video: DuplicateCopy;
   keep: boolean;
   soleKeeper: boolean;
   locked: boolean;
@@ -280,6 +296,10 @@ function MemberHeader({
 }) {
   const route = { page: "video", id: video.id };
   const linkProps = createRouteLinkProps<HTMLAnchorElement>(route, () => onNavigate(route));
+  const fileCopy = isFileCopy(video);
+  // Every file copy shares the video's title, so a file copy is named by its file instead.
+  const name = fileCopy ? (primaryFile(video)?.basename ?? displayTitle(video)) : displayTitle(video);
+  const noun = fileCopy ? "file" : "copy";
   return (
     <div
       className={`relative border-b border-l border-border/60 p-3 ${
@@ -293,12 +313,20 @@ function MemberHeader({
           onQuickView();
         }}
         className="block w-full overflow-hidden rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        aria-label={`Preview ${displayTitle(video)}`}
+        aria-label={`Preview ${name}`}
       >
         <VideoPreviewThumbnail video={video} fit="cover" coverWidth={640} className={keep ? "" : "opacity-75"}>
           <span className="absolute left-2 top-2 z-[8] rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white">
             {index + 1}
           </span>
+          {video.isPrimaryFile ? (
+            <span
+              className="absolute bottom-2 left-2 z-[8] rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white"
+              title="The video currently plays this file"
+            >
+              Primary
+            </span>
+          ) : null}
           <span
             className={`absolute right-2 top-2 z-[8] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow ${
               keep ? "bg-emerald-600" : "bg-red-600/90"
@@ -317,9 +345,9 @@ function MemberHeader({
             linkProps.onClick?.(event);
           }}
           className="line-clamp-2 min-w-0 flex-1 text-sm font-medium leading-snug text-foreground hover:text-accent"
-          title={displayTitle(video)}
+          title={name}
         >
-          {displayTitle(video)}
+          {name}
         </a>
         <a
           href={linkProps.href}
@@ -341,7 +369,7 @@ function MemberHeader({
             event.stopPropagation();
             onKeepOnly();
           }}
-          title={soleKeeper ? "This is the copy being kept" : `Keep only this copy (${index + 1})`}
+          title={soleKeeper ? `This is the ${noun} being kept` : `Keep only this ${noun} (${index + 1})`}
           className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-default ${
             keep
               ? "border-emerald-600/60 bg-emerald-600/15 text-emerald-300"
@@ -349,7 +377,7 @@ function MemberHeader({
           } ${locked && !soleKeeper ? "opacity-50" : ""}`}
         >
           <Crown className="h-3.5 w-3.5" />
-          {soleKeeper ? "Keeping this copy" : keep ? "Keep only this" : "Keep this instead"}
+          {soleKeeper ? `Keeping this ${noun}` : keep ? "Keep only this" : "Keep this instead"}
         </button>
         <button
           type="button"
@@ -358,7 +386,7 @@ function MemberHeader({
             event.stopPropagation();
             onToggleKeep();
           }}
-          title={keep ? "Remove this copy" : "Keep this copy as well"}
+          title={keep ? `Remove this ${noun}` : `Keep this ${noun} as well`}
           className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
           {keep ? "Remove" : "Also keep"}
@@ -453,7 +481,16 @@ const ResolvedGroup = forwardRef<HTMLElement, Props>(function ResolvedGroup(
   { group, focused, onFocus, onQuickView },
   ref,
 ) {
-  const keeper = group.videos.find((video) => group.keepVideoIds.includes(video.id)) ?? group.videos[0];
+  const fileGroup = isFileGroup(group);
+  const keeper =
+    group.videos.find((video: DuplicateCopy) => group.keepVideoIds.includes(copyKey(video))) ?? group.videos[0];
+  const removedNoun = fileGroup
+    ? group.removedVideoCount === 1
+      ? "file"
+      : "files"
+    : group.removedVideoCount === 1
+      ? "copy"
+      : "copies";
   return (
     <article
       ref={ref}
@@ -479,20 +516,23 @@ const ResolvedGroup = forwardRef<HTMLElement, Props>(function ResolvedGroup(
         <div className="mt-0.5 truncate text-sm text-secondary">
           {keeper ? (
             <>
-              Kept <span className="text-foreground">{displayTitle(keeper)}</span>
+              Kept{" "}
+              <span className="text-foreground">
+                {fileGroup ? (primaryFile(keeper)?.basename ?? displayTitle(keeper)) : displayTitle(keeper)}
+              </span>
             </>
           ) : (
             "No copies remain"
           )}
-          {group.removedVideoCount > 0
-            ? ` · removed ${group.removedVideoCount} ${group.removedVideoCount === 1 ? "copy" : "copies"}`
-            : ""}
+          {group.removedVideoCount > 0 ? ` · removed ${group.removedVideoCount} ${removedNoun}` : ""}
           {group.removedBytes > 0 && group.deleteFiles ? ` · freed ${formatFileSize(group.removedBytes)}` : ""}
           {group.resolutionAction === "merge" ? " · metadata merged" : ""}
         </div>
         {group.error ? <div className="mt-0.5 text-xs text-amber-300">{group.error}</div> : null}
         {!group.resolvedAt ? (
-          <div className="mt-0.5 text-xs text-muted">The other copies were removed outside the duplicate finder.</div>
+          <div className="mt-0.5 text-xs text-muted">
+            The other {fileGroup ? "files were" : "copies were"} removed outside the duplicate finder.
+          </div>
         ) : null}
       </div>
     </article>
@@ -503,6 +543,10 @@ const IgnoredGroup = forwardRef<HTMLElement, Props>(function IgnoredGroup(
   { group, focused, busy, canIgnore, onFocus, onRestore, onQuickView },
   ref,
 ) {
+  const fileGroup = isFileGroup(group);
+  const names = group.videos.map((video: DuplicateCopy) =>
+    fileGroup ? (primaryFile(video)?.basename ?? displayTitle(video)) : displayTitle(video),
+  );
   return (
     <article
       ref={ref}
@@ -511,13 +555,13 @@ const IgnoredGroup = forwardRef<HTMLElement, Props>(function IgnoredGroup(
       className={`flex flex-wrap items-center gap-4 rounded-xl border bg-card px-4 py-3 ${focused ? "border-accent/70" : "border-border"}`}
     >
       <div className="flex -space-x-6">
-        {group.videos.slice(0, 4).map((video) => (
+        {group.videos.slice(0, 4).map((video, index) => (
           <button
-            key={video.id}
+            key={copyKey(video)}
             type="button"
             onClick={() => onQuickView(video.id)}
             className="w-28 overflow-hidden rounded-md border-2 border-card"
-            aria-label={`Preview ${displayTitle(video)}`}
+            aria-label={`Preview ${names[index]}`}
           >
             <VideoPreviewThumbnail video={video} fit="cover" coverWidth={320} enableScrubbing={false} />
           </button>
@@ -526,9 +570,9 @@ const IgnoredGroup = forwardRef<HTMLElement, Props>(function IgnoredGroup(
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <EyeOff className="h-4 w-4 text-muted" />
-          Group {group.position + 1} · marked as not duplicates
+          Group {group.position + 1} · {fileGroup ? "keeping all files" : "marked as not duplicates"}
         </div>
-        <div className="mt-0.5 truncate text-sm text-muted">{group.videos.map(displayTitle).join(" · ")}</div>
+        <div className="mt-0.5 truncate text-sm text-muted">{names.join(" · ")}</div>
       </div>
       {canIgnore ? (
         <button

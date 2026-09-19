@@ -9,7 +9,10 @@ namespace Cove.Api.Services;
 /// <summary>One ordered criterion used to choose which member of a duplicate group to keep.</summary>
 public sealed record DuplicateKeeperRule(string Type, IReadOnlyList<string>? Values = null);
 
-/// <summary>The attributes keeper rules compare for one video.</summary>
+/// <summary>
+/// The attributes keeper rules compare for one group member: a video, or a file in a <c>files</c> search,
+/// in which case <paramref name="VideoId"/> holds the file id.
+/// </summary>
 internal sealed record DuplicateKeeperFacts(
     int VideoId,
     long Pixels,
@@ -321,6 +324,65 @@ internal static class DuplicateKeeperRules
                     engagement.GetValueOrDefault(row.Id),
                     row.Organized,
                     row.CreatedAt);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Keeper facts for individual files of one video, keyed by file id, so <see cref="Choose"/> can pick the
+    /// file to keep. Everything that belongs to the video rather than the file (metadata, watch history,
+    /// organized) is identical across the group and deliberately left neutral, so those rules tie and pass
+    /// the decision to the next rule.
+    /// </summary>
+    internal static async Task<Dictionary<int, DuplicateKeeperFacts>> LoadFileFactsAsync(
+        CoveContext db,
+        IReadOnlyCollection<int> fileIds,
+        DuplicateSearchMemoryBudget memoryBudget,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<int, DuplicateKeeperFacts>();
+        foreach (var chunk in fileIds.Distinct().Chunk(2_000))
+        {
+            var files = db.VideoFiles
+                .AsNoTracking()
+                .Where(file => chunk.Contains(file.Id) && file.VideoId.HasValue)
+                .Select(file => new
+                {
+                    file.Id,
+                    file.Width,
+                    file.Height,
+                    file.BitRate,
+                    file.FrameRate,
+                    file.Duration,
+                    file.Size,
+                    VideoCodec = file.VideoCodec != null && file.VideoCodec.Length > DuplicateSearchMemoryBudget.MaximumFieldCharacters
+                        ? file.VideoCodec.Substring(0, DuplicateSearchMemoryBudget.MaximumFieldCharacters + 1)
+                        : file.VideoCodec,
+                    Path = file.Path.Length > DuplicateSearchMemoryBudget.MaximumFieldCharacters
+                        ? file.Path.Substring(0, DuplicateSearchMemoryBudget.MaximumFieldCharacters + 1)
+                        : file.Path,
+                    file.CreatedAt,
+                })
+                .AsAsyncEnumerable();
+            await foreach (var file in files.WithCancellation(ct))
+            {
+                var codec = NormalizeCodec(file.VideoCodec);
+                var path = (file.Path ?? string.Empty).Replace('\\', '/');
+                memoryBudget.ReserveKeeperFact(codec.Length + path.Length, Math.Max(codec.Length, path.Length));
+                result[file.Id] = new DuplicateKeeperFacts(
+                    file.Id,
+                    (long)file.Width * file.Height,
+                    file.BitRate,
+                    file.FrameRate,
+                    file.Duration,
+                    file.Size,
+                    codec,
+                    path,
+                    MetadataScore: 0,
+                    EngagementScore: 0,
+                    Organized: false,
+                    file.CreatedAt);
             }
         }
         return result;

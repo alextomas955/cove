@@ -9,6 +9,7 @@
  */
 
 // ─── Utilities ────────────────────────────────────────────────────────────
+export { navigateToUrl } from "../router/location";
 export {
   TagBadge,
   formatDuration,

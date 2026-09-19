@@ -61,6 +61,30 @@ public sealed class DuplicateSearchGroupConfiguration : IEntityTypeConfiguration
             .WithOne(item => item.Group)
             .HasForeignKey(item => item.GroupId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(group => group.FileItems)
+            .WithOne(item => item.Group)
+            .HasForeignKey(item => item.GroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class DuplicateSearchFileItemConfiguration : IEntityTypeConfiguration<DuplicateSearchFileItem>
+{
+    public void Configure(EntityTypeBuilder<DuplicateSearchFileItem> builder)
+    {
+        builder.ToTable("duplicate_search_file_items");
+        builder.HasKey(item => new { item.GroupId, item.FileId });
+        builder.HasIndex(item => item.FileId);
+        builder.HasIndex(item => item.VideoId);
+        // A removed file leaves its group, so a group whose other files are gone settles on its own.
+        builder.HasOne(item => item.File)
+            .WithMany()
+            .HasForeignKey(item => item.FileId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(item => item.Video)
+            .WithMany()
+            .HasForeignKey(item => item.VideoId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
@@ -74,6 +98,29 @@ public sealed class DuplicateSearchItemConfiguration : IEntityTypeConfiguration<
         builder.HasOne(item => item.Video)
             .WithMany()
             .HasForeignKey(item => item.VideoId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class DuplicateIgnoredFilePairConfiguration : IEntityTypeConfiguration<DuplicateIgnoredFilePair>
+{
+    public void Configure(EntityTypeBuilder<DuplicateIgnoredFilePair> builder)
+    {
+        builder.ToTable("duplicate_ignored_file_pairs", table =>
+        {
+            table.HasCheckConstraint("CK_duplicate_ignored_file_pairs_ordered", "\"LowFileId\" < \"HighFileId\"");
+            table.HasCheckConstraint("CK_duplicate_ignored_file_pairs_decision_count", "\"DecisionCount\" > 0");
+        });
+        builder.HasKey(pair => new { pair.LowFileId, pair.HighFileId });
+        builder.Property(pair => pair.DecisionCount).HasDefaultValue(1);
+        builder.HasIndex(pair => pair.HighFileId);
+        builder.HasOne(pair => pair.LowFile)
+            .WithMany()
+            .HasForeignKey(pair => pair.LowFileId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(pair => pair.HighFile)
+            .WithMany()
+            .HasForeignKey(pair => pair.HighFileId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

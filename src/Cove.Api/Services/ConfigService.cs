@@ -81,6 +81,7 @@ public class ConfigService
             .Where(credential => !string.IsNullOrEmpty(credential.Id))
             .GroupBy(credential => credential.Id, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First().Password, StringComparer.Ordinal);
+        var savedAt = DateTime.UtcNow;
 
         return submitted
             .Where(credential => !string.IsNullOrWhiteSpace(credential.Site) && !string.IsNullOrWhiteSpace(credential.Username))
@@ -97,6 +98,7 @@ public class ConfigService
                     Site = credential.Site.Trim(),
                     Username = credential.Username.Trim(),
                     Password = password,
+                    SavedAt = savedAt,
                 };
             })
             .ToList();

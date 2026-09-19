@@ -218,7 +218,15 @@ public interface IDownloaderService
 }
 
 /// <summary>A login configured for a site in Cove's downloader settings.</summary>
-public sealed record DownloaderSiteLogin(string Site, string Username, string Password);
+public sealed record DownloaderSiteLogin(string Site, string Username, string Password)
+{
+    /// <summary>
+    /// When the downloader settings holding this login were last saved, or null when unknown. A downloader that
+    /// pauses a login after a failed sign-in should resume once this moves forward: saving the settings again,
+    /// changed or not, is how a person says they fixed the problem.
+    /// </summary>
+    public DateTime? SavedAt { get; init; }
+}
 
 /// <summary>
 /// Resolves the site login configured in Cove's downloader settings for a URL. Resolve it from the

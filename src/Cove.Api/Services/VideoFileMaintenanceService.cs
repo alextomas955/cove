@@ -48,7 +48,7 @@ public sealed class VideoFileMaintenanceService(
         if (!await HoldsTheSameContentAsync(source, target, ct))
         {
             return new(false,
-                "The downloaded file is not the same footage as the current file (different length or appearance), "
+                "The replacement file is not the same footage as the current primary file (different length or appearance), "
                 + "so it stays attached to the video without becoming primary.");
         }
 
@@ -67,7 +67,7 @@ public sealed class VideoFileMaintenanceService(
             var tracked = await db.Videos.SingleOrDefaultAsync(item => item.Id == videoId, ct);
             if (tracked is null) { result = new(false, "The video no longer exists."); return; }
             if (tracked.PrimaryFileId != video.PrimaryFileId)
-            { result = new(false, "The primary file changed while the upgrade was downloading."); return; }
+            { result = new(false, "The primary file changed while this change was being prepared."); return; }
             if (!await db.VideoFiles.AnyAsync(file => file.Id == fileId && file.VideoId == videoId, ct))
             { result = new(false, "The replacement file is no longer attached to this video."); return; }
 

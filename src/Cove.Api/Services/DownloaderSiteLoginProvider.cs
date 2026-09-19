@@ -19,7 +19,10 @@ public sealed class DownloaderSiteLoginProvider(CoveConfiguration config) : IDow
             .Select(credential => (Credential: credential, Site: NormalizeSite(credential.Site)))
             .Where(entry => entry.Site != null && MatchesHost(host, entry.Site))
             .OrderByDescending(entry => entry.Site!.Length)
-            .Select(entry => new DownloaderSiteLogin(entry.Site!, entry.Credential.Username.Trim(), entry.Credential.Password))
+            .Select(entry => new DownloaderSiteLogin(entry.Site!, entry.Credential.Username.Trim(), entry.Credential.Password)
+            {
+                SavedAt = entry.Credential.SavedAt,
+            })
             .FirstOrDefault();
     }
 

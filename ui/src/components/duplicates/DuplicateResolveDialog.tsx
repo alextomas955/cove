@@ -20,6 +20,7 @@ export function DuplicateResolveDialog({
   preferences,
   canDeleteFiles,
   canMerge,
+  files = false,
   isPending,
   error,
   scope,
@@ -32,6 +33,8 @@ export function DuplicateResolveDialog({
   preferences: ResolutionPreferences;
   canDeleteFiles: boolean;
   canMerge: boolean;
+  /** Resolving groups from a files search, which removes files from their videos rather than videos. */
+  files?: boolean;
   isPending: boolean;
   error?: string | null;
   scope: "group" | "all";
@@ -46,8 +49,9 @@ export function DuplicateResolveDialog({
   const update = (patch: Partial<ResolutionPreferences>) => onChange({ ...preferences, ...patch });
   const deleteFiles = preferences.deleteFiles && canDeleteFiles;
   const needsAcknowledgement = deleteFiles && scope === "all";
-  const merge = preferences.action === "merge" && canMerge;
-  const copies = `${summary.videoCount.toLocaleString()} ${summary.videoCount === 1 ? "copy" : "copies"}`;
+  const merge = preferences.action === "merge" && canMerge && !files;
+  const noun = files ? (summary.videoCount === 1 ? "file" : "files") : summary.videoCount === 1 ? "copy" : "copies";
+  const copies = `${summary.videoCount.toLocaleString()} ${noun}`;
 
   return (
     <DuplicateDialog
@@ -56,7 +60,7 @@ export function DuplicateResolveDialog({
       dismissible={!isPending}
       size="sm"
       title={scope === "all" ? `Resolve ${summary.groupCount.toLocaleString()} groups` : "Resolve this group"}
-      subtitle={`${copies} will be removed from Cove${deleteFiles ? " and deleted from disk" : ""}.`}
+      subtitle={`${copies} will be removed from ${files ? "their videos" : "Cove"}${deleteFiles ? " and deleted from disk" : ""}.`}
       footer={
         <>
           <button
@@ -89,23 +93,31 @@ export function DuplicateResolveDialog({
       }
     >
       <div className="space-y-4 text-sm">
-        <fieldset className="space-y-2">
-          <legend className="mb-1 font-medium text-foreground">Before removing</legend>
-          <OptionCard
-            checked={merge}
-            disabled={!canMerge}
-            onSelect={() => update({ action: "merge" })}
-            title="Merge metadata into the kept copy"
-            description="Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, play counts and your markers carry over. Empty fields are filled; nothing on the kept copy is overwritten."
-            recommended
-          />
-          <OptionCard
-            checked={!merge}
-            onSelect={() => update({ action: "remove" })}
-            title="Just remove the other copies"
-            description="Their metadata and watch history are discarded."
-          />
-        </fieldset>
+        {files ? (
+          <p className="rounded-lg border border-border bg-card/60 px-3 py-2.5 text-xs text-secondary">
+            When a video&apos;s current primary file is not kept, the kept file becomes primary first. Covers, previews
+            and markers stay because it is the same footage. If it is not the same footage, that group stops with
+            nothing removed so you can line it up from the video page.
+          </p>
+        ) : (
+          <fieldset className="space-y-2">
+            <legend className="mb-1 font-medium text-foreground">Before removing</legend>
+            <OptionCard
+              checked={merge}
+              disabled={!canMerge}
+              onSelect={() => update({ action: "merge" })}
+              title="Merge metadata into the kept copy"
+              description="Tags, performers, galleries, groups, links, remote IDs, ratings, favorites, play counts and your markers carry over. Empty fields are filled; nothing on the kept copy is overwritten."
+              recommended
+            />
+            <OptionCard
+              checked={!merge}
+              onSelect={() => update({ action: "remove" })}
+              title="Just remove the other copies"
+              description="Their metadata and watch history are discarded."
+            />
+          </fieldset>
+        )}
 
         <fieldset className="space-y-2">
           <legend className="mb-1 font-medium text-foreground">Files</legend>
@@ -129,15 +141,17 @@ export function DuplicateResolveDialog({
           ) : (
             <p className="text-xs text-muted">Files stay on disk. You don't have permission to delete video files.</p>
           )}
-          <label className="flex cursor-pointer items-center gap-2.5 px-1 text-secondary">
-            <input
-              type="checkbox"
-              checked={preferences.deleteGenerated}
-              onChange={(event) => update({ deleteGenerated: event.target.checked })}
-              className="accent-accent"
-            />
-            Delete generated previews, sprites and thumbnails
-          </label>
+          {files ? null : (
+            <label className="flex cursor-pointer items-center gap-2.5 px-1 text-secondary">
+              <input
+                type="checkbox"
+                checked={preferences.deleteGenerated}
+                onChange={(event) => update({ deleteGenerated: event.target.checked })}
+                className="accent-accent"
+              />
+              Delete generated previews, sprites and thumbnails
+            </label>
+          )}
         </fieldset>
 
         {scope === "group" ? (

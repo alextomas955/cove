@@ -54,6 +54,25 @@ public sealed class DownloaderSiteLoginTests
     }
 
     [Fact]
+    public void SavingTheSettingsAgainAdvancesTheLoginsSavedTimeEvenWhenNothingChanged()
+    {
+        var config = ConfigWith(Credential("example.com", "user", "stored", id: "login-1"));
+        var service = new ConfigService(config, NullLogger<ConfigService>.Instance);
+        var provider = new DownloaderSiteLoginProvider(config);
+
+        service.ApplyToLive(service.GetConfig());
+        var first = provider.FindForUrl("https://example.com/video")?.SavedAt;
+        Thread.Sleep(5);
+        service.ApplyToLive(service.GetConfig());
+        var second = provider.FindForUrl("https://example.com/video")?.SavedAt;
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.True(second > first);
+        Assert.Equal("stored", Assert.Single(config.DownloaderSiteCredentials).Password);
+    }
+
+    [Fact]
     public void ApplyToLive_KeepsTheStoredPasswordWhenASaveOmitsIt()
     {
         var config = ConfigWith(Credential("example.com", "user", "stored", id: "login-1"));

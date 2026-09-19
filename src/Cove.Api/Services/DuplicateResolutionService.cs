@@ -203,6 +203,7 @@ public sealed class DuplicateResolutionService(
             var resolved = 0;
             var failed = 0;
             var removedVideos = 0;
+            var removedFiles = 0;
             long removedBytes = 0;
             try
             {
@@ -260,7 +261,10 @@ public sealed class DuplicateResolutionService(
                                 .SetProperty(group => group.RemovedBytes, result.RemovedBytes)
                                 .SetProperty(group => group.Error, result.Warning), CancellationToken.None);
                         resolved++;
-                        removedVideos += result.RemovedVideos;
+                        if (result.FileGroup)
+                            removedFiles += result.RemovedVideos;
+                        else
+                            removedVideos += result.RemovedVideos;
                         removedBytes += result.RemovedBytes;
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -318,7 +322,12 @@ public sealed class DuplicateResolutionService(
                 throw;
             }
 
-            var summary = $"Resolved {resolved.ToString(CultureInfo.InvariantCulture)} duplicate groups, removed {removedVideos.ToString(CultureInfo.InvariantCulture)} videos ({FormatBytes(removedBytes)})";
+            var removedParts = new List<string>();
+            if (removedVideos > 0 || removedFiles == 0)
+                removedParts.Add($"{removedVideos.ToString(CultureInfo.InvariantCulture)} videos");
+            if (removedFiles > 0)
+                removedParts.Add($"{removedFiles.ToString(CultureInfo.InvariantCulture)} files");
+            var summary = $"Resolved {resolved.ToString(CultureInfo.InvariantCulture)} duplicate groups, removed {string.Join(" and ", removedParts)} ({FormatBytes(removedBytes)})";
             if (failed > 0)
                 summary += $"; {failed.ToString(CultureInfo.InvariantCulture)} groups failed";
             progress.SetSummary(summary);
@@ -365,6 +374,9 @@ public sealed class DuplicateResolutionService(
         CovePrincipal? principal,
         CancellationToken ct)
     {
+        if (await scopedDb.DuplicateSearchFileItems.AnyAsync(item => item.GroupId == groupId, ct))
+            return await ResolveFileGroupAsync(scopeFactory, services, scopedDb, searchId, groupId, deleteFiles, principal, ct);
+
         var keeperIds = await scopedDb.DuplicateSearchItems
             .Where(item => item.GroupId == groupId && item.Keep)
             .Select(item => item.VideoId)
@@ -463,6 +475,125 @@ public sealed class DuplicateResolutionService(
         return new GroupResolution(removed, removedBytes, warning);
     }
 
+    /// <summary>
+    /// Resolves a group from a files search. When the video's current primary file is not kept, the best kept
+    /// file by the search's keeper rules becomes primary first, which only happens when it is the same footage
+    /// (so covers, previews and timed content stay valid). Then every unkept member file is removed from the
+    /// video, and from disk when asked. Nothing on this path can remove the video itself.
+    /// </summary>
+    private static async Task<GroupResolution> ResolveFileGroupAsync(
+        IServiceScopeFactory scopeFactory,
+        IServiceProvider services,
+        CoveContext scopedDb,
+        Guid searchId,
+        int groupId,
+        bool deleteFiles,
+        CovePrincipal? principal,
+        CancellationToken ct)
+    {
+        var members = await scopedDb.DuplicateSearchFileItems
+            .AsNoTracking()
+            .Where(item => item.GroupId == groupId)
+            .Select(item => new { item.FileId, item.VideoId, item.Keep })
+            .ToListAsync(ct);
+        var videoId = members[0].VideoId;
+        var video = await scopedDb.Videos
+            .AsNoTracking()
+            .Where(item => item.Id == videoId)
+            .Select(item => new { item.PrimaryFileId })
+            .SingleOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("The video no longer exists.");
+
+        // Files moved to another video or removed since the search no longer take part.
+        var memberFileIds = members.Select(member => member.FileId).ToArray();
+        var attachedSizes = await scopedDb.VideoFiles
+            .AsNoTracking()
+            .Where(file => file.VideoId == videoId && memberFileIds.Contains(file.Id))
+            .ToDictionaryAsync(file => file.Id, file => file.Size, ct);
+        var keeperIds = members.Where(member => member.Keep && attachedSizes.ContainsKey(member.FileId))
+            .Select(member => member.FileId).Order().ToArray();
+        if (keeperIds.Length == 0)
+            throw new InvalidOperationException("No file in this group is marked to keep.");
+        var removeIds = members.Where(member => !member.Keep && attachedSizes.ContainsKey(member.FileId))
+            .Select(member => member.FileId).Order().ToArray();
+        if (removeIds.Length == 0)
+            return new GroupResolution(0, 0, null, FileGroup: true);
+
+        // Like video deletion, a system-initiated resolution (no principal) is not entity-authorized.
+        if (principal is not null)
+        {
+            if (deleteFiles && !principal.Has(Permissions.VideosDeleteFile))
+                throw new UnauthorizedAccessException("You do not have permission to delete files from disk.");
+            var authorization = services.GetRequiredService<Cove.Core.Auth.IAuthorizationService>();
+            var decision = await authorization.AuthorizeAsync(principal, Permissions.VideosWrite, EntityRef.Of(EntityKinds.Video, videoId), ct);
+            if (!decision.Allowed)
+                throw new UnauthorizedAccessException("You do not have permission to change this video's files.");
+        }
+
+        // Reserve the video so no other deletion path can remove it while its files change.
+        try
+        {
+            await scopedDb.DuplicateDeletionKeeperReservations
+                .IgnoreQueryFilters()
+                .Where(item => item.SearchId == searchId)
+                .ExecuteDeleteAsync(ct);
+            scopedDb.DuplicateDeletionKeeperReservations.Add(new DuplicateDeletionKeeperReservation { SearchId = searchId, VideoId = videoId });
+            await scopedDb.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            throw new InvalidOperationException("The video was deleted before its files could be changed.");
+        }
+        finally
+        {
+            scopedDb.ChangeTracker.Clear();
+        }
+
+        using var maintenanceScope = CreatePrincipalScope(scopeFactory, principal);
+        var maintenance = maintenanceScope.ServiceProvider.GetRequiredService<Cove.Plugins.IVideoFileMaintenanceService>();
+
+        if (video.PrimaryFileId is not { } primaryFileId || !keeperIds.Contains(primaryFileId))
+        {
+            var rulesJson = await scopedDb.DuplicateSearches
+                .AsNoTracking()
+                .Where(search => search.Id == searchId)
+                .Select(search => search.KeeperRulesJson)
+                .SingleOrDefaultAsync(ct);
+            var facts = await DuplicateKeeperRules.LoadFileFactsAsync(scopedDb, keeperIds, new DuplicateSearchMemoryBudget(), ct);
+            var nextPrimary = DuplicateKeeperRules.Choose(keeperIds, facts, DuplicateKeeperRules.Deserialize(rulesJson)).KeeperId;
+            var swap = await maintenance.MakePrimaryWhenSameContentAsync(videoId, nextPrimary, ct);
+            if (!swap.Applied)
+            {
+                throw new InvalidOperationException(
+                    $"{swap.Reason} Nothing was removed. To keep this file anyway, open the video and use Set as primary to line up its timed content, then resolve this group again.");
+            }
+        }
+
+        var removed = 0;
+        long removedBytes = 0;
+        var kept = new List<string>();
+        foreach (var fileId in removeIds)
+        {
+            ct.ThrowIfCancellationRequested();
+            var outcome = await maintenance.DeleteFileAsync(fileId, deleteFiles, CancellationToken.None);
+            if (outcome.Applied)
+            {
+                removed++;
+                removedBytes += attachedSizes[fileId];
+            }
+            else
+            {
+                kept.Add(outcome.Reason ?? "The file could not be removed.");
+            }
+        }
+        if (removed == 0 && kept.Count > 0)
+            throw new InvalidOperationException(kept[0]);
+        var warning = kept.Count == 0
+            ? null
+            : $"{kept.Count.ToString(CultureInfo.InvariantCulture)} file(s) could not be removed: {kept[0]}";
+        return new GroupResolution(removed, removedBytes, warning, FileGroup: true);
+    }
+
     private static IServiceScope CreatePrincipalScope(IServiceScopeFactory scopeFactory, CovePrincipal? principal)
     {
         var scope = scopeFactory.CreateScope();
@@ -501,5 +632,6 @@ public sealed class DuplicateResolutionService(
         return $"{value.ToString(unit == 0 ? "0" : "0.#", CultureInfo.InvariantCulture)} {units[unit]}";
     }
 
-    private sealed record GroupResolution(int RemovedVideos, long RemovedBytes, string? Warning);
+    /// <summary><paramref name="RemovedVideos"/> counts removed files when <paramref name="FileGroup"/> is set.</summary>
+    private sealed record GroupResolution(int RemovedVideos, long RemovedBytes, string? Warning, bool FileGroup = false);
 }

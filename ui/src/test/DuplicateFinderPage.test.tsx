@@ -3,7 +3,13 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DuplicateSearchGroup, DuplicateSearchInfo, Video } from "../api/types";
-import { phashDistance, rowTones, COMPARISON_ROWS } from "../components/duplicates/duplicateModel";
+import {
+  copyKey,
+  phashDistance,
+  rowTones,
+  toReviewGroup,
+  COMPARISON_ROWS,
+} from "../components/duplicates/duplicateModel";
 import { DuplicateFinderPage } from "../pages/DuplicateFinderPage";
 
 const mocks = vi.hoisted(() => ({
@@ -128,6 +134,8 @@ const group: DuplicateSearchGroup = {
   removedVideoCount: 0,
   removedBytes: 0,
   reclaimableBytes: 120_000_000,
+  fileIds: [],
+  keepFileIds: [],
 };
 
 const nextGroup: DuplicateSearchGroup = {
@@ -207,7 +215,62 @@ describe("DuplicateFinderPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Keep this instead/ }));
 
-    await waitFor(() => expect(mocks.updateDuplicateSearchDecision).toHaveBeenCalledWith("saved-search", 7, [2]));
+    await waitFor(() => expect(mocks.updateDuplicateSearchDecision).toHaveBeenCalledWith("saved-search", 7, [2], false));
+  });
+
+  it("reviews the files attached to one video and keeps a file by its file id", async () => {
+    const base = video(5, 1920, 1080, "h264", 4_000_000);
+    const upgraded: Video = {
+      ...base,
+      title: "Upgraded scene",
+      files: [
+        { ...base.files[0], id: 51, basename: "scene-1080p.mp4" },
+        {
+          ...base.files[0],
+          id: 52,
+          basename: "scene-2160p.mp4",
+          width: 3840,
+          height: 2160,
+          bitRate: 16_000_000,
+          size: 400_000_000,
+        },
+      ],
+      primaryFileId: 51,
+    };
+    mocks.getDuplicateSearch.mockResolvedValue({ ...completedSearch, matchType: "files", videoCount: 2 });
+    mocks.getDuplicateSearchGroups.mockResolvedValue({
+      items: [{ ...group, id: 9, videos: [upgraded], keepVideoIds: [], fileIds: [51, 52], keepFileIds: [52] }],
+      totalCount: 1,
+      page: 1,
+      perPage: 10,
+    });
+    window.history.replaceState({}, "", "/duplicates?search=saved-search");
+    renderPage();
+
+    const article = (await screen.findByText("Group 1")).closest("article")!;
+    expect(within(article).getByText(/2 files on Upgraded scene/)).toBeInTheDocument();
+    expect(within(article).getByText("Primary")).toBeInTheDocument();
+    expect(within(article).getByText("Keeping this file")).toBeInTheDocument();
+    expect(within(article).getByRole("button", { name: /Keep all files/ })).toBeInTheDocument();
+    expect(within(article).getAllByText("scene-1080p.mp4").length).toBeGreaterThan(0);
+    expect(within(article).getAllByText("scene-2160p.mp4").length).toBeGreaterThan(0);
+
+    fireEvent.click(within(article).getByRole("button", { name: /Keep this instead/ }));
+    await waitFor(() =>
+      expect(mocks.updateDuplicateSearchDecision).toHaveBeenCalledWith("saved-search", 9, [51], true),
+    );
+
+    // Files on one video share their metadata, so resolving never merges even when merge is the saved choice.
+    fireEvent.click(within(article).getByRole("button", { name: /Remove 1/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText(/Merge metadata/)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Remove 1 file/ }));
+    await waitFor(() =>
+      expect(mocks.resolveDuplicateGroups).toHaveBeenCalledWith(
+        "saved-search",
+        expect.objectContaining({ groupIds: [9], action: "remove" }),
+      ),
+    );
   });
 
   it("asks once before resolving a group and remembers the choice", async () => {
@@ -344,5 +407,34 @@ describe("duplicate comparison model", () => {
     const added = COMPARISON_ROWS.find((row) => row.key === "added")!;
 
     expect(added.render(group.videos[0], undefined)).toBe("2026-08-25");
+  });
+});
+
+describe("file review groups", () => {
+  it("turns each file into its own copy keyed by file id, and is safe to apply twice", () => {
+    const base = video(5, 1920, 1080, "h264", 4_000_000);
+    const withTwoFiles: Video = {
+      ...base,
+      files: [
+        { ...base.files[0], id: 51 },
+        { ...base.files[0], id: 52, width: 3840, height: 2160 },
+      ],
+      primaryFileId: 51,
+    };
+    const reviewed = toReviewGroup({
+      ...group,
+      videos: [withTwoFiles],
+      keepVideoIds: [],
+      fileIds: [51, 52],
+      keepFileIds: [52],
+    });
+
+    expect(reviewed.videos.map(copyKey)).toEqual([51, 52]);
+    expect(reviewed.videos.map((copy) => copy.id)).toEqual([5, 5]);
+    expect(reviewed.videos.map((copy) => copy.files.map((file) => file.id))).toEqual([[51], [52]]);
+    expect(reviewed.videos.map((copy) => copy.primaryFileId)).toEqual([51, 52]);
+    expect(reviewed.keepVideoIds).toEqual([52]);
+    expect(toReviewGroup(reviewed)).toBe(reviewed);
+    expect(toReviewGroup(group)).toBe(group);
   });
 });

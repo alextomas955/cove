@@ -1000,6 +1000,64 @@ public class DownloaderServiceTests
     }
 
     [Fact]
+    public async Task DownloadAndIngestBatchAsync_ContinuesWhenOneItemCannotBeMatched()
+    {
+        var libraryRoot = Path.Combine(Path.GetTempPath(), "cove-downloader-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(libraryRoot);
+
+        var service = CreateService(
+            out var services,
+            out var downloaderProvider,
+            new CoveConfiguration
+            {
+                CovePaths = [new CovePath { Path = libraryRoot }],
+                MaxConcurrentDownloads = 2,
+            },
+            new FakeScanService(),
+            new FakeVideoMetadataApplyService());
+        downloaderProvider.MatchFailureUrl = "https://example.com/watch/batch-missing";
+
+        try
+        {
+            var summary = await service.DownloadAndIngestBatchAsync(
+                [
+                    new DownloaderBatchItemDto
+                    {
+                        Url = "https://example.com/watch/batch-missing",
+                        Entity = "Video",
+                        Title = "Missing",
+                        Label = "Missing",
+                        CreateEntityIfMissing = true,
+                    },
+                    new DownloaderBatchItemDto
+                    {
+                        Url = "https://example.com/watch/batch-ok",
+                        Entity = "Video",
+                        Title = "Batch Ok",
+                        Label = "Batch Ok",
+                        CreateEntityIfMissing = true,
+                    },
+                ],
+                new DownloaderBatchFollowUpDto(),
+                progress: null,
+                CancellationToken.None);
+
+            Assert.Equal(2, summary.TotalCount);
+            Assert.Equal(1, summary.SucceededCount);
+            Assert.Equal(0, summary.SkippedCount);
+            Assert.Equal(1, summary.FailedCount);
+            Assert.Contains(summary.Issues, issue => issue.Contains("Missing", StringComparison.Ordinal) && issue.Contains("Test downloader match failure", StringComparison.Ordinal));
+            Assert.Single(downloaderProvider.Requests, request => request.Url == "https://example.com/watch/batch-ok");
+        }
+        finally
+        {
+            await services.DisposeAsync();
+            if (Directory.Exists(libraryRoot))
+                Directory.Delete(libraryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task DownloadAndIngestBatchAsync_CreatesPlaceholderAndSkipsDuplicateWithoutCreatingAnotherEntity()
     {
         var libraryRoot = Path.Combine(Path.GetTempPath(), "cove-downloader-tests", Guid.NewGuid().ToString("n"));

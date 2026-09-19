@@ -99,6 +99,9 @@ public class DownloaderSiteCredential
     public string Site { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    // When the downloader settings holding this login were last saved. Downloaders that pause a login after a
+    // failed sign-in treat a newer save as the person saying "try again".
+    public DateTime? SavedAt { get; set; }
 }
 
 public class AuthConfig

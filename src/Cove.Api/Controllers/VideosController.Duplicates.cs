@@ -104,7 +104,7 @@ public partial class VideosController
         var statusRows = await db.DuplicateSearchGroups
             .AsNoTracking()
             .Where(group => group.SearchId == searchId)
-            .Select(group => new { group.Status, Settled = group.Items.Count() < 2 })
+            .Select(group => new { group.Status, Settled = group.Items.Count() + group.FileItems.Count() < 2 })
             .GroupBy(row => new { row.Status, row.Settled })
             .Select(rows => new { rows.Key.Status, rows.Key.Settled, Count = rows.Count() })
             .ToListAsync(ct);
@@ -118,11 +118,26 @@ public partial class VideosController
             Ignored: CountOf((status, _) => status == DuplicateGroupStatus.Ignored),
             Failed: CountOf((status, settled) => status == DuplicateGroupStatus.Failed && !settled));
 
-        var removable = DuplicateSearchJobService.EffectiveUnkeptVideoIds(db, searchId, ReviewableDuplicateGroups(searchId));
-        var removableCount = await removable.CountAsync(ct);
-        var reclaimableBytes = await db.VideoFiles
-            .Where(file => file.VideoId.HasValue && removable.Contains(file.VideoId.Value))
-            .SumAsync(file => (long?)file.Size, ct) ?? 0;
+        int removableCount;
+        long reclaimableBytes;
+        if (search.MatchType == DuplicateSearchJobService.FilesMatchType)
+        {
+            // For a files search the removable copies are files: unkept members of reviewable groups that keep one.
+            var removableFiles = db.DuplicateSearchFileItems
+                .Where(item => ReviewableDuplicateGroups(searchId).Select(group => group.Id).Contains(item.GroupId)
+                    && !item.Keep
+                    && item.Group!.FileItems.Any(keeper => keeper.Keep));
+            removableCount = await removableFiles.CountAsync(ct);
+            reclaimableBytes = await removableFiles.SumAsync(item => (long?)item.File!.Size, ct) ?? 0;
+        }
+        else
+        {
+            var removable = DuplicateSearchJobService.EffectiveUnkeptVideoIds(db, searchId, ReviewableDuplicateGroups(searchId));
+            removableCount = await removable.CountAsync(ct);
+            reclaimableBytes = await db.VideoFiles
+                .Where(file => file.VideoId.HasValue && removable.Contains(file.VideoId.Value))
+                .SumAsync(file => (long?)file.Size, ct) ?? 0;
+        }
         var removed = await db.DuplicateSearchGroups
             .AsNoTracking()
             .Where(group => group.SearchId == searchId && group.Status == DuplicateGroupStatus.Resolved)
@@ -214,20 +229,30 @@ public partial class VideosController
                         || (canReadFiles && file.Path.ToLower().Contains(term)))
                     || (item.Video.Studio != null && item.Video.Studio.Name.ToLower().Contains(term))
                     || item.Video.VideoPerformers.Any(link => link.Performer != null && link.Performer.Name.ToLower().Contains(term))
-                    || item.Video.VideoTags.Any(link => link.Tag != null && link.Tag.Name.ToLower().Contains(term)))));
+                    || item.Video.VideoTags.Any(link => link.Tag != null && link.Tag.Name.ToLower().Contains(term))))
+                || group.FileItems.Any(item => item.Video != null
+                    && ((item.Video.Title != null && item.Video.Title.ToLower().Contains(term))
+                        || (item.File != null && (item.File.Basename.ToLower().Contains(term)
+                            || (canReadFiles && item.File.Path.ToLower().Contains(term))))
+                        || (item.Video.Studio != null && item.Video.Studio.Name.ToLower().Contains(term))
+                        || item.Video.VideoPerformers.Any(link => link.Performer != null && link.Performer.Name.ToLower().Contains(term))
+                        || item.Video.VideoTags.Any(link => link.Tag != null && link.Tag.Name.ToLower().Contains(term)))));
         }
 
         var totalCount = await groupQuery.CountAsync(ct);
         var ordered = (sort ?? string.Empty).Trim().ToLowerInvariant() switch
         {
+            // Each group has either video members or file members, so adding both sides ranks either kind.
             "reclaimable" => groupQuery
-                .OrderByDescending(group => group.Items.Where(item => !item.Keep).Sum(item => (long?)item.Video!.MaxFileSize) ?? 0)
+                .OrderByDescending(group => (group.Items.Where(item => !item.Keep).Sum(item => (long?)item.Video!.MaxFileSize) ?? 0)
+                    + (group.FileItems.Where(item => !item.Keep).Sum(item => (long?)item.File!.Size) ?? 0))
                 .ThenBy(group => group.Position),
             "largest" => groupQuery
-                .OrderByDescending(group => group.Items.Max(item => (long?)item.Video!.MaxFileSize) ?? 0)
+                .OrderByDescending(group => (group.Items.Max(item => (long?)item.Video!.MaxFileSize) ?? 0)
+                    + (group.FileItems.Max(item => (long?)item.File!.Size) ?? 0))
                 .ThenBy(group => group.Position),
             "members" => groupQuery
-                .OrderByDescending(group => group.Items.Count())
+                .OrderByDescending(group => group.Items.Count() + group.FileItems.Count())
                 .ThenBy(group => group.Position),
             "recent" => groupQuery
                 .OrderByDescending(group => group.ResolvedAt ?? group.QueuedAt)
@@ -238,9 +263,13 @@ public partial class VideosController
             .Skip((page - 1) * perPage)
             .Take(perPage)
             .Include(group => group.Items)
+            .Include(group => group.FileItems)
             .ToListAsync(ct);
 
-        var videoIds = groups.SelectMany(group => group.Items).Select(item => item.VideoId).Distinct().ToArray();
+        var videoIds = groups.SelectMany(group => group.Items).Select(item => item.VideoId)
+            .Concat(groups.SelectMany(group => group.FileItems).Select(item => item.VideoId))
+            .Distinct()
+            .ToArray();
         var videos = await db.Videos
             .Include(video => video.Files).ThenInclude(file => file.Fingerprints)
             .Include(video => video.VideoTags).ThenInclude(link => link.Tag).ThenInclude(tag => tag!.TagGroup)
@@ -267,6 +296,9 @@ public partial class VideosController
 
         var items = groups.Select(group =>
         {
+            if (group.FileItems.Count > 0)
+                return MapFileGroup(group, videoLookup);
+
             var members = group.Items.Where(item => videoLookup.ContainsKey(item.VideoId)).ToArray();
             var keepIds = members.Where(item => item.Keep).Select(item => item.VideoId).ToList();
             var reclaimable = keepIds.Count == 0
@@ -294,10 +326,49 @@ public partial class VideosController
                 group.ResolvedAt,
                 group.RemovedVideoCount,
                 group.RemovedBytes,
-                reclaimable);
+                reclaimable,
+                [],
+                []);
         }).ToList();
 
         return Ok(new DuplicateGroupPage(items, totalCount, page, perPage));
+    }
+
+    /// <summary>
+    /// A group from a files search: its one video, and the member files still attached to that video. Files
+    /// that were removed or moved to another video since the search drop out, which settles the group once
+    /// fewer than two remain.
+    /// </summary>
+    private static DuplicateGroupView MapFileGroup(DuplicateSearchGroup group, IReadOnlyDictionary<int, Cove.Core.DTOs.VideoDto> videoLookup)
+    {
+        var videoId = group.FileItems.First().VideoId;
+        var video = videoLookup.GetValueOrDefault(videoId);
+        var sizes = video?.Files.ToDictionary(file => file.Id, file => file.Size) ?? new Dictionary<int, long>();
+        var members = group.FileItems.Where(item => item.VideoId == videoId && sizes.ContainsKey(item.FileId)).ToArray();
+        var keepFileIds = members.Where(item => item.Keep).Select(item => item.FileId).Order().ToList();
+        var reclaimable = keepFileIds.Count == 0
+            ? 0
+            : members.Where(item => !item.Keep).Sum(item => sizes[item.FileId]);
+        var effectiveStatus = group.Status is DuplicateGroupStatus.Unresolved or DuplicateGroupStatus.Failed && members.Length < 2
+            ? DuplicateGroupStatus.Resolved
+            : group.Status;
+        return new DuplicateGroupView(
+            group.Id,
+            group.Position,
+            effectiveStatus.ToString().ToLowerInvariant(),
+            video is null ? [] : [video],
+            [],
+            group.DecisionSource,
+            group.DecisionRule,
+            group.ResolutionAction,
+            group.DeleteFiles,
+            group.Error,
+            group.ResolvedAt,
+            group.RemovedVideoCount,
+            group.RemovedBytes,
+            reclaimable,
+            members.Select(item => item.FileId).Order().ToList(),
+            keepFileIds);
     }
 
     [HttpPatch("duplicate-searches/{searchId:guid}/groups/{groupId:int}")]
@@ -345,6 +416,7 @@ public partial class VideosController
 
             var group = await db.DuplicateSearchGroups
                 .Include(item => item.Items)
+                .Include(item => item.FileItems)
                 .FirstAsync(item => item.SearchId == searchId && item.Id == groupId, ct);
             if (!observedOriginalDecision)
             {
@@ -364,18 +436,34 @@ public partial class VideosController
                 await transaction.CommitAsync(ct);
                 return Conflict(new { message = "Keeper choices changed while this update was being retried. Review the duplicate group and try again." });
             }
-            var keepIds = request.KeepVideoIds.Where(id => id > 0).Distinct().ToHashSet();
-            if (keepIds.Count == 0)
-                return BadRequest("Keep at least one video in every duplicate group.");
-            var memberIds = group.Items.Select(item => item.VideoId).ToHashSet();
-            if (!keepIds.IsSubsetOf(memberIds))
-                return BadRequest("A keeper does not belong to this duplicate group.");
-            var visibleKeeperCount = await db.Videos.CountAsync(video => keepIds.Contains(video.Id), ct);
-            if (visibleKeeperCount != keepIds.Count)
-                return Forbid();
+            if (group.FileItems.Count > 0)
+            {
+                var keepFileIds = (request.KeepFileIds ?? []).Where(id => id > 0).Distinct().ToHashSet();
+                if (keepFileIds.Count == 0)
+                    return BadRequest("Keep at least one file in every group.");
+                if (!keepFileIds.IsSubsetOf(group.FileItems.Select(item => item.FileId)))
+                    return BadRequest("A file to keep does not belong to this group.");
+                var videoId = group.FileItems.First().VideoId;
+                if (!await db.Videos.AnyAsync(video => video.Id == videoId, ct))
+                    return Forbid();
+                foreach (var item in group.FileItems)
+                    item.Keep = keepFileIds.Contains(item.FileId);
+            }
+            else
+            {
+                var keepIds = request.KeepVideoIds.Where(id => id > 0).Distinct().ToHashSet();
+                if (keepIds.Count == 0)
+                    return BadRequest("Keep at least one video in every duplicate group.");
+                var memberIds = group.Items.Select(item => item.VideoId).ToHashSet();
+                if (!keepIds.IsSubsetOf(memberIds))
+                    return BadRequest("A keeper does not belong to this duplicate group.");
+                var visibleKeeperCount = await db.Videos.CountAsync(video => keepIds.Contains(video.Id), ct);
+                if (visibleKeeperCount != keepIds.Count)
+                    return Forbid();
 
-            foreach (var item in group.Items)
-                item.Keep = keepIds.Contains(item.VideoId);
+                foreach (var item in group.Items)
+                    item.Keep = keepIds.Contains(item.VideoId);
+            }
             group.LastDecisionOperationId = decisionOperationId;
             group.DecisionSource = "manual";
             group.DecisionRule = null;
@@ -407,20 +495,30 @@ public partial class VideosController
             groupQuery = groupQuery.Where(group => requestedGroupIds.Contains(group.Id));
         if (!request.OverwriteManual)
             groupQuery = groupQuery.Where(group => group.DecisionSource != "manual");
-        var groups = await groupQuery
-            .AsNoTracking()
-            .Select(group => new { group.Id, Members = group.Items.Select(item => new { item.VideoId, item.Keep }).ToList() })
-            .ToListAsync(ct);
+        var filesSearch = search.MatchType == DuplicateSearchJobService.FilesMatchType;
+        // Members are video ids, or file ids for a files search; the keeper rules score either the same way.
+        var groups = filesSearch
+            ? await groupQuery
+                .AsNoTracking()
+                .Select(group => new { group.Id, Members = group.FileItems.Select(item => new { MemberId = item.FileId, item.Keep }).ToList() })
+                .ToListAsync(ct)
+            : await groupQuery
+                .AsNoTracking()
+                .Select(group => new { group.Id, Members = group.Items.Select(item => new { MemberId = item.VideoId, item.Keep }).ToList() })
+                .ToListAsync(ct);
 
-        var facts = await DuplicateKeeperRules.LoadFactsAsync(db, groups.SelectMany(group => group.Members.Select(member => member.VideoId)).ToArray(), rules, ct);
+        var memberIds = groups.SelectMany(group => group.Members.Select(member => member.MemberId)).ToArray();
+        var facts = filesSearch
+            ? await DuplicateKeeperRules.LoadFileFactsAsync(db, memberIds, new DuplicateSearchMemoryBudget(), ct)
+            : await DuplicateKeeperRules.LoadFactsAsync(db, memberIds, rules, ct);
         var updated = 0;
         var changed = 0;
         foreach (var chunk in groups.Chunk(500))
         {
             var decisions = chunk.Select(group =>
             {
-                var choice = DuplicateKeeperRules.Choose(group.Members.Select(member => member.VideoId).ToArray(), facts, rules);
-                var alreadyChosen = group.Members.All(member => member.Keep == (member.VideoId == choice.KeeperId));
+                var choice = DuplicateKeeperRules.Choose(group.Members.Select(member => member.MemberId).ToArray(), facts, rules);
+                var alreadyChosen = group.Members.All(member => member.Keep == (member.MemberId == choice.KeeperId));
                 return (group.Id, choice, alreadyChosen);
             }).ToArray();
             var ids = decisions.Select(decision => decision.Id).ToArray();
@@ -432,6 +530,7 @@ public partial class VideosController
                 await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
                 var tracked = await db.DuplicateSearchGroups
                     .Include(group => group.Items)
+                    .Include(group => group.FileItems)
                     .Where(group => ids.Contains(group.Id)
                         && (group.Status == DuplicateGroupStatus.Unresolved || group.Status == DuplicateGroupStatus.Failed))
                     .ToListAsync(ct);
@@ -440,6 +539,8 @@ public partial class VideosController
                     var decision = decisions.First(item => item.Id == group.Id);
                     foreach (var item in group.Items)
                         item.Keep = item.VideoId == decision.choice.KeeperId;
+                    foreach (var item in group.FileItems)
+                        item.Keep = item.FileId == decision.choice.KeeperId;
                     group.DecisionSource = "auto";
                     group.DecisionRule = decision.choice.DecisionRule;
                     group.LastDecisionOperationId = Guid.NewGuid();
@@ -484,6 +585,9 @@ public partial class VideosController
             return NotFound();
         if (search.Status != DuplicateSearchStatus.Completed)
             return Conflict(new { message = "Wait for the duplicate search to complete before resolving groups." });
+        var filesSearch = search.MatchType == DuplicateSearchJobService.FilesMatchType;
+        if (filesSearch && action == DuplicateResolutionService.MergeAction)
+            return BadRequest("Files on the same video share one set of metadata, so there is nothing to merge. Use \"remove\".");
 
         var groupQuery = ReviewableDuplicateGroups(searchId);
         if (request.GroupIds is not null)
@@ -492,11 +596,48 @@ public partial class VideosController
             groupQuery = groupQuery.Where(group => requested.Contains(group.Id));
         }
         var eligibleGroupIds = await groupQuery
-            .Where(group => group.Items.Any(item => item.Keep) && group.Items.Any(item => !item.Keep))
+            .Where(group => (group.Items.Any(item => item.Keep) && group.Items.Any(item => !item.Keep))
+                || (group.FileItems.Any(item => item.Keep) && group.FileItems.Any(item => !item.Keep)))
             .Select(group => group.Id)
             .ToArrayAsync(ct);
         if (eligibleGroupIds.Length == 0)
-            return BadRequest("None of the selected groups have a video marked for removal.");
+            return BadRequest(filesSearch
+                ? "None of the selected groups have a file marked for removal."
+                : "None of the selected groups have a video marked for removal.");
+
+        if (filesSearch)
+        {
+            // Resolving a file group changes one video's files (and possibly its primary file); no video is removed.
+            if (principal?.Has(Permissions.VideosWrite) != true)
+                return Forbid();
+            if (authorizationService is not null)
+            {
+                var affectedVideoIds = await db.DuplicateSearchFileItems
+                    .Where(item => eligibleGroupIds.Contains(item.GroupId))
+                    .Select(item => item.VideoId)
+                    .Distinct()
+                    .ToArrayAsync(ct);
+                foreach (var chunk in affectedVideoIds.Chunk(4_000))
+                {
+                    var decisions = await authorizationService.AuthorizeManyAsync(
+                        principal,
+                        Permissions.VideosWrite,
+                        chunk.Select(id => new EntityRef(EntityKinds.Video, id.ToString(CultureInfo.InvariantCulture))).ToArray(),
+                        ct);
+                    if (decisions.Any(decision => !decision.Allowed))
+                        return Forbid();
+                }
+            }
+
+            return Accepted(await duplicateResolutionService!.QueueAsync(
+                searchId,
+                eligibleGroupIds,
+                DuplicateResolutionService.RemoveAction,
+                request.DeleteFiles,
+                deleteGenerated: false,
+                principal,
+                ct));
+        }
 
         // Authorize the whole destructive scope up front so a person learns about a permission problem now
         // rather than from failed groups later. The worker re-authorizes each deletion when it runs.
@@ -582,6 +723,13 @@ public partial class VideosController
                     : Conflict(new { message = "This group is already being resolved." });
             }
 
+            if (search.MatchType == DuplicateSearchJobService.FilesMatchType)
+            {
+                await AddIgnoredFilePairsAsync(groupId, ct);
+                await transaction.CommitAsync(ct);
+                return NoContent();
+            }
+
             // The decision belongs to the persisted group, so later authorization-scope changes must not
             // change which pairs this group contributes or restores.
             var memberIds = await db.DuplicateSearchItems
@@ -644,6 +792,13 @@ public partial class VideosController
                     ? NoContent()
                     : Conflict(new { message = "Only groups marked as not duplicates can be restored." });
             }
+            if (search.MatchType == DuplicateSearchJobService.FilesMatchType)
+            {
+                await RemoveIgnoredFilePairsAsync(groupId, ct);
+                await transaction.CommitAsync(ct);
+                return NoContent();
+            }
+
             var memberIds = await db.DuplicateSearchItems
                 .IgnoreQueryFilters()
                 .Where(item => item.GroupId == groupId)
@@ -666,10 +821,59 @@ public partial class VideosController
         });
     }
 
+    /// <summary>Records that every pair of this file group's files should stay together in later files searches.</summary>
+    private async Task AddIgnoredFilePairsAsync(int groupId, CancellationToken ct)
+    {
+        var memberIds = await db.DuplicateSearchFileItems
+            .IgnoreQueryFilters()
+            .Where(item => item.GroupId == groupId)
+            .Select(item => item.FileId)
+            .OrderBy(id => id)
+            .ToArrayAsync(ct);
+        var pairs = memberIds
+            .SelectMany((low, index) => memberIds.Skip(index + 1).Select(high => (Low: low, High: high)))
+            .ToArray();
+        var existing = (await db.DuplicateIgnoredFilePairs
+                .IgnoreQueryFilters()
+                .Where(pair => memberIds.Contains(pair.LowFileId) && memberIds.Contains(pair.HighFileId))
+                .ToListAsync(ct))
+            .ToDictionary(pair => (pair.LowFileId, pair.HighFileId));
+        foreach (var pair in pairs)
+        {
+            if (existing.TryGetValue((pair.Low, pair.High), out var ignored))
+                ignored.DecisionCount++;
+            else
+                db.DuplicateIgnoredFilePairs.Add(new DuplicateIgnoredFilePair { LowFileId = pair.Low, HighFileId = pair.High });
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task RemoveIgnoredFilePairsAsync(int groupId, CancellationToken ct)
+    {
+        var memberIds = await db.DuplicateSearchFileItems
+            .IgnoreQueryFilters()
+            .Where(item => item.GroupId == groupId)
+            .Select(item => item.FileId)
+            .ToArrayAsync(ct);
+        var ignoredPairs = await db.DuplicateIgnoredFilePairs
+            .IgnoreQueryFilters()
+            .Where(pair => memberIds.Contains(pair.LowFileId) && memberIds.Contains(pair.HighFileId))
+            .ToListAsync(ct);
+        foreach (var pair in ignoredPairs)
+        {
+            if (pair.DecisionCount == 1)
+                db.DuplicateIgnoredFilePairs.Remove(pair);
+            else
+                pair.DecisionCount--;
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    // A group has either video members or file members, so their sum is the group's member count.
     private IQueryable<DuplicateSearchGroup> ReviewableDuplicateGroups(Guid searchId)
         => db.DuplicateSearchGroups.Where(group => group.SearchId == searchId
             && (group.Status == DuplicateGroupStatus.Unresolved || group.Status == DuplicateGroupStatus.Failed)
-            && group.Items.Count() >= 2);
+            && group.Items.Count() + group.FileItems.Count() >= 2);
 
     private static IQueryable<DuplicateSearchGroup> FilterDuplicateGroupsByStatus(IQueryable<DuplicateSearchGroup> groups, string? status)
         => (status ?? "unresolved").Trim().ToLowerInvariant() switch
@@ -677,12 +881,13 @@ public partial class VideosController
             "all" => groups,
             "queued" => groups.Where(group => group.Status == DuplicateGroupStatus.Queued || group.Status == DuplicateGroupStatus.Processing),
             "resolved" => groups.Where(group => group.Status == DuplicateGroupStatus.Resolved
-                || ((group.Status == DuplicateGroupStatus.Unresolved || group.Status == DuplicateGroupStatus.Failed) && group.Items.Count() < 2)),
+                || ((group.Status == DuplicateGroupStatus.Unresolved || group.Status == DuplicateGroupStatus.Failed)
+                    && group.Items.Count() + group.FileItems.Count() < 2)),
             "ignored" => groups.Where(group => group.Status == DuplicateGroupStatus.Ignored),
-            "failed" => groups.Where(group => group.Status == DuplicateGroupStatus.Failed && group.Items.Count() >= 2),
+            "failed" => groups.Where(group => group.Status == DuplicateGroupStatus.Failed && group.Items.Count() + group.FileItems.Count() >= 2),
             // Failed groups stay in the review list with their error so they are not lost off-screen.
             _ => groups.Where(group => (group.Status == DuplicateGroupStatus.Unresolved || group.Status == DuplicateGroupStatus.Failed)
-                && group.Items.Count() >= 2),
+                && group.Items.Count() + group.FileItems.Count() >= 2),
         };
 
     private async Task<DuplicateSearch?> GetAccessibleDuplicateSearchAsync(Guid searchId, CancellationToken ct)

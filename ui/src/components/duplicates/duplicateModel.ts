@@ -5,6 +5,7 @@ import type {
   DuplicateKeeperRuleType,
   DuplicateMatchType,
   DuplicateResolutionAction,
+  DuplicateSearchGroup,
   EntityEngagement,
   Video,
   VideoFile,
@@ -40,6 +41,13 @@ export const MATCH_METHODS: Array<{
     label: "Same scene ID",
     description: "Scraper / StashBox IDs",
     detail: "Groups videos linked to the same remote scene. Great for spotting mis-tagged videos.",
+  },
+  {
+    value: "files",
+    label: "Files on one video",
+    description: "Videos with extra files",
+    detail:
+      "Reviews every video that has more than one file attached, such as a 4K download next to the original. Resolving keeps one file as the video's primary file and removes the others.",
   },
 ];
 
@@ -157,6 +165,48 @@ export const GROUP_SORTS: Array<{ value: DuplicateGroupSort; label: string }> = 
 ];
 
 export const PAGE_SIZES = [5, 10, 20, 50];
+
+/**
+ * One member of a group as the review UI shows it. In a video search that is a video. In a "files" search it
+ * is the group's video narrowed to a single file, so every existing view (thumbnails, comparison rows, the
+ * compare dialog) reads that file through `primaryFile` while links and previews still use the real video id.
+ */
+export type DuplicateCopy = Video & { copyKey?: number; isPrimaryFile?: boolean };
+
+/** The id that identifies a member within its group: the video id, or the file id of a file copy. */
+export function copyKey(video: DuplicateCopy): number {
+  return video.copyKey ?? video.id;
+}
+
+export function isFileCopy(video: DuplicateCopy): boolean {
+  return video.copyKey != null;
+}
+
+export function isFileGroup(group: DuplicateSearchGroup): boolean {
+  return group.videos.some((video: DuplicateCopy) => video.copyKey != null) || (group.fileIds?.length ?? 0) > 0;
+}
+
+/**
+ * Turns a group from a "files" search into the shape every review view already understands: `videos` becomes
+ * one copy per file and `keepVideoIds` holds the kept files' keys. Video groups, and groups already turned,
+ * come back unchanged.
+ */
+export function toReviewGroup(group: DuplicateSearchGroup): DuplicateSearchGroup {
+  if (!group.fileIds?.length || group.videos.some((video: DuplicateCopy) => video.copyKey != null)) return group;
+  const video = group.videos[0];
+  if (!video) return { ...group, videos: [], keepVideoIds: group.keepFileIds ?? [] };
+  const copies = group.fileIds
+    .map((fileId) => video.files.find((file) => file.id === fileId))
+    .filter((file): file is VideoFile => file != null)
+    .map((file): DuplicateCopy => ({
+      ...video,
+      files: [file],
+      primaryFileId: file.id,
+      copyKey: file.id,
+      isPrimaryFile: file.id === video.primaryFileId,
+    }));
+  return { ...group, videos: copies, keepVideoIds: group.keepFileIds ?? [] };
+}
 
 export function primaryFile(video: Video): VideoFile | undefined {
   return video.files.find((file) => file.id === video.primaryFileId) ?? video.files[0];

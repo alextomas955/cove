@@ -802,7 +802,7 @@ export interface BulkDeletionJobStart {
 }
 
 export type DuplicateSearchStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
-export type DuplicateMatchType = "fingerprint" | "phash" | "title" | "remoteId";
+export type DuplicateMatchType = "fingerprint" | "phash" | "title" | "remoteId" | "files";
 export type DuplicateGroupStatus = "unresolved" | "queued" | "processing" | "resolved" | "ignored" | "failed";
 export type DuplicateGroupFilter = "unresolved" | "queued" | "resolved" | "ignored" | "failed" | "all";
 export type DuplicateGroupSort = "position" | "reclaimable" | "largest" | "members" | "recent";
@@ -907,6 +907,9 @@ export interface DuplicateSearchGroup {
   removedVideoCount: number;
   removedBytes: number;
   reclaimableBytes: number;
+  /** A group from a "files" search lists its video's files under review here; `videos` holds that one video. */
+  fileIds: number[];
+  keepFileIds: number[];
 }
 
 export interface DuplicateSearchGroupPage {
