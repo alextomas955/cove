@@ -1713,11 +1713,18 @@ describe("VideoPlayer source lifecycle", () => {
         source.dispatchEvent(new Event("error"));
       });
     };
+    // In-place recovery reloads after a real 500 ms+ backoff; leave headroom for a loaded CI runner.
+    const RECOVERY_WAIT = { timeout: 5_000 };
 
     it("falls back to a transcode when the browser rejects the container outright", async () => {
       mockResolutions(["360p", "720p"]);
       const { container } = render(player(60, "flv"));
       await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/60"));
+      loadMock.mockClear();
+
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+      await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/60");
 
       rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
 
@@ -1727,6 +1734,104 @@ describe("VideoPlayer source lifecycle", () => {
           "/api/stream/video/60/transcode?resolution=720p",
         ),
       );
+    });
+
+    it("retries Direct in place when a reachable source fails once", async () => {
+      mockResolutions(["360p", "720p"]);
+      const { container } = render(player(64, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/64"));
+      const video = container.querySelector("video") as HTMLVideoElement;
+      Object.defineProperty(video, "readyState", { configurable: true, value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+
+      for (let blip = 0; blip < 2; blip++) {
+        loadMock.mockClear();
+        rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+        await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+        // The retried load succeeds, so a later blip gets its own retry instead of a transcode.
+        fireEvent.loadedMetadata(video);
+        fireEvent.canPlay(video);
+      }
+
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/64");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["an error status", () => Promise.resolve(new Response("busy", { status: 503 }))],
+      ["a dropped connection", () => Promise.reject(new TypeError("Failed to fetch"))],
+    ])("recovers Direct in place when the source request failed with %s", async (_, failStream) => {
+      mockResolutions(["360p", "720p"]);
+      const resolveResolutions = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation((input, init) =>
+        String(input) === "/api/stream/video/63" ? failStream() : resolveResolutions(input, init),
+      );
+      const { container } = render(player(63, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/63"));
+      loadMock.mockClear();
+
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/stream/video/63",
+          expect.objectContaining({ headers: { Range: "bytes=0-0" } }),
+        ),
+      );
+      await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/63");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
+    it("stays on Direct when reachable rejections are separated by an unreachable one", async () => {
+      mockResolutions(["360p", "720p"]);
+      const resolveResolutions = fetchMock.getMockImplementation()!;
+      const probeResults = [200, 503, 200];
+      fetchMock.mockImplementation((input, init) =>
+        String(input) === "/api/stream/video/65"
+          ? Promise.resolve(new Response(null, { status: probeResults.shift() ?? 200 }))
+          : resolveResolutions(input, init),
+      );
+      const { container } = render(player(65, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/65"));
+
+      while (probeResults.length > 0) {
+        loadMock.mockClear();
+        rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+        await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+      }
+
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/65");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
+    it("ignores a probe that settles after the source changed", async () => {
+      mockResolutions(["360p", "720p"]);
+      const resolveResolutions = fetchMock.getMockImplementation()!;
+      let settleProbe: (response: Response) => void = () => {};
+      fetchMock.mockImplementation((input, init) =>
+        String(input) === "/api/stream/video/66"
+          ? new Promise<Response>((resolve) => {
+              settleProbe = resolve;
+            })
+          : resolveResolutions(input, init),
+      );
+      const { container, rerender } = render(player(66, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/66"));
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/stream/video/66")).toBe(true),
+      );
+
+      rerender(player(67, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/67"));
+      loadMock.mockClear();
+      await act(async () => {
+        settleProbe(new Response(null, { status: 200 }));
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      });
+
+      expect(loadMock).not.toHaveBeenCalled();
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/67");
     });
 
     it("stays on Direct when a source error leaves a resource selected", async () => {
