@@ -89,6 +89,8 @@ public partial class CoveContext : DbContext
     public DbSet<DuplicateSearchItem> DuplicateSearchItems => Set<DuplicateSearchItem>();
     public DbSet<DuplicateDeletionKeeperReservation> DuplicateDeletionKeeperReservations => Set<DuplicateDeletionKeeperReservation>();
     public DbSet<DuplicateIgnoredPair> DuplicateIgnoredPairs => Set<DuplicateIgnoredPair>();
+    public DbSet<DuplicateSearchFileItem> DuplicateSearchFileItems => Set<DuplicateSearchFileItem>();
+    public DbSet<DuplicateIgnoredFilePair> DuplicateIgnoredFilePairs => Set<DuplicateIgnoredFilePair>();
     public DbSet<PendingPhysicalFileDeletion> PendingPhysicalFileDeletions => Set<PendingPhysicalFileDeletion>();
     public DbSet<VideoDeletionCommitMarker> VideoDeletionCommitMarkers => Set<VideoDeletionCommitMarker>();
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();

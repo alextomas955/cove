@@ -802,7 +802,7 @@ export interface BulkDeletionJobStart {
 }
 
 export type DuplicateSearchStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
-export type DuplicateMatchType = "fingerprint" | "phash" | "title" | "remoteId";
+export type DuplicateMatchType = "fingerprint" | "phash" | "title" | "remoteId" | "files";
 export type DuplicateGroupStatus = "unresolved" | "queued" | "processing" | "resolved" | "ignored" | "failed";
 export type DuplicateGroupFilter = "unresolved" | "queued" | "resolved" | "ignored" | "failed" | "all";
 export type DuplicateGroupSort = "position" | "reclaimable" | "largest" | "members" | "recent";
@@ -907,6 +907,9 @@ export interface DuplicateSearchGroup {
   removedVideoCount: number;
   removedBytes: number;
   reclaimableBytes: number;
+  /** A group from a "files" search lists its video's files under review here; `videos` holds that one video. */
+  fileIds: number[];
+  keepFileIds: number[];
 }
 
 export interface DuplicateSearchGroupPage {
@@ -2294,6 +2297,7 @@ export interface ScrapingConfig {
 export interface CoveConfig {
   covePaths: CovePathConfig[];
   downloaderPathOverrides: DownloaderPathOverrideConfig[];
+  downloaderSiteCredentials: DownloaderSiteCredentialConfig[];
   generatedPath?: string;
   cachePath?: string;
   host: string;
@@ -2356,6 +2360,15 @@ export interface DownloaderPathOverrideConfig {
   downloaderId: string;
   site?: string;
   path: string;
+}
+
+export interface DownloaderSiteCredentialConfig {
+  id: string;
+  site: string;
+  username: string;
+  /** Write-only: the API never returns stored passwords. Leave unset to keep the saved password. */
+  password?: string;
+  hasPassword: boolean;
 }
 
 export interface JobInfo {
@@ -2545,6 +2558,8 @@ export interface DownloaderQualityOption {
   id: string;
   label: string;
   description?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface DownloaderMatch {
@@ -2962,6 +2977,7 @@ export interface VideoFilterCriteria {
   orientationCriterion?: StringCriterion;
   customFieldCriterion?: CustomFieldCriterion;
   customFieldCriteria?: CustomFieldCriterion[];
+  extensionCriteria?: ExtensionFilterCriterion[];
 }
 
 export interface VideoAggregate {

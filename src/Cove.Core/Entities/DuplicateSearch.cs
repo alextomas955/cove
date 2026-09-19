@@ -91,6 +91,39 @@ public sealed class DuplicateSearchGroup
     public long RemovedBytes { get; set; }
     public DuplicateSearch? Search { get; set; }
     public ICollection<DuplicateSearchItem> Items { get; set; } = [];
+    /// <summary>The members of a group from a <c>files</c> search: files attached to one video.</summary>
+    public ICollection<DuplicateSearchFileItem> FileItems { get; set; } = [];
+}
+
+/// <summary>
+/// One file in a group from a <c>files</c> search, which reviews the files attached to a single video.
+/// File members live apart from <see cref="DuplicateSearchItem"/> on purpose: the queries that remove whole
+/// videos only read video members, so a file group can never reach them.
+/// </summary>
+public sealed class DuplicateSearchFileItem
+{
+    public int GroupId { get; set; }
+    public int FileId { get; set; }
+    public int VideoId { get; set; }
+    public bool Keep { get; set; }
+    public DuplicateSearchGroup? Group { get; set; }
+    public VideoFile? File { get; set; }
+    public Video? Video { get; set; }
+}
+
+/// <summary>
+/// Two files of the same video a person chose to keep side by side. Stored once per unordered pair
+/// (<see cref="LowFileId"/> &lt; <see cref="HighFileId"/>) and honored by every later <c>files</c> search.
+/// </summary>
+public sealed class DuplicateIgnoredFilePair
+{
+    public int LowFileId { get; set; }
+    public int HighFileId { get; set; }
+    /// <summary>Number of independent group decisions that currently preserve this pair.</summary>
+    public int DecisionCount { get; set; } = 1;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public VideoFile? LowFile { get; set; }
+    public VideoFile? HighFile { get; set; }
 }
 
 public sealed class DuplicateSearchItem

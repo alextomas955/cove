@@ -38,6 +38,9 @@ import { DuplicateResolveDialog, type ResolveSummary } from "../components/dupli
 import { DuplicateSearchSetup } from "../components/duplicates/DuplicateSearchSetup";
 import { KeeperRulesEditor, describeRules } from "../components/duplicates/KeeperRulesEditor";
 import {
+  copyKey,
+  isFileGroup,
+  toReviewGroup,
   GROUP_FILTERS,
   GROUP_SORTS,
   PAGE_SIZES,
@@ -222,7 +225,9 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     refetchInterval: search && search.counts.queued > 0 ? 2000 : false,
   });
 
-  const serverGroups = groupsQuery.data?.items ?? [];
+  const filesSearch = search?.matchType === "files";
+  // File groups are turned into one copy per file here, once, so every view below can treat them like videos.
+  const serverGroups = useMemo(() => (groupsQuery.data?.items ?? []).map(toReviewGroup), [groupsQuery.data]);
   // Groups handled in this view stay where they were, so the list does not jump while reviewing. Once one
   // leaves the current filter its real state (queued, resolved, failed) is followed by id.
   const pinnedIds = useMemo(
@@ -244,7 +249,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
       const status = statusOverrides.get(group.id);
       return status && (group.status === "unresolved" || group.status === "failed") ? { ...group, status } : group;
     });
-    const followed = new Map((pinnedQuery.data?.items ?? []).map((group) => [group.id, group]));
+    const followed = new Map((pinnedQuery.data?.items ?? []).map((group) => [group.id, toReviewGroup(group)]));
     const missing = [...pinned.values()]
       .filter((entry) => !merged.some((group) => group.id === entry.group.id))
       .sort((left, right) => left.index - right.index);
@@ -267,7 +272,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
   );
 
   const pageVideoIds = useMemo(
-    () => displayedGroups.flatMap((group) => group.videos.map((video) => video.id)),
+    () => [...new Set(displayedGroups.flatMap((group) => group.videos.map((video) => video.id)))],
     [displayedGroups],
   );
   const { engagementById } = useEntityEngagementBatch("video", pageVideoIds);
@@ -321,8 +326,16 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
 
   const decisionMutation = useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: ({ groupId, keepVideoIds }: { groupId: number; keepVideoIds: number[]; previous?: Set<number> }) =>
-      videos.updateDuplicateSearchDecision(searchId!, groupId, keepVideoIds),
+    mutationFn: ({
+      groupId,
+      keepVideoIds,
+      files,
+    }: {
+      groupId: number;
+      keepVideoIds: number[];
+      files: boolean;
+      previous?: Set<number>;
+    }) => videos.updateDuplicateSearchDecision(searchId!, groupId, keepVideoIds, files),
     onMutate: ({ groupId, keepVideoIds }) => {
       setKeeperOverrides((current) => new Map(current).set(groupId, new Set(keepVideoIds)));
     },
@@ -342,9 +355,15 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     },
   });
 
-  const setKeepers = (group: DuplicateSearchGroup, keepVideoIds: number[]) => {
-    if (keepVideoIds.length === 0) return;
-    decisionMutation.mutate({ groupId: group.id, keepVideoIds, previous: keeperOverrides.get(group.id) });
+  /** `keepKeys` are member keys: video ids, or file ids for a group from a files search. */
+  const setKeepers = (group: DuplicateSearchGroup, keepKeys: number[]) => {
+    if (keepKeys.length === 0) return;
+    decisionMutation.mutate({
+      groupId: group.id,
+      keepVideoIds: keepKeys,
+      files: isFileGroup(group),
+      previous: keeperOverrides.get(group.id),
+    });
   };
 
   const pin = (group: DuplicateSearchGroup, intent: "resolve" | "ignore") => {
@@ -357,7 +376,8 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     mutationFn: ({ groupIds }: { groupIds: number[] | null }) =>
       videos.resolveDuplicateGroups(searchId!, {
         groupIds,
-        action: canWrite ? resolution.action : "remove",
+        // Files on one video share their metadata, so a files search only ever removes.
+        action: canWrite && !filesSearch ? resolution.action : "remove",
         deleteFiles: canDeleteFiles && resolution.deleteFiles,
         deleteGenerated: resolution.deleteGenerated,
       }),
@@ -539,7 +559,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     const reviewable = focusedGroup && (focusedGroup.status === "unresolved" || focusedGroup.status === "failed");
     const keepNumber = (position: number) => () => {
       const video = focusedGroup?.videos[position];
-      if (video && reviewable) setKeepers(focusedGroup, [video.id]);
+      if (video && reviewable) setKeepers(focusedGroup, [copyKey(video)]);
     };
     return [
       { id: "duplicates.group.next", action: () => moveFocus(1) },
@@ -564,7 +584,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
   const resolveSummary: ResolveSummary = useMemo(() => {
     if (resolveTarget?.scope === "group" && targetGroup) {
       const keepers = keepersFor(targetGroup);
-      const removed = targetGroup.videos.filter((video) => !keepers.has(video.id));
+      const removed = targetGroup.videos.filter((video) => !keepers.has(copyKey(video)));
       return {
         groupCount: 1,
         videoCount: removed.length,
@@ -835,7 +855,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
                     <ResolutionOptionsSummary
                       resolution={resolution}
                       canDeleteFiles={canDeleteFiles}
-                      canMerge={canWrite}
+                      canMerge={canWrite && !filesSearch}
                       onChange={setResolution}
                     />
                   ) : null}
@@ -879,7 +899,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
                       engagement={engagementById}
                       resolution={{
                         ...resolution,
-                        action: canWrite ? resolution.action : "remove",
+                        action: canWrite && !filesSearch ? resolution.action : "remove",
                         deleteFiles: canDeleteFiles && resolution.deleteFiles,
                       }}
                       focused={index === focusedIndex}
@@ -888,11 +908,11 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
                       canResolve={canResolve}
                       canIgnore={canWrite}
                       onFocus={() => setFocusedIndex(index)}
-                      onKeepOnly={(videoId) => setKeepers(group, [videoId])}
-                      onToggleKeep={(videoId) => {
+                      onKeepOnly={(memberKey) => setKeepers(group, [memberKey])}
+                      onToggleKeep={(memberKey) => {
                         const next = new Set(keepersFor(group));
-                        if (next.has(videoId)) next.delete(videoId);
-                        else next.add(videoId);
+                        if (next.has(memberKey)) next.delete(memberKey);
+                        else next.add(memberKey);
                         setKeepers(group, [...next]);
                       }}
                       onResolve={() => resolveGroup(group)}
@@ -930,6 +950,11 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
           keepVideoIds={keepersFor(compareGroup)}
           initialPair={compare?.pair}
           onClose={() => setCompare(null)}
+          onKeepOnly={
+            compareGroup.status === "unresolved" || compareGroup.status === "failed"
+              ? (memberKey) => setKeepers(compareGroup, [memberKey])
+              : undefined
+          }
         />
       ) : null}
 
@@ -938,12 +963,13 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
       ) : null}
 
       <DuplicateResolveDialog
+        files={filesSearch}
         open={resolveTarget != null}
         scope={resolveTarget?.scope ?? "all"}
         summary={resolveSummary}
         preferences={resolution}
         canDeleteFiles={canDeleteFiles}
-        canMerge={canWrite}
+        canMerge={canWrite && !filesSearch}
         isPending={resolveMutation.isPending}
         error={resolveMutation.error && resolveTarget ? errorMessage(resolveMutation.error) : null}
         onChange={setResolution}
@@ -1092,11 +1118,16 @@ function SearchProgress({
 }
 
 function StatTiles({ search, deleteFiles }: { search: DuplicateSearchInfo; deleteFiles: boolean }) {
+  // A files search counts files, and every group is one video.
+  const files = search.matchType === "files";
+  const copyNoun = (count: number) => (files ? (count === 1 ? "file" : "files") : count === 1 ? "copy" : "copies");
   const tiles = [
     {
-      label: "Groups to review",
+      label: files ? "Videos to review" : "Groups to review",
       value: (search.counts.unresolved + search.counts.failed).toLocaleString(),
-      detail: `${search.groupCount.toLocaleString()} found · ${search.videoCount.toLocaleString()} videos`,
+      detail: files
+        ? `${search.groupCount.toLocaleString()} videos · ${search.videoCount.toLocaleString()} files`
+        : `${search.groupCount.toLocaleString()} found · ${search.videoCount.toLocaleString()} videos`,
     },
     {
       label: "Marked for removal",
@@ -1104,11 +1135,13 @@ function StatTiles({ search, deleteFiles }: { search: DuplicateSearchInfo; delet
       detail:
         search.counts.failed > 0
           ? `${search.counts.failed} group${search.counts.failed === 1 ? "" : "s"} need attention`
-          : "copies across unreviewed groups",
+          : files
+            ? "files across unreviewed videos"
+            : "copies across unreviewed groups",
       tone: search.counts.failed > 0 ? "warn" : undefined,
     },
     {
-      label: deleteFiles ? "Space you can free" : "Space in duplicate copies",
+      label: deleteFiles ? "Space you can free" : files ? "Space in extra files" : "Space in duplicate copies",
       value: formatFileSize(search.reclaimableBytes),
       detail: deleteFiles ? "with files deleted from disk" : "turn on file deletion to reclaim it",
     },
@@ -1117,9 +1150,9 @@ function StatTiles({ search, deleteFiles }: { search: DuplicateSearchInfo; delet
       value: search.counts.resolved.toLocaleString(),
       detail:
         search.removedVideoCount > 0
-          ? `${search.removedVideoCount.toLocaleString()} ${search.removedVideoCount === 1 ? "copy" : "copies"} removed${search.removedBytes > 0 ? ` · ${formatFileSize(search.removedBytes)}` : ""}`
+          ? `${search.removedVideoCount.toLocaleString()} ${copyNoun(search.removedVideoCount)} removed${search.removedBytes > 0 ? ` · ${formatFileSize(search.removedBytes)}` : ""}`
           : search.counts.ignored > 0
-            ? `${search.counts.ignored} marked not duplicates`
+            ? `${search.counts.ignored} ${files ? "keeping all files" : "marked not duplicates"}`
             : "nothing removed yet",
       tone: search.counts.resolved > 0 ? "good" : undefined,
     },
@@ -1281,6 +1314,22 @@ function NoticeBar({ notice, onDismiss }: { notice: Notice; onDismiss: () => voi
 }
 
 function EmptyResults({ search, onAdjust }: { search: DuplicateSearchInfo; onAdjust: () => void }) {
+  if (search.matchType === "files") {
+    return (
+      <div className="rounded-xl border border-border bg-card px-6 py-14 text-center">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
+        <p className="mt-3 text-lg font-medium text-foreground">No videos with extra files</p>
+        <p className="mt-1 text-sm text-muted">Every video in scope has a single file attached.</p>
+        <button
+          type="button"
+          onClick={onAdjust}
+          className="mt-4 rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:border-accent hover:text-foreground"
+        >
+          Adjust search
+        </button>
+      </div>
+    );
+  }
   const tip =
     search.matchType === "fingerprint"
       ? "Identical-file matching only catches byte-for-byte copies. Try “Looks the same” to find re-encodes."

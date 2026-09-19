@@ -55,6 +55,66 @@ public class DownloaderServiceTests
     }
 
     [Fact]
+    public async Task DownloadAndImportAsync_AddsAFileToAVideoThatAlreadyHasOneOnlyWhenDuplicatesAreAllowed()
+    {
+        var libraryRoot = Path.Combine(Path.GetTempPath(), "cove-downloader-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(libraryRoot);
+
+        var scanService = new FakeScanService();
+        IDownloaderService service = CreateService(
+            out _,
+            out var provider,
+            config: new CoveConfiguration { CovePaths = [new CovePath { Path = libraryRoot }] },
+            scanService: scanService,
+            seedDatabase: db => db.Videos.Add(new Video
+            {
+                Id = 42,
+                Title = "Existing 1080p video",
+                Files =
+                [
+                    new VideoFile
+                    {
+                        Basename = "existing.mp4",
+                        ParentFolder = new Folder { Path = "/library", ModTime = DateTime.UtcNow },
+                        Path = "/library/existing.mp4",
+                        Height = 1080,
+                    },
+                ],
+            }));
+        var request = new DownloaderImportRequest(
+            "tests.fake-downloader/example",
+            "https://example.com/watch/upgrade",
+            DownloaderEntity.Video,
+            EntityId: 42,
+            QualityId: "hd");
+
+        try
+        {
+            var refused = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.DownloadAndImportAsync(request, progress: null, CancellationToken.None));
+            Assert.Contains("already has downloaded files", refused.Message);
+            Assert.Empty(provider.Requests);
+
+            var result = await service.DownloadAndImportAsync(
+                request with { AllowDuplicateDownload = true },
+                progress: null,
+                CancellationToken.None);
+
+            Assert.NotNull(result);
+            Assert.Equal(42, result.EntityId);
+            Assert.Equal(42, scanService.VideoId);
+            Assert.True(File.Exists(result.LibraryPath));
+            var downloaderRequest = Assert.Single(provider.Requests);
+            Assert.Equal("hd", downloaderRequest.QualityId);
+            Assert.Equal(["example.com"], downloaderRequest.Permissions.AllowNetworkHosts);
+        }
+        finally
+        {
+            Directory.Delete(libraryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task GetDownloadersAndMatchUrl_ReturnRegisteredProviderData()
     {
         var service = CreateService(out _);
@@ -72,7 +132,9 @@ public class DownloaderServiceTests
         Assert.Equal(downloader.Id, match.DownloaderId);
         Assert.Equal("Example Download", match.DownloaderName);
         Assert.Equal("https://example.com/watch/123", match.NormalizedUrl);
-        Assert.Single(match.QualityOptions);
+        var quality = Assert.Single(match.QualityOptions);
+        Assert.Equal(1920, quality.Width);
+        Assert.Equal(1080, quality.Height);
     }
 
     [Fact]
@@ -938,6 +1000,64 @@ public class DownloaderServiceTests
     }
 
     [Fact]
+    public async Task DownloadAndIngestBatchAsync_ContinuesWhenOneItemCannotBeMatched()
+    {
+        var libraryRoot = Path.Combine(Path.GetTempPath(), "cove-downloader-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(libraryRoot);
+
+        var service = CreateService(
+            out var services,
+            out var downloaderProvider,
+            new CoveConfiguration
+            {
+                CovePaths = [new CovePath { Path = libraryRoot }],
+                MaxConcurrentDownloads = 2,
+            },
+            new FakeScanService(),
+            new FakeVideoMetadataApplyService());
+        downloaderProvider.MatchFailureUrl = "https://example.com/watch/batch-missing";
+
+        try
+        {
+            var summary = await service.DownloadAndIngestBatchAsync(
+                [
+                    new DownloaderBatchItemDto
+                    {
+                        Url = "https://example.com/watch/batch-missing",
+                        Entity = "Video",
+                        Title = "Missing",
+                        Label = "Missing",
+                        CreateEntityIfMissing = true,
+                    },
+                    new DownloaderBatchItemDto
+                    {
+                        Url = "https://example.com/watch/batch-ok",
+                        Entity = "Video",
+                        Title = "Batch Ok",
+                        Label = "Batch Ok",
+                        CreateEntityIfMissing = true,
+                    },
+                ],
+                new DownloaderBatchFollowUpDto(),
+                progress: null,
+                CancellationToken.None);
+
+            Assert.Equal(2, summary.TotalCount);
+            Assert.Equal(1, summary.SucceededCount);
+            Assert.Equal(0, summary.SkippedCount);
+            Assert.Equal(1, summary.FailedCount);
+            Assert.Contains(summary.Issues, issue => issue.Contains("Missing", StringComparison.Ordinal) && issue.Contains("Test downloader match failure", StringComparison.Ordinal));
+            Assert.Single(downloaderProvider.Requests, request => request.Url == "https://example.com/watch/batch-ok");
+        }
+        finally
+        {
+            await services.DisposeAsync();
+            if (Directory.Exists(libraryRoot))
+                Directory.Delete(libraryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task DownloadAndIngestBatchAsync_CreatesPlaceholderAndSkipsDuplicateWithoutCreatingAnotherEntity()
     {
         var libraryRoot = Path.Combine(Path.GetTempPath(), "cove-downloader-tests", Guid.NewGuid().ToString("n"));
@@ -1510,7 +1630,7 @@ public class DownloaderServiceTests
             return Task.FromResult<DownloaderUrlMatch?>(new DownloaderUrlMatch(
                 "tests.fake-downloader/example",
                 url,
-                [new DownloaderQualityOption("hd", "HD")],
+                [new DownloaderQualityOption("hd", "HD") { Width = 1920, Height = 1080 }],
                 "Example video"));
         }
 

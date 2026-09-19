@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { usePublishActiveMedia } from "./ActiveMedia";
 import {
   X,
   ChevronLeft,
@@ -100,6 +101,11 @@ export function Lightbox({
   const currentSrc = useRef<string | undefined>(current?.src);
   currentSrc.current = open ? current?.src : undefined;
   const loading = Boolean(current && displayed?.src !== current.src);
+  usePublishActiveMedia(
+    open && !loading && current ? { kind: "image", id: current.id, surface: "lightbox" } : null,
+    30,
+    open,
+  );
   const failed = failedSrc === current?.src;
   const visibleImages =
     displayed && displayed.src !== current?.src ? [displayed, ...(current ? [current] : [])] : current ? [current] : [];

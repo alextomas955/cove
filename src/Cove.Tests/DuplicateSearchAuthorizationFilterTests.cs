@@ -23,6 +23,7 @@ public sealed class DuplicateSearchAuthorizationFilterTests
         using var db = new CoveContext(options);
 
         Assert.NotEmpty(db.Model.FindEntityType(typeof(DuplicateSearchItem))!.GetDeclaredQueryFilters());
+        Assert.NotEmpty(db.Model.FindEntityType(typeof(DuplicateSearchFileItem))!.GetDeclaredQueryFilters());
         Assert.NotEmpty(db.Model.FindEntityType(typeof(DuplicateDeletionKeeperReservation))!.GetDeclaredQueryFilters());
     }
 }

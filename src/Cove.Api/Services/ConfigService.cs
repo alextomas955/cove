@@ -73,6 +73,37 @@ public class ConfigService
         return null;
     }
 
+    private static List<DownloaderSiteCredential> BuildDownloaderSiteCredentials(
+        IEnumerable<DownloaderSiteCredentialDto> submitted,
+        IEnumerable<DownloaderSiteCredential> stored)
+    {
+        var storedPasswords = stored
+            .Where(credential => !string.IsNullOrEmpty(credential.Id))
+            .GroupBy(credential => credential.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Password, StringComparer.Ordinal);
+        var savedAt = DateTime.UtcNow;
+
+        return submitted
+            .Where(credential => !string.IsNullOrWhiteSpace(credential.Site) && !string.IsNullOrWhiteSpace(credential.Username))
+            .Select(credential =>
+            {
+                var id = string.IsNullOrWhiteSpace(credential.Id) ? Guid.NewGuid().ToString("n") : credential.Id.Trim();
+                // The config API never returns passwords, so a save without one keeps the password stored for this login.
+                var password = !string.IsNullOrEmpty(credential.Password)
+                    ? credential.Password
+                    : storedPasswords.GetValueOrDefault(id, string.Empty);
+                return new DownloaderSiteCredential
+                {
+                    Id = id,
+                    Site = credential.Site.Trim(),
+                    Username = credential.Username.Trim(),
+                    Password = password,
+                    SavedAt = savedAt,
+                };
+            })
+            .ToList();
+    }
+
     /// <summary>Get the current effective configuration as a DTO.</summary>
     public CoveConfigDto GetConfig()
     {
@@ -99,6 +130,16 @@ public class ConfigService
                     DownloaderId = overridePath.DownloaderId,
                     Site = overridePath.Site,
                     Path = overridePath.Path,
+                })
+                .ToList(),
+            DownloaderSiteCredentials = cfg.DownloaderSiteCredentials
+                .Select(credential => new DownloaderSiteCredentialDto
+                {
+                    Id = credential.Id,
+                    Site = credential.Site,
+                    Username = credential.Username,
+                    Password = credential.Password,
+                    HasPassword = !string.IsNullOrEmpty(credential.Password),
                 })
                 .ToList(),
             CalculateMd5 = cfg.CalculateMd5,
@@ -323,6 +364,7 @@ public class ConfigService
                 Path = overridePath.Path.Trim(),
             })
             .ToList();
+        cfg.DownloaderSiteCredentials = BuildDownloaderSiteCredentials(dto.DownloaderSiteCredentials ?? [], cfg.DownloaderSiteCredentials);
         cfg.CalculateMd5 = dto.CalculateMd5;
         cfg.FrameExtractionMode = string.Equals(dto.FrameExtractionMode, "managed", StringComparison.OrdinalIgnoreCase) ? "managed" : "external";
         cfg.FfmpegPath = string.IsNullOrWhiteSpace(dto.FfmpegPath) ? null : dto.FfmpegPath;

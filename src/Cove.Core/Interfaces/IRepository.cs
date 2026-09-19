@@ -31,6 +31,22 @@ public interface IVideoRepository : IRepository<Video>
     Task<VideoAggregate> AggregateAsync(VideoFilter? filter, FindFilter? findFilter, CancellationToken ct)
         => AggregateAsync(filter, findFilter, ct, null);
 
+    /// <summary>
+    /// Ids of the matching videos in sort order, up to <paramref name="limit"/>, without loading entities.
+    /// Used where only membership matters (e.g. handing candidates to an extension filter). The default
+    /// implementation falls back to <see cref="FindAsync(VideoFilter?, FindFilter?, CancellationToken, FilterExpression{VideoFilter}?)"/>.
+    /// </summary>
+    async Task<IReadOnlyList<int>> FindIdsAsync(
+        VideoFilter? filter,
+        FindFilter? findFilter,
+        int limit,
+        CancellationToken ct = default,
+        FilterExpression<VideoFilter>? expression = null)
+    {
+        var (items, _) = await FindAsync(filter, findFilter, ct, expression);
+        return items.Take(limit).Select(video => video.Id).ToList();
+    }
+
     Task<Video?> GetByIdWithRelationsAsync(int id, CancellationToken ct = default);
     /// <summary>Returns VideoPerformer join rows (with Performer.RemoteIds included) for the given video IDs.</summary>
     Task<IReadOnlyList<VideoPerformer>> GetVideoPerformersAsync(IReadOnlyList<int> videoIds, CancellationToken ct = default);
@@ -347,6 +363,8 @@ public class VideoFilter
     public StringCriterion? CaptionsCriterion { get; set; }
     public CustomFieldCriterion? CustomFieldCriterion { get; set; }
     public List<CustomFieldCriterion> CustomFieldCriteria { get; set; } = [];
+    /// <summary>Namespaced predicates contributed and executed by enabled extensions.</summary>
+    public List<ExtensionFilterCriterion> ExtensionCriteria { get; set; } = [];
 }
 
 public class PerformerFilter

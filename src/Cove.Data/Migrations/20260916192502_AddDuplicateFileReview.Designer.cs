@@ -5,6 +5,7 @@ using System.Text.Json;
 using Cove.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -15,13 +16,14 @@ using Pgvector;
 namespace Cove.Data.Migrations
 {
     [DbContext(typeof(CoveContext))]
-    partial class CoveContextModelSnapshot : ModelSnapshot
+    [Migration("20260916192502_AddDuplicateFileReview")]
+    partial class AddDuplicateFileReview
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("Npgsql:CollationDefinition:cove_natural", "und-u-kn,und-u-kn,icu,True")
                 .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -2680,14 +2682,6 @@ namespace Cove.Data.Migrations
 
                     b.HasIndex("UpdatedAt");
 
-                    b.HasIndex(new[] { "MaxPath" }, "IX_images_MaxPath_natural");
-
-                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MaxPath" }, "IX_images_MaxPath_natural"), new[] { "cove_natural" });
-
-                    b.HasIndex(new[] { "MinPath" }, "IX_images_MinPath_natural");
-
-                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MinPath" }, "IX_images_MinPath_natural"), new[] { "cove_natural" });
-
                     b.ToTable("images", (string)null);
                 });
 
@@ -4734,18 +4728,6 @@ namespace Cove.Data.Migrations
                     b.HasIndex("Title");
 
                     b.HasIndex("UpdatedAt");
-
-                    b.HasIndex(new[] { "MaxPath" }, "IX_videos_MaxPath_natural");
-
-                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MaxPath" }, "IX_videos_MaxPath_natural"), new[] { "cove_natural" });
-
-                    b.HasIndex(new[] { "MinPath" }, "IX_videos_MinPath_natural");
-
-                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "MinPath" }, "IX_videos_MinPath_natural"), new[] { "cove_natural" });
-
-                    b.HasIndex(new[] { "Title" }, "IX_videos_Title_natural");
-
-                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "Title" }, "IX_videos_Title_natural"), new[] { "cove_natural" });
 
                     b.ToTable("videos", (string)null);
                 });

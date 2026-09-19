@@ -16,6 +16,11 @@ public sealed class DuplicateSearchJobService(
     IServiceScopeFactory scopeFactory)
 {
     internal const int MaximumPHashDistance = 16;
+    /// <summary>
+    /// The match type that reviews the files attached to one video instead of separate videos. Its groups
+    /// hold <see cref="DuplicateSearchFileItem"/> members and resolve by changing files, never whole videos.
+    /// </summary>
+    internal const string FilesMatchType = "files";
     internal const int MaximumScopePathCharacters = 1_048_576;
     internal static readonly TimeSpan ResultRetention = TimeSpan.FromDays(7);
 
@@ -48,7 +53,9 @@ public sealed class DuplicateSearchJobService(
         var resultUrl = $"/duplicates?search={search.Id:D}";
         var work = CreateExecutionWork(scopeFactory, search.Id, ids, principal);
 
-        var description = $"Finding duplicate videos by {DescribeMatchType(matchType)}";
+        var description = matchType == FilesMatchType
+            ? "Finding videos with more than one file"
+            : $"Finding duplicate videos by {DescribeMatchType(matchType)}";
         var jobId = owner is null
             ? jobService.EnqueueWithResult("duplicate-search", description, work, resultUrl)
             : jobService.EnqueueOwned(owner, "duplicate-search", description, work, resultUrl);
@@ -114,6 +121,7 @@ public sealed class DuplicateSearchJobService(
             "phash" or "visual" => "phash",
             "title" => "title",
             "remoteid" or "remote-id" or "remote_id" => "remoteId",
+            "files" or "same-video" or "same_video" => FilesMatchType,
             _ => "fingerprint",
         };
 
@@ -149,6 +157,7 @@ public sealed class DuplicateSearchJobService(
         "phash" => "visual similarity",
         "title" => "title",
         "remoteId" => "remote ID",
+        FilesMatchType => "files on the same video",
         _ => "file fingerprint",
     };
 }
@@ -208,6 +217,23 @@ public sealed class DuplicateSearchExecutionService(
             DuplicateSearchMemoryBudget.CheckVideoCount(ids.Length);
             search.CandidateCount = ids.Length;
             await db.SaveChangesAsync(ct);
+
+            if (search.MatchType == DuplicateSearchJobService.FilesMatchType)
+            {
+                progress.Report(0.1, "Finding videos with more than one file");
+                var fileGroups = await FindMultiFileGroupsAsync(ids, memoryBudget, ct);
+                ct.ThrowIfCancellationRequested();
+                progress.Report(0.9, "Choosing files to keep");
+                var fileGroupCount = await PersistFileGroupsAsync(
+                    searchId,
+                    fileGroups,
+                    DuplicateKeeperRules.Deserialize(search.KeeperRulesJson),
+                    memoryBudget,
+                    progress,
+                    ct);
+                progress.Report(1, $"Found {fileGroupCount.ToString(CultureInfo.InvariantCulture)} videos with more than one file");
+                return;
+            }
 
             progress.Report(0.03, "Loading pairs marked as not duplicates");
             var ignored = await LoadIgnoredPairsAsync(ids, memoryBudget, ct);
@@ -606,6 +632,143 @@ public sealed class DuplicateSearchExecutionService(
         return boundedGroups.Count;
     }
 
+    /// <summary>
+    /// Groups the files of every candidate video that has more than one, leaving out pairs a person chose to
+    /// keep side by side. A video's files can split into several groups when some of its pairs were kept.
+    /// </summary>
+    private async Task<List<DuplicateFileGroup>> FindMultiFileGroupsAsync(
+        int[] candidateVideoIds,
+        DuplicateSearchMemoryBudget memoryBudget,
+        CancellationToken ct)
+    {
+        var filesByVideoId = new Dictionary<int, List<int>>();
+        var videoIdByFileId = new Dictionary<int, int>();
+        foreach (var chunk in candidateVideoIds.Chunk(QueryChunkSize))
+        {
+            // Only videos that actually have several files are read file by file.
+            var multiFileVideoIds = await db.VideoFiles
+                .AsNoTracking()
+                .Where(file => file.VideoId.HasValue && chunk.Contains(file.VideoId.Value))
+                .GroupBy(file => file.VideoId!.Value)
+                .Where(files => files.Count() > 1)
+                .Select(files => files.Key)
+                .ToArrayAsync(ct);
+            if (multiFileVideoIds.Length == 0)
+                continue;
+
+            var query = db.VideoFiles
+                .AsNoTracking()
+                .Where(file => file.VideoId.HasValue && multiFileVideoIds.Contains(file.VideoId.Value))
+                .Select(file => new { file.Id, VideoId = file.VideoId!.Value });
+            await foreach (var file in ReadCandidatePagesAsync(query, file => file.Id, memoryBudget, _ => (0, 0), false, ct))
+            {
+                if (!filesByVideoId.TryGetValue(file.VideoId, out var files))
+                    filesByVideoId[file.VideoId] = files = [];
+                files.Add(file.Id);
+                videoIdByFileId[file.Id] = file.VideoId;
+            }
+        }
+
+        var candidateFileIds = videoIdByFileId.Keys.ToHashSet();
+        var ignored = new HashSet<(int Low, int High)>();
+        foreach (var chunk in candidateFileIds.Order().Chunk(QueryChunkSize))
+        {
+            var pairs = db.DuplicateIgnoredFilePairs
+                .AsNoTracking()
+                .Where(pair => chunk.Contains(pair.LowFileId))
+                .Select(pair => new { pair.LowFileId, pair.HighFileId })
+                .AsAsyncEnumerable();
+            await foreach (var pair in pairs.WithCancellation(ct))
+            {
+                if (candidateFileIds.Contains(pair.HighFileId) && ignored.Add((pair.LowFileId, pair.HighFileId)))
+                    memoryBudget.ReserveIgnoredPair();
+            }
+        }
+
+        // Each video is its own bucket, so a group can never mix files from different videos.
+        return GroupBuckets(filesByVideoId.Values, ignored, memoryBudget)
+            .Select(fileIds => new DuplicateFileGroup(videoIdByFileId[fileIds[0]], fileIds.ToArray()))
+            .OrderBy(group => group.VideoId)
+            .ThenBy(group => group.FileIds[0])
+            .ToList();
+    }
+
+    /// <summary>
+    /// Saves file groups with their chosen keeper. Unlike video groups they are never split into chunks:
+    /// chunks share a keeper through the cross-group rule that only video resolution understands, and a
+    /// video with more files than a page can show is still one decision about one video.
+    /// </summary>
+    private async Task<int> PersistFileGroupsAsync(
+        Guid searchId,
+        IReadOnlyList<DuplicateFileGroup> groups,
+        IReadOnlyList<DuplicateKeeperRule> rules,
+        DuplicateSearchMemoryBudget memoryBudget,
+        IJobProgress progress,
+        CancellationToken ct)
+    {
+        ThrowIfTooManyGroups(groups.Count, MaximumPersistedGroupCount);
+        var allFileIds = groups.SelectMany(group => group.FileIds).Distinct().ToArray();
+        var facts = await DuplicateKeeperRules.LoadFileFactsAsync(db, allFileIds, memoryBudget, ct);
+
+        progress.Report(0.94, "Saving groups");
+        var existingGroups = db.DuplicateSearchGroups.Where(group => group.SearchId == searchId);
+        if (db.Database.IsRelational())
+        {
+            await existingGroups.ExecuteDeleteAsync(ct);
+        }
+        else
+        {
+            db.DuplicateSearchGroups.RemoveRange(await existingGroups.ToListAsync(ct));
+            await db.SaveChangesAsync(ct);
+        }
+
+        for (var batchStart = 0; batchStart < groups.Count; batchStart += PersistGroupBatchSize)
+        {
+            var batch = groups
+                .Skip(batchStart)
+                .Take(PersistGroupBatchSize)
+                .Select((group, offset) =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var choice = DuplicateKeeperRules.Choose(group.FileIds, facts, rules);
+                    return (Group: group, Choice: choice, Entity: new DuplicateSearchGroup
+                    {
+                        SearchId = searchId,
+                        Position = batchStart + offset,
+                        Status = DuplicateGroupStatus.Unresolved,
+                        DecisionSource = "auto",
+                        DecisionRule = choice.DecisionRule,
+                    });
+                })
+                .ToList();
+
+            db.DuplicateSearchGroups.AddRange(batch.Select(entry => entry.Entity));
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+
+            db.DuplicateSearchFileItems.AddRange(batch.SelectMany(entry => entry.Group.FileIds.Select(fileId => new DuplicateSearchFileItem
+            {
+                GroupId = entry.Entity.Id,
+                FileId = fileId,
+                VideoId = entry.Group.VideoId,
+                Keep = fileId == entry.Choice.KeeperId,
+            })));
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+        }
+
+        var search = await db.DuplicateSearches.FirstAsync(item => item.Id == searchId, ct);
+        search.Status = DuplicateSearchStatus.Completed;
+        search.GroupCount = groups.Count;
+        // A files search counts the files under review, since every group belongs to a single video.
+        search.VideoCount = allFileIds.Length;
+        search.CompletedAt = DateTime.UtcNow;
+        search.ExpiresAt = DateTime.UtcNow.Add(DuplicateSearchJobService.ResultRetention);
+        search.Error = null;
+        await db.SaveChangesAsync(ct);
+        return groups.Count;
+    }
+
     private async Task SetTerminalStatusAsync(Guid searchId, DuplicateSearchStatus status, string? error)
     {
         db.ChangeTracker.Clear();
@@ -944,6 +1107,7 @@ public sealed class DuplicateSearchExecutionService(
     private sealed record DuplicateTitleCandidate(int VideoId, string Title);
     private sealed record DuplicateRemoteIdCandidate(int VideoId, string Endpoint, string RemoteId);
     private sealed record BoundedDuplicateGroup(int[] VideoIds, DuplicateKeeperChoice Choice);
+    private sealed record DuplicateFileGroup(int VideoId, int[] FileIds);
     private sealed record PersistedGroupDefinition(DuplicateSearchGroup Entity, int[] VideoIds, int KeeperId);
     private sealed class DuplicateSearchComplexityException : Exception
     {

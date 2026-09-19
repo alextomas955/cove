@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { usePublishActiveMedia } from "./ActiveMedia";
 import {
   Eye,
   EyeOff,
@@ -1974,6 +1975,17 @@ export function VideoPlayer({
   const mediaPlayerExtensionResetKey = useMemo(
     () => ({ videoId, interactionResetKey }),
     [interactionResetKey, videoId],
+  );
+  usePublishActiveMedia(
+    mediaPlayerExtensionContext
+      ? {
+          kind: "video",
+          id: mediaPlayerExtensionContext.hostId,
+          surface: mediaPlayerExtensionContext.surface,
+          positionSeconds: mediaPlayerExtensionContext.currentTime,
+        }
+      : null,
+    fullscreen ? 40 : extensionSurface === "quick-view" ? 20 : 10,
   );
 
   const createMediaPlayerEntryContext = useCallback(

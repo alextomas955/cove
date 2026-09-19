@@ -45,7 +45,7 @@ describe("extension list filter object representation", () => {
     expect(collapseExtensionCriteria(expandExtensionCriteria(saved))).toEqual(saved);
   });
 
-  it("scopes executable filters to tags and gives their namespace precedence over legacy keys", () => {
+  it("scopes executable filters to the lists that run them and gives their namespace precedence over legacy keys", () => {
     const dualDeclaration = {
       id: "owned",
       entityType: "tags",
@@ -58,7 +58,13 @@ describe("extension list filter object representation", () => {
     };
 
     expect(executableExtensionFilterKey(dualDeclaration)).toBe(extensionFilterKey("owner.actual", "has-preview"));
-    expect(executableExtensionFilterKey({ ...dualDeclaration, entityType: "videos" })).toBeNull();
+    expect(executableExtensionFilterKey({ ...dualDeclaration, entityType: "videos" })).toBe(
+      extensionFilterKey("owner.actual", "has-preview"),
+    );
+    expect(executableExtensionFilterKey({ ...dualDeclaration, entityType: "video" })).toBe(
+      extensionFilterKey("owner.actual", "has-preview"),
+    );
+    expect(executableExtensionFilterKey({ ...dualDeclaration, entityType: "performers" })).toBeNull();
   });
 
   it("does not throw on malformed percent encoding in imported filter keys", () => {

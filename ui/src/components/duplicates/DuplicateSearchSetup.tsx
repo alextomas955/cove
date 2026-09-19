@@ -1,6 +1,18 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Crown, Eye, FileCheck2, Fingerprint, FolderMinus, FolderPlus, Loader2, Search, Type, X } from "lucide-react";
+import {
+  Crown,
+  Eye,
+  FileCheck2,
+  Files,
+  Fingerprint,
+  FolderMinus,
+  FolderPlus,
+  Loader2,
+  Search,
+  Type,
+  X,
+} from "lucide-react";
 import { metadata } from "../../api/client";
 import type { DuplicateMatchType } from "../../api/types";
 import { LibraryFolderTree } from "../LibraryFolderTree";
@@ -13,6 +25,7 @@ const METHOD_ICONS: Record<DuplicateMatchType, ReactNode> = {
   fingerprint: <Fingerprint className="h-5 w-5" />,
   title: <Type className="h-5 w-5" />,
   remoteId: <FileCheck2 className="h-5 w-5" />,
+  files: <Files className="h-5 w-5" />,
 };
 
 export function DuplicateSearchSetup({
@@ -203,7 +216,10 @@ export function DuplicateSearchSetup({
         </div>
 
         <div>
-          <SectionLabel step={3} title="Which copy should be kept?" />
+          <SectionLabel
+            step={3}
+            title={preferences.matchType === "files" ? "Which file should be kept?" : "Which copy should be kept?"}
+          />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-surface/40 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <Crown className="h-5 w-5 shrink-0 text-amber-400" />

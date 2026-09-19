@@ -169,7 +169,75 @@ public sealed record DownloaderDescriptor(
     IReadOnlyList<string> SupportedUrlPatterns,
     DownloaderCapabilities Capabilities = DownloaderCapabilities.None);
 
-public sealed record DownloaderQualityOption(string Id, string Label, string? Description = null);
+public sealed record DownloaderQualityOption(string Id, string Label, string? Description = null)
+{
+    // Init properties rather than positional parameters so extensions compiled against the original
+    // record keep the same constructor and deconstructor ABI.
+
+    /// <summary>Frame width of the stream this option downloads, when the downloader knows it.</summary>
+    public int? Width { get; init; }
+
+    /// <summary>Frame height of the stream this option downloads, when the downloader knows it.</summary>
+    public int? Height { get; init; }
+}
+
+/// <summary>A request to download a URL with a specific downloader and import the file into the library.</summary>
+public sealed record DownloaderImportRequest(
+    string DownloaderId,
+    string Url,
+    DownloaderEntity Entity,
+    int? EntityId = null,
+    string? QualityId = null,
+    string? SourceUrl = null)
+{
+    /// <summary>
+    /// Download even when <see cref="EntityId"/> already has files or the URL is already in the library,
+    /// e.g. to add a higher-quality file to an existing entity.
+    /// </summary>
+    public bool AllowDuplicateDownload { get; init; }
+}
+
+/// <param name="LibraryPath">Where the downloaded file was placed in the library.</param>
+/// <param name="EntityId">The entity the file was imported into, when the import produced one.</param>
+public sealed record DownloaderImportResult(string LibraryPath, int? EntityId);
+
+/// <summary>
+/// Cove's downloader pipeline, resolvable from the extension service provider. These calls do not
+/// authorize anything: endpoints must check the caller's permissions for the target entity first.
+/// </summary>
+public interface IDownloaderService
+{
+    /// <summary>Every enabled downloader's match for the URL, including its quality options.</summary>
+    Task<IReadOnlyList<DownloaderMatchDto>> MatchUrlAsync(string url, CancellationToken ct);
+
+    /// <summary>Download the URL and import the file, attaching it to <see cref="DownloaderImportRequest.EntityId"/> when set.</summary>
+    Task<DownloaderImportResult?> DownloadAndImportAsync(
+        DownloaderImportRequest request,
+        Cove.Core.Interfaces.IJobProgress? progress,
+        CancellationToken ct);
+}
+
+/// <summary>A login configured for a site in Cove's downloader settings.</summary>
+public sealed record DownloaderSiteLogin(string Site, string Username, string Password)
+{
+    /// <summary>
+    /// When the downloader settings holding this login were last saved, or null when unknown. A downloader that
+    /// pauses a login after a failed sign-in should resume once this moves forward: saving the settings again,
+    /// changed or not, is how a person says they fixed the problem.
+    /// </summary>
+    public DateTime? SavedAt { get; init; }
+}
+
+/// <summary>
+/// Resolves the site login configured in Cove's downloader settings for a URL. Resolve it from the
+/// extension service provider. It reads the live settings, so look it up per request instead of caching
+/// the result.
+/// </summary>
+public interface IDownloaderSiteLoginProvider
+{
+    /// <summary>The login whose site matches the URL's host (most specific site wins), or null.</summary>
+    DownloaderSiteLogin? FindForUrl(string url);
+}
 
 public sealed record DownloaderUrlMatch(
     string DownloaderId,
@@ -220,3 +288,30 @@ public interface IDownloaderProvider : IExtension
         => Task.FromResult<DownloaderResult?>(null);
 }
 
+
+/// <summary>Outcome of a file maintenance call that may decline to act.</summary>
+/// <param name="Applied">Whether the change was made.</param>
+/// <param name="Reason">Why it was declined, for showing to the user.</param>
+public sealed record VideoFileOperationResult(bool Applied, string? Reason);
+
+/// <summary>
+/// Video file maintenance Cove performs on an extension's behalf, for work that has to finish without a
+/// user present (an unattended batch, for example). These calls authorize nothing: the endpoint that
+/// queues the work must check the caller's permissions for the video and its files first. Resolve it from
+/// an extension service scope.
+/// </summary>
+public interface IVideoFileMaintenanceService
+{
+    /// <summary>
+    /// Makes <paramref name="fileId"/> the video's primary file, but only when it holds the same footage as
+    /// the current primary (same length and appearance), so markers, clips and generated assets stay valid.
+    /// Declines without changing anything when the two files differ.
+    /// </summary>
+    Task<VideoFileOperationResult> MakePrimaryWhenSameContentAsync(int videoId, int fileId, CancellationToken ct);
+
+    /// <summary>
+    /// Removes a file from the library, optionally deleting it from disk. Declines for a file that is still
+    /// a video's primary file.
+    /// </summary>
+    Task<VideoFileOperationResult> DeleteFileAsync(int fileId, bool deleteFromDisk, CancellationToken ct);
+}

@@ -96,6 +96,12 @@ function normalizeConfig(config: CoveConfig, userKeybindingOverrides?: Record<st
       site: overridePath.site?.trim() || undefined,
       path: overridePath.path?.trim() ?? "",
     })),
+    downloaderSiteCredentials: (config.downloaderSiteCredentials ?? []).map((credential) => ({
+      id: credential.id ?? "",
+      site: credential.site?.trim() ?? "",
+      username: credential.username?.trim() ?? "",
+      hasPassword: Boolean(credential.hasPassword),
+    })),
     interface: {
       ...interfaceConfig,
       menuItems: interfaceConfig.menuItems.length > 0 ? interfaceConfig.menuItems : defaultMenuItems,

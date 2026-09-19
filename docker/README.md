@@ -90,6 +90,16 @@ Each extension is a subdirectory containing pre-compiled DLL files (backend) and
 - No network access needed for extension loading
 - Extensions work identically in Docker and native installs
 
+### Python for extensions
+
+Both images ship Python in a virtual environment at `/opt/cove-python`, owned by the `cove` user and
+first on `PATH`. Extensions that drive Python tooling can `pip install` into it at runtime, which the
+system Python cannot do because Debian marks it externally managed.
+
+yt-dlp does not need it: the yt-dlp downloader extension provisions one of yt-dlp's standalone
+builds, which carries its own Python and the curl_cffi that `--impersonate` needs for sites that only
+serve their higher resolutions to browser-shaped requests.
+
 See the main [README](../README.md) for extension development docs.
 
 ## Environment Variables

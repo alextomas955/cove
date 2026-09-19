@@ -167,6 +167,21 @@ RUN ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
 # Create cove user
 RUN useradd -m -s /bin/bash cove
 
+# Python for extensions that ship Python tooling (a pip-installed yt-dlp, gallery-dl, and similar).
+# Debian marks its system Python as externally managed, so pip refuses to install into it; a venv
+# owned by the cove user gives extensions a writable place to install and puts the entry points they
+# create on PATH. yt-dlp itself needs no Python here — the downloader extension provisions one of
+# yt-dlp's standalone builds, which carries its own Python and the curl_cffi that --impersonate needs
+# for sites that only serve their higher resolutions to browser-shaped requests.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/cove-python \
+    && /opt/cove-python/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && chown -R cove:cove /opt/cove-python
+ENV PATH="/opt/cove-python/bin:${PATH}"
+
 # ── s6 service: PostgreSQL ─────────────────────────────────────────
 RUN mkdir -p /etc/s6-overlay/s6-rc.d/postgres/dependencies.d \
     && touch /etc/s6-overlay/s6-rc.d/postgres/dependencies.d/base \

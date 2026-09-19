@@ -53,6 +53,7 @@ public sealed class SystemConfigRedactionTests
         Assert.Empty(redacted.Security.TrustedHosts ?? []);
         Assert.Empty(redacted.Scraping.ScraperDirectories);
         Assert.Empty(redacted.PluginConfigurations);
+        Assert.Empty(redacted.DownloaderSiteCredentials);
 
         Assert.Equal("Safe UI title", redacted.Ui.Title);
         Assert.True(redacted.Security.Enabled);
@@ -81,6 +82,11 @@ public sealed class SystemConfigRedactionTests
         Assert.False(string.IsNullOrEmpty(writable.GeneratedPath));
         Assert.False(string.IsNullOrEmpty(writable.Interface.HandyKey));
         Assert.Single(writable.PluginConfigurations);
+        var writableLogin = Assert.Single(writable.DownloaderSiteCredentials);
+        Assert.Equal("private-site-username", writableLogin.Username);
+        Assert.True(writableLogin.HasPassword);
+        Assert.Null(writableLogin.Password);
+        Assert.Equal("private-site-password", configService.GetConfig().DownloaderSiteCredentials.Single().Password);
     }
 
     private static CoveConfiguration CreateSensitiveConfiguration()
@@ -97,6 +103,16 @@ public sealed class SystemConfigRedactionTests
                     DownloaderId = "safe-downloader",
                     Site = "safe-site",
                     Path = "/private/downloads",
+                },
+            ],
+            DownloaderSiteCredentials =
+            [
+                new DownloaderSiteCredential
+                {
+                    Id = "site-login",
+                    Site = "private-site.invalid",
+                    Username = "private-site-username",
+                    Password = "private-site-password",
                 },
             ],
             FfmpegPath = "/private/ffmpeg",

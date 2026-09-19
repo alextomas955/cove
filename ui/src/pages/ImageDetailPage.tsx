@@ -39,6 +39,7 @@ import { FaceSplitDialog } from "../components/FaceSplitDialog";
 import { ListLoadError } from "../components/ListLoadError";
 import { useFaceCapabilities } from "../hooks/useFaceCapabilities";
 import { ExtensionSlot } from "../router/RouteRegistry";
+import { usePublishActiveMedia } from "../components/ActiveMedia";
 import { AspectRatingsPanel } from "../components/AspectRatingsPanel";
 import { InteractiveRating } from "../components/Rating";
 import { createRouteLinkProps } from "../components/cardNavigation";
@@ -97,6 +98,10 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  usePublishActiveMedia(
+    image && image.id === id && !imageLoadFailed ? { kind: "image", id, surface: "detail" } : null,
+    10,
+  );
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [showScrapeDialog, setShowScrapeDialog] = useState(false);
   const [showCoverTargetDialog, setShowCoverTargetDialog] = useState(false);

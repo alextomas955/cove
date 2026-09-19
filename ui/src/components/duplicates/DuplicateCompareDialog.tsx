@@ -7,13 +7,45 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { AlertTriangle, Columns2, Film, Pause, Play, SplitSquareHorizontal, Volume2, VolumeX } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Columns2,
+  Film,
+  Maximize2,
+  Minimize2,
+  Pause,
+  Play,
+  SplitSquareHorizontal,
+  Volume2,
+  VolumeX,
+  ZoomIn,
+} from "lucide-react";
 import { videos as videosApi } from "../../api/client";
 import { transcodeSource } from "../../utils/transcodeSource";
 import type { Video } from "../../api/types";
 import { formatDuration, formatFileSize } from "../shared";
+import {
+  clampView,
+  detailShown,
+  FIT_VIEW,
+  formatDetailShown,
+  nativeZoom,
+  zoomAround,
+  type Size,
+  type View,
+} from "./compareView";
 import { DuplicateDialog } from "./DuplicateDialog";
-import { displayTitle, formatBitrate, formatCodec, primaryFile, totalSize } from "./duplicateModel";
+import {
+  copyKey,
+  displayTitle,
+  formatBitrate,
+  formatCodec,
+  isFileCopy,
+  primaryFile,
+  totalSize,
+  type DuplicateCopy,
+} from "./duplicateModel";
 
 type CompareMode = "slider" | "side" | "frames";
 type AudioSource = "a" | "b" | "none";
@@ -21,6 +53,10 @@ type AudioSource = "a" | "b" | "none";
 const DRIFT_TOLERANCE_SECONDS = 0.04;
 const SEEK_DRIFT_SECONDS = 0.6;
 const FRAME_POSITIONS = [0.05, 0.18, 0.31, 0.44, 0.57, 0.7, 0.83, 0.95];
+const ZOOM_PRESETS = [2, 4];
+const DIVIDER_GRAB_PX = 18;
+
+type DragKind = "split" | "pan";
 
 export function DuplicateCompareDialog({
   open,
@@ -28,20 +64,30 @@ export function DuplicateCompareDialog({
   keepVideoIds,
   initialPair,
   onClose,
+  onKeepOnly,
 }: {
   open: boolean;
-  videos: Video[];
+  /** The group's members; in a files search each is the video narrowed to one of its files. */
+  videos: DuplicateCopy[];
+  /** Keys of the members to keep (see `copyKey`). */
   keepVideoIds: Set<number>;
   initialPair?: [number, number];
   onClose: () => void;
+  /** Keeps just this member in the group; omitted when the group can no longer be changed. */
+  onKeepOnly?: (memberKey: number) => void;
 }) {
+  const fileCopies = videos.some(isFileCopy);
   const [mode, setMode] = useState<CompareMode>("slider");
   const [pair, setPair] = useState<[number, number]>(() => initialPair ?? defaultPair(videos));
   useEffect(() => {
     if (open) setPair(initialPair ?? defaultPair(videos));
   }, [open, initialPair, videos]);
-  const left = videos.find((video) => video.id === pair[0]) ?? videos[0];
-  const right = videos.find((video) => video.id === pair[1]) ?? videos[1] ?? videos[0];
+  // Frame strips come from the video's generated thumbnails, which only ever show its primary file.
+  useEffect(() => {
+    if (fileCopies && mode === "frames") setMode("slider");
+  }, [fileCopies, mode]);
+  const left = videos.find((video) => copyKey(video) === pair[0]) ?? videos[0];
+  const right = videos.find((video) => copyKey(video) === pair[1]) ?? videos[1] ?? videos[0];
 
   return (
     <DuplicateDialog
@@ -49,7 +95,7 @@ export function DuplicateCompareDialog({
       onClose={onClose}
       size="xl"
       title="Compare copies"
-      subtitle="Drag the divider or play both copies in sync to spot differences in quality, cuts and watermarks."
+      subtitle="Drag the divider or play both copies in sync to spot cuts and watermarks. To judge sharpness, zoom to 1:1 — fitted to this window, a 4K copy is shrunk and its extra detail never reaches the screen."
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -66,12 +112,14 @@ export function DuplicateCompareDialog({
               icon={<Columns2 className="h-4 w-4" />}
               label="Side by side"
             />
-            <ModeButton
-              active={mode === "frames"}
-              onClick={() => setMode("frames")}
-              icon={<Film className="h-4 w-4" />}
-              label="Frames"
-            />
+            {fileCopies ? null : (
+              <ModeButton
+                active={mode === "frames"}
+                onClick={() => setMode("frames")}
+                icon={<Film className="h-4 w-4" />}
+                label="Frames"
+              />
+            )}
           </div>
           {mode !== "frames" && videos.length > 2 ? (
             <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -95,11 +143,12 @@ export function DuplicateCompareDialog({
           <FrameStrips videos={videos} keepVideoIds={keepVideoIds} />
         ) : left && right ? (
           <SyncedComparison
-            key={`${left.id}-${right.id}-${mode}`}
+            key={`${copyKey(left)}-${copyKey(right)}-${mode}`}
             mode={mode}
             left={left}
             right={right}
             keepVideoIds={keepVideoIds}
+            onKeepOnly={onKeepOnly}
           />
         ) : null}
       </div>
@@ -107,8 +156,14 @@ export function DuplicateCompareDialog({
   );
 }
 
-function defaultPair(videos: Video[]): [number, number] {
-  return [videos[0]?.id ?? 0, videos[1]?.id ?? videos[0]?.id ?? 0];
+function defaultPair(videos: DuplicateCopy[]): [number, number] {
+  const first = videos[0] ? copyKey(videos[0]) : 0;
+  return [first, videos[1] ? copyKey(videos[1]) : first];
+}
+
+/** A member's name: its file for a file copy (every copy shares the video's title), otherwise the video title. */
+function memberName(video: DuplicateCopy) {
+  return isFileCopy(video) ? (primaryFile(video)?.basename ?? displayTitle(video)) : displayTitle(video);
 }
 
 function ModeButton({
@@ -146,7 +201,7 @@ function PairSelect({
 }: {
   label: string;
   value: number;
-  videos: Video[];
+  videos: DuplicateCopy[];
   onChange: (id: number) => void;
 }) {
   return (
@@ -158,8 +213,8 @@ function PairSelect({
         className="max-w-[16rem] rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
       >
         {videos.map((video, index) => (
-          <option key={video.id} value={video.id}>
-            {index + 1}. {displayTitle(video)}
+          <option key={copyKey(video)} value={copyKey(video)}>
+            {index + 1}. {memberName(video)}
           </option>
         ))}
       </select>
@@ -172,12 +227,17 @@ function SyncedComparison({
   left,
   right,
   keepVideoIds,
+  onKeepOnly,
 }: {
   mode: Exclude<CompareMode, "frames">;
-  left: Video;
-  right: Video;
+  left: DuplicateCopy;
+  right: DuplicateCopy;
   keepVideoIds: Set<number>;
+  onKeepOnly?: (memberKey: number) => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const secondStageRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLVideoElement>(null);
   const rightRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -185,7 +245,15 @@ function SyncedComparison({
   const [offset, setOffset] = useState(0);
   const [audio, setAudio] = useState<AudioSource>("none");
   const [split, setSplit] = useState(50);
-  const [dragging, setDragging] = useState(false);
+  const [dragging, setDragging] = useState<DragKind | null>(null);
+  const [overDivider, setOverDivider] = useState(false);
+  const [view, setView] = useState<View>(FIT_VIEW);
+  const [stageSize, setStageSize] = useState<Size>({ width: 0, height: 0 });
+  const [natural, setNatural] = useState<{ a?: Size; b?: Size }>(() => ({
+    a: fileSize(primaryFile(left)),
+    b: fileSize(primaryFile(right)),
+  }));
+  const [fullscreen, setFullscreen] = useState(false);
   const [transcoded, setTranscoded] = useState<{ a: boolean; b: boolean }>({ a: false, b: false });
   const [errors, setErrors] = useState<{ a: boolean; b: boolean }>({ a: false, b: false });
   const leftDuration = primaryFile(left)?.duration ?? 0;
@@ -193,6 +261,10 @@ function SyncedComparison({
   const duration = Math.max(leftDuration, 0.1);
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
+  const stageSizeRef = useRef(stageSize);
+  stageSizeRef.current = stageSize;
+  const dragRef = useRef<{ kind: DragKind; pointerX: number; pointerY: number; view: View } | null>(null);
+  const pixelRatio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 
   const sources = useMemo(
     () => ({
@@ -254,6 +326,65 @@ function SyncedComparison({
     };
   }, []);
 
+  // Both copies always share one stage size (the slider overlays them; side by side uses equal columns),
+  // so measuring the first stage is enough to place and clamp the zoomed picture for both.
+  const measureStage = useCallback((): Size => {
+    const stage = stageRef.current;
+    if (!stage) return stageSizeRef.current;
+    const rect = stage.getBoundingClientRect();
+    const measured = { width: rect.width, height: rect.height };
+    stageSizeRef.current = measured;
+    setStageSize((current) =>
+      current.width === measured.width && current.height === measured.height ? current : measured,
+    );
+    return measured;
+  }, []);
+
+  // ResizeObserver only reports while the page is rendering frames, so zoom and pan also measure the stage
+  // themselves rather than trusting a size that may predate the last layout change.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    measureStage();
+    window.addEventListener("resize", measureStage);
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => measureStage());
+    observer?.observe(stage);
+    return () => {
+      window.removeEventListener("resize", measureStage);
+      observer?.disconnect();
+    };
+  }, [fullscreen, measureStage]);
+
+  useEffect(() => {
+    setView((current) => clampView(current, stageSize));
+  }, [stageSize]);
+
+  // React attaches wheel listeners as passive, so preventing the dialog from scrolling needs a native listener.
+  useEffect(() => {
+    const targets = [stageRef.current, secondStageRef.current].filter((target): target is HTMLDivElement => !!target);
+    const onWheel = (event: WheelEvent) => {
+      const target = event.currentTarget as HTMLElement;
+      event.preventDefault();
+      const rect = target.getBoundingClientRect();
+      const point = { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 };
+      setView((current) => zoomAround(current, current.zoom * Math.exp(-event.deltaY * 0.0015), point, measureStage()));
+    };
+    targets.forEach((target) => target.addEventListener("wheel", onWheel, { passive: false }));
+    return () => targets.forEach((target) => target.removeEventListener("wheel", onWheel));
+  }, [fullscreen, measureStage]);
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === containerRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void containerRef.current?.requestFullscreen();
+  };
+
   const togglePlay = async () => {
     const master = leftRef.current;
     const follower = rightRef.current;
@@ -289,55 +420,135 @@ function SyncedComparison({
     setSplit(Math.min(100, Math.max(0, ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100)));
   };
 
-  const videoClass = "absolute inset-0 h-full w-full object-contain";
+  const nearDivider = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return Math.abs(event.clientX - (rect.left + (rect.width * split) / 100)) <= DIVIDER_GRAB_PX;
+  };
+
+  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>, kind: DragKind) => {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    measureStage();
+    dragRef.current = { kind, pointerX: event.clientX, pointerY: event.clientY, view };
+    setDragging(kind);
+    if (kind === "split") updateSplit(event);
+  };
+
+  const continueDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return false;
+    if (drag.kind === "split") updateSplit(event);
+    else
+      setView(
+        clampView(
+          {
+            ...drag.view,
+            x: drag.view.x + event.clientX - drag.pointerX,
+            y: drag.view.y + event.clientY - drag.pointerY,
+          },
+          stageSizeRef.current,
+        ),
+      );
+    return true;
+  };
+
+  const endDrag = () => {
+    dragRef.current = null;
+    setDragging(null);
+  };
+
+  const zoomTo = (target: (stage: Size) => number) => {
+    const stage = measureStage();
+    setView((current) => zoomAround(current, target(stage), { x: 0, y: 0 }, stage));
+  };
+  const shownA = detailShown(natural.a, stageSize, view.zoom, pixelRatio);
+  const shownB = detailShown(natural.b, stageSize, view.zoom, pixelRatio);
+  // "1:1" gives the sharper copy one screen pixel per source pixel, the least zoom that shows all of its detail.
+  const oneToOne = nativeZoom([natural.a, natural.b], stageSize, pixelRatio);
+  const zoomed = view.zoom > 1.001;
+
+  const layerStyle = {
+    width: `${view.zoom * 100}%`,
+    height: `${view.zoom * 100}%`,
+    left: `calc(50% - ${view.zoom * 50}% + ${view.x}px)`,
+    top: `calc(50% - ${view.zoom * 50}% + ${view.y}px)`,
+  };
+  const videoClass = "h-full w-full object-contain";
   const leftVideo = (
-    <video
-      ref={leftRef}
-      src={sources.a}
-      muted={audio !== "a"}
-      playsInline
-      preload="auto"
-      className={videoClass}
-      onError={() => setErrors((current) => ({ ...current, a: true }))}
-      onLoadedData={() => setErrors((current) => ({ ...current, a: false }))}
-      onEnded={() => setPlaying(false)}
-    />
+    <div className="absolute" style={layerStyle}>
+      <video
+        ref={leftRef}
+        src={sources.a}
+        muted={audio !== "a"}
+        playsInline
+        preload="auto"
+        className={videoClass}
+        onError={() => setErrors((current) => ({ ...current, a: true }))}
+        onLoadedMetadata={(event) => {
+          const { videoWidth, videoHeight } = event.currentTarget;
+          if (videoWidth > 0 && videoHeight > 0)
+            setNatural((current) => ({ ...current, a: { width: videoWidth, height: videoHeight } }));
+        }}
+        onLoadedData={() => setErrors((current) => ({ ...current, a: false }))}
+        onEnded={() => setPlaying(false)}
+      />
+    </div>
   );
   const rightVideo = (
-    <video
-      ref={rightRef}
-      src={sources.b}
-      muted={audio !== "b"}
-      playsInline
-      preload="auto"
-      className={videoClass}
-      style={mode === "slider" ? { clipPath: `inset(0 0 0 ${split}%)` } : undefined}
-      onError={() => setErrors((current) => ({ ...current, b: true }))}
-      onLoadedData={() => {
-        setErrors((current) => ({ ...current, b: false }));
-        syncFollower(true);
-      }}
-    />
+    <div className="absolute" style={layerStyle}>
+      <video
+        ref={rightRef}
+        src={sources.b}
+        muted={audio !== "b"}
+        playsInline
+        preload="auto"
+        className={videoClass}
+        onError={() => setErrors((current) => ({ ...current, b: true }))}
+        onLoadedMetadata={(event) => {
+          const { videoWidth, videoHeight } = event.currentTarget;
+          if (videoWidth > 0 && videoHeight > 0)
+            setNatural((current) => ({ ...current, b: { width: videoWidth, height: videoHeight } }));
+        }}
+        onLoadedData={() => {
+          setErrors((current) => ({ ...current, b: false }));
+          syncFollower(true);
+        }}
+      />
+    </div>
   );
 
+  const stageSizing = fullscreen ? "min-h-0 flex-1" : "mx-auto aspect-video max-h-[calc(92vh-18rem)] min-h-48";
+  const panCursor = dragging === "pan" ? "cursor-grabbing" : zoomed ? "cursor-grab" : "";
+
   return (
-    <div className="space-y-3">
+    <div ref={containerRef} className={fullscreen ? "flex h-full flex-col gap-3 bg-black p-3" : "space-y-3"}>
       {mode === "slider" ? (
         <div
-          className={`relative mx-auto aspect-video max-h-[calc(92vh-15rem)] w-full select-none overflow-hidden rounded-lg bg-black ${dragging ? "cursor-ew-resize" : "cursor-col-resize"}`}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setDragging(true);
-            updateSplit(event);
-          }}
+          ref={stageRef}
+          data-testid="compare-stage"
+          className={`relative w-full select-none overflow-hidden rounded-lg bg-black ${stageSizing} ${
+            dragging === "split"
+              ? "cursor-ew-resize"
+              : dragging === "pan"
+                ? "cursor-grabbing"
+                : overDivider || !zoomed
+                  ? "cursor-col-resize"
+                  : "cursor-grab"
+          }`}
+          onPointerDown={(event) => beginDrag(event, nearDivider(event) || !zoomed ? "split" : "pan")}
           onPointerMove={(event) => {
-            if (dragging) updateSplit(event);
+            if (!continueDrag(event)) setOverDivider(nearDivider(event));
           }}
-          onPointerUp={() => setDragging(false)}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onPointerLeave={() => setOverDivider(false)}
           onDoubleClick={togglePlay}
         >
-          {leftVideo}
-          {rightVideo}
+          <div className="absolute inset-0 overflow-hidden">{leftVideo}</div>
+          {/* The clip sits on an untransformed wrapper so the divider stays where it is drawn at any zoom. */}
+          <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
+            {rightVideo}
+          </div>
           <div
             className="pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-white/90 shadow-[0_0_8px_rgba(0,0,0,0.8)]"
             style={{ left: `${split}%` }}
@@ -346,8 +557,20 @@ function SyncedComparison({
               <SplitSquareHorizontal className="h-4 w-4" />
             </div>
           </div>
-          <SideLabel side="A" video={left} keep={keepVideoIds.has(left.id)} className="left-3" />
-          <SideLabel side="B" video={right} keep={keepVideoIds.has(right.id)} className="right-3" />
+          <SideLabel
+            side="A"
+            video={left}
+            keep={keepVideoIds.has(copyKey(left))}
+            reencoded={transcoded.a}
+            className="left-3"
+          />
+          <SideLabel
+            side="B"
+            video={right}
+            keep={keepVideoIds.has(copyKey(right))}
+            reencoded={transcoded.b}
+            className="right-3"
+          />
           <PlaybackError
             visible={errors.a}
             side="A"
@@ -366,12 +589,13 @@ function SyncedComparison({
           />
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className={`grid gap-3 md:grid-cols-2 ${fullscreen ? "min-h-0 flex-1" : ""}`}>
           {[
             {
               side: "A" as const,
               video: left,
               element: leftVideo,
+              ref: stageRef,
               error: errors.a,
               isTranscoded: transcoded.a,
               transcode: () => setTranscoded((current) => ({ ...current, a: true })),
@@ -380,6 +604,7 @@ function SyncedComparison({
               side: "B" as const,
               video: right,
               element: rightVideo,
+              ref: secondStageRef,
               error: errors.b,
               isTranscoded: transcoded.b,
               transcode: () => setTranscoded((current) => ({ ...current, b: true })),
@@ -387,14 +612,25 @@ function SyncedComparison({
           ].map((entry) => (
             <div
               key={entry.side}
-              className="relative aspect-video max-h-[calc(92vh-15rem)] overflow-hidden rounded-lg bg-black"
+              ref={entry.ref}
+              data-testid={entry.side === "A" ? "compare-stage" : undefined}
+              className={`relative select-none overflow-hidden rounded-lg bg-black ${
+                fullscreen ? "h-full" : "aspect-video max-h-[calc(92vh-18rem)] min-h-48"
+              } ${panCursor}`}
+              onPointerDown={(event) => {
+                if (zoomed) beginDrag(event, "pan");
+              }}
+              onPointerMove={continueDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
               onDoubleClick={togglePlay}
             >
               {entry.element}
               <SideLabel
                 side={entry.side}
                 video={entry.video}
-                keep={keepVideoIds.has(entry.video.id)}
+                keep={keepVideoIds.has(copyKey(entry.video))}
+                reencoded={entry.isTranscoded}
                 className="left-3"
               />
               <PlaybackError
@@ -473,6 +709,69 @@ function SyncedComparison({
           ))}
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+        <div className="flex items-center gap-1" role="group" aria-label="Zoom">
+          <ZoomIn className="mr-1 h-3.5 w-3.5 text-secondary" />
+          <ZoomButton label="Fit" active={!zoomed} onClick={() => setView(FIT_VIEW)} />
+          <ZoomButton
+            label="1:1"
+            title="One screen pixel for every pixel of the sharper copy"
+            active={zoomed && Math.abs(view.zoom - oneToOne) < 0.01}
+            onClick={() => zoomTo((stage) => nativeZoom([natural.a, natural.b], stage, pixelRatio))}
+          />
+          {ZOOM_PRESETS.map((zoom) => (
+            <ZoomButton
+              key={zoom}
+              label={`${zoom}×`}
+              active={Math.abs(view.zoom - zoom) < 0.01}
+              onClick={() => zoomTo(() => zoom)}
+            />
+          ))}
+          <span className="ml-1 w-10 tabular-nums text-muted">{view.zoom.toFixed(1)}×</span>
+        </div>
+        <span
+          className="text-secondary"
+          title="How much of each copy's own resolution reaches your screen. Below 100% a copy is being shrunk, so zoom until the sharper copy shows full detail before judging quality."
+          data-testid="detail-shown"
+        >
+          Detail on screen: A {formatDetailShown(shownA)} · B {formatDetailShown(shownB)}
+        </span>
+        <span className="text-muted">Scroll to zoom · drag to pan</span>
+        <div className="ml-auto flex items-center gap-1.5">
+          {onKeepOnly
+            ? [
+                { side: "A", video: left },
+                { side: "B", video: right },
+              ].map((entry) => {
+                const soleKeeper = keepVideoIds.size === 1 && keepVideoIds.has(copyKey(entry.video));
+                return (
+                  <button
+                    key={entry.side}
+                    type="button"
+                    disabled={soleKeeper}
+                    onClick={() => onKeepOnly(copyKey(entry.video))}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-foreground hover:border-accent disabled:cursor-default disabled:border-emerald-700 disabled:text-emerald-300"
+                  >
+                    {soleKeeper ? <Check className="h-3.5 w-3.5" /> : null}
+                    {soleKeeper ? `Keeping ${entry.side}` : `Keep only ${entry.side}`}
+                  </button>
+                );
+              })
+            : null}
+          {canFullscreen ? (
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-foreground hover:border-accent"
+              aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+            >
+              {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {fullscreen ? "Exit full screen" : "Full screen"}
+            </button>
+          ) : null}
+        </div>
+      </div>
       {Math.abs(leftDuration - rightDuration) >= 1 ? (
         <p className="text-xs text-amber-300">
           The copies differ in length by {Math.round(Math.abs(leftDuration - rightDuration))} seconds. Use the B offset
@@ -480,6 +779,38 @@ function SyncedComparison({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function fileSize(file: { width?: number; height?: number } | undefined): Size | undefined {
+  return file?.width && file.height ? { width: file.width, height: file.height } : undefined;
+}
+
+function ZoomButton({
+  label,
+  title,
+  active,
+  onClick,
+}: {
+  label: string;
+  title?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={active}
+      onClick={onClick}
+      className={`rounded border px-1.5 py-0.5 ${
+        active
+          ? "border-accent bg-accent text-white"
+          : "border-border bg-surface hover:border-accent hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -495,8 +826,21 @@ function NudgeButton({ label, onClick }: { label: string; onClick: () => void })
   );
 }
 
-function SideLabel({ side, video, keep, className }: { side: string; video: Video; keep: boolean; className: string }) {
+function SideLabel({
+  side,
+  video,
+  keep,
+  reencoded,
+  className,
+}: {
+  side: string;
+  video: DuplicateCopy;
+  keep: boolean;
+  reencoded: boolean;
+  className: string;
+}) {
   const file = primaryFile(video);
+  const fileCopy = isFileCopy(video);
   return (
     <div
       className={`pointer-events-none absolute top-3 z-20 max-w-[45%] rounded-md bg-black/75 px-2 py-1 text-xs text-white shadow ${className}`}
@@ -504,11 +848,18 @@ function SideLabel({ side, video, keep, className }: { side: string; video: Vide
       <div className="flex items-center gap-1.5 font-semibold">
         <span className="rounded bg-white/20 px-1">{side}</span>
         <span className={keep ? "text-emerald-300" : "text-red-300"}>{keep ? "Keep" : "Remove"}</span>
+        {video.isPrimaryFile ? <span className="font-normal text-white/70">· primary</span> : null}
       </div>
+      {fileCopy && file ? <div className="mt-0.5 truncate text-white/90">{file.basename}</div> : null}
       {file ? (
         <div className="mt-0.5 truncate text-white/80">
           {file.width}×{file.height} · {formatCodec(file.videoCodec)} · {formatBitrate(file.bitRate)} ·{" "}
           {formatFileSize(totalSize(video))}
+        </div>
+      ) : null}
+      {reencoded ? (
+        <div className="mt-0.5 text-amber-200">
+          Re-encoded for playback, so its compression is not the original&apos;s
         </div>
       ) : null}
     </div>
@@ -593,11 +944,11 @@ function FrameStrips({ videos, keepVideoIds }: { videos: Video[]; keepVideoIds: 
           {videos.map((video, index) => {
             const duration = primaryFile(video)?.duration ?? 0;
             return (
-              <div key={video.id}>
+              <div key={copyKey(video)}>
                 <div className="mb-1 flex items-center gap-2 text-xs">
                   <span className="rounded bg-surface px-1.5 py-0.5 font-semibold text-secondary">{index + 1}</span>
-                  <span className={keepVideoIds.has(video.id) ? "font-medium text-emerald-300" : "text-red-300"}>
-                    {keepVideoIds.has(video.id) ? "Keep" : "Remove"}
+                  <span className={keepVideoIds.has(copyKey(video)) ? "font-medium text-emerald-300" : "text-red-300"}>
+                    {keepVideoIds.has(copyKey(video)) ? "Keep" : "Remove"}
                   </span>
                   <span className="truncate text-secondary">{displayTitle(video)}</span>
                   <span className="text-muted">{formatDuration(duration)}</span>

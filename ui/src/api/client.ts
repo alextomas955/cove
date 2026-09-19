@@ -750,10 +750,11 @@ export const videos = {
         ids: query.ids?.length ? query.ids.join(",") : undefined,
       })}`,
     ),
-  updateDuplicateSearchDecision: (searchId: string, groupId: number, keepVideoIds: number[]) =>
+  /** Keeper ids are video ids, or file ids when `files` is set for a group from a "files" search. */
+  updateDuplicateSearchDecision: (searchId: string, groupId: number, keepIds: number[], files = false) =>
     request<void>(`/videos/duplicate-searches/${encodeURIComponent(searchId)}/groups/${groupId}`, {
       method: "PATCH",
-      body: JSON.stringify({ keepVideoIds }),
+      body: JSON.stringify(files ? { keepVideoIds: [], keepFileIds: keepIds } : { keepVideoIds: keepIds }),
     }),
   autoSelectDuplicateKeepers: (
     searchId: string,

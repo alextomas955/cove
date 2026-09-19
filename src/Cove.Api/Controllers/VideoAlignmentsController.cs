@@ -132,6 +132,10 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
     {
         IActionResult result = Problem("The primary file change could not be applied.");
         var changed = false;
+        // Generated covers, sprites and previews are keyed by video id, so they stay valid when the new
+        // primary holds the same footage. Deleting them would leave the list and hover previews blank
+        // until the next generate run.
+        var keepGeneratedAssets = false;
         object? auditDetails = null;
         var affectedTimelineVideoIds = new HashSet<int> { videoId };
         try
@@ -142,6 +146,7 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
                 db.ChangeTracker.Clear();
                 result = Problem("The primary file change could not be applied.");
                 changed = false;
+                keepGeneratedAssets = false;
                 auditDetails = null;
                 affectedTimelineVideoIds = [videoId];
                 await using var transaction = db.Database.IsRelational()
@@ -174,15 +179,14 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
                     }
                 }
                 else if (request.Resolution == "delete") deletes = dependencies.Select(d => $"{d.Kind}:{d.Id}").ToHashSet(StringComparer.OrdinalIgnoreCase);
-                else if (dependencies.Count > 0)
+
+                if (request.Resolution != "align")
                 {
                     var source = video.PrimaryFileId.HasValue ? await db.VideoFiles.SingleOrDefaultAsync(f => f.Id == video.PrimaryFileId, ct) : null;
-                    var sourceHash = source is null ? null : await EnsurePhash(source, ct);
-                    var targetHash = await EnsurePhash(target, ct);
-                    var equivalent = source is not null && !string.IsNullOrWhiteSpace(sourceHash) && !string.IsNullOrWhiteSpace(targetHash)
-                        && Math.Abs(source.Duration - target.Duration) <= EquivalentDurationTolerance
-                        && MetadataServerService.ComputePhashHammingDistance(sourceHash, targetHash) <= EquivalentPhashDistance;
-                    if (!equivalent) { result = Conflict("Timed dependencies require alignment or removal before changing the primary file."); return; }
+                    var equivalent = await HoldsTheSameContent(source, target, ct);
+                    if (!equivalent && request.Resolution != "delete" && dependencies.Count > 0)
+                    { result = Conflict("Timed dependencies require alignment or removal before changing the primary file."); return; }
+                    keepGeneratedAssets = equivalent;
                 }
                 await ApplyDependencies(dependencies, mapped, deletes, ct);
                 await InvalidateTimelineDerivedData(videoId, dependencies, ct);
@@ -198,8 +202,12 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
             if (!changed) return result;
             foreach (var affectedVideoId in affectedTimelineVideoIds)
             {
-                try { await thumbnailService.DeleteVideoGeneratedFilesAsync(affectedVideoId, ct); }
-                catch (Exception ex) { logger.LogWarning(ex, "Could not delete generated assets after changing the primary timeline for video {VideoId}", affectedVideoId); }
+                if (!keepGeneratedAssets)
+                {
+                    try { await thumbnailService.DeleteVideoGeneratedFilesAsync(affectedVideoId, ct); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Could not delete generated assets after changing the primary timeline for video {VideoId}", affectedVideoId); }
+                }
+
                 generatedAssetCoordinator.Advance(affectedVideoId);
             }
             try
@@ -340,6 +348,22 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
         foreach (var groupId in dependencies.Where(item => item.Kind == "group range" && item.RelatedEntityId.HasValue).Select(item => item.RelatedEntityId!.Value).Distinct())
             if (!(await authorizationService.AuthorizeAsync(principalAccessor.Current, Permissions.GroupsRead, EntityRef.Of(EntityKinds.Group, groupId), ct)).Allowed) return false;
         return true;
+    }
+
+    /// <summary>
+    /// True when both files hold the same footage (same length and appearance), so timed content still
+    /// lines up and generated covers, sprites and previews remain correct for the new primary file.
+    /// </summary>
+    private async Task<bool> HoldsTheSameContent(VideoFile? source, VideoFile target, CancellationToken ct)
+    {
+        if (source is null || Math.Abs(source.Duration - target.Duration) > EquivalentDurationTolerance)
+            return false;
+
+        var sourceHash = await EnsurePhash(source, ct);
+        var targetHash = await EnsurePhash(target, ct);
+        return !string.IsNullOrWhiteSpace(sourceHash)
+            && !string.IsNullOrWhiteSpace(targetHash)
+            && MetadataServerService.ComputePhashHammingDistance(sourceHash, targetHash) <= EquivalentPhashDistance;
     }
 
     private async Task<string?> EnsurePhash(VideoFile file, CancellationToken ct)

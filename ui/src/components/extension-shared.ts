@@ -9,6 +9,7 @@
  */
 
 // ─── Utilities ────────────────────────────────────────────────────────────
+export { navigateToUrl } from "../router/location";
 export {
   TagBadge,
   formatDuration,
@@ -129,6 +130,8 @@ export { useAppConfig } from "../state/AppConfigContext";
 // ─── Types ────────────────────────────────────────────────────────────────
 export type { FindFilter } from "../api/types";
 export { ENTITY_MEDIA_TARGET } from "./EntityMedia";
+export { getActiveMedia, useActiveMedia } from "./ActiveMedia";
+export type { ActiveMediaContext } from "./ActiveMedia";
 export type { EntityMediaFit, EntityMediaRenderProps, EntityMediaSurface } from "./EntityMedia";
 
 export { SortableList } from "./SortableList";

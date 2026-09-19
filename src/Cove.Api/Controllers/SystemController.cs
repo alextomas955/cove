@@ -258,8 +258,16 @@ public class SystemController(
                 || principalAccessor.Current?.Has(Permissions.FilesRead) == true;
             config = RedactSensitiveConfig(config, canReadLibraryPaths);
         }
-        return Ok(config);
+        return Ok(WithoutStoredPasswords(config));
     }
+
+    // Downloader site passwords are write-only: no principal gets them back, including settings writers.
+    internal static CoveConfigDto WithoutStoredPasswords(CoveConfigDto config) => config with
+    {
+        DownloaderSiteCredentials = config.DownloaderSiteCredentials
+            .Select(credential => credential with { Password = null })
+            .ToList(),
+    };
 
     private static CoveConfigDto RedactSensitiveConfig(CoveConfigDto config, bool canReadLibraryPaths)
     {
@@ -273,6 +281,7 @@ public class SystemController(
             DownloaderPathOverrides = config.DownloaderPathOverrides
                 .Select(path => path with { Path = string.Empty })
                 .ToList(),
+            DownloaderSiteCredentials = [],
             FfmpegPath = null,
             FfprobePath = null,
             FfmpegInputArgs = null,
@@ -305,7 +314,7 @@ public class SystemController(
     public async Task<ActionResult<CoveConfigDto>> SaveConfig([FromBody] CoveConfigDto config)
     {
         await configService.SaveConfigAsync(config);
-        return Ok(configService.GetConfig());
+        return Ok(WithoutStoredPasswords(configService.GetConfig()));
     }
 
     /// <summary>Returns the host ffmpeg's verified hardware-acceleration capabilities so the settings UI
@@ -987,12 +996,7 @@ public class SystemController(
     private sealed class UiConfigValidationException(string message) : Exception(message);
 
     private static DownloaderPermissions BuildDownloaderPermissions(string url)
-    {
-        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
-            return new DownloaderPermissions([uri.Host]);
-
-        return new DownloaderPermissions();
-    }
+        => DownloaderService.BuildDownloaderPermissions(url);
 
     private static async Task<AuthorizationResult?> AuthorizeDownloaderTargetAsync(
         DownloaderEntity entity,

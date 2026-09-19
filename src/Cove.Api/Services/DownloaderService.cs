@@ -38,7 +38,7 @@ public partial class DownloaderService(
     CoveConfiguration config,
     IServiceScopeFactory serviceScopeFactory,
     ILogger<DownloaderService> logger,
-    PhysicalFileAccessCoordinator? physicalFileAccessCoordinator = null)
+    PhysicalFileAccessCoordinator? physicalFileAccessCoordinator = null) : IDownloaderService
 {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), "cove", "downloaders");
     private readonly Lock _downloadSlotLock = new();
@@ -314,6 +314,27 @@ public partial class DownloaderService(
         return (result with { LocalPath = libraryPath }, importedEntityId);
     }
 
+    async Task<DownloaderImportResult?> IDownloaderService.DownloadAndImportAsync(
+        DownloaderImportRequest request,
+        Cove.Core.Interfaces.IJobProgress? progress,
+        CancellationToken ct)
+    {
+        var (result, importedEntityId) = await DownloadAndIngestAsync(
+            new DownloaderRequest(
+                request.DownloaderId,
+                request.Url,
+                request.Entity,
+                BuildDownloaderPermissions(request.Url),
+                request.QualityId,
+                request.SourceUrl),
+            request.EntityId,
+            progress,
+            ct,
+            allowDuplicateDownload: request.AllowDuplicateDownload);
+
+        return result == null ? null : new DownloaderImportResult(result.LocalPath, importedEntityId);
+    }
+
     public async Task<DownloaderBatchExecutionSummary> DownloadAndIngestBatchAsync(
         IReadOnlyList<DownloaderBatchItemDto> items,
         DownloaderBatchFollowUpDto? followUp,
@@ -323,8 +344,11 @@ public partial class DownloaderService(
         var expansion = await ExpandBatchItemsAsync(items, ct);
         items = expansion.ItemsToQueue;
 
+        var expansionFailedCount = expansion.Issues.Count(issue => string.Equals(issue.Kind, "failed", StringComparison.OrdinalIgnoreCase));
+        var expansionSkippedCount = expansion.Issues.Count - expansionFailedCount;
+
         if (items.Count == 0)
-            return new DownloaderBatchExecutionSummary(0, 0, expansion.Issues.Count, 0, null, expansion.Issues.Select(issue => $"{issue.Label}: {issue.Reason}").ToList());
+            return new DownloaderBatchExecutionSummary(expansion.Issues.Count, 0, expansionSkippedCount, expansionFailedCount, null, expansion.Issues.Select(issue => $"{issue.Label}: {issue.Reason}").ToList());
 
         followUp ??= new DownloaderBatchFollowUpDto();
 
@@ -335,8 +359,8 @@ public partial class DownloaderService(
         var reservedDownloads = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         var processed = 0;
         var succeeded = 0;
-        var skipped = 0;
-        var failed = 0;
+        var skipped = expansionSkippedCount;
+        var failed = expansionFailedCount;
 
         logger.LogInformation("Starting batch download of {ItemCount} item(s); maxConcurrency={MaxConcurrency}", batchItems.Count, ResolveMaxConcurrentDownloads());
 
@@ -412,7 +436,7 @@ public partial class DownloaderService(
 
         var followUpJobId = TryQueueFollowUpGenerateJob(followUp.Generate, importedPaths, progress);
         var summary = new DownloaderBatchExecutionSummary(
-            batchItems.Count,
+            batchItems.Count + expansion.Issues.Count,
             succeeded,
             skipped,
             failed,
@@ -511,9 +535,25 @@ public partial class DownloaderService(
                 continue;
             }
 
-            var matches = (await MatchUrlAsync(item.Url, ct))
-                .Where(match => string.Equals(match.SupportedEntity, entity.ToString(), StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            List<DownloaderMatchDto> matches;
+            try
+            {
+                matches = (await MatchUrlAsync(item.Url, ct))
+                    .Where(match => string.Equals(match.SupportedEntity, entity.ToString(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One unmatchable URL must not abort the rest of the batch: record it and keep expanding.
+                var label = BuildBatchItemLabel(item, index);
+                logger.LogDebug(ex, "Batch download expansion failed to match {Url}", item.Url);
+                issues.Add(new DownloaderBatchStartIssueDto("failed", label, ex.Message));
+                continue;
+            }
 
             if (matches.Count == 0)
             {
@@ -1877,7 +1917,11 @@ public partial class DownloaderService(
             descriptor.SupportedEntity.ToString(),
             match.NormalizedUrl,
             match.Label,
-            match.QualityOptions?.Select(option => new DownloaderQualityOptionDto(option.Id, option.Label, option.Description)).ToList() ?? [],
+            match.QualityOptions?.Select(option => new DownloaderQualityOptionDto(option.Id, option.Label, option.Description)
+            {
+                Width = option.Width,
+                Height = option.Height,
+            }).ToList() ?? [],
             match.SourceUrl);
     }
 
@@ -2703,7 +2747,7 @@ public partial class DownloaderService(
         }
     }
 
-    private static DownloaderPermissions BuildDownloaderPermissions(string url)
+    internal static DownloaderPermissions BuildDownloaderPermissions(string url)
     {
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
             return new DownloaderPermissions([uri.Host]);
