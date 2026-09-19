@@ -19,6 +19,8 @@ public sealed class TokenService : ITokenService, IExistingUserPrincipalResolver
     public const string JwtIssuer = "Cove";
     public const string JwtAudience = "Cove";
     public static readonly TimeSpan RefreshReuseGracePeriod = TimeSpan.FromSeconds(10);
+    /// <summary>How long after its expiry an access token is still accepted.</summary>
+    public static readonly TimeSpan AccessTokenClockSkew = TimeSpan.FromSeconds(30);
     private const string SessionIdClaim = "cove_session_id";
 
     private readonly CoveContext _db;
@@ -344,7 +346,7 @@ public sealed class TokenService : ITokenService, IExistingUserPrincipalResolver
                 RequireExpirationTime = true,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-                ClockSkew = TimeSpan.FromSeconds(30),
+                ClockSkew = AccessTokenClockSkew,
             }, out _);
 
             var sub = p.FindFirst(ClaimTypes.NameIdentifier)?.Value
