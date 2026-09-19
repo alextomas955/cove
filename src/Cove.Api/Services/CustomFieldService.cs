@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Cove.Api.Helpers;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Data;
@@ -42,7 +43,7 @@ public sealed class CustomFieldService(
             .AsNoTracking()
             .Include(definition => definition.JsonPaths)
             .OrderBy(definition => definition.DisplayOrder)
-            .ThenBy(definition => definition.Label)
+            .ThenBy(definition => NaturalSort.Key(definition.Label))
             .ToListAsync(ct);
 
         if (normalizedEntityType != null)
@@ -343,10 +344,162 @@ public sealed class CustomFieldService(
         return true;
     }
 
+    /// <summary>
+    /// Merges custom field values into many entities at once without saving, so the caller commits them
+    /// together with the rest of a bulk mutation. Only the keys in <paramref name="input"/> and
+    /// <paramref name="clearKeys"/> are touched. Returns the ids of entities whose values changed.
+    /// Throws <see cref="ArgumentException"/> before staging anything when a key is unknown, is not defined
+    /// for the entity type, is referenced twice, or carries a value that does not convert to the field type.
+    /// </summary>
+    public async Task<IReadOnlySet<int>> ApplyBulkValuesAsync(
+        string entityType,
+        IReadOnlyCollection<int> entityIds,
+        IDictionary<string, object?>? input,
+        BulkUpdateMode mode,
+        IEnumerable<string> clearKeys,
+        CancellationToken ct = default)
+    {
+        var normalizedEntityType = RequireEntityType(entityType);
+        var clearKeyList = clearKeys.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var changed = new HashSet<int>();
+        if ((input == null || input.Count == 0) && clearKeyList.Count == 0)
+            return changed;
+
+        var definitionsByKey = (await _db.CustomFieldDefinitions.AsNoTracking().ToListAsync(ct))
+            .ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
+        var plans = new List<BulkFieldPlan>();
+        var plannedDefinitionIds = new HashSet<int>();
+
+        CustomFieldDefinition Resolve(string key)
+        {
+            if (!definitionsByKey.TryGetValue(key, out var definition))
+                throw new ArgumentException($"Unknown custom field '{key}'.");
+            if (!definition.EntityTypes.Contains(normalizedEntityType, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException($"Custom field '{key}' is not defined for {normalizedEntityType} entities.");
+            if (!plannedDefinitionIds.Add(definition.Id))
+                throw new ArgumentException($"Custom field '{key}' is referenced more than once in the request.");
+            return definition;
+        }
+
+        foreach (var key in clearKeyList)
+            plans.Add(new BulkFieldPlan(Resolve(key), [], Clear: true));
+        foreach (var (key, rawValue) in input ?? new Dictionary<string, object?>())
+        {
+            var definition = Resolve(key);
+            plans.Add(new BulkFieldPlan(definition, NormalizeBulkInputValues(definition, key, rawValue), Clear: false));
+        }
+
+        var ids = entityIds.Distinct().ToArray();
+        if (ids.Length == 0)
+            return changed;
+
+        var definitionIds = plans.Select(plan => plan.Definition.Id).ToArray();
+        var existingRows = await _db.CustomFieldValues
+            .Where(value => value.EntityType == normalizedEntityType
+                && ids.Contains(value.EntityId)
+                && definitionIds.Contains(value.DefinitionId))
+            .OrderBy(value => value.Position)
+            .ToListAsync(ct);
+        var existingByEntityAndDefinition = existingRows
+            .GroupBy(value => (value.EntityId, value.DefinitionId))
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<CustomFieldValue>)group.ToList());
+
+        foreach (var entityId in ids)
+        {
+            foreach (var plan in plans)
+            {
+                var current = existingByEntityAndDefinition.GetValueOrDefault((entityId, plan.Definition.Id)) ?? [];
+                var next = plan.Clear
+                    ? (current.Count == 0 ? null : Array.Empty<CustomFieldValue>())
+                    : CustomFieldValueMerger.Merge(
+                        current,
+                        plan.Template,
+                        mode,
+                        NormalizeMultiValue(plan.Definition.Type, plan.Definition.IsMultiValue),
+                        SameContent);
+                if (next == null)
+                    continue;
+
+                _db.CustomFieldValues.RemoveRange(current);
+                _db.CustomFieldValues.AddRange(next.Select((value, index) => CloneValue(value, plan.Definition.Id, normalizedEntityType, entityId, index)));
+                changed.Add(entityId);
+            }
+        }
+
+        return changed;
+    }
+
+    private sealed record BulkFieldPlan(CustomFieldDefinition Definition, IReadOnlyList<CustomFieldValue> Template, bool Clear);
+
+    private static List<CustomFieldValue> NormalizeBulkInputValues(CustomFieldDefinition definition, string key, object? rawValue)
+    {
+        var values = new List<CustomFieldValue>();
+        foreach (var item in EnumerateBulkInputItems(definition, rawValue))
+        {
+            var converted = ConvertInputValue(definition, item);
+            if (converted == null)
+                throw new ArgumentException($"Custom field '{key}' received a value that is not a valid {CustomFieldTypes.Normalize(definition.Type)} value.");
+            values.Add(converted);
+        }
+
+        if (values.Count > 1 && !NormalizeMultiValue(definition.Type, definition.IsMultiValue))
+            throw new ArgumentException($"Custom field '{key}' accepts a single value.");
+        return values;
+    }
+
+    private static IEnumerable<object?> EnumerateBulkInputItems(CustomFieldDefinition definition, object? rawValue)
+    {
+        if (rawValue == null || rawValue is JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined })
+            return [];
+        // A JSON field stores a blank string as a JSON string, exactly as the single-entity PUT does.
+        if (CustomFieldTypes.IsJson(definition.Type))
+            return [rawValue];
+        if (IsAbsentBulkInput(rawValue))
+            return [];
+        if (CustomFieldTypes.IsLongText(definition.Type))
+            return [rawValue];
+        if (rawValue is JsonElement { ValueKind: JsonValueKind.Array } array)
+            return array.EnumerateArray().Where(item => !IsAbsentBulkInput(item)).Select(item => (object?)item).ToList();
+        if (rawValue is not string && rawValue is IEnumerable<object> items)
+            return items.Cast<object?>().Where(item => !IsAbsentBulkInput(item)).ToList();
+        return [rawValue];
+    }
+
+    /// <summary>Null and blank strings carry no value: they clear under Set and are ignored under Add and Remove.</summary>
+    private static bool IsAbsentBulkInput(object? rawValue) => rawValue switch
+    {
+        null => true,
+        JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } => true,
+        JsonElement { ValueKind: JsonValueKind.String } element => string.IsNullOrWhiteSpace(element.GetString()),
+        string text => string.IsNullOrWhiteSpace(text),
+        _ => false,
+    };
+
+    private static CustomFieldValue CloneValue(CustomFieldValue source, int definitionId, string entityType, int entityId, int position)
+        => new()
+        {
+            DefinitionId = definitionId,
+            EntityType = entityType,
+            EntityId = entityId,
+            Position = position,
+            TextValue = source.TextValue,
+            LongTextValue = source.LongTextValue,
+            JsonValue = source.JsonValue?.Clone(),
+            NumberValue = source.NumberValue,
+            BoolValue = source.BoolValue,
+            DateValue = source.DateValue,
+            TimestampValue = source.TimestampValue,
+            IntegerValue = source.IntegerValue,
+        };
+
     private static bool SameValue(CustomFieldValue left, CustomFieldValue right) =>
         left.DefinitionId == right.DefinitionId
         && left.Position == right.Position
-        && left.TextValue == right.TextValue
+        && SameContent(left, right);
+
+    /// <summary>Compares the typed payload of two values, ignoring definition, entity, and position.</summary>
+    internal static bool SameContent(CustomFieldValue left, CustomFieldValue right) =>
+        left.TextValue == right.TextValue
         && left.LongTextValue == right.LongTextValue
         && SameNumber(left.NumberValue, right.NumberValue)
         && left.BoolValue == right.BoolValue

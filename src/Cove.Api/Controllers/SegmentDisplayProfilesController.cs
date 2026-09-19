@@ -22,7 +22,7 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
         var profiles = await ApplyVisibleProfileScope(db.SegmentDisplayProfiles.AsNoTracking(), userId)
             .OrderByDescending(profile => profile.UserId == userId)
             .ThenByDescending(profile => profile.IsDefault)
-            .ThenBy(profile => profile.Name)
+            .ThenBy(profile => NaturalSort.Key(profile.Name))
             .ThenBy(profile => profile.Id)
             .ToListAsync(ct);
 

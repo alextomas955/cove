@@ -160,9 +160,22 @@ function resolveSource(value: string, sources: TaggerSource[]): TaggerSource | u
   );
 }
 
+// YAML scrapers emit relationship fields (Tags, Performers, Studio) as `{ Name, URL }` objects, and
+// Studio as a one-item list of them. Extension scrapers emit plain strings. Both shapes must resolve
+// to names here, otherwise the tagger silently skips the relation.
+function asRelationName(value: Record<string, unknown>): string | undefined {
+  for (const key of ["Name", "name", "Title", "title"]) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  return undefined;
+}
+
 function asString(value: unknown): string | undefined {
   if (typeof value === "string") return value.trim() || undefined;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.length > 0 ? asString(value[0]) : undefined;
+  if (value && typeof value === "object") return asRelationName(value as Record<string, unknown>);
   return undefined;
 }
 
@@ -170,12 +183,22 @@ function asStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap(asStringList).filter(Boolean);
   }
+  if (value && typeof value === "object") {
+    const name = asRelationName(value as Record<string, unknown>);
+    return name ? [name] : [];
+  }
   const text = asString(value);
   if (!text) return [];
   return text
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function dedupeIgnoringCase(values: string[]) {
+  return values.filter(
+    (value, index, items) => items.findIndex((candidate) => candidate.toLowerCase() === value.toLowerCase()) === index,
+  );
 }
 
 function pickString(result: Record<string, unknown>, ...keys: string[]) {
@@ -280,8 +303,8 @@ function toScraperVideoMatch(
 ): UnifiedVideoMatch {
   const title = pickString(result, "Title", "Name");
   const imageUrl = pickString(result, "Image", "ImageUrl", "ImageURL");
-  const performerNames = pickStringList(result, "Performers", "Performer", "PerformerNames");
-  const tagNames = pickStringList(result, "Tags", "Tag", "TagNames");
+  const performerNames = dedupeIgnoringCase(pickStringList(result, "Performers", "Performer", "PerformerNames"));
+  const tagNames = dedupeIgnoringCase(pickStringList(result, "Tags", "Tag", "TagNames"));
   const studioName = pickString(result, "Studio", "StudioName");
   return {
     sourceKind: "scraper",

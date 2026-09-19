@@ -142,10 +142,10 @@ public sealed class StreamDeliveryApiTests(
         var vttCaptionId = await AsDbUser().AttachStreamVideoCaptionAsync(video.Id, vttFilename, "en", "vtt", TestContext.Current.CancellationToken);
         var srtCaptionId = await AsDbUser().AttachStreamVideoCaptionAsync(video.Id, srtFilename, "es", "srt", TestContext.Current.CancellationToken);
         var primaryFileId = (await AsUser().GetVideoByIdAsync(video.Id, TestContext.Current.CancellationToken)).PrimaryFileId!.Value;
-        const string segment = "720p_0000.ts";
+        const string segment = "720p_s0_0000.ts";
         var segmentBytes = "api-test-hls-segment"u8.ToArray();
         fileSystem.CreateGeneratedFile(
-            Path.Combine("transcodes", "hls", (-primaryFileId).ToString(CultureInfo.InvariantCulture), segment),
+            Path.Combine("transcodes", "hls", (-primaryFileId).ToString(CultureInfo.InvariantCulture), "720p", "s0", segment),
             segmentBytes);
 
         var memberRole = (await AsUser().GetRolesAsync(TestContext.Current.CancellationToken))

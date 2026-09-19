@@ -128,8 +128,8 @@ public class StreamControllerTests
             var result = await controller.GetHlsPlaylist(video.Id, "original", CancellationToken.None);
 
             var content = Assert.IsType<ContentResult>(result);
-            Assert.Contains($"/api/stream/video/{video.Id}/hls/segment/original_000.ts?fileId={primaryFile.Id}&access_token=access%20token&share_token=share%2Ftoken&share_password=p%40ss", content.Content);
-            Assert.Contains($"/api/stream/video/{video.Id}/hls/segment/original_001.ts?fileId={primaryFile.Id}&access_token=access%20token&share_token=share%2Ftoken&share_password=p%40ss", content.Content);
+            Assert.Contains($"/api/stream/video/{video.Id}/hls/segment/original_s0_0000.ts?fileId={primaryFile.Id}&access_token=access%20token&share_token=share%2Ftoken&share_password=p%40ss", content.Content);
+            Assert.Contains($"/api/stream/video/{video.Id}/hls/segment/original_s0_0001.ts?fileId={primaryFile.Id}&access_token=access%20token&share_token=share%2Ftoken&share_password=p%40ss", content.Content);
             Assert.Contains("#EXTINF:4,", content.Content);
             Assert.DoesNotContain("ignored=", content.Content);
         }
@@ -163,8 +163,8 @@ public class StreamControllerTests
         public Task<Stream?> TranscodeToMp4Async(string inputPath, string? resolution, double startSeconds = 0, CancellationToken ct = default)
             => Task.FromResult<Stream?>(null);
 
-        public Task<string?> GenerateHlsManifestAsync(int videoId, string inputPath, string? resolution, CancellationToken ct = default)
-            => Task.FromResult<string?>("#EXTM3U\n#EXTINF:4,\noriginal_000.ts\n#EXTINF:4,\noriginal_001.ts\n");
+        public Task<string?> GenerateHlsManifestAsync(int videoId, string inputPath, string? resolution, double startSeconds, CancellationToken ct = default)
+            => Task.FromResult<string?>("#EXTM3U\n#EXTINF:4,\noriginal_s0_0000.ts\n#EXTINF:4,\noriginal_s0_0001.ts\n");
 
         public Task<Stream?> GetHlsSegmentAsync(int videoId, string segment, CancellationToken ct = default)
             => Task.FromResult<Stream?>(null);

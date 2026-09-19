@@ -2087,6 +2087,13 @@ public record BulkVideoUpdateDto
     public BulkUpdateMode TagMode { get; init; } = BulkUpdateMode.Add;
     public List<int>? PerformerIds { get; init; }
     public BulkUpdateMode PerformerMode { get; init; } = BulkUpdateMode.Add;
+    /// <summary>
+    /// Custom field values keyed by definition key. Only the keys present are touched; each key's
+    /// values are merged into every selected entity according to <see cref="CustomFieldMode"/>.
+    /// Clear a field on every selected entity with a <c>customFields.&lt;key&gt;</c> entry in <see cref="ClearFields"/>.
+    /// </summary>
+    public Dictionary<string, object?>? CustomFields { get; init; }
+    public BulkUpdateMode CustomFieldMode { get; init; } = BulkUpdateMode.Add;
     public List<int>? GalleryIds { get; init; }
     public BulkUpdateMode GalleryMode { get; init; } = BulkUpdateMode.Add;
     public List<VideoGroupInputDto>? GroupIds { get; init; }
@@ -2104,6 +2111,9 @@ public record BulkPerformerUpdateDto
     public string? Details { get; init; }
     public List<int>? TagIds { get; init; }
     public BulkUpdateMode TagMode { get; init; } = BulkUpdateMode.Add;
+    /// <inheritdoc cref="BulkVideoUpdateDto.CustomFields"/>
+    public Dictionary<string, object?>? CustomFields { get; init; }
+    public BulkUpdateMode CustomFieldMode { get; init; } = BulkUpdateMode.Add;
 }
 
 public record BulkImageUpdateDto

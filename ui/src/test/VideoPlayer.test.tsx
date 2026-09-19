@@ -1673,6 +1673,27 @@ describe("VideoPlayer source lifecycle", () => {
       expect(screen.getByText("Using transcoded stream for video format compatibility")).toBeInTheDocument();
     });
 
+    it("keeps an HEVC MP4 source on Direct when the browser has no native HLS", async () => {
+      mockResolutions(["360p", "720p"]);
+      const { container } = render(
+        <VideoPlayer
+          streamUrl="/api/stream/video/44"
+          format="mp4"
+          videoCodec="hevc"
+          duration={120}
+          videoId={44}
+          detections={[]}
+          trackingEnabled={false}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/resolutions"))).toBe(true),
+      );
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/44");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
     it("keeps a compatible MP4 source on Direct", async () => {
       mockResolutions(["360p", "720p"]);
       const { container } = render(player(42, "mp4"));
@@ -1692,11 +1713,18 @@ describe("VideoPlayer source lifecycle", () => {
         source.dispatchEvent(new Event("error"));
       });
     };
+    // In-place recovery reloads after a real 500 ms+ backoff; leave headroom for a loaded CI runner.
+    const RECOVERY_WAIT = { timeout: 5_000 };
 
     it("falls back to a transcode when the browser rejects the container outright", async () => {
       mockResolutions(["360p", "720p"]);
       const { container } = render(player(60, "flv"));
       await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/60"));
+      loadMock.mockClear();
+
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+      await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/60");
 
       rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
 
@@ -1706,6 +1734,104 @@ describe("VideoPlayer source lifecycle", () => {
           "/api/stream/video/60/transcode?resolution=720p",
         ),
       );
+    });
+
+    it("retries Direct in place when a reachable source fails once", async () => {
+      mockResolutions(["360p", "720p"]);
+      const { container } = render(player(64, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/64"));
+      const video = container.querySelector("video") as HTMLVideoElement;
+      Object.defineProperty(video, "readyState", { configurable: true, value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+
+      for (let blip = 0; blip < 2; blip++) {
+        loadMock.mockClear();
+        rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+        await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+        // The retried load succeeds, so a later blip gets its own retry instead of a transcode.
+        fireEvent.loadedMetadata(video);
+        fireEvent.canPlay(video);
+      }
+
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/64");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["an error status", () => Promise.resolve(new Response("busy", { status: 503 }))],
+      ["a dropped connection", () => Promise.reject(new TypeError("Failed to fetch"))],
+    ])("recovers Direct in place when the source request failed with %s", async (_, failStream) => {
+      mockResolutions(["360p", "720p"]);
+      const resolveResolutions = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation((input, init) =>
+        String(input) === "/api/stream/video/63" ? failStream() : resolveResolutions(input, init),
+      );
+      const { container } = render(player(63, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/63"));
+      loadMock.mockClear();
+
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/stream/video/63",
+          expect.objectContaining({ headers: { Range: "bytes=0-0" } }),
+        ),
+      );
+      await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/63");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
+    it("stays on Direct when reachable rejections are separated by an unreachable one", async () => {
+      mockResolutions(["360p", "720p"]);
+      const resolveResolutions = fetchMock.getMockImplementation()!;
+      const probeResults = [200, 503, 200];
+      fetchMock.mockImplementation((input, init) =>
+        String(input) === "/api/stream/video/65"
+          ? Promise.resolve(new Response(null, { status: probeResults.shift() ?? 200 }))
+          : resolveResolutions(input, init),
+      );
+      const { container } = render(player(65, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/65"));
+
+      while (probeResults.length > 0) {
+        loadMock.mockClear();
+        rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+        await waitFor(() => expect(loadMock).toHaveBeenCalled(), RECOVERY_WAIT);
+      }
+
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/65");
+      expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
+    });
+
+    it("ignores a probe that settles after the source changed", async () => {
+      mockResolutions(["360p", "720p"]);
+      const resolveResolutions = fetchMock.getMockImplementation()!;
+      let settleProbe: (response: Response) => void = () => {};
+      fetchMock.mockImplementation((input, init) =>
+        String(input) === "/api/stream/video/66"
+          ? new Promise<Response>((resolve) => {
+              settleProbe = resolve;
+            })
+          : resolveResolutions(input, init),
+      );
+      const { container, rerender } = render(player(66, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/66"));
+      rejectSource(container, HTMLMediaElement.NETWORK_NO_SOURCE);
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/stream/video/66")).toBe(true),
+      );
+
+      rerender(player(67, "mp4"));
+      await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/67"));
+      loadMock.mockClear();
+      await act(async () => {
+        settleProbe(new Response(null, { status: 200 }));
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      });
+
+      expect(loadMock).not.toHaveBeenCalled();
+      expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/67");
     });
 
     it("stays on Direct when a source error leaves a resource selected", async () => {
@@ -1945,6 +2071,139 @@ describe("VideoPlayer source lifecycle", () => {
       await waitFor(() => expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/47"));
       expect(screen.queryByText(/Using transcoded stream for/)).not.toBeInTheDocument();
       expect(screen.getByTitle("Video quality")).toHaveTextContent("Direct");
+    });
+  });
+
+  describe("native HLS browsers", () => {
+    const HLS_TYPE = "application/vnd.apple.mpegurl";
+    let canPlayTypeDescriptor: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      canPlayTypeDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "canPlayType");
+      Object.defineProperty(HTMLMediaElement.prototype, "canPlayType", {
+        configurable: true,
+        writable: true,
+        value: (type: string) => (type === HLS_TYPE ? "maybe" : ""),
+      });
+      fetchMock.mockImplementation((input) =>
+        String(input).includes("/resolutions")
+          ? Promise.resolve(
+              new Response(JSON.stringify(["360p", "720p"]), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              }),
+            )
+          : Promise.resolve(new Response(null, { status: 200 })),
+      );
+    });
+
+    afterEach(() => {
+      if (canPlayTypeDescriptor) {
+        Object.defineProperty(HTMLMediaElement.prototype, "canPlayType", canPlayTypeDescriptor);
+      } else {
+        delete (HTMLMediaElement.prototype as unknown as Record<string, unknown>).canPlayType;
+      }
+    });
+
+    const player = (videoId: number, format: string) => (
+      <VideoPlayer
+        streamUrl={`/api/stream/video/${videoId}`}
+        format={format}
+        duration={120}
+        videoId={videoId}
+        detections={[]}
+        trackingEnabled={false}
+      />
+    );
+
+    it("defaults an HEVC source to the HLS transcode with a codec notice", async () => {
+      const { container } = render(
+        <VideoPlayer
+          streamUrl="/api/stream/video/65"
+          format="mp4"
+          videoCodec="hevc"
+          duration={120}
+          videoId={65}
+          detections={[]}
+          trackingEnabled={false}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/65/hls/720p.m3u8"),
+      );
+      expect(screen.getByText("Using transcoded stream for video codec compatibility")).toBeInTheDocument();
+    });
+
+    it("delivers a compatibility transcode as an HLS playlist", async () => {
+      const { container } = render(player(61, "wmv"));
+
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/61/hls/720p.m3u8"),
+      );
+      expect(container.querySelector("source")).toHaveAttribute("type", HLS_TYPE);
+    });
+
+    it("seeks an HLS transcode by requesting a playlist that starts at the target", async () => {
+      const { container } = render(player(62, "mp4"));
+      const video = container.querySelector("video") as HTMLVideoElement;
+      fireEvent.loadedMetadata(video);
+
+      const qualityButton = await screen.findByTitle("Video quality");
+      fireEvent.click(qualityButton);
+      fireEvent.click(screen.getByRole("button", { name: "360p" }));
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/62/hls/360p.m3u8"),
+      );
+      fireEvent.loadedMetadata(video);
+
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+
+      // The playlist encodes from the seek target, so media time 0 is 0:10 of the original.
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute("src", "/api/stream/video/62/hls/360p.m3u8?start=10"),
+      );
+      expect(container.querySelector("source")).toHaveAttribute("type", HLS_TYPE);
+      expect(container).toHaveTextContent("0:10 / 2:00");
+    });
+
+    it("keeps the piped transcode on Chromium even though its HLS probe answers maybe", async () => {
+      const userAgentDescriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, "userAgent");
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+      });
+      try {
+        const { container } = render(player(64, "wmv"));
+
+        await waitFor(() =>
+          expect(container.querySelector("source")).toHaveAttribute(
+            "src",
+            "/api/stream/video/64/transcode?resolution=720p",
+          ),
+        );
+      } finally {
+        delete (navigator as unknown as Record<string, unknown>).userAgent;
+        if (userAgentDescriptor) Object.defineProperty(Navigator.prototype, "userAgent", userAgentDescriptor);
+      }
+    });
+
+    it("keeps the piped transcode when the browser has no native HLS", async () => {
+      Object.defineProperty(HTMLMediaElement.prototype, "canPlayType", {
+        configurable: true,
+        writable: true,
+        value: () => "",
+      });
+      const { container } = render(player(63, "wmv"));
+
+      await waitFor(() =>
+        expect(container.querySelector("source")).toHaveAttribute(
+          "src",
+          "/api/stream/video/63/transcode?resolution=720p",
+        ),
+      );
+      expect(container.querySelector("source")).toHaveAttribute("type", "video/mp4");
     });
   });
 });

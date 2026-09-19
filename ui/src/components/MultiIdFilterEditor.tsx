@@ -64,11 +64,15 @@ export function MultiIdEditor({
   } = useQuery({
     queryKey: ["multi-id-selector", entityType, trimmedSearchText],
     queryFn: async () => {
+      // Tags, performers, studios and groups page by favorite-then-match-quality while searching so
+      // the best match is on the first page. Without a search term "relevance" falls back to
+      // updated-at order on the server, so the unsearched list keeps its alphabetical sort.
+      const nameSort = trimmedSearchText ? "relevance" : "name";
       switch (entityType) {
         case "tags":
           return (
             await tagsApi.find(
-              { q: trimmedSearchText || undefined, perPage: 50, sort: "name", direction: "asc" },
+              { q: trimmedSearchText || undefined, perPage: 50, sort: nameSort, direction: "asc" },
               { includeCounts: false },
             )
           ).items;
@@ -76,15 +80,20 @@ export function MultiIdEditor({
           return await tagGroupsApi.list();
         case "performers":
           return (
-            await performersApi.find({ q: trimmedSearchText || undefined, perPage: 50, sort: "name", direction: "asc" })
+            await performersApi.find({
+              q: trimmedSearchText || undefined,
+              perPage: 50,
+              sort: nameSort,
+              direction: "asc",
+            })
           ).items;
         case "studios":
           return (
-            await studiosApi.find({ q: trimmedSearchText || undefined, perPage: 50, sort: "name", direction: "asc" })
+            await studiosApi.find({ q: trimmedSearchText || undefined, perPage: 50, sort: nameSort, direction: "asc" })
           ).items;
         case "groups":
           return (
-            await groupsApi.find({ q: trimmedSearchText || undefined, perPage: 50, sort: "name", direction: "asc" })
+            await groupsApi.find({ q: trimmedSearchText || undefined, perPage: 50, sort: nameSort, direction: "asc" })
           ).items;
         case "galleries":
           return (
@@ -176,6 +185,7 @@ export function MultiIdEditor({
           available as any[],
           searchText,
           (entity) => entity.name || entity.title || entity.label || entity.performerName || "",
+          (entity) => entity.favorite === true,
         )
       : available;
   }, [entities, entityType, searchText]);

@@ -19,6 +19,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { videos } from "../api/client";
+import { supportsNativeHls, transcodeSource } from "../utils/transcodeSource";
 import type { Detection, Face, Segment } from "../api/types";
 import { createPlaybackTracker, trackInteraction, type PlaybackTrackingTarget } from "../utils/interactionTracking";
 import { useAppConfig } from "../state/AppConfigContext";
@@ -33,6 +34,7 @@ import {
   type MediaPlayerSurface,
 } from "./MediaPlayerExtension";
 import { useMediaRecoveryController } from "./useMediaRecoveryController";
+import { serverAwareFetch } from "../state/serverAvailability";
 import { useKeySequence } from "../hooks/useKeySequence";
 
 type FaceOverlayInfo = Pick<Face, "id" | "label" | "performerName" | "performerId">;
@@ -55,6 +57,7 @@ const MUTED_KEY = "cove-video-player-muted";
 const FACE_OVERLAY_KEY = "cove.player.faceOverlay";
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const CLIP_BOUNDARY_TOLERANCE_SEC = 0.05;
+const SOURCE_PROBE_TIMEOUT_MS = 5_000;
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(
@@ -87,6 +90,17 @@ const SOURCE_TRANSCODE_QUALITY = "Source";
 // the onError->transcode fallback never fires — so we proactively avoid defaulting to Direct.
 const INCOMPATIBLE_AUDIO_CODECS = new Set(["ac3", "eac3", "ec-3", "dts", "dts-hd", "truehd", "mlp"]);
 const TRANSCODE_PREFERRED_VIDEO_FORMATS = new Set(["wmv", "asf", "avi"]);
+
+// Video codecs Safari/WebKit advertises support for but frequently fails to play directly (HEVC is only
+// reliable as 8-bit hvc1-tagged MP4, which the library metadata cannot distinguish). Playback does not
+// error in those cases, so the onError->transcode fallback never fires; on native-HLS browsers these
+// default to the transcode and Direct stays available in the quality menu. Other browsers decode them.
+const NATIVE_HLS_TRANSCODE_PREFERRED_VIDEO_CODECS = new Set(["hevc", "h265"]);
+
+function prefersTranscodedVideoCodec(codec: string | undefined, nativeHls: boolean) {
+  const normalized = codec?.trim().toLowerCase();
+  return nativeHls && normalized ? NATIVE_HLS_TRANSCODE_PREFERRED_VIDEO_CODECS.has(normalized) : false;
+}
 
 function prefersTranscodedVideoFormat(format?: string) {
   const normalized = format?.trim().toLowerCase();
@@ -175,6 +189,7 @@ export function VideoPlayer({
   streamUrl,
   posterUrl,
   format,
+  videoCodec,
   audioCodec,
   duration,
   resumeTime,
@@ -209,6 +224,7 @@ export function VideoPlayer({
   streamUrl: string;
   posterUrl?: string;
   format: string;
+  videoCodec?: string;
   audioCodec?: string;
   duration: number;
   /** Explicit navigation timestamp. Takes precedence over saved resume state. */
@@ -319,8 +335,13 @@ export function VideoPlayer({
   }, [compactControls]);
   const [selectedQuality, setSelectedQuality] = useState<string>("Direct");
   const selectedQualityRef = useRef("Direct");
-  const compatibilityRequired = prefersTranscodedVideoFormat(format) || !isBrowserCompatibleAudio(audioCodec);
-  const compatibilityIdentity = `${videoId}:${fileId ?? "primary"}:${format?.trim().toLowerCase()}:${audioCodec?.trim().toLowerCase()}`;
+  // Safari cannot play the piped fragmented MP4 transcode; it gets the same encode as an HLS playlist.
+  const nativeHlsSupported = useMemo(() => supportsNativeHls(), []);
+  const compatibilityRequired =
+    prefersTranscodedVideoFormat(format) ||
+    prefersTranscodedVideoCodec(videoCodec, nativeHlsSupported) ||
+    !isBrowserCompatibleAudio(audioCodec);
+  const compatibilityIdentity = `${videoId}:${fileId ?? "primary"}:${format?.trim().toLowerCase()}:${videoCodec?.trim().toLowerCase()}:${audioCodec?.trim().toLowerCase()}`;
   const [compatibilityLookup, setCompatibilityLookup] = useState(() => ({
     identity: compatibilityIdentity,
     pending: compatibilityRequired,
@@ -329,9 +350,9 @@ export function VideoPlayer({
     compatibilityLookup.identity === compatibilityIdentity ? compatibilityLookup.pending : compatibilityRequired;
   const [transcodeStartSec, setTranscodeStartSec] = useState(0);
   const [availableQualities, setAvailableQualities] = useState<string[]>([]);
-  const [compatibilityFallbackReason, setCompatibilityFallbackReason] = useState<"video format" | "audio codec" | null>(
-    null,
-  );
+  const [compatibilityFallbackReason, setCompatibilityFallbackReason] = useState<
+    "video format" | "video codec" | "audio codec" | null
+  >(null);
   // Guards the one-shot automatic transcode fallback (on direct-play error). Reset per video.
   const autoTranscodeTriedRef = useRef(false);
   // Guards the one-shot compatibility default selection so a user can still pick Direct later.
@@ -345,6 +366,8 @@ export function VideoPlayer({
   const lastLoadedSourceRef = useRef<string | null>(null);
   const lastLoadedVideoIdRef = useRef<number | null>(null);
   const sourceGenerationRef = useRef(0);
+  // Source generation whose Direct stream was reachable yet rejected, and was retried in place once.
+  const directRetriedGenerationRef = useRef<number | null>(null);
   const metadataHandledGenerationRef = useRef<number | null>(null);
   const pendingAutostartRef = useRef(false);
   const navigationSeekKeyRef = useRef<string | null>(null);
@@ -892,13 +915,14 @@ export function VideoPlayer({
   // The source sentinel transcodes at the original resolution (no `resolution` query param).
   const transcodeResolution = selectedQuality === SOURCE_TRANSCODE_QUALITY ? undefined : selectedQuality;
   const isDirectSource = selectedQuality === "Direct";
-  const effectiveStreamUrl = isDirectSource
-    ? streamUrl
-    : videos.transcodeUrl(videoId, transcodeResolution, transcodeStartSec > 0 ? transcodeStartSec : undefined, fileId);
-  // The transcode endpoint always emits MP4. The direct stream declares no type, so the browser
-  // reads the container from the bytes. A declared type can only reject the source before any
-  // request, which browsers do for the correct type of several containers we serve.
-  const effectiveSourceType = isDirectSource ? undefined : "video/mp4";
+  const transcode = isDirectSource
+    ? null
+    : transcodeSource(videoId, transcodeResolution, transcodeStartSec, fileId, nativeHlsSupported);
+  const effectiveStreamUrl = transcode ? transcode.url : streamUrl;
+  // The transcode source declares its own type (MP4 or an HLS playlist). The direct stream declares
+  // no type, so the browser reads the container from the bytes. A declared type can only reject the
+  // source before any request, which browsers do for the correct type of several containers we serve.
+  const effectiveSourceType = transcode ? transcode.type : undefined;
   const effectiveSourceSignature = `${effectiveStreamUrl}|${effectiveSourceType ?? ""}`;
 
   const suspendedPlaybackRef = useRef<{ time: number; resume: boolean } | null>(null);
@@ -1339,9 +1363,11 @@ export function VideoPlayer({
     let cancelled = false;
     const fallbackReason = prefersTranscodedVideoFormat(format)
       ? "video format"
-      : !isBrowserCompatibleAudio(audioCodec)
-        ? "audio codec"
-        : null;
+      : prefersTranscodedVideoCodec(videoCodec, nativeHlsSupported)
+        ? "video codec"
+        : !isBrowserCompatibleAudio(audioCodec)
+          ? "audio codec"
+          : null;
     // Moves a source the browser cannot play directly onto a transcode. An empty `resolutions`
     // means no ladder rung is known, which selects a transcode at the source resolution.
     const applyCompatibilityFallback = (resolutions: string[]) => {
@@ -1382,7 +1408,7 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
     };
-  }, [audioCodec, fileId, format, videoId]);
+  }, [audioCodec, fileId, format, nativeHlsSupported, videoCodec, videoId]);
 
   const prepareClipForPlayback = useCallback(() => {
     const video = videoRef.current;
@@ -1670,7 +1696,8 @@ export function VideoPlayer({
 
   // Fall back to server-side transcoding when the source can't be played directly in the
   // browser — a non-native container (avi, wmv, …) or a native container with an unsupported
-  // codec that fails to load. Triggered from the <video> onError handler. Picks the highest
+  // codec that fails to load. Triggered from the <video> onError handler and after a reachable
+  // <source> is rejected twice (see handleDirectSourceRejected). Picks the highest
   // available ladder rung, or a source-resolution transcode when no ladder entries exist.
   const fallbackToTranscode = () => {
     if (autoTranscodeTriedRef.current) return;
@@ -1678,6 +1705,39 @@ export function VideoPlayer({
     const target =
       availableQualities.length > 0 ? availableQualities[availableQualities.length - 1] : SOURCE_TRANSCODE_QUALITY;
     changeQuality(target);
+  };
+
+  // A <source> that fails resource selection looks the same whether the browser cannot demux the
+  // container or the request itself failed (an error status or a dropped connection). Probe the
+  // direct URL before deciding: an unreachable stream is recovered in place like any other network
+  // error. A reachable one is retried once too, because a brief outage has usually passed by the
+  // time the probe runs; only a stream rejected twice in a row while reachable moves to a transcode.
+  const handleDirectSourceRejected = (video: HTMLVideoElement, src: string) => {
+    const generation = sourceGenerationRef.current;
+    const playIntent = playing || !video.paused ? "play" : "pause";
+    void serverAwareFetch(src, {
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+      timeoutMs: SOURCE_PROBE_TIMEOUT_MS,
+    })
+      .then((response) => {
+        void response.body?.cancel();
+        return response.ok;
+      })
+      .catch(() => false)
+      .then((reachable) => {
+        if (sourceGenerationRef.current !== generation || videoRef.current !== video) return;
+        if (!reachable) {
+          directRetriedGenerationRef.current = null;
+          // serverAwareFetch already reported the probe outcome to server availability.
+          recordMediaNetworkError(video, playIntent, false);
+        } else if (directRetriedGenerationRef.current !== generation) {
+          directRetriedGenerationRef.current = generation;
+          recordMediaNetworkError(video, playIntent, false);
+        } else {
+          fallbackToTranscode();
+        }
+      });
   };
 
   useEffect(() => {
@@ -1963,6 +2023,7 @@ export function VideoPlayer({
         playsInline
         {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
         onLoadedMetadata={() => {
+          directRetriedGenerationRef.current = null;
           handleVideoMetricsReady();
           recordMediaMetadataLoaded();
         }}
@@ -2125,13 +2186,15 @@ export function VideoPlayer({
             // A source the browser cannot demux fails during resource selection, which fires
             // `error` on the <source> and leaves video.error null — so the <video> onError below
             // never sees it and the player sits dead with no message. Containers such as flv,
-            // mpegts and mpeg-ps reach the user this way. Treat it as a decode failure.
+            // mpegts and mpeg-ps reach the user this way, but so does a failed request.
             if (compatibilityLookupPending || suspended) return;
             if (selectedQuality !== "Direct") return;
             // Teardown clears the src to abort in-flight downloads; that is not a playback failure.
-            if (!e.currentTarget.getAttribute("src")) return;
-            if (videoRef.current?.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE) return;
-            fallbackToTranscode();
+            const src = e.currentTarget.getAttribute("src");
+            if (!src) return;
+            const video = videoRef.current;
+            if (video?.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE) return;
+            handleDirectSourceRejected(video, src);
           }}
         />
         {captions?.map((cap, idx) => (

@@ -593,7 +593,7 @@ public class VideoRepository : IVideoRepository
 
         return sort switch
         {
-            "title" => desc ? query.OrderByDescending(s => s.Title).ThenByDescending(s => s.Id) : query.OrderBy(s => s.Title).ThenBy(s => s.Id),
+            "title" => desc ? query.OrderByDescending(s => NaturalSort.Key(s.Title)).ThenByDescending(s => s.Id) : query.OrderBy(s => NaturalSort.Key(s.Title)).ThenBy(s => s.Id),
             // Null dates sort to bottom: treat null as MinValue so they come last when desc
             "date" => desc ? query.OrderByDescending(s => s.Date ?? DateOnly.MinValue).ThenByDescending(s => s.Id) : query.OrderBy(s => s.Date ?? DateOnly.MinValue).ThenBy(s => s.Id),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), RatingHostType.Video, desc),
@@ -663,8 +663,8 @@ public class VideoRepository : IVideoRepository
     private static IQueryable<Video> ApplyPathSort(IQueryable<Video> query, bool desc)
     {
         return desc
-            ? query.OrderBy(video => video.MaxPath == null ? 1 : 0).ThenByDescending(video => video.MaxPath).ThenByDescending(video => video.Id)
-            : query.OrderBy(video => video.MinPath).ThenBy(video => video.Id);
+            ? query.OrderBy(video => video.MaxPath == null ? 1 : 0).ThenByDescending(video => NaturalSort.Key(video.MaxPath)).ThenByDescending(video => video.Id)
+            : query.OrderBy(video => NaturalSort.Key(video.MinPath)).ThenBy(video => video.Id);
     }
 
     private static IQueryable<Video> ApplyPhashSort(IQueryable<Video> query, bool desc)
@@ -716,8 +716,8 @@ public class VideoRepository : IVideoRepository
         });
 
         return desc
-            ? sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenByDescending(item => item.StudioName).ThenByDescending(item => item.Video.Id).Select(item => item.Video)
-            : sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenBy(item => item.StudioName).ThenBy(item => item.Video.Id).Select(item => item.Video);
+            ? sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenByDescending(item => NaturalSort.Key(item.StudioName)).ThenByDescending(item => item.Video.Id).Select(item => item.Video)
+            : sortQuery.OrderBy(item => item.StudioName == null ? 1 : 0).ThenBy(item => NaturalSort.Key(item.StudioName)).ThenBy(item => item.Video.Id).Select(item => item.Video);
     }
 
     private static IQueryable<Video> ApplyStudioCodeSort(IQueryable<Video> query, bool desc)
@@ -729,8 +729,8 @@ public class VideoRepository : IVideoRepository
         });
 
         return desc
-            ? sortQuery.OrderBy(item => item.Code == null ? 1 : 0).ThenByDescending(item => item.Code).ThenByDescending(item => item.Video.Id).Select(item => item.Video)
-            : sortQuery.OrderBy(item => item.Code == null ? 1 : 0).ThenBy(item => item.Code).ThenBy(item => item.Video.Id).Select(item => item.Video);
+            ? sortQuery.OrderBy(item => item.Code == null ? 1 : 0).ThenByDescending(item => NaturalSort.Key(item.Code)).ThenByDescending(item => item.Video.Id).Select(item => item.Video)
+            : sortQuery.OrderBy(item => item.Code == null ? 1 : 0).ThenBy(item => NaturalSort.Key(item.Code)).ThenBy(item => item.Video.Id).Select(item => item.Video);
     }
 
     private static IQueryable<Video> ApplyPerformerAgeSort(IQueryable<Video> query, bool desc)

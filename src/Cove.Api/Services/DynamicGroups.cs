@@ -742,8 +742,8 @@ public sealed class FilterDynamicGroupSource(CoveContext db, IVideoRepository vi
         query = (findFilter.Sort ?? "created_at") switch
         {
             "title" => desc
-                ? query.OrderByDescending(segment => segment.Title ?? (segment.Tag != null ? segment.Tag.Name : null) ?? segment.Kind).ThenByDescending(segment => segment.Id)
-                : query.OrderBy(segment => segment.Title ?? (segment.Tag != null ? segment.Tag.Name : null) ?? segment.Kind).ThenBy(segment => segment.Id),
+                ? query.OrderByDescending(segment => NaturalSort.Key(segment.Title ?? (segment.Tag != null ? segment.Tag.Name : null) ?? segment.Kind)).ThenByDescending(segment => segment.Id)
+                : query.OrderBy(segment => NaturalSort.Key(segment.Title ?? (segment.Tag != null ? segment.Tag.Name : null) ?? segment.Kind)).ThenBy(segment => segment.Id),
             "start" or "start_sec" => desc
                 ? query.OrderByDescending(segment => segment.StartSec).ThenByDescending(segment => segment.Id)
                 : query.OrderBy(segment => segment.StartSec).ThenBy(segment => segment.Id),
@@ -763,8 +763,8 @@ public sealed class FilterDynamicGroupSource(CoveContext db, IVideoRepository vi
                 ? query.OrderByDescending(segment => segment.SourceKey).ThenByDescending(segment => segment.Id)
                 : query.OrderBy(segment => segment.SourceKey).ThenBy(segment => segment.Id),
             "tag_name" => desc
-                ? query.OrderByDescending(segment => segment.Tag != null ? segment.Tag.Name : string.Empty).ThenByDescending(segment => segment.Id)
-                : query.OrderBy(segment => segment.Tag != null ? segment.Tag.Name : string.Empty).ThenBy(segment => segment.Id),
+                ? query.OrderByDescending(segment => NaturalSort.Key(segment.Tag != null ? segment.Tag.Name : string.Empty)).ThenByDescending(segment => segment.Id)
+                : query.OrderBy(segment => NaturalSort.Key(segment.Tag != null ? segment.Tag.Name : string.Empty)).ThenBy(segment => segment.Id),
             "performer" or "segment_performer" => desc
                 ? query.OrderByDescending(segment => segment.Kind != null && segment.Kind.ToLower() == "performer"
                     ? db.Performers.Where(performer => segment.RefId.HasValue && (long)performer.Id == segment.RefId.Value).Select(performer => performer.Name).FirstOrDefault()
@@ -1625,7 +1625,7 @@ public sealed class FilterDynamicGroupSource(CoveContext db, IVideoRepository vi
 
         return (sort ?? "updated_at") switch
         {
-            "title" => desc ? query.OrderByDescending(audio => audio.Title ?? audio.MinPath).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Title ?? audio.MinPath).ThenBy(audio => audio.Id),
+            "title" => desc ? query.OrderByDescending(audio => NaturalSort.Key(audio.Title ?? audio.MinPath)).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => NaturalSort.Key(audio.Title ?? audio.MinPath)).ThenBy(audio => audio.Id),
             "date" => desc ? query.OrderByDescending(audio => audio.Date ?? DateOnly.MinValue).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Date ?? DateOnly.MinValue).ThenBy(audio => audio.Id),
             "duration" => desc ? query.OrderByDescending(audio => audio.MaxDuration).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxDuration).ThenBy(audio => audio.Id),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(db, query, EngagementQueryHelpers.CurrentUserId(db), RatingHostType.Audio, desc),
@@ -1635,7 +1635,7 @@ public sealed class FilterDynamicGroupSource(CoveContext db, IVideoRepository vi
             "file_size" => desc ? query.OrderByDescending(audio => audio.MaxFileSize).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxFileSize).ThenBy(audio => audio.Id),
             "file_mod_time" => desc ? query.OrderByDescending(audio => audio.MaxFileModTime).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxFileModTime).ThenBy(audio => audio.Id),
             "file_count" => desc ? query.OrderByDescending(audio => audio.FileCount).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.FileCount).ThenBy(audio => audio.Id),
-            "path" => desc ? query.OrderByDescending(audio => audio.MaxPath).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MinPath).ThenBy(audio => audio.Id),
+            "path" => desc ? query.OrderByDescending(audio => NaturalSort.Key(audio.MaxPath)).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => NaturalSort.Key(audio.MinPath)).ThenBy(audio => audio.Id),
             "bitrate" or "bit_rate" => desc ? query.OrderByDescending(audio => audio.MaxBitRate).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxBitRate).ThenBy(audio => audio.Id),
             "track_count" => desc ? query.OrderByDescending(audio => audio.Tracks.Count).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Tracks.Count).ThenBy(audio => audio.Id),
             "tag_count" => desc ? query.OrderByDescending(audio => audio.AudioTags.Count).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.AudioTags.Count).ThenBy(audio => audio.Id),
@@ -1652,7 +1652,7 @@ public sealed class FilterDynamicGroupSource(CoveContext db, IVideoRepository vi
 
         return (sort ?? "updated_at") switch
         {
-            "title" => desc ? query.OrderByDescending(text => text.Title ?? text.MinPath).ThenByDescending(text => text.Id) : query.OrderBy(text => text.Title ?? text.MinPath).ThenBy(text => text.Id),
+            "title" => desc ? query.OrderByDescending(text => NaturalSort.Key(text.Title ?? text.MinPath)).ThenByDescending(text => text.Id) : query.OrderBy(text => NaturalSort.Key(text.Title ?? text.MinPath)).ThenBy(text => text.Id),
             "date" => desc ? query.OrderByDescending(text => text.Date ?? DateOnly.MinValue).ThenByDescending(text => text.Id) : query.OrderBy(text => text.Date ?? DateOnly.MinValue).ThenBy(text => text.Id),
             "word_count" or "words" => desc ? query.OrderByDescending(text => text.MaxWordCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxWordCount).ThenBy(text => text.Id),
             "pages" or "page_count" => desc ? query.OrderByDescending(text => text.MaxPageCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxPageCount).ThenBy(text => text.Id),
@@ -1663,7 +1663,7 @@ public sealed class FilterDynamicGroupSource(CoveContext db, IVideoRepository vi
             "file_size" => desc ? query.OrderByDescending(text => text.MaxFileSize).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxFileSize).ThenBy(text => text.Id),
             "file_mod_time" => desc ? query.OrderByDescending(text => text.MaxFileModTime).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxFileModTime).ThenBy(text => text.Id),
             "file_count" => desc ? query.OrderByDescending(text => text.FileCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.FileCount).ThenBy(text => text.Id),
-            "path" => desc ? query.OrderByDescending(text => text.MaxPath).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MinPath).ThenBy(text => text.Id),
+            "path" => desc ? query.OrderByDescending(text => NaturalSort.Key(text.MaxPath)).ThenByDescending(text => text.Id) : query.OrderBy(text => NaturalSort.Key(text.MinPath)).ThenBy(text => text.Id),
             "tag_count" => desc ? query.OrderByDescending(text => text.TextTags.Count).ThenByDescending(text => text.Id) : query.OrderBy(text => text.TextTags.Count).ThenBy(text => text.Id),
             "performer_count" => desc ? query.OrderByDescending(text => text.TextPerformers.Count).ThenByDescending(text => text.Id) : query.OrderBy(text => text.TextPerformers.Count).ThenBy(text => text.Id),
             "created_at" => desc ? query.OrderByDescending(text => text.CreatedAt).ThenByDescending(text => text.Id) : query.OrderBy(text => text.CreatedAt).ThenBy(text => text.Id),

@@ -434,17 +434,27 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Password changed; please log in again." });
     }
 
-    private void WriteAccessCookie(string token, DateTime expiresUtc)
+    private void WriteAccessCookie(string token, DateTime expiresUtc) =>
+        Response.Cookies.Append(AccessCookieName, token, AccessCookieOptions(expiresUtc, DateTime.UtcNow, Request.IsHttps));
+
+    /// <summary>
+    /// The access cookie carries the same token that API calls send in the Authorization header, and
+    /// media, images and extension bundles can only authenticate with the cookie. A relative Max-Age
+    /// covering the token's remaining lifetime plus the validation clock skew keeps the cookie for
+    /// exactly as long as the server accepts the token, independent of the browser's clock.
+    /// </summary>
+    internal static CookieOptions AccessCookieOptions(DateTime expiresUtc, DateTime nowUtc, bool isHttps)
     {
-        Response.Cookies.Append(AccessCookieName, token, new CookieOptions
+        var remaining = DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc) - DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
+        return new CookieOptions
         {
             HttpOnly = true,
             IsEssential = true,
             SameSite = SameSiteMode.Strict,
-            Secure = Request.IsHttps,
+            Secure = isHttps,
             Path = "/",
-            Expires = new DateTimeOffset(DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc)),
-        });
+            MaxAge = (remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero) + TokenService.AccessTokenClockSkew,
+        };
     }
 
     private void ClearAccessCookie()

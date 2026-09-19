@@ -345,16 +345,20 @@ public class StreamController(IStreamService streamService, IThumbnailService th
     }
 
     [HttpGet("video/{videoId:int}/hls/{profile}.m3u8")]
-    public async Task<IActionResult> GetHlsPlaylist(int videoId, string profile, CancellationToken ct, [FromQuery] int? fileId = null)
+    public async Task<IActionResult> GetHlsPlaylist(int videoId, string profile, CancellationToken ct, [FromQuery] int? fileId = null, [FromQuery] double? start = null)
     {
+        // The profile becomes an output path and an ffmpeg argument, so only known ladder names pass.
+        if (!TranscodeService.IsHlsProfile(profile)) return NotFound();
+
         var selected = await GetVideoFileAsync(videoId, fileId, ct);
         if (selected is null) return NotFound();
         var filePath = FilesystemPaths.ToNativePath(selected.Path);
         if (!System.IO.File.Exists(filePath)) return NotFound();
 
         var resolution = profile == "original" ? null : profile;
+        var startSeconds = start.HasValue && double.IsFinite(start.Value) ? Math.Max(0, start.Value) : 0;
         var cacheId = -selected.Id;
-        var manifest = await transcodeService.GenerateHlsManifestAsync(cacheId, filePath, resolution, ct);
+        var manifest = await transcodeService.GenerateHlsManifestAsync(cacheId, filePath, resolution, startSeconds, ct);
         if (manifest == null) return StatusCode(503, "HLS generation failed — FFmpeg not found or error occurred");
 
         manifest = RewriteHlsSegmentUrls(manifest, videoId, resolution ?? "original", selected.Id);

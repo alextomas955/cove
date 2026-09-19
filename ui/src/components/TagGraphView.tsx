@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import type { TagGraphLink, TagGraphNode } from "../api/types";
 import { createRouteLinkProps } from "./cardNavigation";
+import { compareNatural } from "../utils/naturalCompare";
 
 interface Props {
   nodes: TagGraphNode[];
@@ -262,7 +263,7 @@ function createTouchPinchState(
 }
 
 function sortByName(left: TagGraphNode, right: TagGraphNode) {
-  return left.name.localeCompare(right.name);
+  return compareNatural(left.name, right.name);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -806,7 +807,7 @@ export function TagGraphView({
           right.childIds.filter((childId) => groupMemberIds.has(childId)).length -
             left.childIds.filter((childId) => groupMemberIds.has(childId)).length ||
           right.totalUsageCount - left.totalUsageCount ||
-          left.name.localeCompare(right.name),
+          compareNatural(left.name, right.name),
       )[0];
       if (!anchor) return;
       groupAnchorIdByGroupId.set(groupId, anchor.id);
@@ -837,7 +838,7 @@ export function TagGraphView({
         (left, right) =>
           right.memberIds.length - left.memberIds.length ||
           right.anchor.childIds.length - left.anchor.childIds.length ||
-          left.anchor.name.localeCompare(right.anchor.name),
+          compareNatural(left.anchor.name, right.anchor.name),
       );
 
     const clusterLayoutNodes: ClusterLayoutNode[] = clusters.map((cluster, index) => {
@@ -1211,7 +1212,7 @@ export function TagGraphView({
         (node) =>
           node.name.toLowerCase().includes(searchQuery) || (node.description ?? "").toLowerCase().includes(searchQuery),
       )
-      .sort((left, right) => right.totalUsageCount - left.totalUsageCount || left.name.localeCompare(right.name))
+      .sort((left, right) => right.totalUsageCount - left.totalUsageCount || compareNatural(left.name, right.name))
       .slice(0, 10);
   }, [graph.layoutNodes, searchQuery]);
 

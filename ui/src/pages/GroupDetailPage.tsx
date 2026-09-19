@@ -116,6 +116,7 @@ import { getLoadError, isApiNotFoundError } from "../utils/queryLoadState";
 import { sortSeededRandom } from "../utils/seededRandomSort";
 import { parseDateFilterValue } from "../utils/relativeDate";
 import { useDetailListUrlState } from "../hooks/useDetailListUrlState";
+import { compareNatural } from "../utils/naturalCompare";
 
 interface Props {
   id: number;
@@ -1974,7 +1975,7 @@ function compareOptionalStrings(left?: string | null, right?: string | null) {
   if (!normalizedLeft && !normalizedRight) return 0;
   if (!normalizedLeft) return 1;
   if (!normalizedRight) return -1;
-  return normalizedLeft.localeCompare(normalizedRight, undefined, { numeric: true, sensitivity: "base" });
+  return compareNatural(normalizedLeft, normalizedRight);
 }
 
 function compareOptionalNumbers(left?: number | null, right?: number | null) {

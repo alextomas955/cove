@@ -290,11 +290,16 @@ async function refreshIfCurrent(rejectedAccessToken: string): Promise<boolean> {
       }
     }
     if (!res.ok) {
-      authStore.clear();
+      // Only a rejected refresh token ends the session. A rate limit or server error during a
+      // proactive refresh must not sign the user out; a request that then 401s still does.
+      if (res.status === 401 || res.status === 403) authStore.clear();
       return false;
     }
     const body = (await res.json()) as { token?: string; refreshToken?: string };
     if (!body.token) return false;
+    // A logout (or another page's rotation) while this request was in flight wins; restoring these
+    // tokens would revive a session the user just ended.
+    if (authStore.getRefreshToken() !== refresh) return authStore.getAccessToken() !== null;
     authStore.setTokens(body.token, body.refreshToken ?? refresh);
     return true;
   } catch {
@@ -323,6 +328,56 @@ async function tryRefresh(rejectedAccessToken: string): Promise<boolean> {
   } finally {
     refreshInFlight = null;
   }
+}
+
+// Media, images and extension bundles authenticate through the `cove_access_token` cookie, which
+// lapses when the token expires. The server keeps accepting the same token in the Authorization
+// header for a short clock skew after that, so refreshing only on a 401 leaves a window where API
+// calls succeed while every cookie-authenticated request is rejected — a page loaded then cannot
+// import any extension bundle. Refreshing ahead of expiry closes that window.
+const ACCESS_REFRESH_LEAD_MS = 60_000;
+
+function decodeJwtPayload(token: string): { iat?: unknown; exp?: unknown } | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4))) as { iat?: unknown; exp?: unknown };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Local epoch milliseconds at which the access token should be refreshed, or null if it has no
+ * expiry. With the time the token arrived, the schedule follows the token's lifetime on the local
+ * clock, so a client clock that is ahead of or behind the server neither refreshes too early nor
+ * too late. Without it, the server's expiry is compared against the local clock directly.
+ */
+export function accessTokenRefreshDueAt(token: string, receivedAt: number | null): number | null {
+  const payload = decodeJwtPayload(token);
+  if (typeof payload?.exp !== "number") return null;
+  const expiresAt = payload.exp * 1000;
+  if (typeof payload.iat !== "number") return expiresAt - ACCESS_REFRESH_LEAD_MS;
+  const lifetime = Math.max(0, expiresAt - payload.iat * 1000);
+  // Keep short-lived tokens usable for at least half their lifetime.
+  const lead = Math.min(ACCESS_REFRESH_LEAD_MS, lifetime / 2);
+  return receivedAt === null ? expiresAt - lead : receivedAt + lifetime - lead;
+}
+
+/** When the current bearer session should next be refreshed, or null when there is nothing to refresh. */
+export function nextAccessTokenRefreshAt(): number | null {
+  if (authStore.getShareToken() || !authStore.getRefreshToken()) return null;
+  const token = authStore.getAccessToken();
+  return token ? accessTokenRefreshDueAt(token, authStore.getAccessTokenReceivedAt()) : null;
+}
+
+/** Refreshes the bearer session when its access token is close to expiry, renewing the cookie too. */
+export async function refreshAccessTokenIfDue(): Promise<void> {
+  const token = authStore.getAccessToken();
+  const dueAt = nextAccessTokenRefreshAt();
+  if (!token || dueAt === null || Date.now() < dueAt) return;
+  await tryRefresh(token);
 }
 
 export async function authedFetch(input: string, init?: ServerAwareFetchOptions): Promise<Response> {
@@ -641,6 +696,11 @@ export const videos = {
   transcodeUrl: (id: number, resolution?: string, start?: number, fileId?: number) =>
     buildMediaUrl(`/stream/video/${id}/transcode`, undefined, undefined, { resolution, start, fileId }),
   hlsMasterUrl: (id: number) => buildMediaUrl(`/stream/video/${id}/hls/master.m3u8`),
+  hlsPlaylistUrl: (id: number, profile: string, start?: number, fileId?: number) =>
+    buildMediaUrl(`/stream/video/${id}/hls/${encodeURIComponent(profile)}.m3u8`, undefined, undefined, {
+      start,
+      fileId,
+    }),
   getResolutions: (id: number, fileId?: number) =>
     request<string[]>(`/stream/video/${id}/resolutions${fileId == null ? "" : `?fileId=${fileId}`}`),
   segments: {
