@@ -56,6 +56,7 @@ import {
   Loader2,
   Scissors,
   AlertTriangle,
+  FileVideoCamera,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, Fragment, useMemo, lazy, Suspense } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -172,6 +173,9 @@ function phashVideosLinkProps(value: string, onNavigate?: (route: ReturnType<typ
 
 const GenerateDialog = lazy(() =>
   import("../components/GenerateDialog").then((module) => ({ default: module.GenerateDialog })),
+);
+const ConvertVideosDialog = lazy(() =>
+  import("../components/ConvertVideosDialog").then((module) => ({ default: module.ConvertVideosDialog })),
 );
 const DetailMergeDialog = lazy(() =>
   import("../components/DetailMergeDialog").then((module) => ({ default: module.DetailMergeDialog })),
@@ -364,6 +368,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
   const { getTabsForPage, getExtensionRevision, resolveComponent: resolveExtComponent, getFeature } = useExtensions();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
   const [showOpsMenu, setShowOpsMenu] = useState(false);
   const [showQueuePanel, setShowQueuePanel] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
@@ -1058,6 +1063,17 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
               <Clapperboard className="h-3.5 w-3.5" /> Generate…
             </button>
           ) : null}
+          {canGenerateVideo ? (
+            <button
+              onClick={() => {
+                setShowConvert(true);
+                setShowOpsMenu(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface"
+            >
+              <FileVideoCamera className="h-3.5 w-3.5" /> Convert…
+            </button>
+          ) : null}
           {canWriteVideo ? (
             <button
               onClick={() => {
@@ -1361,6 +1377,15 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
             onClose={() => setShowGenerate(false)}
             videoIds={[id]}
             title={`Generate for "${video.title || "Untitled"}"`}
+          />
+        ) : null}
+        {showConvert ? (
+          <ConvertVideosDialog
+            open
+            onClose={() => setShowConvert(false)}
+            videoIds={[id]}
+            canReplaceOriginals={canDeleteVideoFiles}
+            title={`Convert "${video.title || video.files[0]?.basename || "Untitled"}"`}
           />
         ) : null}
         {showDownloadDialog ? (

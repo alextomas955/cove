@@ -48,11 +48,82 @@ internal static class FfmpegHwAccel
     /// accelerator is honored (falling back to libx264 if it cannot open a session); "auto"/"none"/empty
     /// auto-detects the best available. Every candidate is verified with a real test encode first.</summary>
     public static string SelectH264Encoder(string ffmpegPath, string? hwAccelPref, ILogger logger)
+        => SelectEncoder(ffmpegPath, hwAccelPref, HardwareEncoders, "libx264", "H.264", logger);
+
+    /// <summary>The hardware encoders per output codec, keyed by the same accelerator names as
+    /// <see cref="HardwareEncoders"/> and in the same preference order. AV1 is limited to NVENC: the other
+    /// vendors' AV1 encoders use quality scales that differ from the CRF-style value Cove passes, so AV1
+    /// on those machines encodes in software instead.</summary>
+    public static IReadOnlyList<(string Accelerator, string Encoder)> HardwareEncodersFor(VideoConversionCodec codec) => codec switch
+    {
+        VideoConversionCodec.H264 => HardwareEncoders,
+        VideoConversionCodec.Hevc =>
+        [
+            ("nvenc", "hevc_nvenc"),
+            ("qsv", "hevc_qsv"),
+            ("vaapi", "hevc_vaapi"),
+            ("amf", "hevc_amf"),
+            ("videotoolbox", "hevc_videotoolbox"),
+        ],
+        VideoConversionCodec.Av1 => [("nvenc", "av1_nvenc")],
+        _ => [],
+    };
+
+    /// <summary>The software encoder Cove uses for a codec when no hardware encoder is usable.</summary>
+    public static string SoftwareEncoderFor(VideoConversionCodec codec) => codec switch
+    {
+        VideoConversionCodec.H264 => "libx264",
+        VideoConversionCodec.Hevc => "libx265",
+        VideoConversionCodec.Av1 => "libsvtav1",
+        _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, "Stream copy has no encoder."),
+    };
+
+    public static bool IsSoftwareEncoder(string encoder) => encoder is "libx264" or "libx265" or "libsvtav1";
+
+    /// <summary>
+    /// Picks the encoder for <paramref name="codec"/> under the hardware-acceleration policy, exactly as
+    /// <see cref="SelectH264Encoder"/> does for H.264. Unlike libx264, the HEVC and AV1 software encoders are
+    /// optional in ffmpeg builds, so this returns null when neither a verified hardware encoder nor the
+    /// software encoder is available, rather than naming an encoder that cannot run.
+    /// </summary>
+    public static string? SelectConversionEncoder(string ffmpegPath, VideoConversionCodec codec, string? hwAccelPref, ILogger logger)
+    {
+        var software = SoftwareEncoderFor(codec);
+        var selected = SelectEncoder(ffmpegPath, hwAccelPref, HardwareEncodersFor(codec), software, CodecLabel(codec), logger);
+        if (selected != software)
+            return selected;
+
+        try
+        {
+            return ListEncoders(ffmpegPath).Contains(software, StringComparer.OrdinalIgnoreCase) ? software : null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not list ffmpeg encoders to check for {Encoder}", software);
+            return null;
+        }
+    }
+
+    public static string CodecLabel(VideoConversionCodec codec) => codec switch
+    {
+        VideoConversionCodec.H264 => "H.264",
+        VideoConversionCodec.Hevc => "HEVC",
+        VideoConversionCodec.Av1 => "AV1",
+        _ => "original codec",
+    };
+
+    private static string SelectEncoder(
+        string ffmpegPath,
+        string? hwAccelPref,
+        IReadOnlyList<(string Accelerator, string Encoder)> hardwareEncoders,
+        string softwareEncoder,
+        string codecLabel,
+        ILogger logger)
     {
         if (IsHardwareAccelerationOff(hwAccelPref))
         {
-            logger.LogInformation("Hardware acceleration is off; using software H.264 encoder: libx264");
-            return "libx264";
+            logger.LogInformation("Hardware acceleration is off; using software {Codec} encoder: {Encoder}", codecLabel, softwareEncoder);
+            return softwareEncoder;
         }
 
         try
@@ -61,33 +132,43 @@ internal static class FfmpegHwAccel
 
             // If the user pinned a specific accelerator, honor that choice rather than silently
             // substituting a different vendor's encoder.
-            var pinned = PinnedH264Encoder(hwAccelPref);
-            if (pinned != null)
+            var pref = hwAccelPref?.Trim().ToLowerInvariant();
+            var pinnedAccelerator = HardwareEncoders.Any(item => item.Accelerator == pref) ? pref : null;
+            if (pinnedAccelerator != null)
             {
+                var pinned = hardwareEncoders.FirstOrDefault(item => item.Accelerator == pinnedAccelerator).Encoder;
+                if (pinned == null)
+                {
+                    logger.LogInformation(
+                        "Configured accelerator {Accel} has no {Codec} encoder Cove uses; using software encoder {Encoder}.",
+                        pinnedAccelerator, codecLabel, softwareEncoder);
+                    return softwareEncoder;
+                }
+
                 if (!listed.Contains(pinned, StringComparer.OrdinalIgnoreCase))
                 {
                     logger.LogWarning(
-                        "Configured HW encoder {Encoder} is not built into this ffmpeg ({FfmpegPath}); falling back to libx264.",
-                        pinned, ffmpegPath);
-                    return "libx264";
+                        "Configured HW encoder {Encoder} is not built into this ffmpeg ({FfmpegPath}); falling back to {Software}.",
+                        pinned, ffmpegPath, softwareEncoder);
+                    return softwareEncoder;
                 }
 
                 if (!ProbeEncoder(ffmpegPath, pinned, out var pinnedError))
                 {
                     logger.LogWarning(
-                        "Configured HW encoder {Encoder} is present but a test encode failed ({Error}); falling back to libx264.",
-                        pinned, pinnedError);
-                    return "libx264";
+                        "Configured HW encoder {Encoder} is present but a test encode failed ({Error}); falling back to {Software}.",
+                        pinned, pinnedError, softwareEncoder);
+                    return softwareEncoder;
                 }
 
-                logger.LogInformation("Using configured HW-accelerated H.264 encoder: {Encoder}", pinned);
+                logger.LogInformation("Using configured HW-accelerated {Codec} encoder: {Encoder}", codecLabel, pinned);
                 return pinned;
             }
 
             // Auto-detect in preference order. Verify each candidate with an actual test encode;
             // presence in the encoder list does not guarantee the runtime can open a session (e.g.
             // an NVENC driver/library mismatch).
-            foreach (var (accel, enc) in HardwareEncoders)
+            foreach (var (accel, enc) in hardwareEncoders)
             {
                 if (!listed.Contains(enc, StringComparer.OrdinalIgnoreCase)) continue;
                 if (!ProbeEncoder(ffmpegPath, enc, out var probeError))
@@ -96,17 +177,17 @@ internal static class FfmpegHwAccel
                     continue;
                 }
 
-                logger.LogInformation("Auto-selected HW-accelerated H.264 encoder: {Encoder} ({Accel})", enc, accel);
+                logger.LogInformation("Auto-selected HW-accelerated {Codec} encoder: {Encoder} ({Accel})", codecLabel, enc, accel);
                 return enc;
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to detect HW encoders, falling back to libx264");
+            logger.LogWarning(ex, "Failed to detect HW encoders, falling back to {Software}", softwareEncoder);
         }
 
-        logger.LogInformation("No usable hardware encoder; using software H.264 encoder: libx264");
-        return "libx264";
+        logger.LogInformation("No usable hardware encoder; using software {Codec} encoder: {Encoder}", codecLabel, softwareEncoder);
+        return softwareEncoder;
     }
 
     /// <summary>Returns the accelerator names (nvenc/qsv/vaapi/amf/videotoolbox) whose H.264 encoder is
@@ -180,11 +261,64 @@ internal static class FfmpegHwAccel
         };
     }
 
+    /// <summary>
+    /// The <c>-c:v ...</c> arguments for a library conversion encode (see <see cref="VideoConversionPlanner"/>).
+    /// <paramref name="quality"/> is on the codec's CRF-style scale (lower = better) and is passed as each
+    /// encoder family's constant-quality knob; <paramref name="speed"/> maps to that family's preset
+    /// vocabulary. <paramref name="tenBit"/> keeps a 10-bit source 10-bit for HEVC/AV1; H.264 output is
+    /// always 8-bit 4:2:0 because browsers and Safari's hardware decoder reject High 10.
+    /// </summary>
+    public static string ConversionVideoEncodeArgs(string encoder, int quality, VideoConversionSpeed speed, bool tenBit)
+    {
+        var isH264 = encoder.StartsWith("h264_", StringComparison.Ordinal) || encoder == "libx264";
+        var keepTenBit = tenBit && !isH264;
+        var isHevc = encoder.StartsWith("hevc_", StringComparison.Ordinal) || encoder == "libx265";
+
+        return encoder switch
+        {
+            "libx264" or "libx265" =>
+                $"-c:v {encoder} -preset {speed switch { VideoConversionSpeed.Fast => "veryfast", VideoConversionSpeed.Slow => "slow", _ => "medium" }} -crf {quality}"
+                + (encoder == "libx265" ? " -x265-params log-level=error" : string.Empty)
+                + $" -pix_fmt {(keepTenBit ? "yuv420p10le" : "yuv420p")}",
+            "libsvtav1" =>
+                $"-c:v libsvtav1 -preset {speed switch { VideoConversionSpeed.Fast => 10, VideoConversionSpeed.Slow => 5, _ => 7 }} -crf {quality}"
+                + $" -pix_fmt {(keepTenBit ? "yuv420p10le" : "yuv420p")}",
+            _ when encoder.EndsWith("_nvenc", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -preset {speed switch { VideoConversionSpeed.Fast => "p2", VideoConversionSpeed.Slow => "p7", _ => "p5" }} -tune hq -rc vbr -cq {quality} -b:v 0"
+                + (keepTenBit ? " -pix_fmt p010le" + (isHevc ? " -profile:v main10" : string.Empty) : " -pix_fmt yuv420p"),
+            _ when encoder.EndsWith("_qsv", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -preset {speed switch { VideoConversionSpeed.Fast => "veryfast", VideoConversionSpeed.Slow => "veryslow", _ => "medium" }} -global_quality {quality}"
+                + $" -pix_fmt {(keepTenBit ? "p010le" : "nv12")}",
+            _ when encoder.EndsWith("_amf", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -quality {speed switch { VideoConversionSpeed.Fast => "speed", VideoConversionSpeed.Slow => "quality", _ => "balanced" }} -rc cqp -qp_i {quality} -qp_p {quality}"
+                + (isH264 ? $" -qp_b {quality}" : string.Empty)
+                + $" -pix_fmt {(keepTenBit ? "p010le" : "nv12")}",
+            // VAAPI encodes from GPU surfaces; ConversionVideoFilter uploads the frames in the right format.
+            _ when encoder.EndsWith("_vaapi", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -rc_mode CQP -qp {quality}" + (keepTenBit && isHevc ? " -profile:v main10" : string.Empty),
+            _ when encoder.EndsWith("_videotoolbox", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -q:v {Math.Clamp(65 - quality, 1, 100)}"
+                + (keepTenBit ? " -pix_fmt p010le" + (isHevc ? " -profile:v main10" : string.Empty) : " -pix_fmt yuv420p"),
+            _ => throw new ArgumentOutOfRangeException(nameof(encoder), encoder, "Not an encoder Cove converts with."),
+        };
+    }
+
+    /// <summary>The <c>-vf</c> argument a conversion encode needs, or an empty string. Only VAAPI needs one:
+    /// it encodes from GPU surfaces, so frames are converted and uploaded first.</summary>
+    public static string ConversionVideoFilter(string encoder, bool tenBit)
+    {
+        if (!encoder.EndsWith("_vaapi", StringComparison.Ordinal))
+            return string.Empty;
+
+        var keepTenBit = tenBit && encoder != "h264_vaapi";
+        return $"-vf \"format={(keepTenBit ? "p010" : "nv12")},hwupload\"";
+    }
+
     /// <summary>Returns extra input-side arguments required by the chosen encoder (e.g. the VAAPI
     /// device), or an empty string. Decoding stays in software by default; only the encoder's own
     /// device setup is added here.</summary>
     public static string InputArgsForEncoder(string encoder) =>
-        encoder == "h264_vaapi" ? "-vaapi_device /dev/dri/renderD128" : string.Empty;
+        encoder.EndsWith("_vaapi", StringComparison.Ordinal) ? "-vaapi_device /dev/dri/renderD128" : string.Empty;
 
     /// <summary>Builds the <c>-vf</c> argument for a software-decoded → hardware-encoded pipeline.
     /// <paramref name="scaleChain"/> is the software filter chain (may be empty). VAAPI requires the

@@ -1991,6 +1991,33 @@ export interface GenerateOptions {
   paths?: string[];
 }
 
+export type VideoConversionCodec = "h264" | "hevc" | "av1" | "copy";
+
+export interface VideoConversionOptions {
+  videoIds: number[];
+  codec: VideoConversionCodec;
+  container: "mp4" | "mkv";
+  quality: "high" | "balanced" | "small";
+  speed: "fast" | "balanced" | "slow";
+  /** Verify each converted file, make it primary and delete the original from disk. */
+  replaceOriginal: boolean;
+  /** Throw a re-encoded file away when it is not smaller than the original. */
+  discardIfLarger: boolean;
+}
+
+export interface VideoConversionEncoderInfo {
+  codec: Exclude<VideoConversionCodec, "copy">;
+  /** The ffmpeg encoder a conversion would use, or null when this ffmpeg cannot encode the codec. */
+  encoder: string | null;
+  hardware: boolean;
+}
+
+export const videoConversion = {
+  encoders: () => request<VideoConversionEncoderInfo[]>("/video-conversion/encoders"),
+  start: (opts: VideoConversionOptions) =>
+    request<{ jobId: string; itemCount: number }>("/video-conversion", { method: "POST", body: JSON.stringify(opts) }),
+};
+
 export interface LibraryFolder {
   name: string;
   path: string;
