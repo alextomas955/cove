@@ -21,6 +21,7 @@ import {
   NoDownloaderFoundError,
   type UrlDownloadMode,
 } from "../utils/createFromUrlDownload";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
 import { useFileBackedCreatePreferences } from "../hooks/useFileBackedCreatePreferences";
 import { ImageSourceDownloadDialog } from "../components/ImageSourceDownloadDialog";
 
@@ -193,9 +194,12 @@ function ImageMetadataModal({
   renderMode = "modal",
 }: ImageMetadataModalProps) {
   const [form, setForm] = useState<ImageFormState>(() => cloneFormState(initialState));
+  // The state the form was last filled from; saving an edit sends only the fields changed since.
+  const [baselineState, setBaselineState] = useState<ImageFormState>(initialState);
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   useEffect(() => {
     if (!open) return;
+    setBaselineState(initialState);
     setForm(cloneFormState(initialState));
     setCustomFieldsValid(true);
   }, [initialState, open, resetSignal]);
@@ -209,7 +213,7 @@ function ImageMetadataModal({
     secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
   }));
 
-  const buildPayload = (): ImageCreate & { clearFields?: string[] } => {
+  const buildPayload = (form: ImageFormState): ImageCreate & { clearFields?: string[] } => {
     const urlList = form.urls.map((url) => url.trim()).filter(Boolean);
     // On edit, send raw (trimmed) strings including "" so cleared fields persist.
     // On create, omit empties to avoid sending empty noise.
@@ -246,7 +250,7 @@ function ImageMetadataModal({
   };
 
   const handleSave = () => {
-    const payload = buildPayload();
+    const payload = buildPayload(form);
     if (sourceMode === "file" && onCreateFromFile) {
       const trimmedPath = filePath.trim();
       if (trimmedPath) onCreateFromFile(trimmedPath, payload, form.contextTagIdsByPerformer, form.selectedPerformerIds);
@@ -267,13 +271,17 @@ function ImageMetadataModal({
       return;
     }
 
-    onSubmit(payload, form.contextTagIdsByPerformer, form.selectedPerformerIds);
+    onSubmit(
+      image ? changedUpdateFields(buildPayload(baselineState), payload) : payload,
+      form.contextTagIdsByPerformer,
+      form.selectedPerformerIds,
+    );
   };
 
   const handleCreateWithoutDownload = () => {
     const requestedUrl = url.trim();
     if (requestedUrl && onCreateWithoutDownload) {
-      const payload = buildPayload();
+      const payload = buildPayload(form);
       onCreateWithoutDownload(
         { ...payload, urls: mergeUrlLists(payload.urls, [requestedUrl]) },
         form.contextTagIdsByPerformer,

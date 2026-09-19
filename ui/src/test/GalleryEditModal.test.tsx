@@ -110,15 +110,27 @@ describe("GalleryEditModal", () => {
     expect(dateInput).toHaveAttribute("type", "text");
     expect(dateInput).toHaveAttribute("placeholder", "yyyy-MM-dd");
 
+    fireEvent.change(dateInput, { target: { value: "2026-06" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
 
     const [galleryId, payload] = mockGalleries.update.mock.calls[0];
     expect(galleryId).toBe(21);
-    expect(payload).not.toHaveProperty("rating");
-    expect(payload).not.toHaveProperty("organized");
-    expect(payload).toHaveProperty("date", "2026-05-01");
+    expect(payload).toEqual({ date: "2026-06" });
+  });
+
+  it("sends only the fields the user changed", async () => {
+    mockGalleries.update.mockResolvedValue({});
+
+    renderModal();
+
+    fireEvent.change(screen.getByDisplayValue("Summer Set"), { target: { value: "Renamed Set" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
+    // Untouched relations are omitted so a stale copy cannot revert links changed elsewhere.
+    expect(mockGalleries.update.mock.calls[0][1]).toEqual({ title: "Renamed Set" });
   });
 
   it("adds video relationships and refreshes the gallery videos", async () => {
@@ -167,11 +179,11 @@ describe("GalleryEditModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
-    expect(mockGalleries.update.mock.calls[0][1]).toEqual(
-      expect.objectContaining({
-        clearFields: ["date", "studioId"],
-      }),
-    );
+    expect(mockGalleries.update.mock.calls[0][1]).toEqual({
+      date: undefined,
+      studioId: undefined,
+      clearFields: ["date", "studioId"],
+    });
   });
 
   it("starts from the latest gallery each time it opens", async () => {
@@ -195,9 +207,7 @@ describe("GalleryEditModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
-    expect(mockGalleries.update.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ title: "Renamed Set", videoIds: [30] }),
-    );
+    expect(mockGalleries.update.mock.calls[0][1]).toEqual({ title: "Renamed Set" });
   });
 
   it("keeps unsaved edits when the gallery refetches while open", () => {
@@ -213,5 +223,44 @@ describe("GalleryEditModal", () => {
     rerender(renderWith(buildGallery()));
 
     expect(screen.getByDisplayValue("Renamed Set")).toBeInTheDocument();
+  });
+
+  it("does not resave links that changed after the edit started", async () => {
+    mockGalleries.update.mockResolvedValue({});
+    const queryClient = createQueryClient();
+    const renderWith = (gallery: unknown) => (
+      <QueryClientProvider client={queryClient}>
+        <GalleryEditModal open onClose={vi.fn()} gallery={gallery as any} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(buildGallery({ videoIds: [] })));
+    fireEvent.change(screen.getByDisplayValue("Summer Set"), { target: { value: "Renamed Set" } });
+    rerender(renderWith(buildGallery({ videoIds: [30] })));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledTimes(1));
+    expect(mockGalleries.update.mock.calls[0][1]).toEqual({ title: "Renamed Set" });
+  });
+
+  it("refreshes videos whose links changed elsewhere and were restored by the save", async () => {
+    mockGalleries.update.mockResolvedValue({});
+    const queryClient = createQueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const renderWith = (gallery: unknown) => (
+      <QueryClientProvider client={queryClient}>
+        <GalleryEditModal open onClose={vi.fn()} gallery={gallery as any} />
+      </QueryClientProvider>
+    );
+
+    // Video 14 is unlinked elsewhere while the edit is open; the saved list still contains it.
+    const { rerender } = render(renderWith(buildGallery({ videoIds: [14] })));
+    rerender(renderWith(buildGallery({ videoIds: [] })));
+    fireEvent.click(screen.getByRole("button", { name: "Add video 22" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockGalleries.update).toHaveBeenCalledWith(21, { videoIds: [14, 22] }));
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["video", 14] }));
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["video", 22] });
   });
 });

@@ -8,6 +8,7 @@ import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../comp
 import { StringListEditor } from "../components/StringListEditor";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
 
 interface Props {
   tag: TagDetail;
@@ -20,6 +21,51 @@ type PlayerBarMode = "default" | "always" | "never";
 function clampOptionalPercent(value: number | undefined) {
   if (value == null || !Number.isFinite(value)) return undefined;
   return Math.min(100, Math.max(0, value));
+}
+
+function tagFormValues(tag: TagDetail) {
+  return {
+    name: tag.name,
+    sortName: tag.sortName ?? "",
+    description: tag.description ?? "",
+    color: tag.color ?? "",
+    tagGroupId: tag.tagGroupId ?? undefined,
+    minOccurrenceSec: tag.minOccurrenceSec ?? undefined,
+    minOccurrencePercent: tag.minOccurrencePercent ?? undefined,
+    playerBarMode: readPlayerBarMode(tag.showAsSegment),
+    segmentColorOverride: tag.segmentColorOverride ?? "",
+    segmentLaneOverride: tag.segmentLaneOverride ?? undefined,
+    aliases: tag.aliases,
+    selectedParentIds: tag.parents.map((t) => t.id),
+    selectedChildIds: tag.children.map((t) => t.id),
+    remoteIds: (tag.remoteIds?.length ? tag.remoteIds : []) as RemoteIdValue[],
+    customFields: { ...(tag.customFields ?? {}) } as Record<string, unknown>,
+  };
+}
+
+function tagUpdatePayload(values: ReturnType<typeof tagFormValues>): TagUpdate {
+  const clearFields = [!values.sortName && "sortName", !values.description && "description"].filter(
+    (field): field is string => Boolean(field),
+  );
+  const segmentOverrides = values.playerBarMode === "always";
+  return {
+    name: values.name,
+    sortName: values.sortName || undefined,
+    description: values.description || undefined,
+    color: values.color.trim() || null,
+    tagGroupId: values.tagGroupId ?? null,
+    minOccurrenceSec: values.minOccurrenceSec ?? null,
+    minOccurrencePercent: clampOptionalPercent(values.minOccurrencePercent) ?? null,
+    showAsSegment: values.playerBarMode === "default" ? null : segmentOverrides,
+    segmentColorOverride: segmentOverrides ? values.segmentColorOverride.trim() || null : null,
+    segmentLaneOverride: segmentOverrides ? (values.segmentLaneOverride ?? null) : null,
+    aliases: values.aliases.map((alias) => alias.trim()).filter(Boolean),
+    parentIds: values.selectedParentIds,
+    childIds: values.selectedChildIds,
+    remoteIds: normalizeRemoteIds(values.remoteIds),
+    customFields: values.customFields,
+    clearFields,
+  };
 }
 
 export function TagEditModal({ tag, open, onClose }: Props) {
@@ -64,8 +110,12 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     },
   });
 
+  // The tag the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(tag);
+
   useEffect(() => {
     mutation.reset();
+    setBaseline(tag);
     setName(tag.name);
     setSortName(tag.sortName ?? "");
     setDescription(tag.description ?? "");
@@ -89,27 +139,33 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const aliasList = aliases.map((alias) => alias.trim()).filter(Boolean);
-    const clearFields = [!sortName && "sortName", !description && "description"].filter((field): field is string =>
-      Boolean(field),
-    );
-    mutation.mutate({
+    const current = tagUpdatePayload({
       name,
-      sortName: sortName || undefined,
-      description: description || undefined,
-      color: color.trim() || null,
-      tagGroupId: tagGroupId ?? null,
-      minOccurrenceSec: minOccurrenceSec ?? null,
-      minOccurrencePercent: clampOptionalPercent(minOccurrencePercent) ?? null,
-      showAsSegment: playerBarMode === "default" ? null : playerBarMode === "always",
-      segmentColorOverride: playerBarMode === "always" ? segmentColorOverride.trim() || null : null,
-      segmentLaneOverride: playerBarMode === "always" ? (segmentLaneOverride ?? null) : null,
-      aliases: aliasList,
-      parentIds: selectedParentIds,
-      childIds: selectedChildIds,
-      remoteIds: normalizeRemoteIds(remoteIds),
+      sortName,
+      description,
+      color,
+      tagGroupId,
+      minOccurrenceSec,
+      minOccurrencePercent,
+      playerBarMode,
+      segmentColorOverride,
+      segmentLaneOverride,
+      aliases,
+      selectedParentIds,
+      selectedChildIds,
+      remoteIds,
       customFields,
-      clearFields,
+    });
+    mutation.mutate({
+      ...changedUpdateFields(tagUpdatePayload(tagFormValues(baseline)), current),
+      // The tag update endpoint always writes these, clearing any that are omitted.
+      color: current.color,
+      tagGroupId: current.tagGroupId,
+      minOccurrenceSec: current.minOccurrenceSec,
+      minOccurrencePercent: current.minOccurrencePercent,
+      showAsSegment: current.showAsSegment,
+      segmentColorOverride: current.segmentColorOverride,
+      segmentLaneOverride: current.segmentLaneOverride,
     });
   };
 

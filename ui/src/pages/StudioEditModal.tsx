@@ -8,11 +8,42 @@ import { StringListEditor } from "../components/StringListEditor";
 import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../components/RemoteIdsEditor";
 import { EntityReferenceMultiSelector, EntityReferenceSelector } from "../components/EntityReferenceSelector";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
 
 interface Props {
   studio: Studio;
   open: boolean;
   onClose: () => void;
+}
+
+function studioFormValues(studio: Studio) {
+  return {
+    name: studio.name,
+    details: studio.details ?? "",
+    urls: studio.urls.length > 0 ? studio.urls : [""],
+    aliases: studio.aliases.length > 0 ? studio.aliases : [""],
+    parentId: studio.parentId ?? undefined,
+    selectedTagIds: studio.tags.map((t) => t.id),
+    customFields: { ...(studio.customFields ?? {}) } as Record<string, unknown>,
+    remoteIds: studio.remoteIds.map((remoteId) => ({ ...remoteId })) as RemoteIdValue[],
+  };
+}
+
+function studioUpdatePayload(values: ReturnType<typeof studioFormValues>): StudioUpdate {
+  const clearFields = [!values.details && "details", values.parentId === undefined && "parentId"].filter(
+    (field): field is string => Boolean(field),
+  );
+  return {
+    name: values.name,
+    details: values.details || undefined,
+    parentId: values.parentId,
+    urls: values.urls.map((url) => url.trim()).filter(Boolean),
+    aliases: values.aliases.map((alias) => alias.trim()).filter(Boolean),
+    tagIds: values.selectedTagIds,
+    customFields: values.customFields,
+    remoteIds: normalizeRemoteIds(values.remoteIds),
+    clearFields,
+  };
 }
 
 export function StudioEditModal({ studio, open, onClose }: Props) {
@@ -30,7 +61,11 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(studio.remoteIds.map((remoteId) => ({ ...remoteId })));
   const tagProvenanceById = buildTagProvenanceById(studio.tags, studio.fieldProvenance);
 
+  // The studio the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(studio);
+
   useEffect(() => {
+    setBaseline(studio);
     setName(studio.name);
     setDetails(studio.details ?? "");
     setUrls(studio.urls.length > 0 ? studio.urls : [""]);
@@ -56,22 +91,17 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const urlList = urls.map((url) => url.trim()).filter(Boolean);
-    const aliasList = aliases.map((alias) => alias.trim()).filter(Boolean);
-    const clearFields = [!details && "details", parentId === undefined && "parentId"].filter((field): field is string =>
-      Boolean(field),
-    );
-    mutation.mutate({
+    const current = studioUpdatePayload({
       name,
-      details: details || undefined,
+      details,
+      urls,
+      aliases,
       parentId,
-      urls: urlList,
-      aliases: aliasList,
-      tagIds: selectedTagIds,
+      selectedTagIds,
       customFields,
-      remoteIds: normalizeRemoteIds(remoteIds),
-      clearFields,
+      remoteIds,
     });
+    mutation.mutate(changedUpdateFields(studioUpdatePayload(studioFormValues(baseline)), current));
   };
 
   return (

@@ -136,6 +136,7 @@ import { normalizeStoredResumeTime } from "../utils/playbackResume";
 import { getLoadError, isApiNotFoundError } from "../utils/queryLoadState";
 import { videoEditClearFields } from "../utils/videoEditClearFields";
 import { invalidateGalleriesForVideoLinkChange } from "../utils/galleryVideoLinks";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
 import { LikeHistorySection } from "../components/LikeHistorySection";
 
 function directorVideosRoute(director: string) {
@@ -3082,6 +3083,47 @@ function DetectionsPanel({
 }
 
 // ===== Inline Video Edit Panel =====
+function videoFormValues(video: Video) {
+  return {
+    title: video.title || "",
+    code: video.code || "",
+    details: video.details || "",
+    director: video.director || "",
+    date: video.date || "",
+    isVr: video.isVr ?? false,
+    rating: undefined as number | undefined,
+    urls: video.urls.length > 0 ? video.urls : [""],
+    studioId: video.studioId ?? undefined,
+    remoteIds: (video.remoteIds?.length ? video.remoteIds : []) as RemoteIdValue[],
+    customFields: { ...(video.customFields ?? {}) } as Record<string, unknown>,
+    selectedTagIds: getEditableTagIds(video.tags),
+    selectedPerformerIds: video.performers.map((p) => p.id),
+    selectedGalleryIds: video.galleries.map((g) => g.id),
+    selectedGroups: video.groups.map((g) => ({ groupId: g.id, videoIndex: g.videoIndex })),
+  };
+}
+
+function videoUpdatePayload(values: ReturnType<typeof videoFormValues>): VideoUpdate {
+  return {
+    title: values.title,
+    code: values.code,
+    details: values.details,
+    director: values.director,
+    date: values.date || undefined,
+    isVr: values.isVr,
+    rating: values.rating,
+    studioId: values.studioId,
+    urls: values.urls.map((url) => url.trim()).filter(Boolean),
+    remoteIds: normalizeRemoteIds(values.remoteIds),
+    customFields: values.customFields,
+    tagIds: values.selectedTagIds,
+    performerIds: values.selectedPerformerIds,
+    galleryIds: values.selectedGalleryIds,
+    groups: values.selectedGroups,
+    clearFields: videoEditClearFields(values.date, values.studioId),
+  };
+}
+
 function VideoEditPanel({
   video,
   onCancel,
@@ -3117,7 +3159,10 @@ function VideoEditPanel({
     buildVideoEditPerformerContextTagIds(video),
   );
   const [performerOccurrenceTagsOpen, setPerformerOccurrenceTagsOpen] = useState(false);
+  // The video the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(video);
   useEffect(() => {
+    setBaseline(video);
     setTitle(video.title || "");
     setCode(video.code || "");
     setDetails(video.details || "");
@@ -3152,32 +3197,38 @@ function VideoEditPanel({
       queryClient.invalidateQueries({ queryKey: ["video", video.id] });
       queryClient.invalidateQueries({ queryKey: ["tagapplications"] });
       queryClient.invalidateQueries({ queryKey: ["videos"] });
-      const galleryIds = video.galleries.map((gallery) => gallery.id);
-      invalidateGalleriesForVideoLinkChange(queryClient, galleryIds, data.galleryIds ?? galleryIds);
+      // Links may have changed elsewhere since the edit started, so compare against both copies.
+      if (data.galleryIds) {
+        for (const before of [baseline.galleries, video.galleries]) {
+          invalidateGalleriesForVideoLinkChange(
+            queryClient,
+            before.map((gallery) => gallery.id),
+            data.galleryIds,
+          );
+        }
+      }
     },
   });
 
   const handleSave = () => {
-    const urlList = urls.map((url) => url.trim()).filter(Boolean);
-    const clearFields = videoEditClearFields(date, studioId);
-    mutation.mutate({
-      title: title,
-      code: code,
-      details: details,
-      director: director,
-      date: date || undefined,
+    const current = videoUpdatePayload({
+      title,
+      code,
+      details,
+      director,
+      date,
       isVr,
       rating,
+      urls,
       studioId,
-      urls: urlList,
-      remoteIds: normalizeRemoteIds(remoteIds),
+      remoteIds,
       customFields,
-      tagIds: selectedTagIds,
-      performerIds: selectedPerformerIds,
-      galleryIds: selectedGalleryIds,
-      groups: selectedGroups,
-      clearFields,
+      selectedTagIds,
+      selectedPerformerIds,
+      selectedGalleryIds,
+      selectedGroups,
     });
+    mutation.mutate(changedUpdateFields(videoUpdatePayload(videoFormValues(baseline)), current));
   };
 
   const setPerformerContextTagIds = (performerId: number, tagIds: number[]) => {

@@ -78,4 +78,42 @@ describe("TagEditModal", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("sends changed fields plus the display settings the endpoint always writes", async () => {
+    const user = userEvent.setup();
+    mocks.tagsUpdate.mockResolvedValue({});
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const styledTag = {
+      ...tag,
+      color: "#ff0000",
+      tagGroupId: 3,
+      aliases: ["Alias"],
+      parents: [{ id: 5, name: "Parent" }],
+      customFields: { mood: "bright" },
+    } as unknown as TagDetail;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TagEditModal tag={styledTag} open onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    const nameInput = screen.getByPlaceholderText("Tag name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mocks.tagsUpdate).toHaveBeenCalledWith(1, {
+      name: "Renamed",
+      color: "#ff0000",
+      tagGroupId: 3,
+      minOccurrenceSec: null,
+      minOccurrencePercent: null,
+      showAsSegment: null,
+      segmentColorOverride: null,
+      segmentLaneOverride: null,
+    });
+  });
 });

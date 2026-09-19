@@ -11,12 +11,44 @@ import {
 import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared";
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
 import { IsoDateInput } from "../components/IsoDateInput";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
 
 interface Props {
   text: TextDocument;
   onSaved: () => void;
+}
+
+function textFormValues(text: TextDocument) {
+  return {
+    title: text.title ?? "",
+    code: text.code ?? "",
+    details: text.details ?? "",
+    date: text.date ?? "",
+    studioId: text.studioId ?? undefined,
+    urls: text.urls.length > 0 ? text.urls : [""],
+    customFields: { ...(text.customFields ?? {}) } as Record<string, unknown>,
+    selectedTagIds: text.tags.map((tag) => tag.id),
+    selectedPerformerIds: text.performers.map((performer) => performer.id),
+    selectedGroups: text.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })) as VideoGroupInput[],
+  };
+}
+
+function textUpdatePayload(values: ReturnType<typeof textFormValues>): TextUpdate {
+  return {
+    title: values.title.trim(),
+    code: values.code.trim(),
+    details: values.details.trim(),
+    studioId: values.studioId,
+    date: values.date,
+    urls: values.urls.map((url) => url.trim()).filter(Boolean),
+    tagIds: values.selectedTagIds,
+    performerIds: values.selectedPerformerIds,
+    customFields: values.customFields,
+    groupIds: values.selectedGroups,
+    clearFields: values.studioId === undefined ? ["studioId"] : [],
+  };
 }
 
 export function TextEditPanel({ text, onSaved }: Props) {
@@ -42,7 +74,10 @@ export function TextEditPanel({ text, onSaved }: Props) {
   const [selectedGroups, setSelectedGroups] = useState<VideoGroupInput[]>(
     text.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })),
   );
+  // The text the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(text);
   useEffect(() => {
+    setBaseline(text);
     setTitle(text.title ?? "");
     setCode(text.code ?? "");
     setDetails(text.details ?? "");
@@ -86,20 +121,19 @@ export function TextEditPanel({ text, onSaved }: Props) {
   const tagProvenanceById = buildTagProvenanceById(text.tags, text.fieldProvenance);
 
   const handleSave = () => {
-    const clearFields = studioId === undefined ? ["studioId"] : [];
-    mutation.mutate({
-      title: title.trim(),
-      code: code.trim(),
-      details: details.trim(),
-      studioId,
+    const current = textUpdatePayload({
+      title,
+      code,
+      details,
       date,
-      urls: urls.map((url) => url.trim()).filter(Boolean),
-      tagIds: selectedTagIds,
-      performerIds: selectedPerformerIds,
+      studioId,
+      urls,
       customFields,
-      groupIds: selectedGroups,
-      clearFields,
+      selectedTagIds,
+      selectedPerformerIds,
+      selectedGroups,
     });
+    mutation.mutate(changedUpdateFields(textUpdatePayload(textFormValues(baseline)), current));
   };
 
   return (

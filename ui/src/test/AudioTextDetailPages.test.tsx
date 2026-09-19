@@ -296,6 +296,34 @@ describe("Audio and text detail pages", () => {
     expect(screen.queryByText("Description", { selector: "label" })).not.toBeInTheDocument();
   });
 
+  it("saves only the audio fields the user changed", async () => {
+    mockAudios.get.mockResolvedValue(buildAudio());
+    mockAudios.update.mockResolvedValue(undefined);
+
+    renderWithQueryClient(<AudioDetailPage id={14} onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+
+    const detailsLabel = screen.getByText("Details", { selector: "label" });
+    fireEvent.change(detailsLabel.nextElementSibling!, { target: { value: "Updated soundtrack." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockAudios.update).toHaveBeenCalledWith(14, { details: "Updated soundtrack." }));
+  });
+
+  it("saves only the text fields the user changed", async () => {
+    mockTexts.get.mockResolvedValue(buildText());
+    mockTexts.content.mockResolvedValue("# Notes");
+    mockTexts.update.mockResolvedValue(undefined);
+
+    renderWithQueryClient(<TextDetailPage id={22} onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+
+    fireEvent.change(screen.getByDisplayValue("Project Notes"), { target: { value: "Renamed Notes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockTexts.update).toHaveBeenCalledWith(22, { title: "Renamed Notes" }));
+  });
+
   it("switches to the shared video player when an audio file carries video", async () => {
     mockAudios.get.mockResolvedValue(
       buildAudio({

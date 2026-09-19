@@ -11,6 +11,7 @@ import {
 import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared";
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
 import { IsoDateInput } from "../components/IsoDateInput";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
 import { getEditableTagIds, getLockedTagIds, mergeTagIds } from "../utils/tags";
@@ -18,6 +19,37 @@ import { getEditableTagIds, getLockedTagIds, mergeTagIds } from "../utils/tags";
 interface Props {
   audio: Audio;
   onSaved: () => void;
+}
+
+function audioFormValues(audio: Audio) {
+  return {
+    title: audio.title ?? "",
+    code: audio.code ?? "",
+    details: audio.details ?? "",
+    date: audio.date ?? "",
+    studioId: audio.studioId ?? undefined,
+    urls: audio.urls.length > 0 ? audio.urls : [""],
+    customFields: { ...(audio.customFields ?? {}) } as Record<string, unknown>,
+    selectedTagIds: getEditableTagIds(audio.tags),
+    selectedPerformerIds: audio.performers.map((performer) => performer.id),
+    selectedGroups: audio.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })) as VideoGroupInput[],
+  };
+}
+
+function audioUpdatePayload(values: ReturnType<typeof audioFormValues>): AudioUpdate {
+  return {
+    title: values.title.trim(),
+    code: values.code.trim(),
+    details: values.details.trim(),
+    studioId: values.studioId,
+    date: values.date,
+    urls: values.urls.map((url) => url.trim()).filter(Boolean),
+    tagIds: values.selectedTagIds,
+    performerIds: values.selectedPerformerIds,
+    customFields: values.customFields,
+    groupIds: values.selectedGroups,
+    clearFields: values.studioId === undefined ? ["studioId"] : [],
+  };
 }
 
 export function AudioEditPanel({ audio, onSaved }: Props) {
@@ -43,7 +75,10 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
   const [selectedGroups, setSelectedGroups] = useState<VideoGroupInput[]>(
     audio.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })),
   );
+  // The audio the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(audio);
   useEffect(() => {
+    setBaseline(audio);
     setTitle(audio.title ?? "");
     setCode(audio.code ?? "");
     setDetails(audio.details ?? "");
@@ -94,20 +129,19 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
   };
 
   const handleSave = () => {
-    const clearFields = studioId === undefined ? ["studioId"] : [];
-    mutation.mutate({
-      title: title.trim(),
-      code: code.trim(),
-      details: details.trim(),
-      studioId,
+    const current = audioUpdatePayload({
+      title,
+      code,
+      details,
       date,
-      urls: urls.map((url) => url.trim()).filter(Boolean),
-      tagIds: selectedTagIds,
-      performerIds: selectedPerformerIds,
+      studioId,
+      urls,
       customFields,
-      groupIds: selectedGroups,
-      clearFields,
+      selectedTagIds,
+      selectedPerformerIds,
+      selectedGroups,
     });
+    mutation.mutate(changedUpdateFields(audioUpdatePayload(audioFormValues(baseline)), current));
   };
 
   return (
