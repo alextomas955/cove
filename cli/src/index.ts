@@ -13,14 +13,16 @@ import { CliError, toCliError } from "./errors";
 import { listEntities, mergeObjectFilters } from "./entity-list";
 import { filterByCompletionValues, filterByObjectFilter } from "./filter-by";
 import type { FilterByResource } from "./filter-by";
-import { renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupItems, renderGroups, renderImages, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
+import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
 import type { CatalogEntityKind, RenderContext } from "./output";
 import { resolveResultWindow } from "./pagination";
 import type { ResultWindowOptions } from "./pagination";
 import { defaultSavedFilter, listSavedFilters, queryForSavedFilter, resolveSavedFilter, savedFilterSummary } from "./saved-filters";
 import { isSegmentRecord, listSegments } from "./segments";
+import { heldPermissions, parseScope, SCOPE_PRESET_NAMES, SCOPE_PRESETS, unheldScope } from "./tokens";
+import type { ScopeSelection } from "./tokens";
 import { fetchThemeAccent } from "./theme";
-import type { Audio, GalleryRecord, GlobalSearchResponse, GroupItem, GroupRecord, ImageRecord, JobInfo, ListQueryOptions, LoginResponse, MeResponse, MetadataServerSummary, Performer, SavedFilter, SegmentRecord, SimilarImageResult, SimilarVideoResult, StoredProfile, StudioRecord, SystemStatus, Tag, TextRecord, Video } from "./types";
+import type { ApiTokenRecord, Audio, GalleryRecord, GlobalSearchResponse, GroupItem, GroupRecord, ImageRecord, IssuedApiToken, JobInfo, ListQueryOptions, LoginResponse, MeResponse, MetadataServerSummary, Performer, SavedFilter, SegmentRecord, SimilarImageResult, SimilarVideoResult, StoredProfile, StudioRecord, SystemStatus, Tag, TextRecord, Video } from "./types";
 import { cleanInline, configureCliHelp, DEFAULT_ACCENT, terminalColorsEnabled, terminalHyperlinksEnabled, uiPalette } from "./ui";
 import type { UiColor } from "./ui";
 import { resolvePerformer, resolveTag, videosForCriteria } from "./videos";
@@ -110,9 +112,7 @@ function presentationFor(options: GlobalOptions, accent: string, context: Omit<R
 }
 
 function warnForHttp(server: string, options: GlobalOptions): void {
-  if (!server.startsWith("http://") || outputFormat(options) !== "human") return;
-  const paint = uiPalette(colorsFor(options, process.stderr));
-  process.stderr.write(`${paint.warning("warning:")} credentials will be sent over plain HTTP.\n`);
+  if (server.startsWith("http://")) warn("credentials will be sent over plain HTTP.", options);
 }
 
 function clientFor(store: ConfigStore, options: GlobalOptions): Promise<{ client: CoveClient; name: string; profile: StoredProfile }> {
@@ -429,6 +429,115 @@ function jsonObjectOption(value: string | undefined, option: string): string | u
   } catch {
     throw new CliError("INVALID_ARGUMENT", `${option} must be a JSON object.`);
   }
+}
+
+/**
+ * Human-mode advisory. Machine output keeps stderr reserved for the structured
+ * error body, so anything a script must act on is raised as a CliError instead
+ * of being written here.
+ */
+function warn(message: string, options: GlobalOptions): void {
+  if (outputFormat(options) !== "human") return;
+  const paint = uiPalette(colorsFor(options, process.stderr));
+  process.stderr.write(`${paint.warning("warning:")} ${message}\n`);
+}
+
+function isoDateTimeOption(value: string | undefined, option: string, options: GlobalOptions): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  // A value with no zone would otherwise be read in local time and stored as a
+  // different instant than the one written on the command line.
+  const zoned = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$/.test(trimmed) ? `${trimmed.replace(" ", "T")}Z` : trimmed;
+  const parsed = new Date(zoned);
+  if (!/^\d{4}-\d{2}-\d{2}/.test(trimmed) || Number.isNaN(parsed.getTime())) {
+    throw new CliError("INVALID_ARGUMENT", `${option} must be an ISO-8601 datetime such as 2026-12-31T00:00:00Z. A value without a time zone is read as UTC.`);
+  }
+  if (parsed.getTime() <= Date.now()) {
+    const message = `${option} is in the past; the token would be expired as soon as it is issued.`;
+    if (outputFormat(options) !== "human") throw new CliError("INVALID_ARGUMENT", message);
+    warn(message, options);
+  }
+  return parsed.toISOString();
+}
+
+function abbreviatedList(values: string[], limit = 6): string {
+  return values.length <= limit ? values.join(", ") : `${values.slice(0, limit).join(", ")}, and ${values.length - limit} more`;
+}
+
+function isApiToken(value: unknown): value is ApiTokenRecord {
+  return isRecord(value) && typeof value.id === "string" && typeof value.name === "string" && typeof value.prefix === "string";
+}
+
+function isIssuedApiToken(value: unknown): value is IssuedApiToken {
+  return isApiToken(value) && typeof (value as IssuedApiToken).plaintextToken === "string";
+}
+
+async function listApiTokens(client: CoveClient): Promise<ApiTokenRecord[]> {
+  const items = await client.get<unknown>("apitokens");
+  if (!Array.isArray(items) || !items.every(isApiToken)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid API token list.");
+  return items;
+}
+
+const API_TOKEN_ID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+
+function normalizedApiTokenId(value: string): string {
+  const hex = value.replace(/-/g, "").toLowerCase();
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Resolves a token reference against the caller's own tokens. Revocation is a
+ * no-op 204 for an ID that is unknown, already revoked, or owned by someone
+ * else, so the reference is confirmed first rather than reporting a revocation
+ * that never happened.
+ */
+async function resolveApiToken(client: CoveClient, reference: string): Promise<string> {
+  const value = reference.trim();
+  const tokens = await listApiTokens(client);
+  if (API_TOKEN_ID.test(value)) {
+    const id = normalizedApiTokenId(value);
+    if (!tokens.some(item => item.id.toLowerCase() === id)) {
+      throw new CliError("TOKEN_NOT_FOUND", `No active API token with ID ${id} belongs to the current identity. Run \`cove-cli tokens list\` to see the available tokens.`);
+    }
+    return id;
+  }
+  const matches = tokens.filter(item => item.name.trim().toLowerCase() === value.toLowerCase());
+  if (!matches.length) throw new CliError("TOKEN_NOT_FOUND", `No API token named “${value}”. Run \`cove-cli tokens list\` to see the available tokens.`);
+  if (matches.length > 1) throw new CliError("AMBIGUOUS_TOKEN", `Several API tokens are named “${value}”. Revoke it by ID instead.`);
+  return matches[0]!.id;
+}
+
+/**
+ * Reports scope keys the current identity does not appear to hold. Cove refuses
+ * a token scope wider than its owner, so a preset narrows to what is held —
+ * interactively, where the warning is visible and the narrowing can be seen.
+ * Machine output never silently changes the requested scope: it fails instead,
+ * so a provisioning script cannot issue a quieter token than it asked for.
+ * Keys the caller named are always sent unchanged; the server decides, because
+ * it can see permissions this check cannot.
+ */
+async function reviewedScope(client: CoveClient, selection: ScopeSelection, options: GlobalOptions): Promise<string[] | undefined> {
+  if (!selection.keys) return undefined;
+  const held = await heldPermissions(client);
+  if (!held) return selection.keys;
+  const missing = unheldScope(held, selection.keys);
+  if (!missing.length) return selection.keys;
+
+  const named = missing.filter(key => selection.explicit.includes(key));
+  const presetOnly = missing.filter(key => !named.includes(key));
+  if (presetOnly.length) {
+    const summary = `the ${selection.presets.join(" and ")} scope preset includes ${presetOnly.length} ${presetOnly.length === 1 ? "permission" : "permissions"} the current identity does not hold`;
+    if (outputFormat(options) !== "human") {
+      throw new CliError("SCOPE_NOT_HELD", `${summary}: ${presetOnly.join(", ")}. Name the permissions to include explicitly.`);
+    }
+    warn(`${summary}; leaving out ${abbreviatedList(presetOnly)}.`, options);
+  }
+  if (named.length) {
+    warn(`${abbreviatedList(named)} ${named.length === 1 ? "was" : "were"} asked for by name but the current identity does not appear to hold ${named.length === 1 ? "it" : "them"}; sending the request unchanged. Cove rejects it unless the permission reaches the identity through a content rule this CLI cannot see.`, options);
+  }
+  const keys = selection.keys.filter(key => !presetOnly.includes(key));
+  if (!keys.length) throw new CliError("SCOPE_NOT_HELD", "The current identity holds none of the requested scope permissions.");
+  return keys;
 }
 
 function withResultVolumeOptions(command: Command): Command {
@@ -748,6 +857,58 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       if (config.defaultProfile === name) config.defaultProfile = Object.keys(config.profiles).sort()[0];
     });
     print({ profile: name, removed: true }, global, () => renderProfileChange("Profile removed", name, renderFor(global)));
+  });
+
+  const tokens = program.command("tokens").description("Issue, inspect, and revoke API tokens").helpGroup("Account:");
+  withExamples(tokens.command("list").description("List the current identity's API tokens"), [
+    "cove-cli tokens list --profile personal",
+    "cove-cli tokens list --json",
+  ]).action(async (_options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const items = await listApiTokens(client);
+    print({ tokens: items }, global, () => renderApiTokens(items, renderFor(global)), items);
+  });
+
+  const scopeOption = setCompletionChoices(
+    new Option("--scope <permissions>", `limit the token to these permissions: keys or a preset (${SCOPE_PRESET_NAMES.join(", ")}), repeatable or comma-separated`)
+      .argParser(collect)
+      .default([]),
+    SCOPE_PRESET_NAMES,
+  );
+  withExamples(tokens.command("create <name>")
+    .description("Issue an API token, optionally scoped below your own permissions")
+    .addOption(scopeOption)
+    .option("--expires <datetime>", "expiry as an ISO-8601 datetime (default: never)"), [
+    "cove-cli tokens create agent --scope viewer",
+    "cove-cli tokens create ci --scope videos.read,images.read --expires 2026-12-31T00:00:00Z",
+    "cove-cli tokens create automation --json",
+  ]).action(async (name: string, options: { scope: string[]; expires?: string }, command: Command) => {
+    const global = globals(command);
+    rejectRepeatedOptions(command, ["--expires"]);
+    if (!name.trim()) throw new CliError("INVALID_ARGUMENT", "Provide a name for the API token.");
+    const selection = parseScope(options.scope);
+    const expiresAt = isoDateTimeOption(options.expires, "--expires", global);
+    const { client } = await clientFor(store, global);
+    const scope = await reviewedScope(client, selection, global);
+    const issued = await client.post<IssuedApiToken>("apitokens", {
+      name: name.trim(),
+      ...(scope ? { scope } : {}),
+      ...(expiresAt ? { expiresAt } : {}),
+    });
+    if (!isIssuedApiToken(issued)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid issued API token.");
+    print(issued, global, () => renderIssuedApiToken(issued, renderFor(global)));
+  });
+
+  withExamples(tokens.command("revoke <token>").description("Revoke an API token by ID or name"), [
+    "cove-cli tokens revoke agent",
+    "cove-cli tokens revoke 6f1c2d9e-2c7e-4a51-9a2f-1d6b0f8a4c33",
+  ]).action(async (reference: string, _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const id = await resolveApiToken(client, reference);
+    await client.delete(`apitokens/${id}`);
+    print({ id, revoked: true }, global, () => renderApiTokenRevoked(id, renderFor(global)));
   });
 
   const library = program.command("library").description("Create, edit, merge, and bulk-update library records").helpGroup("Manage:");

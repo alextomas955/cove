@@ -1,4 +1,4 @@
-import type { Audio, GalleryRecord, GlobalSearchResponse, GroupItem, GroupRecord, ImageRecord, MetadataServerSummary, Performer, PerformerSummary, RemoteId, SavedFilter, SegmentRecord, SimilarImageResult, SimilarVideoResult, StudioRecord, Tag, TagReference, TextRecord, Video } from "./types";
+import type { ApiTokenRecord, Audio, GalleryRecord, GlobalSearchResponse, GroupItem, GroupRecord, ImageRecord, IssuedApiToken, MetadataServerSummary, Performer, PerformerSummary, RemoteId, SavedFilter, SegmentRecord, SimilarImageResult, SimilarVideoResult, StudioRecord, Tag, TagReference, TextRecord, Video } from "./types";
 import { savedFilterDefaultSort } from "./saved-filters";
 import { cleanInline as clean, colorizeHex, stripTerminalSequences, terminalColorsEnabled, terminalHyperlinksEnabled, uiPalette } from "./ui";
 import type { UiColor, UiPalette } from "./ui";
@@ -490,6 +490,50 @@ export function renderProfiles(items: Array<{ name: string; server: string; defa
 
 export function renderProfileChange(title: string, profile: string, context: RenderContext = {}): string {
   return renderStatusCard(title, [["Profile", profile]], "success", resolveRenderContext(context));
+}
+
+function calendarDay(value: string | null | undefined, absent = "—"): string {
+  if (!value) return absent;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? clean(value) : parsed.toISOString().slice(0, 10);
+}
+
+function scopeSummary(scope: string[] | null | undefined): string {
+  return scope?.length ? `${scope.length} ${scope.length === 1 ? "perm" : "perms"}` : "full";
+}
+
+export function renderApiTokens(tokens: ApiTokenRecord[], context: RenderContext = {}): string {
+  const resolved = resolveRenderContext(context);
+  const columns: Column<ApiTokenRecord>[] = [
+    { label: "NAME", width: 12, value: item => clean(item.name) || "—" },
+    { label: "SCOPE", width: 8, value: item => scopeSummary(item.scope) },
+    { label: "PREFIX", width: 6, value: item => clean(item.prefix) },
+  ];
+  if (resolved.terminalWidth >= 62) columns.push({ label: "LAST USED", width: 10, value: item => calendarDay(item.lastUsedAt, "never") });
+  if (resolved.terminalWidth >= 78) columns.push({ label: "EXPIRES", width: 10, value: item => calendarDay(item.expiresAt, "never") });
+  // A truncated ID cannot be pasted into `tokens revoke`, so it appears only where it fits whole.
+  if (resolved.terminalWidth >= 96) columns.push({ label: "ID", width: 36, value: item => clean(item.id) });
+  return renderCompactList("API tokens", ["token", "tokens"], tokens, tokens.length, columns, resolved, "Run `cove-cli tokens create <name>` to issue one.");
+}
+
+export function renderIssuedApiToken(token: IssuedApiToken, context: RenderContext = {}): string {
+  const resolved = resolveRenderContext(context);
+  const paint = uiPalette(resolved.color);
+  const card = renderStatusCard("API token issued", [
+    ["Name", clean(token.name) || "—"],
+    ["Scope", token.scope?.length ? token.scope.join(", ") : "full — the owner's current permissions"],
+    ["Expires", token.expiresAt ? clean(token.expiresAt) : "never"],
+    ["ID", clean(token.id)],
+  ], "success", resolved);
+  // The secret is never wrapped or indented: a reflowed token cannot be copied back,
+  // and Cove keeps only its hash, so a mangled copy is unrecoverable.
+  const notice = wrapDetail("Copy it now — Cove stores only a hash and will not show it again.", resolved.terminalWidth - 2)
+    .map(line => paint.warning(`  ${line}`));
+  return [card, "", clean(token.plaintextToken), "", ...notice].join("\n");
+}
+
+export function renderApiTokenRevoked(id: string, context: RenderContext = {}): string {
+  return renderStatusCard("API token revoked", [["ID", clean(id)]], "success", resolveRenderContext(context));
 }
 
 export function renderAudios(audios: Audio[], context: RenderContext = {}): string {

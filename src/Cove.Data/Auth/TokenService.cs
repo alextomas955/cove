@@ -603,12 +603,34 @@ public sealed class TokenService : ITokenService, IExistingUserPrincipalResolver
             .ToList();
         if (requestedScope is not null && scopeList is { Count: 0 })
             throw new ForbiddenException("API token scopes cannot be empty or blank.");
-        if (scopeList is { Count: > 0 }
-            && (actor is null
-                || scopeList.Any(permission => !_registry.IsKnown(permission)
-                    || (!actor.Has(permission) && !actor.HasReadGrant(permission)))))
+        if (scopeList is { Count: > 0 })
         {
-            throw new ForbiddenException("API token scopes must be known permissions already held by the current user.");
+            // Name the scopes that caused the rejection; only keys the caller submitted are
+            // echoed back. Separating a misspelling from a permission the caller does not hold
+            // tells a caller holding apitokens.write whether a key exists in the registry, which
+            // the role catalog otherwise gates behind roles.read. Permission keys are not
+            // secrets, and a rejected request is otherwise a guessing game.
+            var unknown = new List<string>();
+            var notHeld = new List<string>();
+            foreach (var permission in scopeList)
+            {
+                if (!_registry.IsKnown(permission))
+                    unknown.Add(permission);
+                else if (actor is null || (!actor.Has(permission) && !actor.HasReadGrant(permission)))
+                    notHeld.Add(permission);
+            }
+
+            if (unknown.Count > 0 || notHeld.Count > 0)
+            {
+                var reasons = new List<string>();
+                if (unknown.Count > 0)
+                    reasons.Add($"unknown: {string.Join(", ", unknown)}");
+                if (notHeld.Count > 0)
+                    reasons.Add($"not held by the requesting identity: {string.Join(", ", notHeld)}");
+                throw ForbiddenException.ForMissingPermissions(
+                    $"API token scopes must be known permissions already held by the requesting identity ({string.Join("; ", reasons)}).",
+                    [.. unknown, .. notHeld]);
+            }
         }
 
         var (plain, hash) = NewBCryptToken();

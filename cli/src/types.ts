@@ -371,6 +371,21 @@ export interface MeResponse extends CoveRecord {
     } | null;
   };
   permissions?: string[];
+  readGrantedEntityKinds?: string[];
+}
+
+export interface ApiTokenRecord extends CoveRecord {
+  id: string;
+  name: string;
+  prefix: string;
+  scope: string[] | null;
+  createdAt: string;
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export interface IssuedApiToken extends ApiTokenRecord {
+  plaintextToken: string;
 }
 
 export interface SystemStatus extends CoveRecord {

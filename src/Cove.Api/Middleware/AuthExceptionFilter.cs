@@ -19,7 +19,7 @@ public sealed class AuthExceptionFilter : IExceptionFilter
                 {
                     code = "FORBIDDEN",
                     message = fe.Message,
-                    missing = fe.MissingPermission is null ? null : new[] { fe.MissingPermission },
+                    missing = fe.MissingPermissions.Count == 0 ? null : fe.MissingPermissions.ToArray(),
                 })
                 { StatusCode = StatusCodes.Status403Forbidden };
                 context.ExceptionHandled = true;

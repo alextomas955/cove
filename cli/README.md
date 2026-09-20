@@ -56,6 +56,19 @@ COVE_SERVER=https://cove.example COVE_TOKEN=... cove-cli auth status --json
 
 Run `cove-cli help auth login` for all authentication options. Configuration is stored in the platform configuration directory. Set `COVE_CONFIG_DIR` to override its location.
 
+Issue API tokens for the signed-in identity, optionally scoping one below your own permissions:
+
+```sh
+cove-cli tokens create agent --scope viewer
+cove-cli tokens create ci --scope videos.read,images.read --expires 2026-12-31T00:00:00Z
+cove-cli tokens list
+cove-cli tokens revoke agent
+```
+
+A token acts as its owner. Its effective permissions are the intersection of the owner's current permissions and the token's scope, so a scope can only remove access relative to its owner, never add it; Cove refuses to issue a token whose scope exceeds its owner. `--scope viewer` is a read-only preset, and `--scope` otherwise takes permission keys, repeated or comma-separated. The plaintext token is shown once at creation and never again.
+
+Cove expands implied permissions, so a scope key also grants what it implies: `--scope images.delete.file` reaches `images.delete` and `images.read` as well. List read keys only when a token should stay read-only. A scope that includes a permission the current identity does not hold is reported before the request is sent; in `--json` and `--jsonl` output a preset is never narrowed silently, so name the permissions explicitly when the identity holds only part of a preset.
+
 ## Develop
 
 Run the CLI directly from the checkout:

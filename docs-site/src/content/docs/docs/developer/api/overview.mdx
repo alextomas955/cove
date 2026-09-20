@@ -54,6 +54,17 @@ An API token acts as its owner, not as a separate administrator. Its effective p
 
 A token with no scope uses the owner's current permissions. A scoped token can only remove access; it cannot add a permission the owner lacks. Disabling or locking the user, revoking the token, token expiry, role changes, and role content rules all affect later requests.
 
+The settings page issues unscoped tokens. To choose a scope, use [Cove CLI](https://github.com/yourcove/cove/tree/main/cli), which warns before it sends a scope the current identity does not hold:
+
+```bash
+cove-cli tokens create agent --scope viewer
+cove-cli tokens create ci --scope videos.read,images.read --expires 2026-12-31T00:00:00Z
+```
+
+`viewer` is a read-only preset; a scope otherwise lists permission keys explicitly, because a resource wildcard such as `videos.*` is not a registered permission and Cove rejects it. The superuser key `*` is registered, so an owner can scope a token to it, but that is the same as issuing the token with no scope at all.
+
+Cove expands implied permissions inside a scope, so a key also grants what it implies: a scope of `images.delete.file` reaches `images.delete` and `images.read`. The expansion is still intersected with the owner's permissions, so it cannot escalate. A rejected scope is answered with 403 and names the permissions that caused the rejection, separating keys Cove does not know from keys the owner does not hold.
+
 Use an environment variable or secret store rather than putting the token in a URL, tracked script, or command history. The examples assume `COVE_URL` and `COVE_API_TOKEN` are already set:
 
 ```bash
