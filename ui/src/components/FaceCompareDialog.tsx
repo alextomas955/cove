@@ -12,7 +12,7 @@ import {
 import type { Face, FaceSuggestion, FaceSuggestionEvidence, FaceTopSuggestion } from "../api/types";
 import { createRouteLinkProps } from "./cardNavigation";
 import { EditModal } from "./EditModal";
-import { faceDisplayName } from "../utils/faceDisplay";
+import { faceStoredName } from "../utils/faceDisplay";
 
 type ComparableSuggestion = FaceSuggestion | FaceTopSuggestion;
 type ConfirmOptions = { setPerformerImage?: boolean };
@@ -137,7 +137,9 @@ export function FaceCompareDialog({
     return null;
   }
 
-  const faceTitle = face.performerId || face.label?.trim() ? faceDisplayName(face) : "Unidentified face";
+  // Deliberately the face's own name, never the suggested one: this dialog exists to compare the
+  // face against that very suggestion, so echoing it here would show the same name on both sides.
+  const faceTitle = faceStoredName(face) ?? "Unidentified face";
   const localPerformerId = readLocalPerformerId(active);
   const referenceOnly = localPerformerId == null && active.performerId < 0;
   // Sourced from a reference database, whether or not it already resolved to a local performer.
