@@ -505,42 +505,6 @@ export function CompactCollectionDecision({
   );
 }
 
-// Cover-image equivalent of CompactScalarDecision: current cover thumbnail vs the scraped/match cover,
-// with a Keep / Replace choice. Render only when a scraped cover exists. `replacing` should default to
-// true when the entity has no current cover (replace-if-empty) and false when it already has one.
-export function CompactImageDecision({
-  label = "Cover",
-  currentImageUrl,
-  scrapedImageUrl,
-  replacing,
-  onChange,
-}: {
-  label?: string;
-  currentImageUrl?: string | null;
-  scrapedImageUrl?: string | null;
-  replacing: boolean;
-  onChange: (shouldReplace: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <CompactFieldLabel>{label}</CompactFieldLabel>
-      <div className="grid min-w-0 flex-1 gap-1.5 md:grid-cols-2">
-        <CompactDecisionPane label="Current" selected={!replacing} tone="current" onClick={() => onChange(false)}>
-          <CompactImageValue url={currentImageUrl} />
-        </CompactDecisionPane>
-        <CompactDecisionPane label="Scraped" selected={replacing} tone="scraped" onClick={() => onChange(true)}>
-          <CompactImageValue url={scrapedImageUrl} />
-        </CompactDecisionPane>
-      </div>
-    </div>
-  );
-}
-
-function CompactImageValue({ url }: { url?: string | null }) {
-  if (!url) return <span className="text-xs text-muted">No image</span>;
-  return <img src={url} alt="" className="h-24 w-auto max-w-full rounded object-cover object-top" loading="lazy" />;
-}
-
 function CompactFieldLabel({ children }: { children: ReactNode }) {
   return <span className="w-20 shrink-0 pt-2 text-[10px] uppercase tracking-wider text-muted">{children}</span>;
 }
