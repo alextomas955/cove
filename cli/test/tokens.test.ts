@@ -74,6 +74,7 @@ describe("scope parsing", () => {
   test("expands presets, splits repeated and comma-separated values, and deduplicates", () => {
     expect(parseScope([])).toEqual({ explicit: [], presets: [] });
     expect(parseScope(["viewer"])).toEqual({ keys: SCOPE_PRESETS.viewer!, explicit: [], presets: ["viewer"] });
+    expect(SCOPE_PRESETS.viewer).toContain("files.read");
     expect(parseScope(["videos.read,images.read", " files.read "])).toEqual({
       keys: ["videos.read", "images.read", "files.read"],
       explicit: ["videos.read", "images.read", "files.read"],
@@ -98,9 +99,9 @@ describe("scope parsing", () => {
     expect(() => parseScope([" , "])).toThrow(/at least one permission or preset/);
   });
 
-  test("the viewer preset mirrors the server's Viewer role defaults", async () => {
-    // The preset claims to mirror Permissions.ViewerDefaults; read the server's list rather
-    // than trusting the comment, so adding a key there is a visible decision here.
+  test("the viewer preset includes the server's Viewer role defaults plus file access", async () => {
+    // Read the server's list rather than trusting the comment, so adding a key there is a
+    // visible decision here. The CLI preset intentionally adds read-only file metadata access.
     const permissions = await Bun.file(join(import.meta.dir, "../../src/Cove.Core/Auth/Permissions.cs")).text();
     const block = /ViewerDefaults\s*=\s*\[(?<keys>[^\]]*)\]/s.exec(permissions)?.groups?.keys;
     expect(block).toBeString();
@@ -112,7 +113,7 @@ describe("scope parsing", () => {
     });
 
     expect(viewerDefaults.length).toBeGreaterThan(10);
-    expect([...SCOPE_PRESETS.viewer!].sort()).toEqual([...viewerDefaults].sort());
+    expect([...SCOPE_PRESETS.viewer!].sort()).toEqual([...new Set([...viewerDefaults, "files.read"])].sort());
     for (const key of SCOPE_PRESETS.viewer!) expect(key).toMatch(/\.read$/);
   });
 });
@@ -208,8 +209,8 @@ describe("tokens commands", () => {
 
     const result = await runCli(["tokens", "create", "agent", "--scope", "viewer"], { env });
     expect(result.exitCode).toBe(0);
-    expect(result.stderr).toContain("viewer scope preset includes 16 permissions the current identity does not hold");
-    expect(result.stderr).toMatch(/leaving out audios\.read, .*, and 10 more\./);
+    expect(result.stderr).toContain("viewer scope preset includes 17 permissions the current identity does not hold");
+    expect(result.stderr).toMatch(/leaving out audios\.read, .*, and 11 more\./);
     const create = server.requests.find(entry => entry.method === "POST");
     expect((create?.body as { scope: string[] }).scope).toEqual(["videos.read", "images.read", "system.read"]);
   });
