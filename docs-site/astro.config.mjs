@@ -322,6 +322,7 @@ export default defineConfig({
                 { link: '/docs/reference/role-assignments/', label: 'Role assignments' },
                 { link: '/docs/reference/permissions/', label: 'Permissions' },
                 { link: '/docs/reference/content-rules/', label: 'Content rules' },
+                { link: '/docs/reference/personal-state/', label: 'Personal state' },
                 { link: '/docs/reference/api-tokens/', label: 'API tokens' },
                 { link: '/docs/reference/share-links/', label: 'Share links' },
               ],

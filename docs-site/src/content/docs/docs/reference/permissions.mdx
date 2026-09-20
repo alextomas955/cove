@@ -15,6 +15,10 @@ Permissions normally arrive through roles, with special instance ownership behav
 
 For read access, a matching allow content rule can expose scoped records without the general role read permission. For writes and deletes, a content rule cannot replace the underlying role permission; it can only restrict its record scope.
 
+## What a read permission allows
+
+A read permission authorizes reading entities of its kind and writing the principal's own personal state about them: bookmarks, favorites, ratings, and playback history. Personal state is per-user and invisible to others, so recording it does not require the write permission that changing the shared record would. See [Personal state](../personal-state/).
+
 ## Extension distinction
 
 User permissions are not the same as extension manifest permission declarations. User permissions authorize an authenticated principal. Manifest declarations describe access an installed package expects and are not a runtime sandbox.
@@ -23,4 +27,5 @@ User permissions are not the same as extension manifest permission declarations.
 
 - [Roles](../roles/)
 - [Content rules](../content-rules/)
+- [Personal state](../personal-state/)
 - [Extension permissions](../../developer/extensions/permissions/)
