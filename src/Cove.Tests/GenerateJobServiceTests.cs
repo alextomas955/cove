@@ -206,6 +206,7 @@ public class GenerateJobServiceTests
                 thumbnails,
                 thumbnails,
                 fingerprints,
+                new AlwaysReadableSourceHealthProbe(),
                 fingerprintWriter,
                 nonVideoGeneration,
                 scopeFactory,
@@ -316,7 +317,8 @@ public class GenerateJobServiceTests
             var fingerprints = new NullFingerprintService();
             var scopes = provider.GetRequiredService<IServiceScopeFactory>();
             var writer = new FileFingerprintWriter(scopes);
-            var service = new GenerateJobService(jobs, thumbnails, thumbnails, fingerprints, writer,
+            var service = new GenerateJobService(jobs, thumbnails, thumbnails, fingerprints,
+                new AlwaysReadableSourceHealthProbe(), writer,
                 new NonVideoGenerationService(thumbnails, fingerprints, writer, NullLogger<NonVideoGenerationService>.Instance),
                 scopes, new CoveConfiguration { MaxParallelTasks = 1 }, NullLogger<GenerateJobService>.Instance);
             service.Start(new GenerateOptionsDto { Thumbnails = true });
@@ -565,4 +567,14 @@ public class GenerateJobServiceTests
 
         public string StartGenerateImagePhashes() => "image-phashes";
     }
+}
+
+/// <summary>
+/// Source-health probe that never flags anything, so these tests exercise generation flow rather
+/// than the truncation check (which has its own tests in <see cref="VideoSourceHealthTests"/>).
+/// </summary>
+internal sealed class AlwaysReadableSourceHealthProbe : IVideoSourceHealthProbe
+{
+    public Task<string?> GetUnreadableReasonAsync(string path, CancellationToken ct = default)
+        => Task.FromResult<string?>(null);
 }

@@ -143,7 +143,6 @@ public class ConfigService
                 })
                 .ToList(),
             CalculateMd5 = cfg.CalculateMd5,
-            FrameExtractionMode = cfg.FrameExtractionMode,
             FfmpegPath = cfg.FfmpegPath,
             FfprobePath = cfg.FfprobePath,
             MaxStreamingTranscodeSize = cfg.MaxStreamingTranscodeSize,
@@ -366,7 +365,6 @@ public class ConfigService
             .ToList();
         cfg.DownloaderSiteCredentials = BuildDownloaderSiteCredentials(dto.DownloaderSiteCredentials ?? [], cfg.DownloaderSiteCredentials);
         cfg.CalculateMd5 = dto.CalculateMd5;
-        cfg.FrameExtractionMode = string.Equals(dto.FrameExtractionMode, "managed", StringComparison.OrdinalIgnoreCase) ? "managed" : "external";
         cfg.FfmpegPath = string.IsNullOrWhiteSpace(dto.FfmpegPath) ? null : dto.FfmpegPath;
         cfg.FfprobePath = string.IsNullOrWhiteSpace(dto.FfprobePath) ? null : dto.FfprobePath;
         cfg.MaxStreamingTranscodeSize = dto.MaxStreamingTranscodeSize;

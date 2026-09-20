@@ -12,27 +12,23 @@ namespace Cove.Api.Services;
 /// Sets <see cref="CoveConfiguration.FfmpegPath"/> and <see cref="CoveConfiguration.FfprobePath"/>
 /// so all services discover ffmpeg without their own search logic.
 ///
-/// On Windows and Linux the downloaded build is the BtbN "gpl-shared" variant which
-/// includes the FFmpeg shared libraries (.dll / .so) alongside the binaries.
-/// FFmpeg.AutoGen's DynamicallyLoadedBindings needs to dlopen those files for
-/// in-process frame extraction; the static CLI-only builds do NOT provide them.
-/// macOS uses evermeet.cx standalone binaries (no shared build available) and falls
-/// back to the process-spawn path in FingerprintService / ThumbnailService.
+/// Cove only ever invokes the ffmpeg/ffprobe binaries, so the self-contained "gpl" builds are
+/// enough. Earlier versions pulled the larger BtbN "gpl-shared" variant because the in-process
+/// FFmpeg.AutoGen decoder had to dlopen the shared libraries; that decoder has been removed.
 /// </summary>
 public class FfmpegManagerService(CoveConfiguration config, ILogger<FfmpegManagerService> logger) : IHostedService
 {
-    // BtbN GPL-SHARED builds — includes shared libraries (.dll/.so) required by FFmpeg.AutoGen.
-    private const string WinUrl      = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip";
-    private const string LinuxUrl    = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl-shared.tar.xz";
-    private const string LinuxArm64Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl-shared.tar.xz";
-    // macOS: evermeet.cx static builds (no shared-library build publicly available)
+    // BtbN GPL builds — self-contained binaries; no shared libraries needed.
+    private const string WinUrl      = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
+    private const string LinuxUrl    = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz";
+    private const string LinuxArm64Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz";
+    // macOS: evermeet.cx static builds
     private const string MacUrl      = "https://evermeet.cx/ffmpeg/getrelease/zip";
     private const string MacProbeUrl = "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip";
 
     // Marker written to ManagedDir after a successful shared-library download.
     // If the binary exists but this marker is absent the install is a legacy standalone
     // build and we re-download to get the shared libraries.
-    private const string SharedMarker = "_cove_shared";
 
     private static string ManagedDir => CoveDefaultPaths.GetDataSubdirectory("ffmpeg");
 
@@ -60,28 +56,16 @@ public class FfmpegManagerService(CoveConfiguration config, ILogger<FfmpegManage
         }
 
         var managedFfmpeg = Path.Combine(ManagedDir, FfmpegExe);
-        var sharedMarkerPath = Path.Combine(ManagedDir, SharedMarker);
 
-        // 3. Already downloaded — but check that it is the shared-library build.
-        //    On Windows and Linux a standalone build lacks the .dll/.so files that
-        //    FFmpeg.AutoGen needs; re-download if the marker is absent.
+        // 3. Already downloaded. Any build whose binaries run is fine now that nothing loads the
+        //    FFmpeg shared libraries in-process, so an existing install is never re-downloaded
+        //    just because of which variant it is.
         if (File.Exists(managedFfmpeg))
         {
-            var needsSharedLibs = !OperatingSystem.IsMacOS(); // macOS has no shared build
-            if (needsSharedLibs && !File.Exists(sharedMarkerPath))
-            {
-                logger.LogInformation(
-                    "Managed FFmpeg is a standalone build — re-downloading shared-library build " +
-                    "so in-process frame extraction (FFmpeg.AutoGen) works correctly...");
-                try { Directory.Delete(ManagedDir, recursive: true); } catch { /* best effort */ }
-            }
-            else
-            {
-                config.FfmpegPath = managedFfmpeg;
-                EnsureFfprobePath(ManagedDir);
-                logger.LogInformation("FFmpeg found at managed location {Path}", managedFfmpeg);
-                return;
-            }
+            config.FfmpegPath = managedFfmpeg;
+            EnsureFfprobePath(ManagedDir);
+            logger.LogInformation("FFmpeg found at managed location {Path}", managedFfmpeg);
+            return;
         }
 
         // 4. Download
@@ -120,19 +104,15 @@ public class FfmpegManagerService(CoveConfiguration config, ILogger<FfmpegManage
         if (OperatingSystem.IsWindows())
         {
             await DownloadAndExtractZipAsync(WinUrl, ct);
-            // Mark as a shared-library install
-            await File.WriteAllTextAsync(Path.Combine(ManagedDir, SharedMarker), "shared", ct);
         }
         else if (OperatingSystem.IsMacOS())
         {
             await DownloadMacAsync(ct);
-            // macOS is always standalone — no marker written
         }
         else
         {
             var url = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? LinuxArm64Url : LinuxUrl;
             await DownloadAndExtractTarAsync(url, ct);
-            await File.WriteAllTextAsync(Path.Combine(ManagedDir, SharedMarker), "shared", ct);
         }
 
         // Verify
@@ -174,13 +154,10 @@ public class FfmpegManagerService(CoveConfiguration config, ILogger<FfmpegManage
     }
 
     /// <summary>
-    /// Extracts the BtbN Linux tar.xz (gpl-shared). The archive contains:
-    ///   ffmpeg-master-latest-linux64-gpl-shared/bin/ffmpeg      ← CLI binary
-    ///   ffmpeg-master-latest-linux64-gpl-shared/bin/ffprobe
-    ///   ffmpeg-master-latest-linux64-gpl-shared/lib/libavcodec.so.61  ← needed by AutoGen
-    ///   ffmpeg-master-latest-linux64-gpl-shared/lib/libavformat.so.61 ← etc.
-    /// Both bin/ and lib/ contents are extracted flat into ManagedDir so that
-    /// DynamicallyLoadedBindings.LibrariesPath (set to ManagedDir) finds the .so files.
+    /// Extracts the BtbN Linux tar.xz. The archive nests everything under a versioned directory:
+    ///   ffmpeg-master-latest-linux64-gpl/bin/ffmpeg      ← CLI binary
+    ///   ffmpeg-master-latest-linux64-gpl/bin/ffprobe
+    /// Contents are extracted flat into ManagedDir so the binaries land at a predictable path.
     /// </summary>
     private async Task DownloadAndExtractTarAsync(string url, CancellationToken ct)
     {
@@ -229,9 +206,6 @@ public class FfmpegManagerService(CoveConfiguration config, ILogger<FfmpegManage
 
     private async Task DownloadMacAsync(CancellationToken ct)
     {
-        // macOS: evermeet.cx only provides standalone static binaries (no shared .dylib build).
-        // In-process FFmpeg.AutoGen will not work; FingerprintService / ThumbnailService
-        // fall back to spawning the ffmpeg process automatically.
         var ffmpegZip  = Path.Combine(ManagedDir, "ffmpeg.zip");
         var ffprobeZip = Path.Combine(ManagedDir, "ffprobe.zip");
         try

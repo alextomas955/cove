@@ -54,6 +54,7 @@ import {
   UserX,
   Loader2,
   Scissors,
+  AlertTriangle,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, Fragment, useMemo, lazy, Suspense } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -2036,6 +2037,19 @@ export function FileInfoTab({
                   <FolderOpen className="h-3.5 w-3.5" />
                   Reveal
                 </button>
+              </div>
+            ) : null}
+
+            {file.sourceUnreadableReason ? (
+              <div
+                role="status"
+                className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-200"
+              >
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <div>
+                  <div className="font-medium">Generation skipped this file</div>
+                  <div className="mt-0.5 text-amber-200/80">{file.sourceUnreadableReason}</div>
+                </div>
               </div>
             ) : null}
 

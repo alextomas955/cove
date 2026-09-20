@@ -953,7 +953,10 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             f.BitRate,
             f.Size,
             f.Fingerprints.Select(fp => new FingerprintDto(fp.Type, fp.Value)).ToList(),
-            f.Captions.Select(c => new CaptionDto(c.Id, c.LanguageCode, c.CaptionType, c.Filename)).ToList())).ToList(),
+            f.Captions.Select(c => new CaptionDto(c.Id, c.LanguageCode, c.CaptionType, c.Filename)).ToList())
+        {
+            SourceUnreadableReason = f.IsSourceKnownUnreadable ? f.SourceUnreadableReason : null,
+        }).ToList(),
         MapWholeVideoGroups(s),
         s.VideoGalleries.Where(sg => sg.Gallery != null).Select(sg => new GallerySummaryDto(sg.Gallery!.Id, sg.Gallery.Title, PartialDate.Format(sg.Gallery.Date, sg.Gallery.DatePrecision))).ToList(),
         s.RemoteIds.Select(remoteId => new VideoRemoteIdDto(remoteId.Endpoint, remoteId.RemoteId)).ToList(),
@@ -994,7 +997,10 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             f.BitRate,
             f.Size,
             [],
-            [])).ToList(),
+            [])
+        {
+            SourceUnreadableReason = f.IsSourceKnownUnreadable ? f.SourceUnreadableReason : null,
+        }).ToList(),
         MapWholeVideoGroups(s),
         s.VideoGalleries.Where(sg => sg.Gallery != null).Select(sg => new GallerySummaryDto(sg.Gallery!.Id, sg.Gallery.Title, PartialDate.Format(sg.Gallery.Date, sg.Gallery.DatePrecision))).ToList(),
         s.RemoteIds.Select(remoteId => new VideoRemoteIdDto(remoteId.Endpoint, remoteId.RemoteId)).ToList(),

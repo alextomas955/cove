@@ -12,4 +12,30 @@
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Cove.Core.Interfaces.PerformerFilter.get_CountryCriterion</Target>
   </Suppression>
+
+  <!--
+    Deliberately accepted break, listed as a breaking change in CHANGELOG.md under the release that
+    follows 1.4.1. The in-process ("managed") frame extractor was removed: batching the ffmpeg process
+    path made it faster than in-process decoding, and a fault in the native decoder could take the whole
+    host down, which it repeatedly did. FrameExtractionMode selected between the two, so with only one
+    path left the setting no longer means anything and has been removed rather than left as an
+    ignored property. Remove these entries when CoveExtensionAbiBaselineVersion is bumped past that
+    release.
+  -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.Interfaces.CoveConfiguration.get_FrameExtractionMode</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.Interfaces.CoveConfiguration.set_FrameExtractionMode(System.String)</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.CoveConfigDto.get_FrameExtractionMode</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.CoveConfigDto.set_FrameExtractionMode(System.String)</Target>
+  </Suppression>
 </Suppressions>

@@ -303,6 +303,8 @@ try
     builder.Services.AddSingleton<NonVideoGenerationService>();
     builder.Services.AddSingleton<GenerateJobService>();
     builder.Services.AddSingleton<IMediaProbeService, FfprobeMediaProbeService>();
+    builder.Services.AddSingleton<IVideoSourceHealthProbe, VideoSourceHealthProbe>();
+    builder.Services.AddSingleton<FfmpegConcurrencyLimiter>();
     builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddSingleton<IScanFileValidator, ScanFileValidator>();
     builder.Services.AddSingleton<IFaceSuggester, EmptyFaceSuggester>();
@@ -827,8 +829,6 @@ try
     // Initialize SignalR log sink with hub context
     SignalRLogSink.SetHubContext(app.Services.GetRequiredService<IHubContext<LogHub>>());
 
-    // FfmpegInProcess is a static class with no injected logger — give it one for init diagnostics.
-    FfmpegInProcess.Logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Cove.Api.Services.FfmpegInProcess");
 
     if (isIntegrationTest)
     {

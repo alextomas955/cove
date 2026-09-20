@@ -12,6 +12,7 @@ public sealed class GenerateJobService(
     IThumbnailService thumbnailService,
     IVideoAssetGenerator videoAssetGenerator,
     IFingerprintService fingerprintService,
+    IVideoSourceHealthProbe sourceHealthProbe,
     FileFingerprintWriter fingerprintWriter,
     NonVideoGenerationService nonVideoGenerationService,
     IServiceScopeFactory scopeFactory,
@@ -33,6 +34,12 @@ public sealed class GenerateJobService(
         bool HasSprite,
         bool HasPhash,
         bool HasMd5);
+
+    /// <summary>Work that needs frames decoded out of the source file. MD5 does not.</summary>
+    private static bool NeedsDecodableSource(GenerateOptionsDto options)
+        => options.Thumbnails || options.Previews || options.Sprites
+            || options.SegmentThumbnails || options.SegmentPreviews || options.Segments
+            || options.Phashes;
 
     public string Start(GenerateOptionsDto options)
         => jobService.Enqueue(
@@ -116,6 +123,18 @@ public sealed class GenerateJobService(
             await workSet.AddAsync(batch.Select(item => item.Video.Id), ct);
         progress.DeclareUnitCount(workSet.Count);
 
+        var reporter = new GenerateProgressReporter(progress, logger, workSet.Count);
+        logger.LogInformation(
+            "Generate starting: {Count} videos need work ({Assets}), {Parallelism} in parallel, overwrite={Overwrite}",
+            workSet.Count, DescribeSelectedAssets(options), parallelism, options.Overwrite);
+
+        if (workSet.Count == 0)
+        {
+            logger.LogInformation("Generate finished: nothing to do — every selected video already has the requested assets.");
+            progress.Report(1d, "Nothing to generate");
+            return;
+        }
+
         var segmentThumbnails = options.SegmentThumbnails || options.SegmentPreviews || options.Segments;
         var segmentPreviews = options.SegmentPreviews || options.Segments;
         var filterPaths = hasVideoSelection ? [] : GeneratePathFilter.Normalize(options.Paths);
@@ -127,17 +146,36 @@ public sealed class GenerateJobService(
             {
                 using var unit = progress.StartUnit(missingId.ToString());
                 unit.Complete(JobUnitOutcome.Skipped, "Selected video or source file is no longer available");
+                reporter.RecordSkipped();
             }
             var segmentsByVideoId = segmentThumbnails ? await LoadSegmentsAsync(db, workItems, ct) : [];
             await jobService.RunBatchAsync(
                 workItems,
                 parallelism,
-                (item, unit, token) => GenerateVideoAsync(item, options, segmentThumbnails, segmentPreviews, segmentsByVideoId, unit, token),
+                (item, unit, token) => GenerateVideoAsync(
+                    item, options, segmentThumbnails, segmentPreviews, segmentsByVideoId,
+                    new RecordingJobUnit(unit), reporter, token),
                 progress,
                 unitIdFactory: (item, _) => item.Video.Id.ToString(),
                 labelFactory: item => item.Video.Title,
                 ct: ct);
         }
+
+        reporter.ReportCompleted();
+    }
+
+    /// <summary>Names the asset kinds this run was asked for, so the log says what it is doing.</summary>
+    internal static string DescribeSelectedAssets(GenerateOptionsDto options)
+    {
+        var selected = new List<string>(6);
+        if (options.Thumbnails) selected.Add("covers");
+        if (options.Previews) selected.Add("previews");
+        if (options.Sprites) selected.Add("sprites");
+        if (options.SegmentThumbnails || options.Segments) selected.Add("segment covers");
+        if (options.SegmentPreviews || options.Segments) selected.Add("segment previews");
+        if (options.Phashes) selected.Add("phashes");
+        if (options.Md5) selected.Add("md5");
+        return selected.Count > 0 ? string.Join(", ", selected) : "nothing";
     }
 
     private async IAsyncEnumerable<List<VideoWorkItem>> ReadVideoWorkAsync(
@@ -236,15 +274,31 @@ public sealed class GenerateJobService(
         bool generateSegmentThumbnails,
         bool generateSegmentPreviews,
         IReadOnlyDictionary<int, List<(double StartSec, double? EndSec)>> segmentsByVideoId,
-        IJobUnit unit,
+        RecordingJobUnit unit,
+        GenerateProgressReporter reporter,
         CancellationToken ct)
     {
+        var startedAt = DateTime.UtcNow;
         try
         {
             if (!System.IO.File.Exists(item.Path))
             {
                 unit.Complete(JobUnitOutcome.Skipped, "Source file is unavailable");
                 return;
+            }
+
+            // Everything below decodes frames from the source. A truncated download cannot produce
+            // any of them, and rediscovering that costs tens of seconds per asset per run, so the
+            // source is judged once per video - not once per selected asset - and the verdict is
+            // persisted so later runs skip straight past it.
+            if (NeedsDecodableSource(options))
+            {
+                var unreadable = await ResolveUnreadableReasonAsync(item, ct);
+                if (unreadable != null)
+                {
+                    unit.Complete(JobUnitOutcome.Failed, unreadable);
+                    return;
+                }
             }
 
             await GeneratePrimaryVideoAssetsAsync(item, options, unit, ct);
@@ -274,6 +328,126 @@ public sealed class GenerateJobService(
         {
             logger.LogWarning(ex, "Skipped video {VideoId} during generate after an error", item.Video.Id);
             unit.Complete(JobUnitOutcome.Failed, ex.Message);
+        }
+        finally
+        {
+            RecordVideoOutcome(item, unit, reporter, DateTime.UtcNow - startedAt);
+        }
+    }
+
+    /// <summary>
+    /// Feeds one video's result into the running tally and leaves a trace of it.
+    ///
+    /// A failure is logged at Warning with the reason the unit recorded, because that is the thing
+    /// worth noticing while a long run is in flight; successes are Debug, since a full-library run
+    /// would otherwise write a line per video across the whole library.
+    /// </summary>
+    private void RecordVideoOutcome(VideoWorkItem item, RecordingJobUnit unit, GenerateProgressReporter reporter, TimeSpan elapsed)
+    {
+        // A unit the work left untouched succeeded: RunBatchAsync marks it after this returns.
+        switch (unit.Outcome)
+        {
+            case JobUnitOutcome.Failed:
+                reporter.RecordFailed();
+                logger.LogWarning(
+                    "Generate failed for video {VideoId} ({Title}) after {Elapsed:F1}s: {Reason}",
+                    item.Video.Id, item.Video.Title, elapsed.TotalSeconds, unit.Message ?? "no reason recorded");
+                break;
+            case JobUnitOutcome.Skipped:
+                reporter.RecordSkipped();
+                logger.LogDebug(
+                    "Generate skipped video {VideoId} ({Title}): {Reason}",
+                    item.Video.Id, item.Video.Title, unit.Message ?? "no reason recorded");
+                break;
+            default:
+                reporter.RecordSucceeded();
+                logger.LogDebug(
+                    "Generated video {VideoId} ({Title}) in {Elapsed:F1}s",
+                    item.Video.Id, item.Video.Title, elapsed.TotalSeconds);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Forwards to the real job unit while remembering the last reason passed to Complete.
+    /// IJobUnit deliberately exposes only the outcome, but the reason is the useful half when a
+    /// video fails, so generation keeps its own copy to put in the log.
+    /// </summary>
+    private sealed class RecordingJobUnit(IJobUnit inner) : IJobUnit
+    {
+        public string? Message { get; private set; }
+
+        public JobUnitOutcome? Outcome => inner.Outcome;
+
+        public void Report(double progress, string? message = null) => inner.Report(progress, message);
+
+        public void Complete(JobUnitOutcome outcome, string? message = null)
+        {
+            Message = message ?? Message;
+            inner.Complete(outcome, message);
+        }
+
+        // The batch runner owns the real unit's lifetime; disposing here would end it early.
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// Returns why this source cannot be generated from, or null to proceed. Uses the stored verdict
+    /// when it still applies to the file currently on disk; otherwise probes and stores the result.
+    /// A file that changes size (an interrupted download that later completed) is re-evaluated.
+    /// </summary>
+    private async Task<string?> ResolveUnreadableReasonAsync(VideoWorkItem item, CancellationToken ct)
+    {
+        if (item.File.IsSourceKnownUnreadable)
+            return item.File.SourceUnreadableReason ?? "Source file is unreadable";
+
+        var reason = await sourceHealthProbe.GetUnreadableReasonAsync(item.Path, ct);
+
+        // Only touch the database when the stored verdict actually changes. The overwhelmingly
+        // common case is a healthy file with nothing recorded, and opening a scope per video just
+        // to confirm that would add a scope and a query to every video in the library.
+        var hasStoredVerdict = item.File.SourceUnreadableAt.HasValue;
+        if (reason != null || hasStoredVerdict)
+            await RecordSourceHealthAsync(item.File.Id, reason, ct);
+
+        return reason;
+    }
+
+    /// <summary>
+    /// Persists (or clears) the unreadable verdict for a file. Clearing matters as much as setting:
+    /// a file that was truncated and has since been re-downloaded must become eligible again.
+    /// </summary>
+    private async Task RecordSourceHealthAsync(int fileId, string? reason, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CoveContext>();
+            var file = await db.VideoFiles.SingleOrDefaultAsync(candidate => candidate.Id == fileId, ct);
+            if (file == null)
+                return;
+
+            if (reason == null)
+            {
+                if (file.SourceUnreadableAt == null)
+                    return;
+                file.SourceUnreadableAt = null;
+                file.SourceUnreadableReason = null;
+                file.SourceUnreadableSize = null;
+            }
+            else
+            {
+                file.SourceUnreadableAt = DateTime.UtcNow;
+                file.SourceUnreadableReason = reason;
+                file.SourceUnreadableSize = file.Size;
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Recording the verdict is an optimization; failing to store it only costs time later.
+            logger.LogDebug(ex, "Could not record source health for file {FileId}", fileId);
         }
     }
 
