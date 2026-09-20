@@ -55,7 +55,13 @@ import {
 } from "../hooks/useEntityCardSize";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { withSeededRandomSort } from "../utils/seededRandomSort";
-import { defaultSortDirection, getSortClauses } from "../utils/sortClauses";
+import { getSortClauses } from "../utils/sortClauses";
+import {
+  normalizeListEntityType,
+  resolveSearchQueryFilter,
+  withRelevanceSortOption,
+  type PreviousSearchSort,
+} from "../utils/relevanceSort";
 import { trackInteraction } from "../utils/interactionTracking";
 import { toolbarIconButtonClass, toolbarSegmentClass, toolbarSelectClass } from "./listToolbarStyles";
 import { PageSizeSelect } from "./PageSizeSelect";
@@ -149,32 +155,6 @@ export interface ListPageProps {
   supportsFilterExpressions?: boolean;
 }
 const DEFAULT_ZOOM_LEVEL = 1;
-const RELEVANCE_SORT_OPTION = { value: "relevance", label: "Relevance" } as const;
-const RELEVANCE_SORT_ENTITY_TYPES = new Set([
-  "video",
-  "image",
-  "audio",
-  "text",
-  "gallery",
-  "performer",
-  "tag",
-  "group",
-  "studio",
-]);
-const LIST_ENTITY_BY_FILTER_MODE: Record<string, string> = {
-  videos: "video",
-  audios: "audio",
-  texts: "text",
-  performers: "performer",
-  tags: "tag",
-  studios: "studio",
-  galleries: "gallery",
-  images: "image",
-  groups: "group",
-  faces: "face",
-  segments: "segment",
-};
-
 const REFERENCE_ENTITY_TYPE_BY_EXTENSION_VALUE: Record<string, EntityType> = {
   tag: "tags",
   tags: "tags",
@@ -194,12 +174,6 @@ const REFERENCE_ENTITY_TYPE_BY_EXTENSION_VALUE: Record<string, EntityType> = {
   face: "faces",
   faces: "faces",
 };
-
-function normalizeListEntityType(entityType?: string) {
-  const normalized = (entityType ?? "").trim().toLowerCase();
-  const singular = normalized.endsWith("s") ? normalized.slice(0, -1) : normalized;
-  return LIST_ENTITY_BY_FILTER_MODE[normalized] ?? singular;
-}
 
 function normalizeCriterionType(value: string | undefined): CriterionType {
   const normalized = (value ?? "string").trim().toLowerCase();
@@ -441,7 +415,7 @@ export function ListPage({
   );
 
   const perPage = filter.perPage ?? 25;
-  const previousSearchSortRef = useRef<Pick<FindFilter, "sort" | "direction" | "sorts" | "seed"> | null>(null);
+  const previousSearchSortRef = useRef<PreviousSearchSort | null>(null);
   const infinitePageSize = allowInfinitePageSize && (perPage === 0 || infinitePageSizeOnly);
   const page = filter.page ?? 1;
   const resolvedLoadState =
@@ -502,9 +476,10 @@ export function ListPage({
         label: `Custom: ${definition.label || definition.key}`,
       }),
     );
-    const relevanceOptions =
-      RELEVANCE_SORT_ENTITY_TYPES.has(listEntityType) && Boolean(filter.q?.trim()) ? [RELEVANCE_SORT_OPTION] : [];
-    const mergedOptions = [...relevanceOptions, ...(sortOptions ?? []), ...extensionSortOptions, ...customSortOptions];
+    const mergedOptions = withRelevanceSortOption(
+      [...(sortOptions ?? []), ...extensionSortOptions, ...customSortOptions],
+      { listEntityType, filter },
+    );
     const knownValues = new Set(mergedOptions.map((option) => option.value));
     const unavailableCustomSortOptions = getSortClauses(filter)
       .filter(
@@ -659,40 +634,15 @@ export function ListPage({
         });
       }
 
-      const currentQuery = filter.q?.trim();
-      if (query && !currentQuery && RELEVANCE_SORT_ENTITY_TYPES.has(listEntityType)) {
-        previousSearchSortRef.current = {
-          sort: filter.sort,
-          direction: filter.direction,
-          sorts: filter.sorts,
-          seed: filter.seed,
-        };
-        onFilterChange({
-          ...filter,
-          q: query,
-          page: 1,
-          sort: "relevance",
-          direction: "desc",
-          sorts: undefined,
-          seed: undefined,
-        });
-        return;
-      }
-
-      if (!query && currentQuery && filter.sort === "relevance") {
-        const fallbackSort = sortOptions?.find((option) => option.value !== "relevance")?.value;
-        const previousSort = previousSearchSortRef.current ?? {
-          sort: fallbackSort,
-          direction: fallbackSort ? defaultSortDirection(fallbackSort) : undefined,
-          sorts: undefined,
-          seed: undefined,
-        };
-        previousSearchSortRef.current = null;
-        onFilterChange({ ...filter, ...previousSort, q: undefined, page: 1 });
-        return;
-      }
-
-      onFilterChange({ ...filter, q: query, page: 1 });
+      const resolved = resolveSearchQueryFilter({
+        filter,
+        query,
+        listEntityType,
+        sortOptions,
+        previousSearchSort: previousSearchSortRef.current,
+      });
+      previousSearchSortRef.current = resolved.previousSearchSort;
+      onFilterChange(resolved.filter);
     },
     [filter, listEntityType, objectFilter, onFilterChange, pageKey, sortOptions],
   );

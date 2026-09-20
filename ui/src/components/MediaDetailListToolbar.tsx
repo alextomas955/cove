@@ -32,6 +32,8 @@ function aggregate(
 
 /** Uses the same aggregate endpoints as top-level lists, with the parent relation included. */
 export function MediaDetailListToolbar({ mediaType, aggregateObjectFilter, selectedIds, ...props }: Props) {
+  // The media type already names this list's entity, so relevance works without a filterMode.
+  const listEntityType = props.listEntityType ?? mediaType;
   const aggregateFilter = { q: props.filter.q, page: 1, perPage: 0 };
   const filtered = useQuery({
     queryKey: [mediaType, "aggregate", "detail", aggregateFilter, aggregateObjectFilter],
@@ -65,6 +67,7 @@ export function MediaDetailListToolbar({ mediaType, aggregateObjectFilter, selec
   return (
     <DetailListToolbar
       {...props}
+      listEntityType={listEntityType}
       metadataByline={metadata(filtered)}
       selectionMetadata={ids.length > 0 ? metadata(selected) : undefined}
     />
