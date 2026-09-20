@@ -580,7 +580,16 @@ public record GroupQueryUpdateDto(string QuerySourceKey, string? QueryJson = nul
 public record VideoFileDto(int Id, string Path, string Basename, string Format,
     int Width, int Height, double Duration, string VideoCodec, string AudioCodec,
     double FrameRate, long BitRate, long Size, List<FingerprintDto> Fingerprints,
-    List<CaptionDto>? Captions = null);
+    List<CaptionDto>? Captions = null)
+{
+    /// <summary>
+    /// Why generation cannot read this source - almost always an incomplete download. Null when the
+    /// file is fine. Added as an init property rather than a positional parameter: widening the
+    /// primary constructor would change its arity and break every extension already compiled
+    /// against the current shape (see the Compatibility / ABI section of src/Cove.Sdk/README.md).
+    /// </summary>
+    public string? SourceUnreadableReason { get; init; }
+}
 
 public record CaptionDto(int Id, string LanguageCode, string CaptionType, string Filename);
 
@@ -1351,7 +1360,6 @@ public record CoveConfigDto
     public List<DownloaderPathOverrideDto> DownloaderPathOverrides { get; init; } = [];
     public List<DownloaderSiteCredentialDto> DownloaderSiteCredentials { get; init; } = [];
     public bool CalculateMd5 { get; init; }
-    public string FrameExtractionMode { get; init; } = "external";
     public string? FfmpegPath { get; init; }
     public string? FfprobePath { get; init; }
     public int MaxStreamingTranscodeSize { get; init; }

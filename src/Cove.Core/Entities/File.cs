@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Cove.Core.Entities;
 
 public class Folder
@@ -59,6 +61,21 @@ public class VideoFile : BaseFileEntity
     public string AudioCodec { get; set; } = string.Empty;
     public double FrameRate { get; set; }
     public long BitRate { get; set; }
+
+    // Set when generation determined the source cannot be read — almost always an incomplete
+    // download whose container still advertises the full duration. Generation skips such files
+    // instead of spending tens of seconds per asset re-discovering the same failure on every run.
+    // SourceUnreadableSize records the file size the verdict was made against: if the file later
+    // changes size (the download finished, the file was replaced), the verdict no longer applies
+    // and generation re-evaluates it.
+    public DateTime? SourceUnreadableAt { get; set; }
+    public string? SourceUnreadableReason { get; set; }
+    public long? SourceUnreadableSize { get; set; }
+
+    /// <summary>True when a previous generation run found this exact file unreadable.</summary>
+    [NotMapped]
+    public bool IsSourceKnownUnreadable
+        => SourceUnreadableAt.HasValue && SourceUnreadableSize == Size;
 
     // FK to Video
     public int? VideoId { get; set; }

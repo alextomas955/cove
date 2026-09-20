@@ -1190,6 +1190,11 @@ export interface VideoFile {
   size: number;
   fingerprints: Fingerprint[];
   captions?: Caption[];
+  /**
+   * Why generation cannot read this source — almost always an incomplete download whose container
+   * still advertises the full duration. Undefined when the file is fine.
+   */
+  sourceUnreadableReason?: string | null;
 }
 
 export interface Caption {
@@ -2305,7 +2310,6 @@ export interface CoveConfig {
   maxParallelTasks: number;
   maxConcurrentDownloads: number;
   calculateMd5: boolean;
-  frameExtractionMode: string;
   videoExtensions: string[];
   imageExtensions: string[];
   galleryExtensions: string[];

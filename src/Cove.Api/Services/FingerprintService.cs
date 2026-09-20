@@ -28,22 +28,20 @@ public class FingerprintService(
     IServiceScopeFactory scopeFactory,
     IJobService jobService,
     CoveConfiguration config,
+    FfmpegConcurrencyLimiter ffmpegConcurrency,
     ILogger<FingerprintService> logger) : IFingerprintService
 {
     // Matches goimagehash PerceptionHash: 64×64 resize, 8×8 DCT low-frequency block
     private const int DctImageSize = 64;
     private const int DctLowFreqSize = 8;
 
-    // Sprite generation constants matching Go's videophash package
+    // Sprite grid and frame size, matching Stash's videophash package. These, the 5% offset and the
+    // 90% sampling window below define the hash: Cove's pHashes are compared against Stash's and
+    // against remote metadata servers, so changing any of them re-hashes the library and breaks
+    // those comparisons.
     private const int SpriteFrameSize = 160;
     private const int SpriteColumns = 5;
     private const int SpriteRows = 5;
-
-    // The single-process sprite pHash path decodes ~90% of the file to sample its frames, so its cost
-    // scales with video length and routinely times out on long videos before falling through to
-    // seek-based extraction anyway. Past this duration, skip it and go straight to fast input-seek
-    // extraction (near-constant cost per frame).
-    private const double SpriteDecodeMaxDurationSeconds = 600d; // 10 minutes
 
     public async Task<string?> ComputeMd5Async(string path, CancellationToken ct = default)
     {
@@ -302,14 +300,9 @@ public class FingerprintService(
             return null;
         }
 
-        // In-process extraction is opt-in via the "managed" frame-extraction mode; otherwise use
-        // the crash-isolated ffmpeg CLI path below.
-        var useInProcess = string.Equals(config.FrameExtractionMode, "managed", StringComparison.OrdinalIgnoreCase);
-        if (useInProcess)
-            FfmpegInProcess.EnsureInitialized(ffmpegPath, !FfmpegHwAccel.IsHardwareAccelerationOff(config.HardwareAcceleration));
-        logger.LogTrace("pHash FFmpeg setup: path={FfmpegPath}, managed={Managed}, inProcessAvailable={IsAvailable}, duration={Duration:F1}s, target={Path}",
-            ffmpegPath, useInProcess, FfmpegInProcess.IsAvailable, duration, path);
-
+        // These timestamps define the hash. Changing the count, the 5% offset or the 90% window
+        // changes every hash this method produces and silently invalidates the stored ones, so
+        // they are fixed regardless of how the frames are extracted.
         var chunkCount = SpriteColumns * SpriteRows; // 25
         var offset = 0.05 * duration;
         var stepSize = (0.9 * duration) / chunkCount;
@@ -317,60 +310,40 @@ public class FingerprintService(
         for (var i = 0; i < chunkCount; i++)
             timestamps[i] = offset + i * stepSize;
 
-        if (useInProcess && FfmpegInProcess.IsAvailable)
+        logger.LogTrace("pHash extraction for {Path}: ffmpeg={FfmpegPath}, duration={Duration:F1}s", path, ffmpegPath, duration);
+
+        var extracted = await VideoFrameBatchExtractor.ExtractAsync(
+            ffmpegPath, path, timestamps, SpriteFrameSize, ffmpegConcurrency, logger, ct);
+
+        if (extracted == null)
         {
-            // Fast path: in-process frame extraction (seeks directly, no process spawning).
-            logger.LogTrace("Attempting in-process pHash extraction for {Path}", path);
-            try
+            logger.LogWarning("Video pHash extraction failed for {Path} - no frames could be read", path);
+            return null;
+        }
+
+        try
+        {
+            // Unlike a sprite, a pHash cannot tolerate substituted frames: filling a gap from a
+            // neighbour would produce a hash that no other extraction of the same file reproduces.
+            // A missing frame means no hash.
+            var missing = 0;
+            for (var i = 0; i < extracted.Length; i++)
+                if (extracted[i] is null) missing++;
+
+            if (missing > 0)
             {
-                var frames = FfmpegInProcess.ExtractFrames(path, timestamps, SpriteFrameSize, threadCount: 1, ct);
-                if (frames != null)
-                {
-                    logger.LogTrace("In-process pHash extraction succeeded for {Path}", path);
-                    try
-                    {
-                        return BuildSpritePhash(frames);
-                    }
-                    finally
-                    {
-                        foreach (var f in frames) f?.Dispose();
-                    }
-                }
-
-                logger.LogDebug("In-process pHash frame extraction returned null for {Path}, falling back to process spawn", path);
+                logger.LogWarning(
+                    "Video pHash extraction failed for {Path} - {Missing} of {Total} sample frames could not be decoded",
+                    path, missing, extracted.Length);
+                return null;
             }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "In-process FFmpeg failed for {Path}, falling back to process spawn", path);
-            }
-        }
-        else
-        {
-            logger.LogTrace("Using ffmpeg CLI for pHash extraction (managed={Managed}, available={Available}) for {Path}",
-                useInProcess, FfmpegInProcess.IsAvailable, path);
-        }
 
-        // The whole-window sprite decode is fine for short videos but pathological for long ones, so
-        // only attempt it under the duration threshold; otherwise drop straight to seek-based extraction.
-        if (duration <= SpriteDecodeMaxDurationSeconds)
-        {
-            var spritePhash = await TryComputeVideoPhashViaSpriteAsync(ffmpegPath, path, duration, ct);
-            if (!string.IsNullOrWhiteSpace(spritePhash))
-                return spritePhash;
-
-            logger.LogTrace("Single-process sprite extraction failed for {Path}; falling back to per-frame process extraction", path);
+            return BuildSpritePhash(extracted!);
         }
-        else
+        finally
         {
-            logger.LogTrace("Skipping whole-window sprite pHash path for long video ({Duration:F0}s) {Path}; using seek-based extraction", duration, path);
+            DisposeFrames(extracted);
         }
-
-        // Final fallback path: spawn ffmpeg once per timestamp and extract a single frame each time.
-        var processPhash = await ComputeVideoPhashViaProcessAsync(ffmpegPath, path, timestamps, ct);
-        if (string.IsNullOrWhiteSpace(processPhash))
-            logger.LogWarning("All video pHash extraction strategies failed for {Path}", path);
-        return processPhash;
     }
 
     private string? BuildSpritePhash(Image<Rgba32>[] frames)
@@ -385,83 +358,6 @@ public class FingerprintService(
             sprite.Mutate(ctx => ctx.DrawImage(frames[index], new SixLabors.ImageSharp.Point(x, y), 1f));
         }
         return ComputePerceptionHash(sprite);
-    }
-
-    /// <summary>
-    /// Single-process fallback: builds a tiled sprite with one ffmpeg invocation and hashes
-    /// that image directly. This is much faster than spawning ffmpeg once per timestamp and
-    /// serves as the primary cross-platform fallback when AutoGen is unavailable.
-    /// </summary>
-    private async Task<string?> TryComputeVideoPhashViaSpriteAsync(
-        string ffmpegPath,
-        string videoPath,
-        double duration,
-        CancellationToken ct)
-    {
-        var tmpDir = Path.Combine(Path.GetTempPath(), $"cove_phash_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tmpDir);
-
-        var spritePath = Path.Combine(tmpDir, "sprite.jpg");
-        try
-        {
-            var offset = Math.Max(duration * 0.05d, 0d);
-            var sampleWindow = Math.Max(duration * 0.9d, 0.001d);
-            var step = sampleWindow / (SpriteColumns * SpriteRows);
-            var offsetText = offset.ToString("0.########", CultureInfo.InvariantCulture);
-            var sampleWindowText = sampleWindow.ToString("0.########", CultureInfo.InvariantCulture);
-            var stepText = step.ToString("0.########", CultureInfo.InvariantCulture);
-            var decodeArgs = GetFfmpegDecodeArgs();
-            var filter = $"select='if(isnan(prev_selected_t),1,gte(t-prev_selected_t,{stepText}))',scale={SpriteFrameSize}:-2,tile={SpriteColumns}x{SpriteRows}:margin=0:padding=0";
-            // -pix_fmt yuvj420p forces full-range JPEG output so the mjpeg encoder doesn't reject
-            // limited-range YUV sources ("Non full-range YUV is non-standard", ffmpeg exit 234).
-            var args = $"{decodeArgs} -v error -fflags +discardcorrupt -err_detect ignore_err -y -ss {offsetText} -t {sampleWindowText} -i \"{videoPath}\" -vf \"{filter}\" -frames:v 1 -q:v 3 -pix_fmt yuvj420p -f image2 \"{spritePath}\"";
-            var timeout = TimeSpan.FromSeconds(Math.Clamp(duration / 2d, 45d, 300d));
-
-            logger.LogTrace("Attempting single-process sprite extraction for {Path}", videoPath);
-            if (!await TryRunFfmpegAsync(ffmpegPath, args, timeout, ct) || !File.Exists(spritePath))
-                return null;
-
-            using var sprite = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(spritePath, ct);
-            return ComputePerceptionHash(sprite);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogDebug(ex, "Single-process sprite extraction failed for {Path}", videoPath);
-            return null;
-        }
-        finally
-        {
-            try { Directory.Delete(tmpDir, recursive: true); } catch { }
-        }
-    }
-
-    /// <summary>
-    /// Process-based fallback: spawns ffmpeg (the CLI binary) once per timestamp to extract
-    /// a single scaled frame, then composes the sprite and computes the phash.
-    /// Slower than in-process but works on any platform regardless of shared library availability.
-    /// </summary>
-    private async Task<string?> ComputeVideoPhashViaProcessAsync(
-        string ffmpegPath, string videoPath, double[] timestamps, CancellationToken ct)
-    {
-        var frames = await FfmpegProcessFrameExtractor.ExtractFramesAsync(
-            ffmpegPath,
-            videoPath,
-            timestamps,
-            SpriteFrameSize,
-            logger,
-            ct);
-
-        if (frames == null)
-            return null;
-
-        try
-        {
-            return BuildSpritePhash(frames);
-        }
-        finally
-        {
-            DisposeFrames(frames);
-        }
     }
 
     private static void DisposeFrames(Image<Rgba32>?[] frames)

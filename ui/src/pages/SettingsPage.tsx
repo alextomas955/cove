@@ -553,9 +553,6 @@ const settingsSearchKeywords: Partial<Record<BuiltInSettingsTab, string[]>> = {
     "nvenc",
     "qsv",
     "vaapi",
-    "frame extraction",
-    "managed",
-    "in-process",
   ],
   "operations-scan-generate": ["scan", "generate", "covers", "thumbnails", "previews", "sprites", "phash", "md5"],
   "operations-downloads": ["download", "download from file", "url file", "batch download", "import urls"],
@@ -2501,26 +2498,6 @@ export function SettingsPage() {
                           ) : (
                             <> No hardware encoders were detected on this host — encoding will use the CPU.</>
                           ))}
-                      </p>
-                    </div>
-                    <div>
-                      <SelectField
-                        label="Frame extraction"
-                        value={draft.frameExtractionMode === "managed" ? "managed" : "external"}
-                        onChange={(value) => updateDraft((d) => ({ ...d, frameExtractionMode: value }))}
-                        options={[
-                          { value: "external", label: "External (ffmpeg CLI)" },
-                          { value: "managed", label: "Managed (in-process)" },
-                        ]}
-                      />
-                      <p className="mt-1 text-xs text-secondary">
-                        How Cove extracts frames for thumbnails, sprites, and phashes.{" "}
-                        <span className="font-medium">External</span> spawns the ffmpeg CLI — most compatible and
-                        crash-isolated. <span className="font-medium">Managed</span> decodes in-process for much higher
-                        throughput (and uses the hardware accelerator above for decode when not Off).
-                        <span className="text-red-300 font-medium"> Warning:</span> managed mode can fatally crash the
-                        process on some systems (e.g. missing native drivers, or rare malformed files); switch back to
-                        external if you hit instability.
                       </p>
                     </div>
                     <div>

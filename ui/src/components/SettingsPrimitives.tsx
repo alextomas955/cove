@@ -86,8 +86,6 @@ const fieldDescriptionFallbacks: Record<string, string> = {
   "Allow Identify to create new tags": "Lets Identify create tag records when applying metadata.",
   Host: "Network interface the Cove API binds to after restart.",
   Port: "HTTP port the Cove API listens on after restart.",
-  "Enable hardware acceleration (FFmpeg in-process)":
-    "Allows Cove's in-process FFmpeg work to use configured hardware acceleration when available.",
   "FFmpeg path": "Optional absolute path to the FFmpeg executable.",
   "FFprobe path": "Optional absolute path to the FFprobe executable.",
   "Max transcode size": "Maximum output size used for generated transcodes.",
