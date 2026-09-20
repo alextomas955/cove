@@ -17,6 +17,7 @@ public sealed class ScanPostgresStorageTests(MetadataImportPostgresFixture fixtu
         await using var db = fixture.CreateContext();
         NpgsqlConnection connection;
         int stageProcessId;
+        DateTime stageBackendStart;
         using (var records = new ScanDiskCollection<Record>(
             db,
             item => item.Key,
@@ -26,6 +27,9 @@ public sealed class ScanPostgresStorageTests(MetadataImportPostgresFixture fixtu
         {
             connection = GetConnection(records);
             stageProcessId = connection.ProcessID;
+            await using (var identity = new NpgsqlCommand(
+                "SELECT backend_start FROM pg_stat_activity WHERE pid = pg_backend_pid()", connection))
+                stageBackendStart = (DateTime)(await identity.ExecuteScalarAsync(ct))!;
             using var timeoutCommand = new NpgsqlCommand { Connection = connection };
             Assert.Equal(300, timeoutCommand.CommandTimeout);
             for (var i = 600; i >= 0; i--) records.Add(new Record($"file-{i:D4}", i));
@@ -58,10 +62,27 @@ public sealed class ScanPostgresStorageTests(MetadataImportPostgresFixture fixtu
         Assert.Equal(ConnectionState.Closed, connection.State);
         await db.Database.OpenConnectionAsync(ct);
         await using var check = new NpgsqlCommand(
-            "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$1)",
+            "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND backend_start=$2)",
             (NpgsqlConnection)db.Database.GetDbConnection());
         check.Parameters.AddWithValue(stageProcessId);
-        Assert.True((bool)(await check.ExecuteScalarAsync(ct))!);
+        check.Parameters.AddWithValue(stageBackendStart);
+        Assert.True(await BackendExitsAsync(check, ct), $"Backend {stageProcessId} outlived the staging connection.");
+    }
+
+    /// <summary>
+    /// Closing the client socket only sends <c>Terminate</c>; PostgreSQL clears the row once the
+    /// backend finishes shutting down, so the release is eventual rather than immediate. The caller
+    /// pins <c>backend_start</c> as well as the pid so a reused pid cannot stand in for the original.
+    /// </summary>
+    private static async Task<bool> BackendExitsAsync(NpgsqlCommand check, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (true)
+        {
+            if ((bool)(await check.ExecuteScalarAsync(ct))!) return true;
+            if (DateTime.UtcNow >= deadline) return false;
+            await Task.Delay(50, ct);
+        }
     }
 
     [Fact]
