@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DetailListPagination, DetailListToolbar } from "../components/DetailListToolbar";
+import type { FindFilter } from "../api/types";
 import { VIDEO_CRITERIA } from "../components/filterCriteriaCatalogs";
 import { customFieldDefinitionsQueryKey } from "../hooks/useCustomFieldDefinitions";
 import { useRegisterKeyboardActionHandler } from "../hooks/useRegisterKeyboardActionHandler";
@@ -765,6 +766,201 @@ describe("DetailListToolbar", () => {
       expect(onObjectFilterChange).toHaveBeenCalledWith({
         customFieldCriteria: [{ key: "review_status", type: "text", modifier: "EQUALS", value: "stale" }],
       });
+    });
+  });
+
+  describe("relevance sorting", () => {
+    it("switches a searchable subview to relevance and restores the previous sort when cleared", () => {
+      const onFilterChange = vi.fn();
+      const renderToolbar = (filter: FindFilter) => (
+        <DetailListToolbar
+          filter={filter}
+          onFilterChange={onFilterChange}
+          totalCount={10}
+          sortOptions={[{ value: "name", label: "Name" }]}
+          filterMode="performers"
+          showSearch
+        />
+      );
+
+      const { rerender } = renderWithQueryClient(
+        renderToolbar({ page: 3, perPage: 24, sort: "random", direction: "asc", seed: 7 }),
+      );
+
+      expect(
+        within(screen.getByRole("combobox", { name: "Primary sort" })).queryByRole("option", { name: "Relevance" }),
+      ).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Search list" }), { target: { value: "needle" } });
+      fireEvent.submit(screen.getByRole("textbox", { name: "Search list" }).closest("form")!);
+
+      const searchedFilter = onFilterChange.mock.lastCall?.[0];
+      expect(searchedFilter).toEqual({
+        page: 1,
+        perPage: 24,
+        q: "needle",
+        sort: "relevance",
+        direction: "desc",
+        sorts: undefined,
+        seed: undefined,
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      rerender(<QueryClientProvider client={queryClient}>{renderToolbar(searchedFilter)}</QueryClientProvider>);
+
+      expect(screen.getByRole("combobox", { name: "Primary sort" })).toHaveValue("relevance");
+      expect(screen.queryByRole("button", { name: "Descending" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+      expect(onFilterChange.mock.lastCall?.[0]).toEqual({
+        page: 1,
+        perPage: 24,
+        q: undefined,
+        sort: "random",
+        direction: "asc",
+        sorts: undefined,
+        seed: 7,
+      });
+
+      const restoredClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      rerender(
+        <QueryClientProvider client={restoredClient}>
+          {renderToolbar(onFilterChange.mock.lastCall?.[0])}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByRole("button", { name: "Ascending" })).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("combobox", { name: "Primary sort" })).queryByRole("option", { name: "Relevance" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("pins descending and keeps the option listed when relevance is chosen from the dropdown", () => {
+      const onFilterChange = vi.fn();
+
+      renderWithQueryClient(
+        <DetailListToolbar
+          filter={{
+            page: 2,
+            perPage: 24,
+            q: "needle",
+            sort: "title",
+            direction: "asc",
+            sorts: [{ key: "title", direction: "asc" }],
+          }}
+          onFilterChange={onFilterChange}
+          totalCount={10}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          filterMode="videos"
+          showSearch
+        />,
+      );
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Primary sort" }), { target: { value: "relevance" } });
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: "relevance", direction: "desc", sorts: undefined, page: 1 }),
+      );
+    });
+
+    it("keeps relevance selectable when it is the active sort without a query", () => {
+      renderWithQueryClient(
+        <DetailListToolbar
+          filter={{ page: 1, perPage: 24, sort: "relevance", direction: "desc" }}
+          onFilterChange={vi.fn()}
+          totalCount={10}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          filterMode="videos"
+          showSearch
+        />,
+      );
+
+      expect(screen.getByRole("combobox", { name: "Primary sort" })).toHaveValue("relevance");
+      expect(screen.queryByRole("button", { name: "Descending" })).not.toBeInTheDocument();
+    });
+
+    it("restores a valid fallback sort when a deep-linked relevance search is cleared", () => {
+      const onFilterChange = vi.fn();
+
+      renderWithQueryClient(
+        <DetailListToolbar
+          filter={{ page: 1, perPage: 24, q: "needle", sort: "relevance", direction: "desc" }}
+          onFilterChange={onFilterChange}
+          totalCount={10}
+          sortOptions={[{ value: "name", label: "Name" }]}
+          filterMode="performers"
+          showSearch
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+      expect(onFilterChange.mock.lastCall?.[0]).toEqual({
+        page: 1,
+        perPage: 24,
+        q: undefined,
+        sort: "name",
+        direction: "desc",
+        sorts: undefined,
+        seed: undefined,
+      });
+    });
+
+    it("leaves the caller's sort options untouched while sorting them for display", () => {
+      const sortOptions = [
+        { value: "title", label: "Title" },
+        { value: "date", label: "Date" },
+      ];
+
+      renderWithQueryClient(
+        <DetailListToolbar
+          filter={{ page: 1, perPage: 24, sort: "title" }}
+          onFilterChange={vi.fn()}
+          totalCount={10}
+          sortOptions={sortOptions}
+          filterMode="videos"
+          showSearch
+        />,
+      );
+
+      expect(sortOptions.map((option) => option.value)).toEqual(["title", "date"]);
+      expect(
+        within(screen.getByRole("combobox", { name: "Primary sort" }))
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ).toEqual(["Date", "Title"]);
+    });
+
+    // A face subview's endpoints filter and sort in memory and would ignore sort=relevance, so the
+    // list pages do not offer relevance for faces and neither may a face subview.
+    it("leaves a subview whose entity has no relevance ordering on its existing sort", () => {
+      const onFilterChange = vi.fn();
+
+      renderWithQueryClient(
+        <DetailListToolbar
+          filter={{ page: 2, perPage: 24, sort: "similarity", direction: "desc" }}
+          onFilterChange={onFilterChange}
+          totalCount={10}
+          sortOptions={[{ value: "similarity", label: "Similarity" }]}
+          listEntityType="faces"
+          showSearch
+        />,
+      );
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Search list" }), { target: { value: "needle" } });
+      fireEvent.submit(screen.getByRole("textbox", { name: "Search list" }).closest("form")!);
+
+      expect(onFilterChange.mock.lastCall?.[0]).toEqual({
+        page: 1,
+        perPage: 24,
+        q: "needle",
+        sort: "similarity",
+        direction: "desc",
+      });
+      expect(
+        within(screen.getByRole("combobox", { name: "Primary sort" })).queryByRole("option", { name: "Relevance" }),
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -14,7 +14,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import type { CustomFieldEntityType, FindFilter } from "../api/types";
-import { isValidElement, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   clampEntityCardSizeLevel,
   getEntityCardMaxLevel,
@@ -40,6 +40,14 @@ import {
   removeObjectFilterChipTarget,
 } from "./ActiveObjectFilterChips";
 import { ListSearchControl } from "./ListSearchControl";
+import {
+  filterPatchForSelectedSort,
+  normalizeListEntityType,
+  resolveSearchQueryFilter,
+  withRelevanceSortOption,
+  RELEVANCE_SORT_VALUE,
+  type PreviousSearchSort,
+} from "../utils/relevanceSort";
 import { PaginationControls } from "./PaginationControls";
 import { WallSizeControl } from "./WallSizeControl";
 
@@ -97,6 +105,11 @@ export interface DetailListToolbarProps {
   // When set (e.g. "videos"), shows the saved-filter menu so embedded lists inside detail pages
   // (a performer's videos, a studio's galleries, …) can save, apply and default-pin filters too.
   filterMode?: string;
+  /**
+   * Entity this list holds, which decides whether a text query can sort by relevance. Defaults to
+   * the entity behind `filterMode`; set it explicitly on a list that has no saved-filter mode.
+   */
+  listEntityType?: string;
   // Optional separate storage key for the auto-applied default filter (defaults to filterMode). Lets an
   // embedded list keep its own default while still sharing filterMode's named-filter library.
   filterDefaultKey?: string;
@@ -189,6 +202,7 @@ export function DetailListToolbar({
   showPagingControls = true,
   paginationAriaLabel = "Pagination above results",
   filterMode,
+  listEntityType,
   filterDefaultKey,
   defaultFilterResolved = false,
 }: DetailListToolbarProps) {
@@ -213,6 +227,8 @@ export function DetailListToolbar({
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   const start = totalCount > 0 ? (infinitePageSize ? 1 : (clampedPage - 1) * effectivePerPage + 1) : 0;
   const end = infinitePageSize ? totalCount : Math.min(clampedPage * effectivePerPage, totalCount);
+  // Sort displaced by a relevance search, restored when the query is cleared.
+  const previousSearchSortRef = useRef<PreviousSearchSort | null>(null);
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
   const [filterDialogPreselect, setFilterDialogPreselect] = useState<FilterDialogPreselection | undefined>();
   const [filterDialogInitialView, setFilterDialogInitialView] = useState<"simple" | "advanced">("simple");
@@ -250,10 +266,21 @@ export function DetailListToolbar({
     ].map((registration) => ({ ...registration, surface: "list" as const, enabled: pagingKeyboardEnabled }));
   }, [clampedPage, filter, onFilterChange, pagingKeyboardEnabled, totalPages]);
   useRegisterKeyboardActions(pagingKeyboardActions);
-  const sortedSortOptions = useMemo(
-    () => [...sortOptions].sort((left, right) => left.label.localeCompare(right.label)),
-    [sortOptions],
+  const resolvedListEntityType = useMemo(
+    () => normalizeListEntityType(listEntityType ?? filterMode),
+    [filterMode, listEntityType],
   );
+  const sortedSortOptions = useMemo(
+    () =>
+      withRelevanceSortOption(sortOptions, { listEntityType: resolvedListEntityType, filter }).sort((left, right) =>
+        left.label.localeCompare(right.label),
+      ),
+    [filter, resolvedListEntityType, sortOptions],
+  );
+  // Relevance always ranks best-first, so the direction toggle is meaningless while it is the sort.
+  // Both this and the option list key off the same resolved options, so they can never disagree.
+  const sortingByRelevance =
+    filter.sort === RELEVANCE_SORT_VALUE && sortedSortOptions.some((option) => option.value === RELEVANCE_SORT_VALUE);
   const selectionActionEntityType = useMemo(() => {
     if (!isValidElement<{ entityType?: string }>(selectionActions)) return undefined;
     return selectionActions.props.entityType;
@@ -275,9 +302,17 @@ export function DetailListToolbar({
 
   const handleSearchChange = useCallback(
     (query: string | undefined) => {
-      onFilterChange({ ...filter, q: query, page: 1 });
+      const resolved = resolveSearchQueryFilter({
+        filter,
+        query,
+        listEntityType: resolvedListEntityType,
+        sortOptions,
+        previousSearchSort: previousSearchSortRef.current,
+      });
+      previousSearchSortRef.current = resolved.previousSearchSort;
+      onFilterChange(resolved.filter);
     },
-    [filter, onFilterChange],
+    [filter, onFilterChange, resolvedListEntityType, sortOptions],
   );
 
   const handleZoomChange = (level: number) => {
@@ -349,9 +384,16 @@ export function DetailListToolbar({
         {showSort && (
           <div className={toolbarSegmentClass}>
             <select
+              aria-label="Primary sort"
               value={filter.sort ?? sortedSortOptions[0]?.value ?? ""}
               onChange={(e) =>
-                onFilterChange(withSeededRandomSort(filter, { ...filter, sort: e.target.value, page: 1 }))
+                onFilterChange(
+                  withSeededRandomSort(filter, {
+                    ...filter,
+                    ...filterPatchForSelectedSort(e.target.value, filter),
+                    page: 1,
+                  }),
+                )
               }
               className={`${toolbarSelectClass} min-w-[8.5rem] max-w-[10rem]`}
             >
@@ -372,26 +414,28 @@ export function DetailListToolbar({
                 <Shuffle className="w-3.5 h-3.5" />
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() =>
-                onFilterChange(
-                  withSeededRandomSort(filter, {
-                    ...filter,
-                    direction: filter.direction === "asc" ? "desc" : "asc",
-                    page: 1,
-                  }),
-                )
-              }
-              className={toolbarIconButtonClass}
-              title={filter.direction === "asc" ? "Ascending" : "Descending"}
-            >
-              {filter.direction === "desc" ? (
-                <ArrowDown className="w-3.5 h-3.5" />
-              ) : (
-                <ArrowUp className="w-3.5 h-3.5" />
-              )}
-            </button>
+            {sortingByRelevance ? null : (
+              <button
+                type="button"
+                onClick={() =>
+                  onFilterChange(
+                    withSeededRandomSort(filter, {
+                      ...filter,
+                      direction: filter.direction === "asc" ? "desc" : "asc",
+                      page: 1,
+                    }),
+                  )
+                }
+                className={toolbarIconButtonClass}
+                title={filter.direction === "asc" ? "Ascending" : "Descending"}
+              >
+                {filter.direction === "desc" ? (
+                  <ArrowDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ArrowUp className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
           </div>
         )}
 

@@ -2828,6 +2828,7 @@ function GroupVideosPanel({
       criteriaDefinitions={VIDEO_CRITERIA}
       objectFilter={objectFilter}
       onObjectFilterChange={setObjectFilter}
+      listEntityType="videos"
       allowInfinitePageSize
       displayMode={displayMode}
       onDisplayModeChange={setDisplayMode}

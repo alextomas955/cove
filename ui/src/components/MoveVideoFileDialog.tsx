@@ -97,6 +97,7 @@ export function MoveVideoFileDialog({
               onFilterChange={setFilter}
               totalCount={results.data?.totalCount ?? 0}
               sortOptions={VIDEO_SORT_OPTIONS}
+              listEntityType="videos"
               showSearch
               criteriaDefinitions={VIDEO_CRITERIA}
               objectFilter={objectFilter}

@@ -105,4 +105,33 @@ describe("MediaDetailListToolbar", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry totals" }));
     expect(await screen.findByText("0 B")).toBeInTheDocument();
   });
+
+  it("derives relevance sorting from the media type alone, with no filterMode", () => {
+    vi.mocked(videos.aggregate).mockResolvedValue({ count: 0, fileSize: 0, duration: 0 } as never);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    const onFilterChange = vi.fn();
+
+    render(
+      <QueryClientProvider client={client}>
+        <MediaDetailListToolbar
+          mediaType="videos"
+          selectedIds={new Set<number>()}
+          aggregateObjectFilter={{}}
+          filter={{ page: 3, perPage: 20, sort: "title", direction: "asc" }}
+          totalCount={100}
+          sortOptions={[{ value: "title", label: "Title" }]}
+          onFilterChange={onFilterChange}
+          showSearch
+        />
+      </QueryClientProvider>,
+    );
+
+    const search = screen.getByRole("textbox", { name: "Search list" });
+    fireEvent.change(search, { target: { value: "needle" } });
+    fireEvent.submit(search.closest("form")!);
+
+    expect(onFilterChange).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "needle", page: 1, sort: "relevance", direction: "desc" }),
+    );
+  });
 });
