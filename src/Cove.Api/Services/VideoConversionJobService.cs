@@ -99,6 +99,7 @@ public sealed class VideoConversionJobService(
     {
         private long _bytes;
         private int _videos;
+        private int _discardedNotSmaller;
 
         public void Add(long sourceSize, long outputSize)
         {
@@ -106,8 +107,12 @@ public sealed class VideoConversionJobService(
             Interlocked.Increment(ref _videos);
         }
 
+        /// <summary>A file that encoded successfully and was then thrown away for being no smaller.</summary>
+        public void AddDiscardedNotSmaller() => Interlocked.Increment(ref _discardedNotSmaller);
+
         public long Bytes => Interlocked.Read(ref _bytes);
         public int Videos => Volatile.Read(ref _videos);
+        public int DiscardedNotSmaller => Volatile.Read(ref _discardedNotSmaller);
     }
 
     private async Task RunAsync(int[] ids, VideoConversionSettings settings, IJobProgress progress, CancellationToken ct)
@@ -156,11 +161,20 @@ public sealed class VideoConversionJobService(
             labelFactory: item => item.Label,
             ct: ct);
 
+        // The bare counts are not enough on their own: a run that encodes for minutes and then throws
+        // the result away still ends "completed", and reads as success unless the reason is said here.
         var summary = result.Summary;
         if (reclaimed.Videos > 0 && reclaimed.Bytes > 0)
             summary += $" Freed {FormatSize(reclaimed.Bytes)} across {reclaimed.Videos} replaced file(s).";
         else if (reclaimed.Videos > 0 && reclaimed.Bytes < 0)
             summary += $" Used {FormatSize(-reclaimed.Bytes)} more across {reclaimed.Videos} replaced file(s).";
+
+        if (reclaimed.DiscardedNotSmaller > 0)
+        {
+            summary += reclaimed.DiscardedNotSmaller == 1
+                ? " 1 video was converted but discarded because the result was no smaller than the original."
+                : $" {reclaimed.DiscardedNotSmaller} videos were converted but discarded because the results were no smaller than the originals.";
+        }
 
         logger.LogInformation(
             "Conversion finished: {Summary} (encoder {Encoder})",
@@ -243,6 +257,16 @@ public sealed class VideoConversionJobService(
         var published = false;
         try
         {
+            // Find out what this would produce before spending the whole encode on it. A constant-quality
+            // encode of an already-compressed source can come out larger than the original, and without
+            // this that is only discovered after the full run - minutes of work thrown away.
+            if (await ProjectsLargerAsync(ffmpeg, encoder, source, sourcePath, sourceSize, settings, copiesVideo, unit, ct) is { } projection)
+            {
+                reclaimed.AddDiscardedNotSmaller();
+                unit.Complete(JobUnitOutcome.Skipped, projection);
+                return;
+            }
+
             var plan = await EncodeAsync(ffmpeg, copiesVideo ? null : encoder, source, sourcePath, partialPath, settings, notes, unit, ct);
             notes.AddRange(plan.Notes);
 
@@ -256,6 +280,14 @@ public sealed class VideoConversionJobService(
             var outputSize = new FileInfo(partialPath).Length;
             if (!copiesVideo && settings.DiscardIfLarger && outputSize >= sourceSize)
             {
+                // Worth a log line of its own: this throws away a complete encode, which on a large
+                // file is many minutes of work, and the job summary alone would only show a skip.
+                reclaimed.AddDiscardedNotSmaller();
+                logger.LogInformation(
+                    "Discarded the conversion of {Path}: {Output} is no smaller than the original {Source}. " +
+                    "The source is {SourceKbps:F0} kbps, which constant-quality encoding did not beat.",
+                    sourcePath, FormatSize(outputSize), FormatSize(sourceSize),
+                    source.Duration > 0 ? sourceSize * 8d / source.Duration / 1000 : 0);
                 unit.Complete(JobUnitOutcome.Skipped,
                     $"The converted file was {FormatSize(outputSize)}, no smaller than the original's {FormatSize(sourceSize)}, so it was discarded and the original kept.");
                 return;
@@ -332,6 +364,69 @@ public sealed class VideoConversionJobService(
         {
             if (!published)
                 DeletePartial(partialPath);
+        }
+    }
+
+    /// <summary>
+    /// Trial-encodes a slice and returns why the conversion was abandoned, or null to go ahead.
+    ///
+    /// Only runs where it can pay for itself: the video is being re-encoded (a stream copy's size is
+    /// already known), the user asked for results no larger than the original, and the file is long
+    /// enough that a minute of trial is small next to the whole encode. The trial uses the very command
+    /// the conversion would, so its bitrate includes audio and container overhead.
+    /// </summary>
+    private async Task<string?> ProjectsLargerAsync(
+        string ffmpeg,
+        string? encoder,
+        ProbedMedia source,
+        string sourcePath,
+        long sourceSize,
+        VideoConversionSettings settings,
+        bool copiesVideo,
+        IJobUnit unit,
+        CancellationToken ct)
+    {
+        if (copiesVideo || !settings.DiscardIfLarger || encoder is null)
+            return null;
+
+        if (VideoConversionPlanner.ChooseSample(source.Duration) is not { } sample)
+            return null;
+
+        var samplePath = Path.Combine(Path.GetTempPath(), $"cove_convert_probe_{Guid.NewGuid():N}{VideoConversionPlanner.Extension(settings.Container)}");
+        try
+        {
+            var plan = VideoConversionPlanner.Build(source, sourcePath, samplePath, settings, encoder, config.FfmpegInputArgs, sample);
+            unit.Report(0, "Checking whether converting would actually save space...");
+            var result = await RunTrackedAsync(ffmpeg, plan.Arguments, sample.DurationSeconds, "Checking whether converting would actually save space...", 0, 0.05, unit, ct, encoder);
+
+            // An inconclusive trial must never block the conversion; fall through and do the real thing.
+            if (result.ExitCode != 0 || !File.Exists(samplePath))
+            {
+                logger.LogDebug("Conversion size probe did not complete for {Path}; converting anyway.", sourcePath);
+                return null;
+            }
+
+            var sampleBytes = new FileInfo(samplePath).Length;
+            var projected = VideoConversionPlanner.ProjectFullSize(sampleBytes, sample.DurationSeconds, source.Duration);
+            if (!VideoConversionPlanner.ProjectsLarger(projected, sourceSize))
+                return null;
+
+            logger.LogInformation(
+                "Skipping {Path}: a {Sample:F0}s trial encode projects about {Projected} against the original's {Source}, " +
+                "so converting would not save space.",
+                sourcePath, sample.DurationSeconds, FormatSize(projected), FormatSize(sourceSize));
+
+            return $"A trial encode projects about {FormatSize(projected)}, larger than the original's {FormatSize(sourceSize)}, "
+                 + "so it was left alone. The source is already efficiently encoded for its resolution.";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not VideoConversionException)
+        {
+            logger.LogDebug(ex, "Conversion size probe failed for {Path}; converting anyway.", sourcePath);
+            return null;
+        }
+        finally
+        {
+            try { if (File.Exists(samplePath)) File.Delete(samplePath); } catch { /* best effort */ }
         }
     }
 
