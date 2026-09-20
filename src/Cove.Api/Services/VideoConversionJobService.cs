@@ -26,6 +26,7 @@ public sealed class VideoConversionJobService(
     IServiceScopeFactory scopeFactory,
     IMediaProbeService mediaProbe,
     HardwareEncodeSessionGate hwEncodeSessionGate,
+    FfmpegConcurrencyLimiter ffmpegConcurrency,
     PhysicalFileAccessCoordinator physicalFileCoordinator,
     CoveConfiguration config,
     ILogger<VideoConversionJobService> logger)
@@ -88,6 +89,27 @@ public sealed class VideoConversionJobService(
         return encoder;
     }
 
+    /// <summary>
+    /// Bytes reclaimed across a run. The common use of this feature is re-encoding the largest files in a
+    /// library to a denser codec, where the number worth reporting is the total freed, not each file's
+    /// before-and-after. Only counted when the original is actually replaced; adding a converted file
+    /// alongside its original consumes space rather than freeing it.
+    /// </summary>
+    private sealed class ReclaimedSpace
+    {
+        private long _bytes;
+        private int _videos;
+
+        public void Add(long sourceSize, long outputSize)
+        {
+            Interlocked.Add(ref _bytes, sourceSize - outputSize);
+            Interlocked.Increment(ref _videos);
+        }
+
+        public long Bytes => Interlocked.Read(ref _bytes);
+        public int Videos => Volatile.Read(ref _videos);
+    }
+
     private async Task RunAsync(int[] ids, VideoConversionSettings settings, IJobProgress progress, CancellationToken ct)
     {
         var ffmpeg = FfmpegHwAccel.FindFfmpeg(config.FfmpegPath)
@@ -124,16 +146,27 @@ public sealed class VideoConversionJobService(
             ? Math.Min(2, hwEncodeSessionGate.Capacity)
             : 1;
 
+        var reclaimed = new ReclaimedSpace();
         var result = await jobService.RunBatchAsync(
             work,
             parallelism,
-            (item, unit, token) => ConvertAsync(ffmpeg, encoder, item.Id, settings, unit, token),
+            (item, unit, token) => ConvertAsync(ffmpeg, encoder, item.Id, settings, reclaimed, unit, token),
             progress,
             unitIdFactory: (item, _) => item.Id.ToString(CultureInfo.InvariantCulture),
             labelFactory: item => item.Label,
             ct: ct);
 
-        progress.SetSummary(result.Summary);
+        var summary = result.Summary;
+        if (reclaimed.Videos > 0 && reclaimed.Bytes > 0)
+            summary += $" Freed {FormatSize(reclaimed.Bytes)} across {reclaimed.Videos} replaced file(s).";
+        else if (reclaimed.Videos > 0 && reclaimed.Bytes < 0)
+            summary += $" Used {FormatSize(-reclaimed.Bytes)} more across {reclaimed.Videos} replaced file(s).";
+
+        logger.LogInformation(
+            "Conversion finished: {Summary} (encoder {Encoder})",
+            summary, encoder ?? "stream copy");
+
+        progress.SetSummary(summary);
     }
 
     private async Task ConvertAsync(
@@ -141,6 +174,7 @@ public sealed class VideoConversionJobService(
         string? encoder,
         int videoId,
         VideoConversionSettings settings,
+        ReclaimedSpace reclaimed,
         IJobUnit unit,
         CancellationToken ct)
     {
@@ -286,6 +320,8 @@ public sealed class VideoConversionJobService(
                 return;
             }
 
+            // Counted only here: this is the one path where the original is actually gone from disk.
+            reclaimed.Add(sourceSize, outputSize);
             unit.Complete(JobUnitOutcome.Succeeded, Describe($"{outcome}; it replaced the original, which was deleted.", notes));
         }
         catch (VideoConversionException ex)
@@ -387,11 +423,21 @@ public sealed class VideoConversionJobService(
         }
 
         logger.LogDebug("Running ffmpeg {Arguments}", arguments);
+
+        // A conversion reads one input, so it reserves one decode slot. Conversion caps its own
+        // parallelism, but it can run alongside a generate job that does not know about it, and the
+        // configured limit is meant to bound everything Cove decodes at once, not each job separately.
         if (encoder is null || FfmpegHwAccel.IsSoftwareEncoder(encoder))
+        {
+            await using var softwareSlot = await ffmpegConcurrency.AcquireAsync(1, ct);
             return await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, OnProgress, StallTimeout, ct);
+        }
 
         using (await hwEncodeSessionGate.AcquireAsync(ct))
+        {
+            await using var hardwareSlot = await ffmpegConcurrency.AcquireAsync(1, ct);
             return await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, OnProgress, StallTimeout, ct);
+        }
     }
 
     private async Task<ProbedMedia> ProbeAsync(string path, string which, CancellationToken ct)
