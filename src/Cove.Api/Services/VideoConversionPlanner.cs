@@ -19,26 +19,58 @@ public enum VideoConversionContainer
     Mkv,
 }
 
-public enum VideoConversionQuality
+/// <summary>
+/// The single ladder the convert dialog offers, ordered from most quality to most speed. It replaces a
+/// separate quality and speed pair, because those two controls were not independent in practice:
+/// measured on a 4K source at a fixed quality target, hevc_nvenc's p4, p5, p6 and p7 presets landed
+/// within 1% of the same size and 0.2 VMAF of each other while p7 cost 2.4x p4's time, and libx265's
+/// "slower" cost 4x "slow" for 0.3 VMAF. Most of the nine combinations were therefore indistinguishable
+/// or simply slower for nothing, and picking between them meant understanding encoder internals.
+///
+/// Each rung names its intent rather than a quality standard, because the same encoder setting lands at
+/// very different measured quality depending on the content: on one 4K source libx265 slow scored 95.1
+/// VMAF, and on a grainy over-encoded 1080p one the same class of setting scored 79.7.
+///
+/// Hardware rungs are separate entries rather than a toggle: a machine without a usable hardware encoder
+/// cannot offer them at all, and hardware is a different quality-per-bit trade rather than a modifier -
+/// at matched size libx265 scored 2.4 VMAF above hevc_nvenc, and reached the same quality as it using
+/// 37% fewer bits.
+/// </summary>
+public enum VideoConversionEffort
 {
-    High,
-    Balanced,
-    Small,
+    /// <summary>libx265 slow. The best quality per bit Cove offers, and the slowest.</summary>
+    QualitySoftware,
+
+    /// <summary>libx265 medium, quality-leaning.</summary>
+    HighSoftware,
+
+    /// <summary>libx265 medium. The middle of the software range.</summary>
+    BalancedSoftware,
+
+    /// <summary>libx265 medium, size-leaning.</summary>
+    SmallerSoftware,
+
+    /// <summary>Hardware encoder, quality-leaning. Several times faster than any software rung.</summary>
+    QualityHardware,
+
+    /// <summary>Hardware encoder, size-leaning.</summary>
+    SmallerHardware,
 }
 
-public enum VideoConversionSpeed
-{
-    Fast,
-    Balanced,
-    Slow,
-}
+/// <summary>What a rung resolves to: which encoder family, its preset, its quality target, and how much
+/// of the source's video bitrate the result may use.</summary>
+public sealed record VideoConversionEffortProfile(
+    bool PreferHardware,
+    string SoftwarePreset,
+    string HardwarePreset,
+    int SoftwareCrf,
+    double SourceBitrateCap);
 
 /// <summary>What a conversion job produces for every selected video.</summary>
 public sealed record VideoConversionSettings(
     VideoConversionCodec Codec,
     VideoConversionContainer Container,
-    VideoConversionQuality Quality,
-    VideoConversionSpeed Speed,
+    VideoConversionEffort Effort,
     bool ReplaceOriginal,
     bool DiscardIfLarger);
 
@@ -54,7 +86,8 @@ public sealed record ProbedStream(
     bool AttachedPicture,
     string? ColorPrimaries,
     string? ColorTransfer,
-    string? ColorSpace);
+    string? ColorSpace,
+    double BitRateKbps = 0);
 
 /// <summary>The parts of an ffprobe <c>-show_format -show_streams</c> result a conversion needs.</summary>
 public sealed record ProbedMedia(double Duration, IReadOnlyList<ProbedStream> Streams)
@@ -65,6 +98,28 @@ public sealed record ProbedMedia(double Duration, IReadOnlyList<ProbedStream> St
     public IEnumerable<ProbedStream> Audio => Streams.Where(stream => stream.CodecType == "audio");
 
     public IEnumerable<ProbedStream> Subtitles => Streams.Where(stream => stream.CodecType == "subtitle");
+
+    /// <summary>
+    /// The video stream's bitrate in kbit/s, which is what a conversion's ceiling is measured against.
+    /// Not every container records a per-stream rate, so it falls back to the container average minus
+    /// whatever the audio streams declare - an estimate, but one that errs high and so only ever makes
+    /// the ceiling more generous.
+    /// </summary>
+    public double VideoBitRateKbps
+    {
+        get
+        {
+            if (Video is { BitRateKbps: > 0 } video)
+                return video.BitRateKbps;
+            if (OverallBitRateKbps <= 0)
+                return 0;
+            var audio = Audio.Sum(stream => stream.BitRateKbps);
+            return Math.Max(0, OverallBitRateKbps - audio);
+        }
+    }
+
+    /// <summary>Container average bitrate in kbit/s, when the probe reported one.</summary>
+    public double OverallBitRateKbps { get; init; }
 
     public static ProbedMedia Parse(string ffprobeJson)
     {
@@ -89,7 +144,8 @@ public sealed record ProbedMedia(double Duration, IReadOnlyList<ProbedStream> St
                     attachedPicture,
                     String(stream, "color_primaries"),
                     String(stream, "color_transfer"),
-                    String(stream, "color_space")));
+                    String(stream, "color_space"),
+                    Number(stream, "bit_rate") / 1000d));
             }
         }
 
@@ -106,7 +162,8 @@ public sealed record ProbedMedia(double Duration, IReadOnlyList<ProbedStream> St
                 : 0;
         }
 
-        return new ProbedMedia(duration, streams);
+        var overall = root.TryGetProperty("format", out var formatElement) ? Number(formatElement, "bit_rate") / 1000d : 0;
+        return new ProbedMedia(duration, streams) { OverallBitRateKbps = overall };
     }
 
     private static string? String(JsonElement element, string property)
@@ -203,45 +260,73 @@ public static class VideoConversionPlanner
     ///
     /// The two scales look alike - both nominally 0-51 - and were originally treated as equivalent.
     /// They are not. Measured against libx265 at the same number, hevc_nvenc produced 2.55x the
-    /// bitrate at cq24, 1.43x at cq28 and 1.10x at cq30, reaching parity around cq31; the ratios held
-    /// within a few percent across a 4K 4350 kbps source and a 1080p 26 Mbps one, so the offset is a
-    /// property of the scales rather than of the content. Without it a "Balanced" conversion meant
-    /// something entirely different depending on whether the machine had a usable hardware encoder,
-    /// and on an already-compressed source it reliably produced a file larger than the original.
+    /// bitrate at cq24 and reached parity near cq31, and the ratios held within a few percent across a
+    /// 4K 4350 kbps source and a 1080p 26 Mbps one, so the offset is a property of the scales rather
+    /// than of the content.
     ///
-    /// Measured on NVENC. QSV, VAAPI and AMF expose the same style of hardware rate-control quality
-    /// value and are given the same correction; that part is extrapolated, not measured.
+    /// Note this matches the two encoders by SIZE, not by quality: at equal size libx265 still scored
+    /// about 2.4 VMAF higher. That difference is what the hardware and software rungs represent.
+    ///
+    /// Measured on NVENC. QSV, VAAPI and AMF expose the same style of hardware rate-control value and
+    /// are given the same correction; that part is extrapolated, not measured.
     /// </summary>
     internal const int HardwareQualityOffset = 7;
 
     /// <summary>
-    /// The constant-quality value for a codec on the scale <paramref name="encoder"/> actually takes
-    /// (x264/x265 CRF, SVT-AV1's 0-63 CRF, or a hardware encoder's CQ/QP - see
-    /// <see cref="HardwareQualityOffset"/>).
+    /// What each rung of the ladder resolves to.
+    ///
+    /// Presets come from a measured sweep rather than from ffmpeg's naming. libx265 "slower" and every
+    /// hevc_nvenc preset above p4 are deliberately absent: on a 4K source at a fixed quality target,
+    /// "slower" cost 4x "slow" for 0.3 VMAF, and p5/p6/p7 matched p4's output within 1% of size and
+    /// 0.2 VMAF while taking up to 2.4x as long.
+    ///
+    /// SourceBitrateCap is a fraction of the source's own video bitrate, and is what makes a conversion
+    /// unable to come out larger than its original. It only binds on sources that are already
+    /// efficiently encoded; on an over-encoded one the quality target lands far below it (a 26 Mbps
+    /// 1080p source encoded to 11-14% of its size with the cap never engaging).
     /// </summary>
-    public static int QualityValue(VideoConversionCodec codec, VideoConversionQuality quality, string encoder)
+    public static VideoConversionEffortProfile Profile(VideoConversionEffort effort) => effort switch
     {
-        var (high, balanced, small) = codec switch
-        {
-            VideoConversionCodec.H264 => (18, 22, 26),
-            VideoConversionCodec.Hevc => (20, 24, 28),
-            VideoConversionCodec.Av1 when encoder == "libsvtav1" => (24, 30, 36),
-            VideoConversionCodec.Av1 => (22, 27, 32),
-            _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, "Stream copy has no quality setting."),
-        };
-        var crf = quality switch
-        {
-            VideoConversionQuality.High => high,
-            VideoConversionQuality.Small => small,
-            _ => balanced,
-        };
+        VideoConversionEffort.QualitySoftware => new(false, "slow", "p4", 18, 0.85),
+        VideoConversionEffort.HighSoftware => new(false, "medium", "p4", 21, 0.80),
+        VideoConversionEffort.BalancedSoftware => new(false, "medium", "p4", 24, 0.70),
+        VideoConversionEffort.SmallerSoftware => new(false, "medium", "p4", 27, 0.55),
+        VideoConversionEffort.QualityHardware => new(true, "medium", "p4", 20, 0.85),
+        VideoConversionEffort.SmallerHardware => new(true, "medium", "p4", 26, 0.65),
+        _ => throw new ArgumentOutOfRangeException(nameof(effort), effort, "Unknown conversion effort."),
+    };
 
-        // AV1's non-software values were already chosen against av1_nvenc, so they are not shifted again.
-        if (FfmpegHwAccel.IsSoftwareEncoder(encoder) || codec == VideoConversionCodec.Av1)
-            return crf;
+    /// <summary>True when the rung asks for a hardware encoder. A machine without one falls back to software.</summary>
+    public static bool PrefersHardware(VideoConversionEffort effort) => Profile(effort).PreferHardware;
 
-        return crf + HardwareQualityOffset;
+    /// <summary>
+    /// The constant-quality value on the scale <paramref name="encoder"/> actually takes. Hardware
+    /// encoders carry <see cref="HardwareQualityOffset"/>; SVT-AV1 has its own 0-63 scale.
+    /// </summary>
+    public static int QualityValue(VideoConversionCodec codec, VideoConversionEffort effort, string encoder)
+    {
+        var crf = Profile(effort).SoftwareCrf;
+
+        // AV1's encoders sit on different scales again, so the ladder's H.264/HEVC CRF is shifted onto
+        // them rather than used directly.
+        if (codec == VideoConversionCodec.Av1)
+            return encoder == "libsvtav1" ? crf + 6 : crf + 3;
+
+        if (codec == VideoConversionCodec.H264)
+            crf -= 2;   // x264 needs a slightly lower number than x265 for comparable quality
+
+        return FfmpegHwAccel.IsSoftwareEncoder(encoder) ? crf : crf + HardwareQualityOffset;
     }
+
+    /// <summary>
+    /// The ceiling on the converted file's video bitrate, in kbit/s, or null when the source's own rate
+    /// is unknown and no meaningful ceiling can be derived. This is the guarantee that a conversion
+    /// never grows a file.
+    /// </summary>
+    public static int? BitrateCapKbps(VideoConversionEffort effort, double sourceVideoBitrateKbps)
+        => sourceVideoBitrateKbps > 0
+            ? Math.Max(1, (int)(sourceVideoBitrateKbps * Profile(effort).SourceBitrateCap))
+            : null;
 
     /// <summary>
     /// Where the converted file goes: next to the original, under the same name with the new extension
@@ -280,7 +365,8 @@ public static class VideoConversionPlanner
         VideoConversionSettings settings,
         string? encoder,
         string? decodeInputArgs,
-        VideoConversionSample? sample = null)
+        VideoConversionSample? sample = null,
+        double sourceVideoBitrateKbps = 0)
     {
         var video = source.Video ?? throw new VideoConversionException("The file has no video stream to convert.");
         var mp4 = settings.Container == VideoConversionContainer.Mp4;
@@ -356,8 +442,17 @@ public static class VideoConversionPlanner
         else
         {
             var tenBit = IsTenBit(video);
-            var quality = QualityValue(settings.Codec, settings.Quality, encoder!);
-            Append(args, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder!, quality, settings.Speed, tenBit));
+            var quality = QualityValue(settings.Codec, settings.Effort, encoder!);
+            Append(args, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder!, quality, settings.Effort, tenBit));
+
+            // The ceiling that stops a conversion growing a file. Quality-driven encoding alone cannot
+            // promise that: it targets an absolute quality with no knowledge of what the source spent,
+            // so on an already-compressed source it happily asks for more bits than the original used.
+            if (BitrateCapKbps(settings.Effort, sourceVideoBitrateKbps) is { } capKbps)
+            {
+                args.Append(" -maxrate ").Append(capKbps.ToString(CultureInfo.InvariantCulture)).Append('k')
+                    .Append(" -bufsize ").Append((capKbps * 2).ToString(CultureInfo.InvariantCulture)).Append('k');
+            }
             Append(args, FfmpegHwAccel.ConversionVideoFilter(encoder!, tenBit));
 
             // Carry the colour description over explicitly so HDR and wide-gamut sources are not tagged as

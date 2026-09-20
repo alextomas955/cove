@@ -1997,8 +1997,14 @@ export interface VideoConversionOptions {
   videoIds: number[];
   codec: VideoConversionCodec;
   container: "mp4" | "mkv";
-  quality: "high" | "balanced" | "small";
-  speed: "fast" | "balanced" | "slow";
+  /** One rung of the conversion ladder, ordered from most quality to most speed. */
+  effort:
+    | "qualitySoftware"
+    | "highSoftware"
+    | "balancedSoftware"
+    | "smallerSoftware"
+    | "qualityHardware"
+    | "smallerHardware";
   /** Verify each converted file, make it primary and delete the original from disk. */
   replaceOriginal: boolean;
   /** Throw a re-encoded file away when it is not smaller than the original. */

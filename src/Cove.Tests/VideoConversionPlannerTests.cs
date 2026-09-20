@@ -7,7 +7,7 @@ namespace Cove.Tests;
 public class VideoConversionPlannerTests
 {
     private static readonly VideoConversionSettings HevcMp4 = new(
-        VideoConversionCodec.Hevc, VideoConversionContainer.Mp4, VideoConversionQuality.Balanced, VideoConversionSpeed.Balanced,
+        VideoConversionCodec.Hevc, VideoConversionContainer.Mp4, VideoConversionEffort.BalancedSoftware,
         ReplaceOriginal: false, DiscardIfLarger: true);
 
     private static ProbedStream Video(string codec, string pixFmt = "yuv420p", int index = 0, bool attachedPicture = false)
@@ -125,14 +125,16 @@ public class VideoConversionPlannerTests
     [InlineData("libx264", true, "-c:v libx264 -preset medium -crf 22 -pix_fmt yuv420p")]
     [InlineData("libx265", true, "-c:v libx265 -preset medium -crf 22 -x265-params log-level=error -pix_fmt yuv420p10le")]
     [InlineData("libsvtav1", false, "-c:v libsvtav1 -preset 7 -crf 22 -pix_fmt yuv420p")]
-    [InlineData("h264_nvenc", true, "-c:v h264_nvenc -preset p5 -tune hq -rc vbr -cq 22 -b:v 0 -pix_fmt yuv420p")]
+    // p4 rather than p5: on a 4K source p4 through p7 landed within 0.2 VMAF and 1% of the same
+    // size, and p7 took 2.4x p4's time, so the ladder never asks for the slower ones.
+    [InlineData("h264_nvenc", true, "-c:v h264_nvenc -preset p4 -tune hq -rc vbr -cq 22 -b:v 0 -pix_fmt yuv420p")]
     [InlineData("hevc_qsv", false, "-c:v hevc_qsv -preset medium -global_quality 22 -pix_fmt nv12")]
     [InlineData("hevc_amf", false, "-c:v hevc_amf -quality balanced -rc cqp -qp_i 22 -qp_p 22 -pix_fmt nv12")]
     [InlineData("h264_amf", false, "-c:v h264_amf -quality balanced -rc cqp -qp_i 22 -qp_p 22 -qp_b 22 -pix_fmt nv12")]
     [InlineData("hevc_vaapi", true, "-c:v hevc_vaapi -rc_mode CQP -qp 22 -profile:v main10")]
     public void ConversionVideoEncodeArgs_UsesEachEncoderFamilysOwnQualityKnob(string encoder, bool tenBit, string expected)
     {
-        Assert.Equal(expected, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder, 22, VideoConversionSpeed.Balanced, tenBit));
+        Assert.Equal(expected, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder, 22, VideoConversionEffort.BalancedSoftware, tenBit));
     }
 
     [Fact]
@@ -221,7 +223,7 @@ public class VideoConversionPlannerTests
             var outputPath = VideoConversionPlanner.ChooseOutputPath(sourcePath, HevcMp4, File.Exists);
             Assert.Equal(Path.Combine(root, "clip.mp4"), outputPath);
 
-            var plan = VideoConversionPlanner.Build(source, sourcePath, outputPath, HevcMp4 with { Speed = VideoConversionSpeed.Fast }, "libx265", null);
+            var plan = VideoConversionPlanner.Build(source, sourcePath, outputPath, HevcMp4 with { Effort = VideoConversionEffort.SmallerHardware }, "libx265", null);
             var positions = new List<double>();
             var encode = await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg!, plan.Arguments,
                 line => { if (VideoConversionPlanner.TryParseProgressSeconds(line, out var seconds)) positions.Add(seconds); },
@@ -286,7 +288,7 @@ public class VideoConversionPlannerTests
         Assert.SkipWhen(ffmpeg is null, "Requires ffmpeg on PATH.");
         Assert.SkipWhen(!FfmpegHwAccel.ListEncoders(ffmpeg!).Contains("libx265"), "Requires an ffmpeg build with libx265.");
 
-        Assert.Equal("libx265", FfmpegHwAccel.SelectConversionEncoder(ffmpeg!, VideoConversionCodec.Hevc, "off", NullLogger.Instance));
+        Assert.Equal("libx265", FfmpegHwAccel.SelectConversionEncoder(ffmpeg!, VideoConversionCodec.Hevc, "off", preferHardware: true, NullLogger.Instance));
     }
 
     private static async Task<string> ProbeAsync(string ffprobe, string path, CancellationToken ct)

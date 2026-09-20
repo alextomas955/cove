@@ -73,9 +73,9 @@ public sealed class VideoConversionJobService(
             })];
     }
 
-    private string? ResolveEncoder(string ffmpegPath, VideoConversionCodec codec)
+    private string? ResolveEncoder(string ffmpegPath, VideoConversionCodec codec, bool preferHardware = true)
     {
-        var key = ($"{ffmpegPath}|{config.HardwareAcceleration}", codec);
+        var key = ($"{ffmpegPath}|{config.HardwareAcceleration}|{preferHardware}", codec);
         lock (_encoderLock)
         {
             if (_encoders.TryGetValue(key, out var cached))
@@ -83,7 +83,7 @@ public sealed class VideoConversionJobService(
         }
 
         // Probing runs test encodes, so it happens outside the lock; a concurrent duplicate probe is harmless.
-        var encoder = FfmpegHwAccel.SelectConversionEncoder(ffmpegPath, codec, config.HardwareAcceleration, logger);
+        var encoder = FfmpegHwAccel.SelectConversionEncoder(ffmpegPath, codec, config.HardwareAcceleration, preferHardware, logger);
         lock (_encoderLock)
             _encoders[key] = encoder;
         return encoder;
@@ -124,7 +124,7 @@ public sealed class VideoConversionJobService(
         if (settings.Codec != VideoConversionCodec.Copy)
         {
             progress.Report(0, $"Choosing the {FfmpegHwAccel.CodecLabel(settings.Codec)} encoder...");
-            encoder = ResolveEncoder(ffmpeg, settings.Codec)
+            encoder = ResolveEncoder(ffmpeg, settings.Codec, VideoConversionPlanner.PrefersHardware(settings.Effort))
                 ?? throw new InvalidOperationException(
                     $"This ffmpeg build cannot encode {FfmpegHwAccel.CodecLabel(settings.Codec)}: "
                     + $"{FfmpegHwAccel.SoftwareEncoderFor(settings.Codec)} is not built in and no hardware encoder for it passed a test encode.");
@@ -395,7 +395,7 @@ public sealed class VideoConversionJobService(
         var samplePath = Path.Combine(Path.GetTempPath(), $"cove_convert_probe_{Guid.NewGuid():N}{VideoConversionPlanner.Extension(settings.Container)}");
         try
         {
-            var plan = VideoConversionPlanner.Build(source, sourcePath, samplePath, settings, encoder, config.FfmpegInputArgs, sample);
+            var plan = VideoConversionPlanner.Build(source, sourcePath, samplePath, settings, encoder, config.FfmpegInputArgs, sample, source.VideoBitRateKbps);
             unit.Report(0, "Checking whether converting would actually save space...");
             var result = await RunTrackedAsync(ffmpeg, plan.Arguments, sample.DurationSeconds, "Checking whether converting would actually save space...", 0, 0.05, unit, ct, encoder);
 
@@ -442,7 +442,7 @@ public sealed class VideoConversionJobService(
         CancellationToken ct)
     {
         var decodeArgs = config.FfmpegInputArgs;
-        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs);
+        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, sample: null, source.VideoBitRateKbps);
         var action = plan.CopiesVideo ? "Remuxing" : $"Encoding with {encoder}";
 
         var result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"{action}...", 0, EncodeShare, unit, ct, encoder);
@@ -459,7 +459,7 @@ public sealed class VideoConversionJobService(
             notes.Add($"{encoder} failed ({LastLine(result.StandardError)}), so it was encoded with {software} instead.");
             DeletePartial(partialPath);
 
-            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs);
+            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, sample: null, source.VideoBitRateKbps);
             result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"Encoding with {software}...", 0, EncodeShare, unit, ct, software);
             if (result.ExitCode == 0)
                 return plan;

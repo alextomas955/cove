@@ -12,10 +12,12 @@ public sealed class VideoConversionRequestDto
     public string Codec { get; set; } = "hevc";
     /// <summary>"mp4" or "mkv".</summary>
     public string Container { get; set; } = "mp4";
-    /// <summary>"high", "balanced" or "small".</summary>
-    public string Quality { get; set; } = "balanced";
-    /// <summary>"fast", "balanced" or "slow".</summary>
-    public string Speed { get; set; } = "balanced";
+    /// <summary>
+    /// One rung of the conversion ladder, from most quality to most speed:
+    /// "qualitySoftware", "highSoftware", "balancedSoftware", "smallerSoftware",
+    /// "qualityHardware", "smallerHardware".
+    /// </summary>
+    public string Effort { get; set; } = "balancedSoftware";
     /// <summary>Verify each converted file, make it the video's primary file and delete the original from disk.</summary>
     public bool ReplaceOriginal { get; set; }
     /// <summary>Throw a re-encoded file away when it is not smaller than the original.</summary>
@@ -50,17 +52,17 @@ public sealed class VideoConversionController(
 
         if (!TryParse(dto.Codec, out VideoConversionCodec codec)
             || !TryParse(dto.Container, out VideoConversionContainer container)
-            || !TryParse(dto.Quality, out VideoConversionQuality quality)
-            || !TryParse(dto.Speed, out VideoConversionSpeed speed))
+            || !TryParse(dto.Effort, out VideoConversionEffort effort))
         {
             return BadRequest(new
             {
                 error = "Unknown conversion option. Codec is h264, hevc, av1 or copy; container is mp4 or mkv; "
-                    + "quality is high, balanced or small; speed is fast, balanced or slow.",
+                    + "effort is qualitySoftware, highSoftware, balancedSoftware, smallerSoftware, "
+                    + "qualityHardware or smallerHardware.",
             });
         }
 
-        var settings = new VideoConversionSettings(codec, container, quality, speed, dto.ReplaceOriginal, dto.DiscardIfLarger);
+        var settings = new VideoConversionSettings(codec, container, effort, dto.ReplaceOriginal, dto.DiscardIfLarger);
         return Accepted(conversionService.Start(principalAccessor.Current, dto.VideoIds, settings));
     }
 
