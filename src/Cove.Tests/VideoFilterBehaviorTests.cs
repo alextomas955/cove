@@ -1368,6 +1368,83 @@ public class VideoFilterBehaviorTests
     }
 
     [Fact]
+    public async Task AudioPerformerFilterCriterion_MatchesExactPerformerOccurrenceTagsOnSameLink()
+    {
+        await using var context = CreateContext();
+        var tag = new Tag { Name = "Audio Occurrence Tag" };
+        var targetPerformer = CreatePerformer("Audio Target", new DateOnly(2000, 1, 1));
+        var otherPerformer = CreatePerformer("Audio Other", new DateOnly(2000, 1, 1));
+        var targetTagged = CreateAudio("target-tagged-audio", targetPerformer);
+        targetTagged.AudioPerformers.Add(new AudioPerformer { Performer = otherPerformer });
+        var wrongPerformerTagged = CreateAudio("wrong-performer-tagged-audio", targetPerformer);
+        wrongPerformerTagged.AudioPerformers.Add(new AudioPerformer { Performer = otherPerformer });
+
+        context.Tags.Add(tag);
+        context.Audios.AddRange(targetTagged, wrongPerformerTagged);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        context.TagApplications.AddRange(
+            CreatePerformerOccurrenceApplication(AffinityHostType.Audio, targetTagged.Id, targetPerformer.Id, tag.Id),
+            CreatePerformerOccurrenceApplication(AffinityHostType.Audio, wrongPerformerTagged.Id, otherPerformer.Id, tag.Id));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var matches = await AudioFilterQuery.BuildAsync(
+            context,
+            new AudioFilter
+            {
+                PerformerFilterCriterion = new RelatedFilterCriterion<PerformerFilter>
+                {
+                    PerformerIdsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.Includes, Value = [targetPerformer.Id] },
+                    PerformerOccurrenceTagsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.Includes, Value = [tag.Id] },
+                },
+            },
+            null,
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["target-tagged-audio"],
+            await matches.Select(audio => audio.Title!).ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AudioPerformerFilterCriterion_ExcludesOccurrenceTagsPerLinkAndIgnoresVideoApplications()
+    {
+        await using var context = CreateContext();
+        var tag = new Tag { Name = "Audio Excluded Tag" };
+        var performer = CreatePerformer("Audio Only", new DateOnly(2000, 1, 1));
+        var answered = CreateAudio("answered-audio", performer);
+        var unanswered = CreateAudio("unanswered-audio", performer);
+        // A video application for the same performer and tag must not answer the audio occurrence.
+        var video = CreateVideoWithFile("same-performer-video", performer: performer);
+
+        context.Tags.Add(tag);
+        context.Audios.AddRange(answered, unanswered);
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        context.TagApplications.AddRange(
+            CreatePerformerOccurrenceApplication(AffinityHostType.Audio, answered.Id, performer.Id, tag.Id),
+            CreatePerformerOccurrenceApplication(AffinityHostType.Video, video.Id, performer.Id, tag.Id));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var matches = await AudioFilterQuery.BuildAsync(
+            context,
+            new AudioFilter
+            {
+                PerformerFilterCriterion = new RelatedFilterCriterion<PerformerFilter>
+                {
+                    PerformerOccurrenceTagsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.Excludes, Value = [tag.Id] },
+                },
+            },
+            null,
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["unanswered-audio"],
+            await matches.Select(audio => audio.Title!).ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task TextsController_FindPost_PerformerTagsCriterion_WithRequiredPerformerCriterion_MatchesSamePerformerOccurrence()
     {
         await using var context = CreateContext();

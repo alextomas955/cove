@@ -432,8 +432,34 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             .ToListAsync(ct);
         var clearFields = dto.ClearFields?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
+        // Validate and stage custom field values before any relationship work so a rejected key leaves nothing applied.
+        var customFieldClears = clearFields
+            .Where(field => field.StartsWith(CustomFieldClearPrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(field => field[CustomFieldClearPrefix.Length..])
+            .ToList();
+        var customFieldChangedIds = new HashSet<int>();
+        if (dto.CustomFields != null || customFieldClears.Count > 0)
+        {
+            try
+            {
+                customFieldChangedIds.UnionWith(await customFields.ApplyBulkValuesAsync(
+                    CustomFieldEntityTypes.Audio,
+                    items.Select(audio => audio.Id).ToList(),
+                    dto.CustomFields,
+                    dto.CustomFieldMode,
+                    customFieldClears,
+                    ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         foreach (var audio in items)
         {
+            // Only an audio whose values actually changed is touched, as video bulk updates do.
+            if (customFieldChangedIds.Contains(audio.Id)) MetadataCollectionUpdater.Touch(audio);
             if (clearFields.Contains("studioId")) audio.StudioId = null;
             if (clearFields.Contains("date")) audio.Date = null;
             if (clearFields.Contains("code")) audio.Code = null;
@@ -845,6 +871,8 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         }));
         return true;
     }
+
+    private const string CustomFieldClearPrefix = "customFields.";
 
     private static string? NormalizeOptionalText(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
