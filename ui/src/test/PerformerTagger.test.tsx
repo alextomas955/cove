@@ -122,6 +122,8 @@ describe("PerformerTagger", () => {
         id: "second-remote",
         name: "Same Name",
         heightCm: 165,
+        imageUrl: "https://cdn.example/a.jpg",
+        imageUrls: ["https://cdn.example/a.jpg", "https://cdn.example/b.jpg"],
         aliases: [],
         urls: [],
         deleted: false,
@@ -151,7 +153,16 @@ describe("PerformerTagger", () => {
 
     renderTagger([performer], "detail");
     await user.click(await screen.findByRole("button", { name: "Refresh from Second" }));
-    await user.click(await screen.findByRole("button", { name: "Save" }));
+    // The source's images are candidates: the one on screen when applying is the one imported.
+    expect(await screen.findByText("1 / 2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next image" }));
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    // A new lookup starts from the first image again: the position belongs to the match it was chosen for.
+    await user.click(screen.getByRole("button", { name: "Refresh from Second" }));
+    expect(await screen.findByText("1 / 2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next image" }));
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Apply/ }));
 
     await waitFor(() =>
       expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(
@@ -159,6 +170,7 @@ describe("PerformerTagger", () => {
         expect.objectContaining({
           endpoint: "https://second.example/graphql",
           performerId: "second-remote",
+          imageUrl: "https://cdn.example/b.jpg",
         }),
       ),
     );

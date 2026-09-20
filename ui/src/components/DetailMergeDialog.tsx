@@ -1,6 +1,7 @@
 import { QueryKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitMerge, Loader2, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { MAX_REVIEWED_ITEMS } from "./MergeDialog";
 
 export interface DetailMergeCandidate {
   id: number;
@@ -18,7 +19,11 @@ interface Props {
   onMerge: (targetId: number, sourceIds: number[]) => Promise<unknown>;
   invalidateQueryKeys: Array<string | QueryKey>;
   onMerged?: () => void;
+  /** When given, the merge goes through a review shell instead of running from this dialog. */
+  renderReview?: (targetId: number, sourceIds: number[], onBack: () => void) => ReactNode;
 }
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 export function DetailMergeDialog({
   open,
@@ -29,8 +34,10 @@ export function DetailMergeDialog({
   onMerge,
   invalidateQueryKeys,
   onMerged,
+  renderReview,
 }: Props) {
   const queryClient = useQueryClient();
+  const [review, setReview] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   // "intoCurrent": merge other entries into this one (this one is kept).
@@ -39,6 +46,7 @@ export function DetailMergeDialog({
 
   useEffect(() => {
     if (!open) {
+      setReview(false);
       setSearchTerm("");
       setSelectedIds([]);
       setDirection("intoCurrent");
@@ -69,6 +77,14 @@ export function DetailMergeDialog({
 
   if (!open) return null;
 
+  const reviewable = renderReview != null && selectedIds.length > 0 && selectedIds.length < MAX_REVIEWED_ITEMS;
+  if (review && renderReview && reviewable)
+    return renderReview(
+      direction === "intoCurrent" ? targetItem.id : selectedIds[0],
+      direction === "intoCurrent" ? selectedIds : [targetItem.id],
+      () => setReview(false),
+    );
+
   const intoOther = direction === "intoOther";
   const toggleSelection = (id: number) => {
     setSelectedIds((prev) => {
@@ -89,8 +105,8 @@ export function DetailMergeDialog({
             </h2>
             <p className="mt-1 text-sm text-secondary">
               {intoOther
-                ? `Merge this ${entityType} into another one. This ${entityType} is removed; the selected one is kept.`
-                : `Keep the current ${entityType} and merge other matching entries into it.`}
+                ? `Merge this ${entityType} into another one, then remove it. The selected one is kept.`
+                : `Keep this ${entityType} and merge other matching entries into it, then remove them.`}
             </p>
           </div>
           <button onClick={onClose} className="rounded p-1 text-secondary hover:bg-surface hover:text-foreground">
@@ -126,7 +142,7 @@ export function DetailMergeDialog({
             className={`rounded-lg border p-3 ${intoOther ? "border-red-600/30 bg-red-600/10" : "border-green-600/30 bg-green-600/10"}`}
           >
             <div className={`text-xs uppercase tracking-wide ${intoOther ? "text-red-300" : "text-green-300"}`}>
-              {intoOther ? `This ${entityType} (will be merged away)` : "Merge target (kept)"}
+              {intoOther ? "Merge in, then remove" : "Keep"}
             </div>
             <div className="mt-1 text-sm font-medium text-foreground">{targetItem.name}</div>
             {targetItem.subtitle && <div className="mt-0.5 text-xs text-muted">{targetItem.subtitle}</div>}
@@ -193,9 +209,9 @@ export function DetailMergeDialog({
           <div className="text-sm text-secondary">
             {intoOther
               ? selectedIds.length === 0
-                ? "Select a destination"
-                : "1 destination selected"
-              : `${selectedIds.length} selected for merge`}
+                ? `Select the ${entityType} to keep`
+                : "Kept entry selected"
+              : `${selectedIds.length} to merge in, then remove`}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -205,12 +221,16 @@ export function DetailMergeDialog({
               Cancel
             </button>
             <button
-              onClick={() => mergeMut.mutate()}
+              onClick={() => (reviewable ? setReview(true) : mergeMut.mutate())}
               disabled={selectedIds.length === 0 || mergeMut.isPending}
               className="inline-flex items-center gap-2 rounded bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {mergeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
-              {intoOther ? `Merge this ${entityType} into selected` : `Merge into current ${entityType}`}
+              {reviewable
+                ? "Compare metadata"
+                : intoOther
+                  ? `Merge & remove this ${entityType}`
+                  : `Merge & remove ${plural(selectedIds.length, entityType)}`}
             </button>
           </div>
         </div>

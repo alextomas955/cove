@@ -84,6 +84,10 @@ public sealed class DuplicateSearchGroup
     public string? ResolutionAction { get; set; }
     public bool DeleteFiles { get; set; }
     public bool DeleteGenerated { get; set; }
+    public const int MergeMetadataJsonMaxLength = 16_000;
+
+    /// <summary>The review's field-level merge choices as JSON, when the group was queued with any.</summary>
+    public string? MergeMetadataJson { get; set; }
     public string? Error { get; set; }
     public DateTime? QueuedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }

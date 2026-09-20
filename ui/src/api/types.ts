@@ -898,6 +898,8 @@ export interface DuplicateSearchGroup {
   status: DuplicateGroupStatus;
   videos: Video[];
   keepVideoIds: number[];
+  /** Non-keepers that another group of the same search keeps; resolving this group never removes them. */
+  keptElsewhereVideoIds?: number[];
   decisionSource?: "auto" | "manual" | null;
   decisionRule?: DuplicateKeeperRuleType | "tiebreak" | null;
   resolutionAction?: DuplicateResolutionAction | null;
@@ -933,6 +935,8 @@ export interface DuplicateResolveRequest {
   action: DuplicateResolutionAction;
   deleteFiles: boolean;
   deleteGenerated: boolean;
+  /** Review choices; honoured only when a single group is resolved with the merge action. */
+  metadata?: VideoMergeMetadata;
 }
 
 export interface DuplicateResolveResult {
@@ -2529,6 +2533,10 @@ export interface ApplyVideoScrapeAttemptRequest {
   selectedCandidateIndex?: number;
   tagSelections?: ScrapeCollectionItemSelection[];
   performerSelections?: ScrapeCollectionItemSelection[];
+  addedTagIds?: number[];
+  removedTagIds?: number[];
+  addedPerformerIds?: number[];
+  removedPerformerIds?: number[];
 }
 
 export type ApplyScrapeAttemptRequest = ApplyVideoScrapeAttemptRequest;
@@ -2683,6 +2691,8 @@ export interface MetadataServerPerformerMatch {
   birthDate?: string;
   country?: string;
   imageUrl?: string;
+  /** Every image the source has for the performer, in its order; candidates to pick from, one is stored. */
+  imageUrls?: string[];
   deleted: boolean;
   mergedIntoId?: string;
   aliases: string[];
@@ -2693,6 +2703,8 @@ export interface MetadataServerPerformerImportRequest {
   endpoint: string;
   performerId: string;
   fieldStrategies?: Record<string, "ignore" | "merge" | "overwrite">;
+  /** The source image to store; must be one of the performer's images at the source. Defaults to the first. */
+  imageUrl?: string;
 }
 
 export interface MetadataServerFindByIdsRequest {
@@ -2822,6 +2834,12 @@ export interface MetadataServerVideoImportRequest {
   performerOverrides?: MetadataServerVideoEntityOverride[];
   tagOverrides?: MetadataServerVideoEntityOverride[];
   fieldStrategies?: Record<string, "ignore" | "merge" | "overwrite">;
+  // Hand edits made in the review, as the edit form would make them: library ids added through search
+  // and current ids taken off. Applied after the import, whatever the collection modes.
+  addedTagIds?: number[];
+  removedTagIds?: number[];
+  addedPerformerIds?: number[];
+  removedPerformerIds?: number[];
 }
 
 // ===== Filter Criteria =====
@@ -3979,4 +3997,31 @@ export interface RegistryUninstallResult {
   extension?: ExtensionDependencyImpact;
   dependents?: ExtensionDependencyImpact[];
   uninstalledExtensions?: string[];
+}
+
+export interface VideoMergeMetadata {
+  fields?: Record<string, "source" | "target">;
+  customFields?: Record<string, "source" | "target">;
+  tagIds?: number[];
+  performerIds?: number[];
+  galleryIds?: number[];
+  urls?: string[];
+  remoteIds?: VideoRemoteId[];
+}
+
+/**
+ * What happens to the merged copies' files. "attach" moves them onto the kept video; "remove" leaves
+ * them with the copies, which are deleted like any other video with the same delete options.
+ */
+export interface VideoMergeFileHandling {
+  mode: "attach" | "remove";
+  deleteFiles: boolean;
+  deleteGenerated: boolean;
+}
+
+/** What removing a source video's files would do to its markers and timed group items. */
+export interface VideoMergeAssessment {
+  videoId: number;
+  filesEquivalent: boolean;
+  timelineItemCount: number;
 }

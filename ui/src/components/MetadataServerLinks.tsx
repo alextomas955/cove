@@ -31,7 +31,7 @@ export function metadataServerEntityUrl(
   }
 }
 
-function metadataServerLabel(endpoint: string, servers: MetadataServer[]): string {
+export function metadataServerLabel(endpoint: string, servers: MetadataServer[]): string {
   const normalizedEndpoint = endpoint.trim().replace(/\/$/, "").toLowerCase();
   const configuredName = servers
     .find((server) => server.endpoint.trim().replace(/\/$/, "").toLowerCase() === normalizedEndpoint)

@@ -1,6 +1,8 @@
 using System.Data;
 using System.Globalization;
+using System.Text.Json;
 using Cove.Core.Auth;
+using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Core.Interfaces;
 using Cove.Data;
@@ -40,11 +42,15 @@ public sealed class DuplicateResolutionService(
         bool deleteFiles,
         bool deleteGenerated,
         CovePrincipal? principal,
-        CancellationToken ct)
+        CancellationToken ct,
+        VideoMergeMetadataDto? mergeMetadata = null)
     {
         var ids = groupIds.Distinct().ToArray();
         if (ids.Length == 0)
             return new DuplicateResolveResult(0, null);
+        var mergeMetadataJson = mergeMetadata is null || action != MergeAction
+            ? null
+            : SerializeMergeMetadata(mergeMetadata);
 
         var queuedAt = DateTime.UtcNow;
         var claim = DuplicateSearchDeletionClaim.Create();
@@ -72,6 +78,7 @@ public sealed class DuplicateResolutionService(
                     .SetProperty(group => group.ResolutionAction, action)
                     .SetProperty(group => group.DeleteFiles, deleteFiles)
                     .SetProperty(group => group.DeleteGenerated, deleteGenerated)
+                    .SetProperty(group => group.MergeMetadataJson, mergeMetadataJson)
                     .SetProperty(group => group.QueuedAt, queuedAt)
                     .SetProperty(group => group.Error, (string?)null), ct);
             // Counting by this request's timestamp keeps a replayed transaction's result accurate.
@@ -217,7 +224,7 @@ public sealed class DuplicateResolutionService(
                         .Where(group => group.SearchId == searchId && group.Status == DuplicateGroupStatus.Queued)
                         .OrderBy(group => group.QueuedAt)
                         .ThenBy(group => group.Position)
-                        .Select(group => new { group.Id, group.Position, group.ResolutionAction, group.DeleteFiles, group.DeleteGenerated })
+                        .Select(group => new { group.Id, group.Position, group.ResolutionAction, group.DeleteFiles, group.DeleteGenerated, group.MergeMetadataJson })
                         .FirstOrDefaultAsync(ct);
                     if (next is null)
                     {
@@ -250,6 +257,7 @@ public sealed class DuplicateResolutionService(
                             next.ResolutionAction == MergeAction,
                             next.DeleteFiles,
                             next.DeleteGenerated,
+                            ParseMergeMetadata(next.MergeMetadataJson),
                             principal,
                             ct);
                         await scopedDb.DuplicateSearchGroups
@@ -371,6 +379,7 @@ public sealed class DuplicateResolutionService(
         bool merge,
         bool deleteFiles,
         bool deleteGenerated,
+        VideoMergeMetadataDto? mergeMetadata,
         CovePrincipal? principal,
         CancellationToken ct)
     {
@@ -417,6 +426,7 @@ public sealed class DuplicateResolutionService(
             .Select(group => new { VideoId = group.Key, Bytes = group.Sum(file => file.Size) })
             .ToDictionaryAsync(row => row.VideoId, row => row.Bytes, ct);
 
+        string? warning = null;
         if (merge)
         {
             // Like video deletion, a system-initiated resolution (no principal) is not entity-authorized.
@@ -427,15 +437,20 @@ public sealed class DuplicateResolutionService(
                 if (!decision.Allowed)
                     throw new UnauthorizedAccessException("You do not have permission to change the video being kept.");
             }
+            // The duplicates' files leave with them, so the shared merge only carries metadata, engagement
+            // and whatever timeline-bound items fit the kept file. The deletion below removes the copies.
             using var mergeScope = CreatePrincipalScope(scopeFactory, principal);
-            await mergeScope.ServiceProvider.GetRequiredService<DuplicateVideoMetadataMerger>()
-                .MergeAsync(keeperIds[0], removeIds, ct);
+            var result = await mergeScope.ServiceProvider.GetRequiredService<VideoMergeService>()
+                .MergeAsync(new VideoMergePlan(keeperIds[0], removeIds, VideoMergeFileHandling.Remove, mergeMetadata), ct);
+            if (result.Outcome != VideoMergeOutcome.Merged)
+                throw new InvalidOperationException(result.Error ?? "The video to keep no longer exists.");
+            if (result.TimelineKeptVideoIds.Count > 0)
+                warning = TimelineKeptWarning(result.TimelineKeptVideoIds.Count);
         }
 
         var context = new BulkDeletionExecutionContext();
         var removed = 0;
         long removedBytes = 0;
-        string? warning = null;
         try
         {
             foreach (var videoId in removeIds)
@@ -469,7 +484,10 @@ public sealed class DuplicateResolutionService(
                         BulkDeletionJobService.ResolveMaxParallelism(config, Environment.ProcessorCount),
                         CancellationToken.None);
                 if (physical.Failed > 0)
-                    warning = $"{physical.Failed.ToString(CultureInfo.InvariantCulture)} file(s) could not be deleted from disk and will be retried.";
+                {
+                    var physicalWarning = $"{physical.Failed.ToString(CultureInfo.InvariantCulture)} file(s) could not be deleted from disk and will be retried.";
+                    warning = warning is null ? physicalWarning : $"{warning} {physicalWarning}";
+                }
             }
         }
         return new GroupResolution(removed, removedBytes, warning);
@@ -592,6 +610,41 @@ public sealed class DuplicateResolutionService(
             ? null
             : $"{kept.Count.ToString(CultureInfo.InvariantCulture)} file(s) could not be removed: {kept[0]}";
         return new GroupResolution(removed, removedBytes, warning, FileGroup: true);
+    }
+
+    internal static string TimelineKeptWarning(int count)
+        => count == 1
+            ? "The removed copy's markers were not carried over, because its file is not equivalent to the kept video's, and were removed with it."
+            : $"{count.ToString(CultureInfo.InvariantCulture)} removed copies' markers were not carried over, because their files are not equivalent to the kept video's, and were removed with them.";
+
+    private static readonly JsonSerializerOptions MergeMetadataJsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Serializes the review's choices for the group row; throws when they exceed the column.</summary>
+    internal static string SerializeMergeMetadata(VideoMergeMetadataDto metadata)
+    {
+        var json = JsonSerializer.Serialize(metadata, MergeMetadataJsonOptions);
+        if (json.Length > DuplicateSearchGroup.MergeMetadataJsonMaxLength)
+            throw new ArgumentException("The merge choices are too large to store with the group.", nameof(metadata));
+        return json;
+    }
+
+    /// <summary>
+    /// Reads the choices stored with a queued group. Unreadable choices fail the group rather than fall
+    /// back to the default policy, which would merge in exactly what the review deselected.
+    /// </summary>
+    internal static VideoMergeMetadataDto? ParseMergeMetadata(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<VideoMergeMetadataDto>(json, MergeMetadataJsonOptions)
+                ?? throw new InvalidOperationException("The merge choices stored with this group could not be read. Review it and resolve it again.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("The merge choices stored with this group could not be read. Review it and resolve it again.", ex);
+        }
     }
 
     private static IServiceScope CreatePrincipalScope(IServiceScopeFactory scopeFactory, CovePrincipal? principal)

@@ -160,7 +160,7 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
         batchSearching={batchSearching}
         onCancelBatch={cancelBatchSearch}
         onRunAll={searchAll}
-        runAllLabel="Search All"
+        runAllLabel="Search all"
         showRunAll={mode === "bulk"}
         countLabel={`${visibleTags.length} tag${visibleTags.length !== 1 ? "s" : ""}`}
         settingsOpen={showSettings}
@@ -310,20 +310,21 @@ function TagTaggerRow({
               onChange={(event) => onQueryChange(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && onSearch()}
               placeholder="Search query..."
-              className="flex-1 bg-input border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
+              className="flex-1 min-w-0 bg-input border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
             />
             <button
               onClick={onSearch}
               disabled={state?.loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
+              aria-label="Search"
+              className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
             >
               {state?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-              Search
+              <span className="hidden sm:inline">Search</span>
             </button>
             <button
               onClick={() => submitDraftMut.mutate()}
               disabled={submitDraftMut.isPending}
-              className="flex items-center gap-1 px-2 py-1.5 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
+              className="flex shrink-0 items-center gap-1 px-2 py-1.5 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
               title="Submit this tag as a draft entry to the metadata server"
             >
               {submitDraftMut.isPending ? (

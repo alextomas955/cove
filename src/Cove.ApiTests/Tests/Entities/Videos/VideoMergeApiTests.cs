@@ -1,3 +1,4 @@
+using System.Net;
 using Cove.ApiTests.Builders;
 using Cove.ApiTests.Infrastructure;
 using Cove.Core.Auth;
@@ -11,6 +12,266 @@ public sealed class VideoMergeApiTests(
     ITestOutputHelper output,
     CoveApiTestFixture fixture) : ApiTest(output, fixture)
 {
+    [Fact]
+    public async Task GivenMetadataChoices_WhenMerged_ThenMixedFieldsAndSelectedListsArePersisted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var keepTag = await AsUser().CreateTagAsync("Keep tag", ct);
+        var dropTag = await AsUser().CreateTagAsync("Drop tag", ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source title")
+            .WithDetails("Source description").WithDate("2024-03").WithTags([keepTag])
+            .WithUrl("https://merge.example/source").WithRemoteId("https://metadata.example", "source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target title")
+            .WithDetails("Target description").WithDirector("Director to clear").WithTags([dropTag])
+            .WithUrl("https://merge.example/target").WithRemoteId("https://metadata.example", "target").Build(), ct);
+        await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(
+            Fields: new() { ["title"] = "source", ["details"] = "target", ["director"] = "source", ["date"] = "source" },
+            TagIds: [keepTag.Id], Urls: ["https://merge.example/source"],
+            RemoteIds: [new("https://metadata.example", "source")]), ct);
+
+        var result = await AsUser().GetVideoByIdAsync(target.Id, ct);
+        result.Title.Should().Be("Source title");
+        result.Details.Should().Be("Target description");
+        result.Director.Should().BeNull();
+        result.Date.Should().Be("2024-03");
+        result.Tags.Select(tag => tag.Id).Should().Equal(keepTag.Id);
+        result.Urls.Should().Equal("https://merge.example/source");
+        result.RemoteIds.Should().ContainSingle().Which.RemoteId.Should().Be("source");
+        var readSource = () => AsUser().GetVideoByIdAsync(source.Id, ct);
+        await readSource.Should().ThrowAsync<InvalidOperationException>().WithMessage("*404*");
+    }
+
+    [Fact]
+    public async Task GivenEmptyTargetFields_WhenMergedWithoutChoices_ThenTheyAreFilledFromTheSource()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source title")
+            .WithDetails("Source description").WithDirector("Source director").WithDate("2024-03").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target title")
+            .WithDetails("Target description").Build(), ct);
+
+        var merged = await AsUser().MergeVideosAsync(target, ct, source);
+
+        merged.Title.Should().Be("Target title");
+        merged.Details.Should().Be("Target description");
+        merged.Director.Should().Be("Source director");
+        merged.Date.Should().Be("2024-03");
+        merged.FieldProvenance.Should().Contain(entry => entry.FieldKey == "director" && entry.SourceKey == "merge");
+    }
+
+    [Fact]
+    public async Task GivenRatingFavouriteAndPlaybackOnTheSource_WhenMerged_ThenTheTargetCarriesThem()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target").Build(), ct);
+        await AsUser().SetVideoRatingAsync(source, 80, cancellationToken: ct);
+        await AsUser().SetVideoFavoriteAsync(source, true, ct);
+        await AsUser().RecordVideoPlaybackAsync(source, Guid.NewGuid(), ct);
+        await AsUser().SetVideoBookmarkAsync(source, true, ct);
+
+        await AsUser().MergeVideosAsync(target, ct, source);
+
+        var engagement = await AsUser().GetVideoEngagementAsync(target, ct);
+        engagement.Rating.Should().Be(80);
+        engagement.IsFavorite.Should().BeTrue();
+        engagement.PlayDuration.Should().BeGreaterThan(0);
+        engagement.LastPlayedAt.Should().NotBeNull();
+        (await AsUser().GetVideoBookmarkAsync(target, ct)).Saved.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GivenRemoveFileHandling_WhenMerged_ThenTheSourceFileIsNotAttachedToTheTarget()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var targetPath = AsTestFileSystem().CreateTextFile("The kept copy's file.");
+        var sourcePath = AsTestFileSystem().CreateTextFile("A redundant copy's file that is not wanted.");
+        var target = await AsUser().CreateVideoFromFileAsync(targetPath, ct);
+        var source = await AsUser().CreateVideoFromFileAsync(sourcePath, ct);
+        source = await AsUser().UpdateVideoAsync(source.Id, new { details = "Details only the copy had" }, ct);
+
+        var merged = await AsUser().MergeVideosAsync(new VideoMergeDto(target.Id, [source.Id])
+        {
+            FileHandling = new VideoMergeFileHandlingDto(VideoMergeFileHandlingDto.RemoveMode, DeleteFiles: false),
+        }, ct);
+
+        merged.Details.Should().Be("Details only the copy had");
+        merged.Files.Select(file => file.Path).Should().Equal(targetPath);
+        var readSource = () => AsUser().GetVideoByIdAsync(source.Id, ct);
+        await readSource.Should().ThrowAsync<InvalidOperationException>().WithMessage("*404*");
+        File.Exists(sourcePath).Should().BeTrue();
+    }
+
+    [Fact]
+    [CoversEndpoint("POST", "/api/videos/merge/assess")]
+    public async Task GivenCopiesWithDifferentRunningTimes_WhenAssessed_ThenTheMarkersThatWouldNotFollowAreReported()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var targetPath = AsTestFileSystem().CreateTextFile("The kept copy's file.");
+        var sourcePath = AsTestFileSystem().CreateTextFile("A copy whose file has a different length.");
+        var target = await AsUser().CreateVideoFromFileAsync(targetPath, ct);
+        var source = await AsUser().CreateVideoFromFileAsync(sourcePath, ct);
+        await AsUser().CreateVideoSegmentAsync(source, new SegmentCreateDto(
+            StartSec: 5, EndSec: null, TagId: null, Kind: null, RefId: null, Payload: null,
+            SourceKey: "user", SourceRunId: null, Confidence: null, Title: "Marker on the copy", ColorHint: null), ct);
+
+        var assessment = await AsUser().AssessVideoMergeAsync(target, [source], ct);
+
+        assessment.Should().ContainSingle().Which.Should().BeEquivalentTo(new VideoMergeAssessmentDto(source.Id, false, 1));
+    }
+
+    [Fact]
+    public async Task GivenDeleteFilesWithAttachHandling_WhenMerged_ThenTheRequestIsRejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target").Build(), ct);
+
+        await AsUser().AssertResponseAsync(HttpMethod.Post, "/api/videos/merge", HttpStatusCode.BadRequest,
+            new VideoMergeDto(target.Id, [source.Id]) { FileHandling = new VideoMergeFileHandlingDto(DeleteFiles: true) }, ct);
+
+        (await AsUser().GetVideoByIdAsync(source.Id, ct)).Id.Should().Be(source.Id);
+    }
+
+    [Fact]
+    public async Task GivenRelationshipsFromElsewhereInTheLibrary_WhenChosen_ThenTheKeptVideoGainsThem()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var performer = await AsUser().CreatePerformerAsync(new PerformerBuilder().WithName("Added performer").Build(), ct);
+        var gallery = await AsUser().CreateGalleryAsync(new GalleryBuilder().WithTitle("Added gallery").Build(), ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target").WithUrl("https://merge.example/target").Build(), ct);
+
+        var merged = await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(
+            PerformerIds: [performer.Id], GalleryIds: [gallery.Id], Urls: ["https://merge.example/target", "https://merge.example/added-in-review"]), ct);
+
+        merged.Performers.Select(item => item.Id).Should().Equal(performer.Id);
+        merged.Galleries.Select(item => item.Id).Should().Equal(gallery.Id);
+        merged.Urls.Should().BeEquivalentTo("https://merge.example/target", "https://merge.example/added-in-review");
+    }
+
+    [Fact]
+    public async Task GivenCustomFieldsAndAnAdditionalTag_WhenMerged_ThenResultChoicesAreSaved()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await AsUser().CreateCustomFieldDefinitionAsync(new CustomFieldDefinitionCreateDto
+            { Key = "merge_note", Label = "Merge note", EntityTypes = ["video"] }, ct);
+        var addedTag = await AsUser().CreateTagAsync("Additional tag", ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source")
+            .WithCustomField("merge_note", "Source note").Build(), ct);
+        var target = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Target")
+            .WithCustomField("merge_note", "Target note").Build(), ct);
+        await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(TagIds: [addedTag.Id],
+            CustomFields: new() { ["merge_note"] = "source" }), ct);
+        var result = await AsUser().GetVideoByIdAsync(target.Id, ct);
+        result.CustomFields!["merge_note"].ToString().Should().Be("Source note");
+        result.Tags.Select(tag => tag.Id).Should().Equal(addedTag.Id);
+    }
+
+    [Fact]
+    public async Task GivenHiddenPerformer_WhenVisibleRelationshipsAreCleared_ThenHiddenLinksArePreserved()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var performer = await AsUser().CreatePerformerAsync(new PerformerBuilder().WithName("Hidden performer").Build(), ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").WithPerformers([performer]).Build(), ct);
+        var target = await AsUser().CreateVideoAsync("Target", ct);
+        var role = (await AsUser().GetRolesAsync(ct)).Single(item => item.Name == BuiltinRoles.Member);
+        await AsUser().UpdateRoleAsync(role.Id, new UpdateRoleRequest(Description: null,
+            Permissions: role.Permissions.Append(Permissions.VideosDelete).Distinct().ToArray()), ct);
+        await AsUser().CreateContentRuleAsync(new CreateContentRuleRequest(role.Id, EntityKinds.Performer,
+            Effect: "deny", ScopeKind: "all", ScopeValue: "{}", AppliesTo: "read"), ct);
+        var result = await AsUser(ApiTestUsers.Eva).MergeVideoMetadataAsync(target, source,
+            new VideoMergeMetadataDto(PerformerIds: []), ct);
+        result.Performers.Should().BeEmpty();
+        (await AsUser().GetVideoByIdAsync(target.Id, ct)).Performers.Select(item => item.Id).Should().Equal(performer.Id);
+    }
+
+    [Fact]
+    public async Task GivenHiddenStudio_WhenChosenFromSource_ThenProvenanceDoesNotRevealItsName()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var studio = await AsUser().CreateStudioAsync("Hidden studio", ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").WithStudio(studio).Build(), ct);
+        var target = await AsUser().CreateVideoAsync("Target", ct);
+        var role = (await AsUser().GetRolesAsync(ct)).Single(item => item.Name == BuiltinRoles.Member);
+        await AsUser().UpdateRoleAsync(role.Id, new UpdateRoleRequest(Description: null,
+            Permissions: role.Permissions.Append(Permissions.VideosDelete).Distinct().ToArray()), ct);
+        await AsUser().CreateContentRuleAsync(new CreateContentRuleRequest(role.Id, EntityKinds.Studio,
+            Effect: "deny", ScopeKind: "all", ScopeValue: "{}", AppliesTo: "read"), ct);
+        var result = await AsUser(ApiTestUsers.Eva).MergeVideoMetadataAsync(target, source,
+            new VideoMergeMetadataDto(Fields: new() { ["studioId"] = "source" }), ct);
+        result.StudioName.Should().BeNull();
+        global::System.Text.Json.JsonSerializer.Serialize(result.FieldProvenance).Should().NotContain("Hidden studio");
+        (await AsUser().GetVideoByIdAsync(target.Id, ct)).StudioId.Should().Be(studio.Id);
+    }
+
+    [Fact]
+    public async Task GivenDerivedTargetTag_WhenEditableTagsAreCleared_ThenItRemainsDerived()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tag = await AsUser().CreateTagAsync("Derived tag", ct);
+        var source = await AsUser().CreateVideoAsync(new VideoBuilder().WithTitle("Source").WithTags([tag]).Build(), ct);
+        var target = await AsUser().CreateVideoAsync("Target", ct);
+        await AsUser().CreateTagApplicationAsync(new TagApplicationCreateDto("video", target.Id, tag.Id, "scraper:local"), ct);
+        await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(TagIds: []), ct);
+        var result = await AsUser().GetVideoByIdAsync(target.Id, ct);
+        var retained = result.Tags.Should().ContainSingle().Subject;
+        retained.Id.Should().Be(tag.Id);
+        retained.CanRemove.Should().BeFalse();
+        retained.IsDerived.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GivenSourceCover_WhenMerged_ThenItRemainsAvailableAfterSourceDeletion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync("Source", ct);
+        var target = await AsUser().CreateVideoAsync("Target", ct);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=");
+        await AsUser().UploadVideoImageAsync(source, png, cancellationToken: ct);
+        await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(Fields: new() { ["cover"] = "source" }), ct);
+        (await AsUser().GetVideoByIdAsync(target.Id, ct)).ImagePath.Should().NotBeNullOrEmpty();
+        var image = await AsUser().GetVideoImageAsync(target, cancellationToken: ct);
+        image.Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task GivenGeneratedSourceCover_WhenMerged_ThenTheResultOwnsAPersistentCover()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync("Source", ct);
+        var target = await AsUser().CreateVideoAsync("Target", ct);
+        var image = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=");
+        var bucket = Convert.ToHexStringLower(global::System.Security.Cryptography.SHA256.HashData(BitConverter.GetBytes(source.Id)))[..2];
+        AsTestFileSystem().CreateGeneratedFile(Path.Combine("screenshots", bucket, $"{source.Id}.jpg"), image);
+        await AsUser().MergeVideoMetadataAsync(target, source, new VideoMergeMetadataDto(Fields: new() { ["cover"] = "source" }), ct);
+        (await AsUser().GetVideoByIdAsync(target.Id, ct)).ImagePath.Should().NotBeNullOrEmpty();
+        (await AsUser().GetVideoImageAsync(target, cancellationToken: ct)).Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task GivenInvalidMetadataChoices_WhenMerged_ThenNeitherVideoChanges()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var source = await AsUser().CreateVideoAsync("Source title", ct);
+        var target = await AsUser().CreateVideoAsync("Target title", ct);
+        foreach (var choices in new[] {
+            new VideoMergeMetadataDto(Fields: new() { ["title"] = "unknown" }),
+            new VideoMergeMetadataDto(Fields: new() { ["primaryFileId"] = "source" }),
+            new VideoMergeMetadataDto(TagIds: [int.MaxValue]),
+            new VideoMergeMetadataDto(Fields: new() { ["cover"] = "source" }),
+            new VideoMergeMetadataDto(PerformerIds: [int.MaxValue]),
+            new VideoMergeMetadataDto(Urls: ["   "]),
+            new VideoMergeMetadataDto(RemoteIds: [new("https://unrelated.example", "nope")]),
+            new VideoMergeMetadataDto(CustomFields: new() { ["unknown"] = "source" }) })
+        {
+            var merge = () => AsUser().MergeVideoMetadataAsync(target, source, choices, ct);
+            await merge.Should().ThrowAsync<InvalidOperationException>().WithMessage("*400*");
+            (await AsUser().GetVideoByIdAsync(source.Id, ct)).Title.Should().Be("Source title");
+            (await AsUser().GetVideoByIdAsync(target.Id, ct)).Title.Should().Be("Target title");
+        }
+    }
+
     [Fact]
     public async Task GivenSourceRemoteIdsAndGroupMembership_WhenMerged_ThenTheyMoveToTheTarget()
     {

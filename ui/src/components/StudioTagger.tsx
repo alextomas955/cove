@@ -9,11 +9,17 @@ import type {
 } from "../api/types";
 import { useAppConfig } from "../state/AppConfigContext";
 import { DEFAULT_COLLECTION_MODES, type CollectionMode } from "./videoScrapeUtils";
+import { MetadataDiff, scalarStatus, summarizeDiff, type DiffSelection } from "./MetadataDiff";
+import { metadataServerLabel } from "./MetadataServerLinks";
+import { MetadataDiffSummary } from "./MetadataDiffSummary";
+import { ReviewCoverPanel } from "./ReviewCoverPanel";
 import {
-  CompactCollectionDecision,
-  CompactImageDecision,
-  CompactListValue,
-  CompactScalarDecision,
+  applyStudioSelectionChange,
+  buildStudioReview,
+  type StudioFieldStrategy,
+  type StudioReviewInput,
+} from "./StudioTaggerReview";
+import {
   DEFAULT_TAGGER_BLACKLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
@@ -47,8 +53,6 @@ interface StudioSearchState {
   collectionModes?: Record<string, CollectionMode>;
 }
 
-type StudioFieldStrategy = "ignore" | "merge" | "overwrite";
-
 const CONCURRENCY_LIMIT = 5;
 async function runWithConcurrency<T>(
   items: T[],
@@ -67,7 +71,7 @@ async function runWithConcurrency<T>(
   await Promise.all(workers);
 }
 
-// Cover image is handled separately as a thumbnail comparison (CompactImageDecision), not a text scalar.
+// The logo is handled separately as a cover panel, not a text scalar.
 const studioScalarFields = [
   { key: "name", label: "Name" },
   { key: "parent", label: "Parent" },
@@ -83,8 +87,6 @@ function getStudioCurrentValue(studio: Studio, field: string) {
       return studio.name;
     case "parent":
       return studio.parentName;
-    case "image":
-      return studio.imagePath ? "Current logo" : undefined;
     default:
       return undefined;
   }
@@ -96,8 +98,6 @@ function getStudioScrapedValue(result: MetadataServerStudioMatch, field: string)
       return result.name;
     case "parent":
       return result.parentName;
-    case "image":
-      return result.imageUrl ? "MetadataServer logo" : undefined;
     default:
       return undefined;
   }
@@ -432,20 +432,21 @@ function StudioTaggerRow({
               onChange={(e) => onQueryChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
               placeholder="Search query..."
-              className="flex-1 bg-input border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
+              className="flex-1 min-w-0 bg-input border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
             />
             <button
               onClick={onSearch}
               disabled={state?.loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
+              aria-label="Search"
+              className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
             >
               {state?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-              Search
+              <span className="hidden sm:inline">Search</span>
             </button>
             <button
               onClick={() => submitDraftMut.mutate()}
               disabled={submitDraftMut.isPending}
-              className="flex items-center gap-1 px-2 py-1.5 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
+              className="flex shrink-0 items-center gap-1 px-2 py-1.5 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
               title="Submit this studio as a draft entry to the metadata server"
             >
               {submitDraftMut.isPending ? (
@@ -485,7 +486,9 @@ function StudioTaggerRow({
                   key={`${result.endpoint}-${result.id}`}
                   studio={studio}
                   result={result}
+                  metadataServers={metadataServers}
                   isSelected={i === (state.selectedIndex ?? 0)}
+                  showSelector={state.results!.length > 1}
                   fieldStrategies={getStudioFieldStrategies(studio, result, state)}
                   collectionModes={getStudioCollectionModes(result, state)}
                   onFieldStrategyChange={(field, strategy) =>
@@ -526,7 +529,9 @@ function StudioTaggerRow({
 function StudioResultRow({
   studio,
   result,
+  metadataServers,
   isSelected,
+  showSelector,
   fieldStrategies,
   collectionModes,
   onFieldStrategyChange,
@@ -538,7 +543,9 @@ function StudioResultRow({
 }: {
   studio: Studio;
   result: MetadataServerStudioMatch;
+  metadataServers: MetadataServer[];
   isSelected: boolean;
+  showSelector: boolean;
   fieldStrategies: Record<string, StudioFieldStrategy>;
   collectionModes: Record<string, CollectionMode>;
   onFieldStrategyChange: (field: string, strategy: StudioFieldStrategy) => void;
@@ -548,92 +555,158 @@ function StudioResultRow({
   saving?: boolean;
   saved?: boolean;
 }) {
-  const scalarRows = studioScalarFields
-    .map((field) => ({
-      ...field,
-      current: getStudioCurrentValue(studio, field.key),
-      scraped: getStudioScrapedValue(result, field.key),
-    }))
-    .filter((field) => field.scraped !== undefined && field.scraped !== null && field.scraped !== "");
+  // Accept-all is the common case, so the review opens as a list of facts; the full side-by-side
+  // rows are one click away.
+  const [adjusting, setAdjusting] = useState(false);
+  const sourceName = result.serverName || metadataServerLabel(result.endpoint, metadataServers);
+  const reviewInput: StudioReviewInput = {
+    sourceName,
+    scalars: studioScalarFields
+      .map((field) => ({
+        key: field.key,
+        label: field.label,
+        current: getStudioCurrentValue(studio, field.key),
+        scraped: getStudioScrapedValue(result, field.key),
+      }))
+      .filter(
+        (field): field is typeof field & { scraped: string | number } =>
+          field.scraped !== undefined && field.scraped !== null && field.scraped !== "",
+      ),
+    fieldStrategies,
+    collectionModes,
+    currentImageUrl: studio.imagePath,
+    incomingImageUrl: result.imageUrl || undefined,
+    urls: { current: studio.urls ?? [], incoming: result.urls },
+    aliases: { current: studio.aliases ?? [], incoming: result.aliases },
+  };
+  const review = isSelected ? buildStudioReview(reviewInput) : null;
+  const summary = review ? summarizeDiff(review.fields, review.source, review.target, review.selection) : null;
+  const imageField = review?.fields.find((field) => field.key === "image");
+  const handleSelectionChange = (next: DiffSelection) => {
+    if (!review) return;
+    applyStudioSelectionChange(reviewInput, review.selection, next, {
+      onFieldStrategyChange,
+      onCollectionModeChange,
+    });
+  };
+  const facts = [
+    result.parentName ? `Parent: ${result.parentName}` : null,
+    result.aliases.length > 0 ? `${result.aliases.length} alias${result.aliases.length === 1 ? "" : "es"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
       onClick={onClick}
-      className={`rounded border cursor-pointer transition-colors ${
-        isSelected ? "border-accent bg-card" : "border-border bg-surface hover:border-accent/50"
+      className={`rounded-lg border transition-colors ${
+        isSelected ? "border-accent/70 bg-card" : "cursor-pointer border-border bg-surface hover:border-accent/50"
       }`}
     >
-      <div className="flex items-center gap-3 p-2">
-        {result.imageUrl && (
-          <img src={result.imageUrl} alt="" className="h-8 w-16 object-contain rounded flex-shrink-0" loading="lazy" />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground truncate">{result.name}</p>
-          <div className="flex items-center gap-2 text-[10px] text-muted">
-            {result.parentName && <span>Parent: {result.parentName}</span>}
-            {result.aliases && result.aliases.length > 0 && <span>{result.aliases.length} alias(es)</span>}
+      <div
+        role={showSelector && !isSelected ? "button" : undefined}
+        tabIndex={showSelector && !isSelected ? 0 : undefined}
+        aria-label={showSelector && !isSelected ? `Use ${result.name}` : undefined}
+        onKeyDown={(event) => {
+          if (showSelector && !isSelected && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onClick();
+          }
+        }}
+        className="flex flex-wrap items-center gap-2.5 px-3 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        {showSelector && (
+          <div
+            aria-hidden="true"
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-accent" : "border-border"}`}
+          >
+            {isSelected && <div className="h-2 w-2 rounded-full bg-accent" />}
           </div>
+        )}
+        {!isSelected && result.imageUrl && (
+          <img src={result.imageUrl} alt="" className="h-8 w-16 shrink-0 rounded object-contain" loading="lazy" />
+        )}
+        {review && imageField ? (
+          <div onClick={(event) => event.stopPropagation()} className="w-full sm:w-auto">
+            <ReviewCoverPanel
+              status={scalarStatus(imageField, review.source, review.target)}
+              chosen={review.selection.image === "source" ? "source" : "target"}
+              currentUrl={studio.imagePath}
+              candidates={result.imageUrl ? [result.imageUrl] : []}
+              incomingLabel={sourceName}
+              onChoose={(side) => handleSelectionChange({ ...review.selection, image: side })}
+              disabled={saving}
+              subject="Logo"
+            />
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1 self-start">
+          <p
+            className={`text-foreground ${isSelected ? "text-base font-semibold leading-snug" : "truncate text-[13px] font-semibold"}`}
+          >
+            {result.name}
+          </p>
+          {/* Expanded, the rows below say what happens to each fact, so the header names the source instead. */}
+          {isSelected ? (
+            <p className="text-sm text-secondary">{sourceName}</p>
+          ) : facts ? (
+            <p className="truncate text-[11px] text-muted">{facts}</p>
+          ) : null}
         </div>
       </div>
 
-      {isSelected && !saved && (
-        <div className="border-t border-border px-3 py-3 space-y-3">
-          {scalarRows.map((row) => (
-            <CompactScalarDecision
-              key={row.key}
-              label={row.label}
-              current={row.current}
-              scraped={row.scraped}
-              replacing={fieldStrategies[row.key] === "overwrite"}
-              onChange={(shouldReplace) => onFieldStrategyChange(row.key, shouldReplace ? "overwrite" : "ignore")}
-            />
-          ))}
-
-          {result.imageUrl && (
-            <CompactImageDecision
-              label="Logo"
-              currentImageUrl={studio.imagePath}
-              scrapedImageUrl={result.imageUrl}
-              replacing={fieldStrategies.image === "overwrite"}
-              onChange={(shouldReplace) => onFieldStrategyChange("image", shouldReplace ? "overwrite" : "ignore")}
-            />
-          )}
-
-          {result.urls.length > 0 && (
-            <CompactCollectionDecision
-              label="URLs"
-              current={studio.urls}
-              mode={collectionModes.urls}
-              onModeChange={(mode) => onCollectionModeChange("urls", mode)}
-              scraped={<CompactListValue values={result.urls} breakAll />}
-            />
-          )}
-
-          {result.aliases.length > 0 && (
-            <CompactCollectionDecision
-              label="Aliases"
-              current={studio.aliases}
-              mode={collectionModes.aliases}
-              onModeChange={(mode) => onCollectionModeChange("aliases", mode)}
-              scraped={<CompactListValue values={result.aliases} />}
-            />
-          )}
-
-          {onSave && !saved && (
-            <div className="flex justify-end">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSave();
-                }}
+      {review && !saved && (
+        <div className="border-t border-border" onClick={(event) => event.stopPropagation()}>
+          {adjusting ? (
+            <div className="px-3 py-3">
+              <MetadataDiff
+                fields={review.fields}
+                source={review.source}
+                target={review.target}
+                value={review.selection}
+                onChange={handleSelectionChange}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Save
-              </button>
+              />
+            </div>
+          ) : (
+            <div className="py-1">
+              <MetadataDiffSummary
+                fields={review.fields.filter((field) => field.key !== "image")}
+                source={review.source}
+                target={review.target}
+                value={review.selection}
+                onChange={handleSelectionChange}
+                disabled={saving}
+              />
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface/60 px-3 py-2">
+            {onSave && (
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {summary?.changeCount
+                  ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+                  : "Apply"}
+              </button>
+            )}
+            {summary ? (
+              <span className="hidden min-w-0 flex-1 truncate text-[11px] text-muted sm:inline">
+                {summary.changes.map((change) => change.text).join(" · ")}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              aria-expanded={adjusting}
+              onClick={() => setAdjusting((current) => !current)}
+              className="ml-auto text-xs text-accent hover:underline"
+            >
+              {adjusting ? "Done adjusting" : "Adjust…"}
+            </button>
+          </div>
         </div>
       )}
     </div>

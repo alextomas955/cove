@@ -1,6 +1,7 @@
 using System.Reflection;
 using Cove.Api.Services;
 using Cove.Core.Auth;
+using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
@@ -46,6 +47,46 @@ public sealed class DuplicateResolutionWorkerTests
         Assert.NotNull(resolved.ResolvedAt);
         Assert.Null((await db.DuplicateSearches.SingleAsync()).DeletionJobId);
         Assert.Empty(await db.DuplicateDeletionKeeperReservations.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public async Task MergeResolutionHonoursTheReviewsFieldChoices()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (search, group, keeper, duplicate) = await harness.SeedAsync();
+
+        await harness.QueueAsync(search.Id, group.Id, DuplicateResolutionService.MergeAction, new VideoMergeMetadataDto(
+            Fields: new() { ["title"] = "source", ["details"] = "target" },
+            TagIds: [harness.DuplicateTagId]));
+        await harness.RunWorkerAsync();
+
+        await using var db = harness.CreateContext();
+        Assert.False(await db.Videos.AnyAsync(video => video.Id == duplicate.Id));
+        var kept = await db.Videos.Include(video => video.VideoTags).SingleAsync(video => video.Id == keeper.Id);
+        Assert.Equal("Duplicate title", kept.Title);
+        Assert.Null(kept.Details);
+        Assert.Equal([harness.DuplicateTagId], kept.VideoTags.Select(link => link.TagId));
+        Assert.Equal(DuplicateGroupStatus.Resolved, (await db.DuplicateSearchGroups.SingleAsync(item => item.Id == group.Id)).Status);
+    }
+
+    [Fact]
+    public async Task UnreadableStoredChoicesFailTheGroupInsteadOfMergingByDefault()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (search, group, keeper, duplicate) = await harness.SeedAsync();
+        await harness.QueueAsync(search.Id, group.Id, DuplicateResolutionService.MergeAction, new VideoMergeMetadataDto(TagIds: []));
+        await using (var db = harness.CreateContext())
+            await db.DuplicateSearchGroups.Where(item => item.Id == group.Id)
+                .ExecuteUpdateAsync(update => update.SetProperty(item => item.MergeMetadataJson, "{not json"));
+
+        await harness.RunWorkerAsync();
+
+        await using var verify = harness.CreateContext();
+        Assert.True(await verify.Videos.AnyAsync(video => video.Id == duplicate.Id));
+        Assert.Null((await verify.Videos.SingleAsync(video => video.Id == keeper.Id)).Details);
+        var failed = await verify.DuplicateSearchGroups.SingleAsync(item => item.Id == group.Id);
+        Assert.Equal(DuplicateGroupStatus.Failed, failed.Status);
+        Assert.Contains("choices", failed.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -152,8 +193,12 @@ public sealed class DuplicateResolutionWorkerTests
                 provider.GetRequiredService<IThumbnailService>(),
                 provider.GetRequiredService<IBlobService>(),
                 provider.GetRequiredService<IEventBus>()));
-            services.AddScoped(provider => new DuplicateVideoMetadataMerger(
+            services.AddSingleton(NoOp<IStreamService>.Create());
+            services.AddScoped(provider => new VideoMergeService(
                 provider.GetRequiredService<CoveContext>(),
+                provider.GetRequiredService<CustomFieldService>(),
+                provider.GetRequiredService<IBlobService>(),
+                provider.GetRequiredService<IStreamService>(),
                 provider.GetRequiredService<IEventBus>()));
             var provider = services.BuildServiceProvider();
             var harness = new Harness(anchor, provider, options);
@@ -232,7 +277,7 @@ public sealed class DuplicateResolutionWorkerTests
             return (group, duplicate);
         }
 
-        public async Task<DuplicateResolveResult> QueueAsync(Guid searchId, int groupId, string action)
+        public async Task<DuplicateResolveResult> QueueAsync(Guid searchId, int groupId, string action, VideoMergeMetadataDto? metadata = null)
         {
             await using var db = CreateContext();
             var service = new DuplicateResolutionService(
@@ -240,7 +285,7 @@ public sealed class DuplicateResolutionWorkerTests
                 Jobs,
                 _provider.GetRequiredService<IServiceScopeFactory>(),
                 new CoveConfiguration { MaxParallelTasks = 1 });
-            return await service.QueueAsync(searchId, [groupId], action, deleteFiles: false, deleteGenerated: false, principal: null, CancellationToken.None);
+            return await service.QueueAsync(searchId, [groupId], action, deleteFiles: false, deleteGenerated: false, principal: null, CancellationToken.None, metadata);
         }
 
         public Task RunWorkerAsync() => Jobs.Work!(new NullProgress(), CancellationToken.None);

@@ -1650,13 +1650,27 @@ public record MetadataServerPerformerMatchDto(
     string? MergedIntoId,
     List<string> Aliases,
     List<string> Urls
-);
+)
+{
+    /// <summary>
+    /// Every image the source has for the performer, in the source's order. They are candidates for the
+    /// person to pick from in the scrape review; Cove still stores a single performer image. An init
+    /// property rather than a positional parameter so the record keeps its constructor arity.
+    /// </summary>
+    public List<string> ImageUrls { get; init; } = [];
+}
 
 public record MetadataServerPerformerImportRequestDto
 {
     public string Endpoint { get; init; } = string.Empty;
     public string PerformerId { get; init; } = string.Empty;
     public Dictionary<string, string>? FieldStrategies { get; init; }
+
+    /// <summary>
+    /// The source image to store. Honoured only when it is one of the images the source lists for this
+    /// performer; anything else falls back to the source's first image.
+    /// </summary>
+    public string? ImageUrl { get; init; }
 }
 
 public record MetadataServerStudioMatchDto(
@@ -1802,6 +1816,12 @@ public record MetadataServerVideoImportRequestDto
     public Dictionary<string, string>? FieldStrategies { get; init; }
     public List<string>? PerformerGenders { get; init; }
     public bool SkipSingleNamePerformers { get; init; }
+    // Hand edits made in the review beside the import, as the video's edit form would make them: library
+    // tags and performers added through search, and current ones taken off. Applied after the import.
+    public List<int>? AddedTagIds { get; init; }
+    public List<int>? RemovedTagIds { get; init; }
+    public List<int>? AddedPerformerIds { get; init; }
+    public List<int>? RemovedPerformerIds { get; init; }
 }
 
 public record MetadataServerEndpointDto(string Endpoint);
@@ -1850,7 +1870,15 @@ public record ApplyVideoScrapeAttemptDto(
     bool HydratePerformers = false,
     int? SelectedCandidateIndex = null,
     List<ScrapeCollectionItemSelectionDto>? TagSelections = null,
-    List<ScrapeCollectionItemSelectionDto>? PerformerSelections = null);
+    List<ScrapeCollectionItemSelectionDto>? PerformerSelections = null)
+{
+    // Init properties rather than positional parameters: shipped extensions hold this record's constructor
+    // arity. Hand edits made in the review beside the scrape, as the video's edit form would make them.
+    public List<int>? AddedTagIds { get; init; }
+    public List<int>? RemovedTagIds { get; init; }
+    public List<int>? AddedPerformerIds { get; init; }
+    public List<int>? RemovedPerformerIds { get; init; }
+}
 
 public record ScrapeCollectionItemSelectionDto(string? Name, string? Action);
 
@@ -2239,7 +2267,43 @@ public record BulkGroupUpdateDto
 }
 
 // ===== MERGE DTOs =====
-public record VideoMergeDto(int TargetId, List<int> SourceIds);
+public record VideoMergeDto(int TargetId, List<int> SourceIds)
+{
+    // Not positional parameters: that would change the constructor and Deconstruct that extensions
+    // compiled against Cove 1.4 bind to. See src/Cove.Sdk/README.md.
+    public VideoMergeMetadataDto? Metadata { get; init; }
+    /// <summary>What happens to the merged copies' files. Omitted means attach them to the kept video.</summary>
+    public VideoMergeFileHandlingDto? FileHandling { get; init; }
+}
+
+/// <summary>
+/// <paramref name="Mode"/> is "attach" (the files move onto the kept video) or "remove" (the files leave
+/// with the merged copy, which is deleted like any other video; the delete flags apply as they do there).
+/// </summary>
+public record VideoMergeFileHandlingDto(string Mode = "attach", bool DeleteFiles = false, bool DeleteGenerated = true)
+{
+    public const string AttachMode = "attach";
+    public const string RemoveMode = "remove";
+}
+
+/// <summary>Asks, before a merge, what removing the source videos' files would do to their timeline-bound items.</summary>
+public record VideoMergeAssessRequestDto(int TargetId, List<int> SourceIds);
+
+/// <param name="FilesEquivalent">The source's primary file is equivalent to the target's, so its markers can move.</param>
+/// <param name="TimelineItemCount">User markers and timed group items on the source that depend on its timeline.</param>
+public record VideoMergeAssessmentDto(int VideoId, bool FilesEquivalent, int TimelineItemCount);
+
+// Omitted scalar choices follow the default policy: an empty kept value is filled from the source and a
+// conflict keeps the kept value. Omitted list choices keep the combined collections. Empty lists clear
+// visible items.
+public record VideoMergeMetadataDto(
+    Dictionary<string, string>? Fields = null,
+    List<int>? TagIds = null,
+    List<int>? PerformerIds = null,
+    List<int>? GalleryIds = null,
+    List<string>? Urls = null,
+    List<VideoRemoteIdDto>? RemoteIds = null,
+    Dictionary<string, string>? CustomFields = null);
 public record PerformerMergeDto(int TargetId, List<int> SourceIds);
 public record TagMergeDto(int TargetId, List<int> SourceIds);
 public record StudioMergeDto(int TargetId, List<int> SourceIds);

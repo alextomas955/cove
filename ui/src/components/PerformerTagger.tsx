@@ -12,17 +12,8 @@ import type {
 import { useAppConfig } from "../state/AppConfigContext";
 import { createNestedRouteLinkProps } from "./cardNavigation";
 import { DEFAULT_COLLECTION_MODES, pickBestSourceUrl, type CollectionMode } from "./videoScrapeUtils";
+import { buildRelationActionMap, relationKey, type ScrapeRelationActionMap } from "./ScrapeRelationChoices";
 import {
-  buildRelationActionMap,
-  relationKey,
-  ScrapeRelationChoices,
-  type ScrapeRelationActionMap,
-} from "./ScrapeRelationChoices";
-import {
-  CompactCollectionDecision,
-  CompactImageDecision,
-  CompactListValue,
-  CompactScalarDecision,
   DEFAULT_TAGGER_BLACKLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
@@ -34,8 +25,6 @@ import {
   Loader2,
   Check,
   X,
-  ChevronDown,
-  ChevronUp,
   AlertCircle,
   CloudDownload,
   CloudUpload,
@@ -45,6 +34,15 @@ import {
   Eye,
 } from "lucide-react";
 import { toggleOptionsFromEvent, withOrderedToggle, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
+import { MetadataDiff, scalarStatus, summarizeDiff, type DiffSelection } from "./MetadataDiff";
+import { MetadataDiffSummary } from "./MetadataDiffSummary";
+import { metadataServerLabel } from "./MetadataServerLinks";
+import { ReviewCoverPanel } from "./ReviewCoverPanel";
+import {
+  applyPerformerSelectionChange,
+  buildPerformerReview,
+  type PerformerReviewInput,
+} from "./PerformerTaggerReview";
 
 interface PerformerTaggerProps {
   performers: Performer[];
@@ -71,7 +69,17 @@ interface PerformerSearchState {
   fieldStrategies?: Record<string, PerformerFieldStrategy>;
   collectionModes?: Record<string, CollectionMode>;
   tagActions?: ScrapeRelationActionMap;
+  /** Which of the source's images is on screen in the review; that one is applied. */
+  imageIndex?: number;
 }
+
+/** Every per-match decision. A new search or another match starts from these, so nothing chosen for one match applies to the next. */
+const CLEARED_DECISIONS = {
+  fieldStrategies: undefined,
+  collectionModes: undefined,
+  tagActions: undefined,
+  imageIndex: undefined,
+} satisfies Partial<PerformerSearchState>;
 
 type PerformerFieldStrategy = "ignore" | "merge" | "overwrite";
 type PerformerInputKind = "url" | "name";
@@ -159,6 +167,17 @@ function getPerformerSearchErrorMessage(error: unknown) {
 
 function normalizeDecisionValue(value?: string | number | null) {
   return value === undefined || value === null ? "" : String(value).trim();
+}
+
+/** The source's images in its own order; a source with a single image has one candidate. */
+function getPerformerImageCandidates(result: UnifiedPerformerMatch): string[] {
+  const urls = (result.imageUrls ?? []).filter((url) => url.trim());
+  return urls.length > 0 ? urls : result.imageUrl ? [result.imageUrl] : [];
+}
+
+function getChosenPerformerImage(result: UnifiedPerformerMatch, state?: PerformerSearchState) {
+  const candidates = getPerformerImageCandidates(result);
+  return candidates[Math.min(Math.max(state?.imageIndex ?? 0, 0), Math.max(candidates.length - 1, 0))];
 }
 
 function getPerformerTagNames(performer: Performer) {
@@ -266,7 +285,7 @@ function buildDefaultPerformerFieldStrategies(
       normalizeDecisionValue(current) === normalizeDecisionValue(scraped) ? "ignore" : "overwrite";
   }
   // Cover image: replace-if-empty, keep-if-exists. "overwrite" replaces the cover; "ignore" keeps it.
-  if (result.imageUrl) {
+  if (getPerformerImageCandidates(result).length > 0) {
     strategies.image = performer.imagePath ? "ignore" : "overwrite";
   }
   return strategies;
@@ -319,6 +338,7 @@ function buildFilteredScrapedPerformer(
   result: UnifiedPerformerMatch,
   state: PerformerSearchState | undefined,
   createMissingTags: boolean,
+  existingTagNames: string[],
 ): ScrapedPerformer {
   const scraped = result.scraped;
   if (!scraped) throw new Error("No scraped performer selected");
@@ -327,7 +347,7 @@ function buildFilteredScrapedPerformer(
   const currentTagNames = getPerformerTagNames(performer);
   const tagActions =
     state?.tagActions ??
-    buildRelationActionMap(scraped.tagNames ?? [], currentTagNames, currentTagNames, createMissingTags);
+    buildRelationActionMap(scraped.tagNames ?? [], currentTagNames, existingTagNames, createMissingTags);
   const selectedTags = (scraped.tagNames ?? []).filter((name) => tagActions[relationKey(name)] !== "exclude");
 
   const filtered: ScrapedPerformer = {
@@ -341,7 +361,8 @@ function buildFilteredScrapedPerformer(
     if (value === undefined || value === null || value === "") continue;
     (filtered as unknown as Record<string, unknown>)[field.key] = value;
   }
-  if (result.imageUrl) filtered.imageUrl = result.imageUrl;
+  const chosenImage = getChosenPerformerImage(result, state);
+  if (chosenImage) filtered.imageUrl = chosenImage;
   return filtered;
 }
 
@@ -468,7 +489,13 @@ export function PerformerTagger({
     async (performer: Performer) => {
       const source = selectedSource;
       const query = getQuery(performer);
-      updateSearchState(performer.id, { loading: true, error: undefined, results: undefined, saved: false });
+      updateSearchState(performer.id, {
+        loading: true,
+        error: undefined,
+        results: undefined,
+        saved: false,
+        ...CLEARED_DECISIONS,
+      });
       try {
         let results: UnifiedPerformerMatch[];
         if (source?.kind === "scraper") {
@@ -668,7 +695,7 @@ function PerformerTaggerRow({
   const refreshFromRemote = useCallback(
     async (endpoint: string, remoteId: string) => {
       setRefreshBusyEndpoint(endpoint);
-      onUpdateState({ loading: true, error: undefined, results: undefined, saved: false });
+      onUpdateState({ loading: true, error: undefined, results: undefined, saved: false, ...CLEARED_DECISIONS });
       try {
         const matches = await performers.findMetadataServerByIds({ endpoint, ids: [remoteId] });
         onUpdateState({
@@ -714,7 +741,13 @@ function PerformerTaggerRow({
           );
         const forceCreateTags = Object.values(tagActions).some((action) => action === "create");
         return performers.applyScraped(performer.id, {
-          scraped: buildFilteredScrapedPerformer(performer, selectedResult, state, taggerConfig.createMissingTags),
+          scraped: buildFilteredScrapedPerformer(
+            performer,
+            selectedResult,
+            state,
+            taggerConfig.createMissingTags,
+            existingTagNames,
+          ),
           createMissingTags: taggerConfig.createMissingTags || forceCreateTags,
           // "image" is included only when its decision is "overwrite" (it lives in fieldStrategies now),
           // so the cover is replaced only when the user chose Replace.
@@ -728,6 +761,8 @@ function PerformerTaggerRow({
         endpoint: selectedResult.endpoint,
         performerId: selectedResult.id,
         fieldStrategies: buildPerformerFieldStrategies(performer, selectedResult, state),
+        // The image on screen in the review, so the import stores that one instead of the source's first.
+        imageUrl: getChosenPerformerImage(selectedResult, state),
       };
       return performers.importFromMetadataServer(performer.id, importReq);
     },
@@ -780,7 +815,8 @@ function PerformerTaggerRow({
 
   return (
     <div className={`px-3 py-2 ${selected ? "bg-accent/5" : ""}`}>
-      <div className="flex gap-3">
+      {/* Wraps on a phone: the performer on its own line, then the query and the review at full width. */}
+      <div className="flex flex-wrap gap-3 sm:flex-nowrap">
         {onSelect && (
           <button
             type="button"
@@ -794,14 +830,14 @@ function PerformerTaggerRow({
         )}
         <a
           {...performerLinkProps}
-          className="group/performer block w-28 flex-shrink-0"
+          className="group/performer block w-20 flex-shrink-0 sm:w-28"
           title={`Open performer ${performer.name}`}
         >
           {preview}
         </a>
 
         {/* Search + Results */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-[1_1_100%] sm:flex-1">
           {detailMode && isScraperSource && (
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <select
@@ -857,21 +893,22 @@ function PerformerTaggerRow({
               onChange={(e) => onQueryChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
               placeholder={searchPlaceholder}
-              className="flex-1 bg-input border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
+              className="flex-1 min-w-0 bg-input border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
             />
             <button
               onClick={onSearch}
               disabled={state?.loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
+              aria-label="Search"
+              className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-60"
             >
               {state?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-              Search
+              <span className="hidden sm:inline">Search</span>
             </button>
             {source?.kind === "metadata-server" && (
               <button
                 onClick={() => submitDraftMut.mutate()}
                 disabled={submitDraftMut.isPending}
-                className="flex items-center gap-1 px-2 py-1.5 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
+                className="flex shrink-0 items-center gap-1 px-2 py-1.5 rounded text-xs bg-surface border border-border text-muted hover:text-foreground disabled:opacity-60"
                 title="Submit this performer as a draft entry to the metadata server"
               >
                 {submitDraftMut.isPending ? (
@@ -926,6 +963,14 @@ function PerformerTaggerRow({
                   }
                   existingTagNames={existingTagNames}
                   createMissingTags={taggerConfig.createMissingTags}
+                  showSelector={state.results!.length > 1}
+                  sourceName={
+                    result.sourceKind === "scraper"
+                      ? (source?.label ?? "the scraper").replace(/ \(Scraper\)$/, "")
+                      : result.serverName || metadataServerLabel(result.endpoint, metadataServers)
+                  }
+                  imageIndex={i === (state.selectedIndex ?? 0) ? (state.imageIndex ?? 0) : 0}
+                  onImageIndexChange={(imageIndex) => onUpdateState({ imageIndex })}
                   onFieldStrategyChange={(field, strategy) =>
                     onUpdateState({
                       fieldStrategies: { ...getPerformerFieldStrategies(performer, result, state), [field]: strategy },
@@ -934,7 +979,7 @@ function PerformerTaggerRow({
                   onCollectionModeChange={(field, mode) =>
                     onUpdateState({ collectionModes: { ...getPerformerCollectionModes(result, state), [field]: mode } })
                   }
-                  onTagActionChange={(name, action) =>
+                  onTagActionsChange={(actions) =>
                     onUpdateState({
                       tagActions: {
                         ...(state.tagActions ??
@@ -944,7 +989,7 @@ function PerformerTaggerRow({
                             existingTagNames,
                             taggerConfig.createMissingTags,
                           )),
-                        [relationKey(name)]: action,
+                        ...actions,
                       },
                     })
                   }
@@ -954,9 +999,7 @@ function PerformerTaggerRow({
                         ? { selectedIndex: i }
                         : {
                             selectedIndex: i,
-                            fieldStrategies: undefined,
-                            collectionModes: undefined,
-                            tagActions: undefined,
+                            ...CLEARED_DECISIONS,
                           },
                     )
                   }
@@ -984,14 +1027,18 @@ function PerformerResultRow({
   performer,
   result,
   isSelected,
+  showSelector,
+  sourceName,
   fieldStrategies,
   collectionModes,
   tagActions,
   existingTagNames,
   createMissingTags,
+  imageIndex,
+  onImageIndexChange,
   onFieldStrategyChange,
   onCollectionModeChange,
-  onTagActionChange,
+  onTagActionsChange,
   onClick,
   onSave,
   saving,
@@ -1000,134 +1047,184 @@ function PerformerResultRow({
   performer: Performer;
   result: UnifiedPerformerMatch;
   isSelected: boolean;
+  showSelector: boolean;
+  sourceName: string;
   fieldStrategies: Record<string, PerformerFieldStrategy>;
   collectionModes: Record<string, CollectionMode>;
   tagActions: ScrapeRelationActionMap;
   existingTagNames: string[];
   createMissingTags: boolean;
+  imageIndex: number;
+  onImageIndexChange: (index: number) => void;
   onFieldStrategyChange: (field: string, strategy: PerformerFieldStrategy) => void;
   onCollectionModeChange: (field: string, mode: CollectionMode) => void;
-  onTagActionChange: (name: string, action: "include" | "create" | "exclude") => void;
+  onTagActionsChange: (actions: Record<string, "include" | "create" | "exclude">) => void;
   onClick: () => void;
   onSave?: () => void;
   saving?: boolean;
   saved?: boolean;
 }) {
-  const scalarRows = performerScalarFields
-    .map((field) => ({
-      ...field,
-      current: getPerformerCurrentValue(performer, field.key),
-      scraped: getPerformerScrapedValue(result, field.key),
-    }))
-    .filter((field) => field.scraped !== undefined && field.scraped !== null && field.scraped !== "");
+  // Accept-all is the common case, so the review opens as a list of facts; the full side-by-side
+  // rows are one click away for per-item chips.
+  const [adjusting, setAdjusting] = useState(false);
   const currentTagNames = getPerformerTagNames(performer);
   const scrapedTagNames = result.scraped?.tagNames ?? [];
-  const effectiveTagActions =
-    scrapedTagNames.length > 0
-      ? tagActions
-      : buildRelationActionMap(scrapedTagNames, currentTagNames, existingTagNames, createMissingTags);
+  const candidates = getPerformerImageCandidates(result);
+  const activeImage = candidates[Math.min(Math.max(imageIndex, 0), Math.max(candidates.length - 1, 0))];
+  const reviewInput: PerformerReviewInput = {
+    sourceName,
+    scalars: performerScalarFields
+      .map((field) => ({
+        key: field.key,
+        label: field.label,
+        current: getPerformerCurrentValue(performer, field.key),
+        scraped: getPerformerScrapedValue(result, field.key),
+      }))
+      .filter(
+        (field): field is typeof field & { scraped: string | number } =>
+          field.scraped !== undefined && field.scraped !== null && field.scraped !== "",
+      ),
+    fieldStrategies,
+    collectionModes,
+    currentImageUrl: performer.imagePath,
+    incomingImageUrl: activeImage,
+    urls: { current: performer.urls ?? [], incoming: result.urls },
+    aliases: { current: performer.aliases ?? [], incoming: result.aliases },
+    tags: {
+      current: currentTagNames,
+      incoming: scrapedTagNames,
+      existing: existingTagNames,
+      actions: tagActions,
+    },
+  };
+  const review = isSelected ? buildPerformerReview(reviewInput) : null;
+  const summary = review ? summarizeDiff(review.fields, review.source, review.target, review.selection) : null;
+  const imageField = review?.fields.find((field) => field.key === "image");
+  const handleSelectionChange = (next: DiffSelection) => {
+    if (!review) return;
+    applyPerformerSelectionChange(reviewInput, review.selection, next, {
+      onFieldStrategyChange,
+      onCollectionModeChange,
+      onTagActionsChange,
+    });
+  };
+  const identity = [result.disambiguation ? `(${result.disambiguation})` : null, sourceName]
+    .filter(Boolean)
+    .join(" · ");
+  const facts = [result.gender, result.country, result.birthDate].filter(Boolean).join(" · ");
 
   return (
     <div
       onClick={onClick}
-      className={`rounded border cursor-pointer transition-colors ${
-        isSelected ? "border-accent bg-card" : "border-border bg-surface hover:border-accent/50"
+      className={`rounded-lg border transition-colors ${
+        isSelected ? "border-accent/70 bg-card" : "cursor-pointer border-border bg-surface hover:border-accent/50"
       }`}
     >
-      <div className="flex items-center gap-3 p-2">
-        {result.imageUrl && (
-          <img src={result.imageUrl} alt="" className="w-10 h-14 object-cover rounded flex-shrink-0" loading="lazy" />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground truncate">{result.name}</p>
-          <div className="flex items-center gap-2 text-[10px] text-muted">
-            {result.disambiguation && <span>({result.disambiguation})</span>}
-            {result.gender && <span>{result.gender}</span>}
-            {result.country && <span>{result.country}</span>}
-            {result.birthDate && <span>{result.birthDate}</span>}
+      <div
+        role={showSelector && !isSelected ? "button" : undefined}
+        tabIndex={showSelector && !isSelected ? 0 : undefined}
+        aria-label={showSelector && !isSelected ? `Use ${result.name}` : undefined}
+        onKeyDown={(event) => {
+          if (showSelector && !isSelected && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onClick();
+          }
+        }}
+        className="flex flex-wrap items-center gap-2.5 px-3 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        {showSelector && (
+          <div
+            aria-hidden="true"
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-accent" : "border-border"}`}
+          >
+            {isSelected && <div className="h-2 w-2 rounded-full bg-accent" />}
           </div>
+        )}
+        {!isSelected && result.imageUrl && (
+          <img src={result.imageUrl} alt="" className="h-14 w-10 shrink-0 rounded object-cover" loading="lazy" />
+        )}
+        {review && imageField ? (
+          <div onClick={(event) => event.stopPropagation()} className="w-full sm:w-auto">
+            <ReviewCoverPanel
+              status={scalarStatus(imageField, review.source, review.target)}
+              chosen={review.selection.image === "source" ? "source" : "target"}
+              currentUrl={performer.imagePath}
+              candidates={candidates}
+              activeIndex={imageIndex}
+              onActiveIndexChange={onImageIndexChange}
+              incomingLabel={sourceName}
+              onChoose={(side) => handleSelectionChange({ ...review.selection, image: side })}
+              disabled={saving}
+              aspect="portrait"
+              subject="Image"
+            />
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1 self-start">
+          <p
+            className={`text-foreground ${isSelected ? "text-base font-semibold leading-snug" : "truncate text-[13px] font-semibold"}`}
+          >
+            {result.name}
+          </p>
+          {identity ? (
+            <p className={isSelected ? "text-sm text-secondary" : "text-[11px] text-secondary"}>{identity}</p>
+          ) : null}
+          {!isSelected && facts ? <p className="truncate text-[11px] text-muted">{facts}</p> : null}
         </div>
       </div>
 
-      {isSelected && !saved && (
-        <div className="border-t border-border px-3 py-3 space-y-3">
-          {scalarRows.map((row) => (
-            <CompactScalarDecision
-              key={row.key}
-              label={row.label}
-              current={row.current}
-              scraped={row.scraped}
-              multiline={row.multiline}
-              replacing={fieldStrategies[row.key] === "overwrite"}
-              onChange={(shouldReplace) => onFieldStrategyChange(row.key, shouldReplace ? "overwrite" : "ignore")}
-            />
-          ))}
-
-          {result.imageUrl && (
-            <CompactImageDecision
-              currentImageUrl={performer.imagePath}
-              scrapedImageUrl={result.imageUrl}
-              replacing={fieldStrategies.image === "overwrite"}
-              onChange={(shouldReplace) => onFieldStrategyChange("image", shouldReplace ? "overwrite" : "ignore")}
-            />
-          )}
-
-          {result.urls.length > 0 && (
-            <CompactCollectionDecision
-              label="URLs"
-              current={performer.urls}
-              mode={collectionModes.urls}
-              onModeChange={(mode) => onCollectionModeChange("urls", mode)}
-              scraped={<CompactListValue values={result.urls} breakAll />}
-            />
-          )}
-
-          {result.aliases.length > 0 && (
-            <CompactCollectionDecision
-              label="Aliases"
-              current={performer.aliases}
-              mode={collectionModes.aliases}
-              onModeChange={(mode) => onCollectionModeChange("aliases", mode)}
-              scraped={<CompactListValue values={result.aliases} />}
-            />
-          )}
-
-          {scrapedTagNames.length > 0 && (
-            <CompactCollectionDecision
-              label="Tags"
-              current={currentTagNames}
-              mode={collectionModes.tags}
-              onModeChange={(mode) => onCollectionModeChange("tags", mode)}
-              scraped={
-                <div onClick={(event) => event.stopPropagation()}>
-                  <ScrapeRelationChoices
-                    names={scrapedTagNames}
-                    currentNames={currentTagNames}
-                    existingNames={existingTagNames}
-                    actions={effectiveTagActions}
-                    disabled={collectionModes.tags === "skip"}
-                    onActionChange={onTagActionChange}
-                  />
-                </div>
-              }
-            />
-          )}
-
-          {onSave && !saved && (
-            <div className="flex justify-end">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSave();
-                }}
+      {review && !saved && (
+        <div className="border-t border-border" onClick={(event) => event.stopPropagation()}>
+          {adjusting ? (
+            <div className="px-3 py-3">
+              <MetadataDiff
+                fields={review.fields}
+                source={review.source}
+                target={review.target}
+                value={review.selection}
+                onChange={handleSelectionChange}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Save
-              </button>
+              />
+            </div>
+          ) : (
+            <div className="py-1">
+              <MetadataDiffSummary
+                fields={review.fields.filter((field) => field.key !== "image")}
+                source={review.source}
+                target={review.target}
+                value={review.selection}
+                onChange={handleSelectionChange}
+                disabled={saving}
+              />
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface/60 px-3 py-2">
+            {onSave && (
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {summary?.changeCount
+                  ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+                  : "Apply"}
+              </button>
+            )}
+            {summary ? (
+              <span className="hidden min-w-0 flex-1 truncate text-[11px] text-muted sm:inline">
+                {summary.changes.map((change) => change.text).join(" · ")}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              aria-expanded={adjusting}
+              onClick={() => setAdjusting((current) => !current)}
+              className="ml-auto text-xs text-accent hover:underline"
+            >
+              {adjusting ? "Done adjusting" : "Adjust…"}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { QueryKey, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Merge, Loader2, X, ArrowRight } from "lucide-react";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
@@ -16,11 +16,19 @@ interface Props {
   items: MergeItem[];
   onMerge: (targetId: number, sourceIds: number[]) => Promise<unknown>;
   queryKey: string | QueryKey;
+  /** When given, the merge goes through a review shell instead of running from this dialog. */
+  renderReview?: (targetId: number, sourceIds: number[], onBack: () => void) => ReactNode;
 }
 
-export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKey }: Props) {
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** Beyond this many entries a side-by-side review stops being readable; the merge runs with the defaults. */
+export const MAX_REVIEWED_ITEMS = 8;
+
+export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKey, renderReview }: Props) {
   const [targetId, setTargetId] = useState<number | null>(items[0]?.id ?? null);
   const qc = useQueryClient();
+  const [review, setReview] = useState(false);
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
@@ -36,6 +44,14 @@ export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKe
   });
 
   if (!open || items.length < 2) return null;
+
+  const reviewable = renderReview != null && items.length <= MAX_REVIEWED_ITEMS;
+  if (review && renderReview && reviewable && targetId != null)
+    return renderReview(
+      targetId,
+      items.filter((item) => item.id !== targetId).map((item) => item.id),
+      () => setReview(false),
+    );
 
   const sources = items.filter((i) => i.id !== targetId);
   const target = items.find((i) => i.id === targetId);
@@ -56,11 +72,11 @@ export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKe
 
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
           <p className="text-sm text-secondary">
-            Select the destination {entityType}. All other {entityType}s will be merged into it and deleted.
+            Choose the {entityType} to keep. The others are merged into it, then removed.
           </p>
 
           <div className="space-y-1">
-            <label className="text-xs text-secondary block mb-2">Destination</label>
+            <label className="text-xs text-secondary block mb-2">Keep</label>
             {items.map((item) => (
               <label
                 key={item.id}
@@ -77,7 +93,11 @@ export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKe
                 />
                 {item.imagePath && <img src={item.imagePath} alt="" className="w-8 h-8 rounded object-cover" />}
                 <span className="text-sm flex-1">{item.name}</span>
-                {targetId === item.id && <span className="text-xs text-accent font-medium">Destination</span>}
+                {targetId === item.id ? (
+                  <span className="text-xs text-accent font-medium">Keep</span>
+                ) : (
+                  <span className="text-xs text-red-400">Merge in, then remove</span>
+                )}
               </label>
             ))}
           </div>
@@ -106,12 +126,12 @@ export function MergeDialog({ open, onClose, entityType, items, onMerge, queryKe
             Cancel
           </button>
           <button
-            onClick={() => mutation.mutate()}
+            onClick={() => (reviewable ? setReview(true) : mutation.mutate())}
             disabled={mutation.isPending || !targetId}
             className="px-4 py-2 text-sm bg-accent hover:bg-accent-hover text-white rounded flex items-center gap-2 disabled:opacity-50"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Merge className="w-4 h-4" />}
-            Merge
+            {reviewable ? "Compare metadata" : `Merge & remove ${plural(sources.length, entityType)}`}
           </button>
         </div>
       </div>

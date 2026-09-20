@@ -19,6 +19,35 @@ public sealed class MetadataServerServiceTests
     private const string Endpoint = "https://metadata.example/graphql";
     private const string ApiKey = "fixture-key";
 
+    [Theory]
+    [InlineData("https://cdn.example/b.jpg", "https://cdn.example/b.jpg")]
+    [InlineData(" https://cdn.example/b.jpg ", "https://cdn.example/b.jpg")]
+    [InlineData(null, "https://cdn.example/a.jpg")]
+    [InlineData("", "https://cdn.example/a.jpg")]
+    [InlineData("https://elsewhere.example/x.jpg", "https://cdn.example/a.jpg")]
+    [InlineData("https://cdn.example/B.jpg", "https://cdn.example/a.jpg")]
+    public void ResolvePerformerImageUrl_HonoursOnlyAnImageTheSourceLists(string? requested, string expected)
+    {
+        var listed = new[] { "https://cdn.example/a.jpg", " ", "https://cdn.example/b.jpg" };
+
+        Assert.Equal(expected, MetadataServerService.ResolvePerformerImageUrl(listed, requested));
+    }
+
+    [Fact]
+    public void ResolvePerformerImageUrl_RecognisesAListedImageWithStrayWhitespace()
+    {
+        var listed = new[] { "https://cdn.example/a.jpg", "  https://cdn.example/b.jpg " };
+
+        Assert.Equal("https://cdn.example/b.jpg", MetadataServerService.ResolvePerformerImageUrl(listed, "https://cdn.example/b.jpg"));
+        Assert.Equal("https://cdn.example/b.jpg", MetadataServerService.ResolvePerformerImageUrl(listed, "  https://cdn.example/b.jpg "));
+    }
+
+    [Fact]
+    public void ResolvePerformerImageUrl_ReturnsNullWhenTheSourceHasNoImage()
+    {
+        Assert.Null(MetadataServerService.ResolvePerformerImageUrl([], "https://cdn.example/a.jpg"));
+    }
+
     [Fact]
     public async Task SearchVideosAsync_MapsGraphQlFixtureAndLocalCandidates()
     {

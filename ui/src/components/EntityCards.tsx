@@ -1037,13 +1037,14 @@ export function VideoCardPopovers({
 
 // ===== PerformerBadge (hover popover with performer image) =====
 
-function PerformerBadge({
+export function PerformerBadge({
   performer,
   navigationHandlers,
 }: {
   performer: { id: number; name: string; imagePath?: string | null };
-  navigationHandlers: ReturnType<typeof createNestedRouteLinkProps<HTMLAnchorElement>>;
+  navigationHandlers?: ReturnType<typeof createNestedRouteLinkProps<HTMLAnchorElement>>;
 }) {
+  const Badge = navigationHandlers ? "a" : "span";
   const badgeRef = useRef<HTMLAnchorElement>(null);
   const [hover, setHover] = useState(false);
   const [style, setStyle] = useState<React.CSSProperties>({});
@@ -1087,7 +1088,7 @@ function PerformerBadge({
 
   return (
     <>
-      <a
+      <Badge
         ref={badgeRef}
         {...navigationHandlers}
         onMouseEnter={onEnter}
@@ -1100,7 +1101,7 @@ function PerformerBadge({
           <User className="h-3.5 w-3.5 text-muted flex-shrink-0" />
         )}
         <span className="max-w-[80px] truncate text-[10px] text-secondary hover:text-accent">{performer.name}</span>
-      </a>
+      </Badge>
       {hover &&
         createPortal(
           <div

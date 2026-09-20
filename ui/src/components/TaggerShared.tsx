@@ -1,5 +1,16 @@
-import { useState, type ReactNode } from "react";
-import { Check, ChevronDown, CloudDownload, Eye, EyeOff, Loader2, RefreshCw, Settings2, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Check,
+  ChevronDown,
+  CloudDownload,
+  Eye,
+  EyeOff,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  Settings2,
+  X,
+} from "lucide-react";
 import type { CollectionMode } from "./videoScrapeUtils";
 
 // Reduce an endpoint to its registrable domain (last two labels, "www." dropped) so a remote id stored
@@ -136,6 +147,36 @@ export function cleanTaggerQueryString(input: string, blacklist: string[]): stri
   return cleaned.replace(/ +/g, " ").trim();
 }
 
+/**
+ * A `<details>` menu that also closes on a click outside it or on Escape, the way a menu is expected
+ * to, instead of staying open until its summary is clicked again.
+ */
+export function DismissibleMenu({ className, children }: { className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const close = () => element.removeAttribute("open");
+    const onPointerDown = (event: PointerEvent) => {
+      if (element.open && !element.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && element.open) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+  return (
+    <details ref={ref} className={className}>
+      {children}
+    </details>
+  );
+}
+
 export function TaggerToolbar({
   sources,
   selectedSource,
@@ -145,7 +186,7 @@ export function TaggerToolbar({
   onCancelBatch,
   onRunAll,
   runAllOptions,
-  runAllLabel = "Scrape All",
+  runAllLabel = "Search all",
   showRunAll = true,
   countLabel,
   settingsOpen,
@@ -187,17 +228,6 @@ export function TaggerToolbar({
         </select>
       </div>
 
-      {showToggle && (
-        <button
-          type="button"
-          onClick={() => showToggle.onChange(!showToggle.value)}
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs border border-border bg-input text-secondary hover:text-foreground"
-        >
-          {showToggle.value ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-          {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
-        </button>
-      )}
-
       {showRunAll &&
         (batchSearching ? (
           <button
@@ -219,11 +249,11 @@ export function TaggerToolbar({
               {runAllLabel}
             </button>
             {runAllOptions?.length ? (
-              <details className="relative">
+              <DismissibleMenu className="relative">
                 <summary
                   role="button"
                   className="flex h-full list-none items-center rounded-r border-l border-white/20 bg-accent px-1.5 text-white hover:bg-accent-hover cursor-pointer"
-                  aria-label="Choose scrape strategy"
+                  aria-label="Choose search strategy"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </summary>
@@ -243,22 +273,63 @@ export function TaggerToolbar({
                     </button>
                   ))}
                 </div>
-              </details>
+              </DismissibleMenu>
             ) : null}
           </div>
         ))}
 
       <span className="ml-auto text-xs text-muted">{countLabel}</span>
 
-      {onToggleSettings && (
-        <button
-          type="button"
-          onClick={onToggleSettings}
-          className={`flex items-center gap-1 px-2 py-1 rounded text-xs border bg-input ${settingsOpen ? "border-accent text-accent" : "border-border text-secondary hover:text-foreground"}`}
-          title="Tagger settings"
-        >
-          <Settings2 className="w-3.5 h-3.5" />
-        </button>
+      {(showToggle || onToggleSettings) && (
+        // Everything that is not "pick a source and scrape" sits behind one menu.
+        <DismissibleMenu className="relative">
+          <summary
+            role="button"
+            aria-label="More tagger options"
+            title="More tagger options"
+            className={`flex cursor-pointer list-none items-center rounded border px-1.5 py-1 [&::-webkit-details-marker]:hidden ${
+              settingsOpen
+                ? "border-accent bg-input text-accent"
+                : "border-border bg-input text-secondary hover:text-foreground"
+            }`}
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </summary>
+          <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded border border-border bg-card shadow-xl">
+            {showToggle && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.currentTarget.closest("details")?.removeAttribute("open");
+                  showToggle.onChange(!showToggle.value);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface"
+              >
+                {showToggle.value ? (
+                  <Eye className="w-3.5 h-3.5 text-muted" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5 text-muted" />
+                )}
+                {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
+              </button>
+            )}
+            {onToggleSettings && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.currentTarget.closest("details")?.removeAttribute("open");
+                  onToggleSettings();
+                }}
+                title="Tagger settings"
+                aria-expanded={settingsOpen}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface ${settingsOpen ? "text-accent" : "text-foreground"}`}
+              >
+                <Settings2 className="w-3.5 h-3.5 text-muted" />
+                Tagger settings
+              </button>
+            )}
+          </div>
+        </DismissibleMenu>
       )}
     </div>
   );
@@ -432,42 +503,6 @@ export function CompactCollectionDecision({
       </div>
     </div>
   );
-}
-
-// Cover-image equivalent of CompactScalarDecision: current cover thumbnail vs the scraped/match cover,
-// with a Keep / Replace choice. Render only when a scraped cover exists. `replacing` should default to
-// true when the entity has no current cover (replace-if-empty) and false when it already has one.
-export function CompactImageDecision({
-  label = "Cover",
-  currentImageUrl,
-  scrapedImageUrl,
-  replacing,
-  onChange,
-}: {
-  label?: string;
-  currentImageUrl?: string | null;
-  scrapedImageUrl?: string | null;
-  replacing: boolean;
-  onChange: (shouldReplace: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <CompactFieldLabel>{label}</CompactFieldLabel>
-      <div className="grid min-w-0 flex-1 gap-1.5 md:grid-cols-2">
-        <CompactDecisionPane label="Current" selected={!replacing} tone="current" onClick={() => onChange(false)}>
-          <CompactImageValue url={currentImageUrl} />
-        </CompactDecisionPane>
-        <CompactDecisionPane label="Scraped" selected={replacing} tone="scraped" onClick={() => onChange(true)}>
-          <CompactImageValue url={scrapedImageUrl} />
-        </CompactDecisionPane>
-      </div>
-    </div>
-  );
-}
-
-function CompactImageValue({ url }: { url?: string | null }) {
-  if (!url) return <span className="text-xs text-muted">No image</span>;
-  return <img src={url} alt="" className="h-24 w-auto max-w-full rounded object-cover object-top" loading="lazy" />;
 }
 
 function CompactFieldLabel({ children }: { children: ReactNode }) {

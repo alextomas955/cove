@@ -26,8 +26,6 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
     ISegmentSpanCacheInvalidator segmentSpanCacheInvalidator, IEventBus eventBus, VideoGeneratedAssetCoordinator generatedAssetCoordinator,
     ILogger<VideoAlignmentsController> logger) : ControllerBase
 {
-    private const int EquivalentPhashDistance = 8;
-    private const double EquivalentDurationTolerance = 1;
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> FingerprintLocks = new();
 
     [HttpGet]
@@ -58,9 +56,7 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
         var (source, target) = pair.Value;
         var sourceHash = await EnsurePhash(source, ct);
         var targetHash = await EnsurePhash(target, ct);
-        var equivalent = !string.IsNullOrWhiteSpace(sourceHash) && !string.IsNullOrWhiteSpace(targetHash)
-            && MetadataServerService.ComputePhashHammingDistance(sourceHash, targetHash) <= EquivalentPhashDistance
-            && Math.Abs(source.Duration - target.Duration) <= EquivalentDurationTolerance;
+        var equivalent = VideoFileEquivalence.AreEquivalent(source.Duration, sourceHash, target.Duration, targetHash);
         var dependencies = await LoadDependencies(videoId, ct);
         if (!await CanReadDependencies(dependencies, ct)) return Forbid();
         return Ok(new { sourceFileId = source.Id, targetFileId = target.Id, sourceDuration = source.Duration, targetDuration = target.Duration,
@@ -356,14 +352,11 @@ public class VideoAlignmentsController(CoveContext db, VideoAlignmentExtractor e
     /// </summary>
     private async Task<bool> HoldsTheSameContent(VideoFile? source, VideoFile target, CancellationToken ct)
     {
-        if (source is null || Math.Abs(source.Duration - target.Duration) > EquivalentDurationTolerance)
-            return false;
+        if (source is null) return false;
 
         var sourceHash = await EnsurePhash(source, ct);
         var targetHash = await EnsurePhash(target, ct);
-        return !string.IsNullOrWhiteSpace(sourceHash)
-            && !string.IsNullOrWhiteSpace(targetHash)
-            && MetadataServerService.ComputePhashHammingDistance(sourceHash, targetHash) <= EquivalentPhashDistance;
+        return VideoFileEquivalence.AreEquivalent(source.Duration, sourceHash, target.Duration, targetHash);
     }
 
     private async Task<string?> EnsurePhash(VideoFile file, CancellationToken ct)

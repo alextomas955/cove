@@ -29,6 +29,7 @@ import { useAuth } from "../auth/AuthContext";
 import { canDeleteEntity } from "../auth/visibility";
 import { PaginationControls } from "../components/PaginationControls";
 import { QuickViewDialog } from "../components/QuickViewDialog";
+import { MERGE_POLICY_SUMMARY, VideoMergeReview, type VideoMergeChoices } from "../components/VideoMergeReview";
 import { formatFileSize } from "../components/shared";
 import { AnchoredPopover } from "../components/duplicates/AnchoredPopover";
 import { DuplicateCompareDialog } from "../components/duplicates/DuplicateCompareDialog";
@@ -142,6 +143,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
   const [compare, setCompare] = useState<{ groupId: number; pair?: [number, number] } | null>(null);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [resolveTarget, setResolveTarget] = useState<ResolveTarget | null>(null);
+  const [reviewGroupId, setReviewGroupId] = useState<number | null>(null);
   const [autoSelectOpen, setAutoSelectOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [keeperOverrides, setKeeperOverrides] = useState<Map<number, Set<number>>>(new Map());
@@ -171,6 +173,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     setStatusOverrides(new Map());
     setPinned(new Map());
     setFocusedIndex(0);
+    setReviewGroupId(null);
   }, [searchId, url.status, url.sort, url.page, url.q, preferences.pageSize]);
 
   const searchQuery = useQuery({
@@ -373,14 +376,26 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
 
   const resolveMutation = useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: ({ groupIds }: { groupIds: number[] | null }) =>
-      videos.resolveDuplicateGroups(searchId!, {
-        groupIds,
-        // Files on one video share their metadata, so a files search only ever removes.
-        action: canWrite && !filesSearch ? resolution.action : "remove",
-        deleteFiles: canDeleteFiles && resolution.deleteFiles,
-        deleteGenerated: resolution.deleteGenerated,
-      }),
+    // `choices` come from the merge review: they replace the remembered options for that one group.
+    mutationFn: ({ groupIds, choices }: { groupIds: number[] | null; choices?: VideoMergeChoices }) =>
+      videos.resolveDuplicateGroups(
+        searchId!,
+        choices
+          ? {
+              groupIds,
+              action: "merge",
+              deleteFiles: canDeleteFiles && choices.fileHandling.deleteFiles,
+              deleteGenerated: choices.fileHandling.deleteGenerated,
+              metadata: choices.metadata,
+            }
+          : {
+              groupIds,
+              // Files on one video share their metadata, so a files search only ever removes.
+              action: canWrite && !filesSearch ? resolution.action : "remove",
+              deleteFiles: canDeleteFiles && resolution.deleteFiles,
+              deleteGenerated: resolution.deleteGenerated,
+            },
+      ),
     onMutate: ({ groupIds }) => {
       if (!groupIds) return;
       setStatusOverrides((current) => {
@@ -391,6 +406,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     },
     onSuccess: async (result, { groupIds }) => {
       setResolveTarget(null);
+      setReviewGroupId(null);
       if (!groupIds) {
         setNotice({
           tone: "success",
@@ -421,7 +437,8 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
         for (const id of groupIds ?? []) next.delete(id);
         return next;
       });
-      if (!resolveTarget) setNotice({ tone: "error", message: errorMessage(error) });
+      // The policy dialog and the review show the error themselves.
+      if (!resolveTarget && reviewGroupId == null) setNotice({ tone: "error", message: errorMessage(error) });
     },
   });
 
@@ -524,7 +541,11 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     const keepers = keepersFor(group);
     if (keepers.size === group.videos.length) return;
     if (resolution.confirmEachGroup && !confirmed) {
-      setResolveTarget({ scope: "group", groupId: group.id });
+      // A merge is confirmed in the review shell, where each field and the files decision can be changed;
+      // a plain removal, a files search (which never merges), or a group with nothing marked to keep,
+      // keeps the policy dialog.
+      if (canWrite && !filesSearch && resolution.action === "merge" && keepers.size > 0) setReviewGroupId(group.id);
+      else setResolveTarget({ scope: "group", groupId: group.id });
       return;
     }
     setResolveTarget(null);
@@ -532,6 +553,28 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     resolveMutation.mutate({ groupIds: [group.id] });
     advanceFocusFrom(group.id);
   };
+
+  const reviewGroup = reviewGroupId == null ? undefined : displayedGroups.find((group) => group.id === reviewGroupId);
+  const reviewKeepers = reviewGroup ? keepersFor(reviewGroup) : new Set<number>();
+  const reviewKept = reviewGroup?.videos.filter((video) => reviewKeepers.has(video.id)).sort((a, b) => a.id - b.id)[0];
+  // The server never removes a copy that another group keeps, so the review must not show it as merged in.
+  const reviewRemoved =
+    reviewGroup?.videos.filter(
+      (video) => !reviewKeepers.has(video.id) && !reviewGroup.keptElsewhereVideoIds?.includes(video.id),
+    ) ?? [];
+  const confirmReviewedMerge = async (group: DuplicateSearchGroup, choices: VideoMergeChoices) => {
+    pin(group, "resolve");
+    await resolveMutation.mutateAsync({ groupIds: [group.id], choices });
+    advanceFocusFrom(group.id);
+  };
+  useEffect(() => {
+    if (reviewGroupId == null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !resolveMutation.isPending) setReviewGroupId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [reviewGroupId, resolveMutation.isPending]);
 
   const ignoreGroup = (group: DuplicateSearchGroup) => {
     if (!canWrite) return;
@@ -546,6 +589,7 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
     !compare &&
     quickViewId == null &&
     !resolveTarget &&
+    reviewGroupId == null &&
     !autoSelectOpen &&
     !shortcutsOpen,
   );
@@ -962,6 +1006,44 @@ export function DuplicateFinderPage({ onNavigate }: Props) {
         <QuickViewDialog type="video" id={quickViewId} onClose={() => setQuickViewId(null)} onNavigate={onNavigate} />
       ) : null}
 
+      {reviewGroup && reviewKept && reviewRemoved.length > 0 ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 sm:p-3">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="duplicate-merge-title"
+            className="flex h-full w-full max-w-7xl flex-col overflow-hidden border-border bg-surface text-foreground shadow-xl sm:h-auto sm:max-h-[95vh] sm:rounded-2xl sm:border"
+          >
+            <VideoMergeReview
+              key={reviewGroup.id}
+              titleId="duplicate-merge-title"
+              kept={reviewKept}
+              removed={reviewRemoved}
+              fileHandling={{
+                mode: "remove",
+                deleteFiles: canDeleteFiles && resolution.deleteFiles,
+                deleteGenerated: resolution.deleteGenerated,
+              }}
+              allowAttach={false}
+              canDeleteFiles={canDeleteFiles}
+              footerExtra={
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={!resolution.confirmEachGroup}
+                    onChange={(event) => setResolution({ ...resolution, confirmEachGroup: !event.target.checked })}
+                    className="accent-accent"
+                  />
+                  Don't ask again — resolve groups with these options straight away
+                </label>
+              }
+              onClose={() => setReviewGroupId(null)}
+              onConfirm={(choices) => confirmReviewedMerge(reviewGroup, choices)}
+            />
+          </div>
+        </div>
+      ) : null}
+
       <DuplicateResolveDialog
         files={filesSearch}
         open={resolveTarget != null}
@@ -1222,7 +1304,7 @@ function ResolutionOptionsSummary({
             />
             <span>
               <span className="block text-foreground">Merge metadata into the keeper</span>
-              <span className="block text-xs text-muted">Tags, performers, ratings, plays and markers carry over.</span>
+              <span className="block text-xs text-muted">{MERGE_POLICY_SUMMARY}</span>
             </span>
           </label>
           <label className="flex cursor-pointer items-start gap-2">
