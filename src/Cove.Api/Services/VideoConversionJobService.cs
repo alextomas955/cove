@@ -449,7 +449,7 @@ public sealed class VideoConversionJobService(
         CancellationToken ct)
     {
         var decodeArgs = config.FfmpegInputArgs;
-        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, sample: null, targetKbps, EffectiveFrameRate(source, settings));
+        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, targetKbps, EffectiveFrameRate(source, settings));
         var action = plan.CopiesVideo ? "Remuxing" : $"Encoding with {encoder}";
 
         var result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"{action}...", 0, EncodeShare, unit, ct, encoder);
@@ -466,7 +466,7 @@ public sealed class VideoConversionJobService(
             notes.Add($"{encoder} failed ({LastLine(result.StandardError)}), so it was encoded with {software} instead.");
             DeletePartial(partialPath);
 
-            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, sample: null, targetKbps, EffectiveFrameRate(source, settings));
+            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, targetKbps, EffectiveFrameRate(source, settings));
             result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"Encoding with {software}...", 0, EncodeShare, unit, ct, software);
             if (result.ExitCode == 0)
                 return plan;

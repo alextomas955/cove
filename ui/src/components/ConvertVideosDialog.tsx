@@ -305,6 +305,7 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
 
         <div className="space-y-2 border-t border-border pt-4">
           {reencodes && (
+            <>
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
@@ -316,6 +317,22 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
                 Discard the conversion if it isn't smaller than the original
               </span>
             </label>
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={settings.convertMarginalSavings ?? false}
+                onChange={() => update("convertMarginalSavings", !settings.convertMarginalSavings)}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-accent"
+              />
+              <span className="text-sm text-foreground">
+                Convert even when it would save very little
+                <span className="block text-xs text-muted">
+                  Videos already close to the bitrate their resolution can use are skipped by default,
+                  since re-encoding them costs time and a little quality for almost no space.
+                </span>
+              </span>
+            </label>
+            </>
           )}
           {canReplaceOriginals && (
             <label className="flex cursor-pointer items-start gap-3">

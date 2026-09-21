@@ -121,22 +121,20 @@ public class VideoConversionPlannerTests
         Assert.Contains("-color_primaries bt2020 -color_trc smpte2084 -colorspace bt2020nc", plan.Arguments);
     }
 
+    /// <summary>
+    /// Each encoder family is driven in its own capped-VBR mode, aiming at the bitrate the ladder
+    /// chose. The ceiling lets busy scenes spend more while keeping the file near the size the user was
+    /// shown before starting.
+    /// </summary>
     [Theory]
-    [InlineData("libx264", true, "-c:v libx264 -preset medium -crf 22 -pix_fmt yuv420p")]
-    [InlineData("libx265", true, "-c:v libx265 -preset medium -crf 22 -x265-params log-level=error -pix_fmt yuv420p10le")]
-    [InlineData("libsvtav1", false, "-c:v libsvtav1 -preset 7 -crf 22 -pix_fmt yuv420p")]
-    // p4 rather than p5: on a 4K source p4 through p7 landed within 0.2 VMAF and 1% of the same
-    // size, and p7 took 2.4x p4's time, so the ladder never asks for the slower ones.
-    [InlineData("h264_nvenc", true, "-c:v h264_nvenc -preset p4 -tune hq -rc vbr -cq 22 -b:v 0 -pix_fmt yuv420p")]
-    [InlineData("hevc_qsv", false, "-c:v hevc_qsv -preset medium -global_quality 22 -pix_fmt nv12")]
-    [InlineData("hevc_amf", false, "-c:v hevc_amf -quality balanced -rc cqp -qp_i 22 -qp_p 22 -pix_fmt nv12")]
-    [InlineData("h264_amf", false, "-c:v h264_amf -quality balanced -rc cqp -qp_i 22 -qp_p 22 -qp_b 22 -pix_fmt nv12")]
-    [InlineData("hevc_vaapi", true, "-c:v hevc_vaapi -rc_mode CQP -qp 22 -profile:v main10")]
-    public void ConversionVideoEncodeArgs_UsesEachEncoderFamilysOwnQualityKnob(string encoder, bool tenBit, string expected)
+    [InlineData("libx265", "-c:v libx265 -preset medium -b:v 5000k -maxrate 7500k -bufsize 10000k")]
+    [InlineData("hevc_nvenc", "-c:v hevc_nvenc -preset p4 -tune hq -rc vbr -b:v 5000k -maxrate 7500k -bufsize 10000k")]
+    [InlineData("hevc_qsv", "-c:v hevc_qsv -preset medium -b:v 5000k -maxrate 7500k -bufsize 10000k")]
+    public void ConversionBitrateArgs_AimAtTheTargetWithACeiling(string encoder, string expectedPrefix)
     {
-        Assert.Equal(expected, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder, 22, VideoConversionEffort.HighHardware, tenBit));
+        var args = FfmpegHwAccel.ConversionBitrateArgs(encoder, 5000, VideoConversionEffort.HighHardware, tenBit: false);
+        Assert.StartsWith(expectedPrefix, args, StringComparison.Ordinal);
     }
-
     [Fact]
     public void ConversionVideoFilter_UploadsFramesOnlyForVaapi()
     {

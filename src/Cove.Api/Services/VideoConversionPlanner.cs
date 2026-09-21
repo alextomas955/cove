@@ -210,12 +210,6 @@ public sealed record ProbedMedia(double Duration, IReadOnlyList<ProbedStream> St
         => double.TryParse(String(element, property), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : 0;
 }
 
-/// <summary>
-/// A slice of the source to encode as a trial run, to find out what the full conversion would produce
-/// without paying for it.
-/// </summary>
-public sealed record VideoConversionSample(double StartSeconds, double DurationSeconds);
-
 /// <summary>The ffmpeg run that converts one file, and what it will produce.</summary>
 public sealed record VideoConversionPlan(
     string Arguments,
@@ -373,7 +367,6 @@ public static class VideoConversionPlanner
         VideoConversionSettings settings,
         string? encoder,
         string? decodeInputArgs,
-        VideoConversionSample? sample = null,
         int targetKbps = 0,
         double? outputFrameRate = null)
     {
@@ -397,14 +390,7 @@ public static class VideoConversionPlanner
             Append(args, FfmpegHwAccel.InputArgsForEncoder(encoder!));
             Append(args, decodeInputArgs);
         }
-        if (sample is not null)
-        {
-            // Input-side seek: the trial run must not pay to decode everything before its slice.
-            args.Append(" -ss ").Append(sample.StartSeconds.ToString("0.###", CultureInfo.InvariantCulture));
-        }
         args.Append(" -i ").Append(Quote(inputPath));
-        if (sample is not null)
-            args.Append(" -t ").Append(sample.DurationSeconds.ToString("0.###", CultureInfo.InvariantCulture));
 
         args.Append(" -map 0:").Append(video.Index.ToString(CultureInfo.InvariantCulture));
 
@@ -488,36 +474,6 @@ public static class VideoConversionPlanner
 
         return new VideoConversionPlan(args.ToString(), copyVideo, outputVideoCodec, audio.Count, notes);
     }
-
-    /// <summary>Length of the trial encode. Long enough to average over a scene change, short enough to be cheap.</summary>
-    public const double SampleSeconds = 60;
-
-    /// <summary>
-    /// How much bigger than the source a projection has to be before the conversion is abandoned without
-    /// running. A trial encode of one slice is an estimate, not a measurement, so a file only misses out
-    /// on its real attempt when the projection is clearly, not marginally, worse.
-    /// </summary>
-    public const double ProjectionMargin = 1.15;
-
-    /// <summary>
-    /// Where to take the trial slice, or null when the file is too short for one to be worth it - the
-    /// trial would cost a large fraction of simply doing the conversion.
-    /// </summary>
-    public static VideoConversionSample? ChooseSample(double durationSeconds)
-        => durationSeconds >= SampleSeconds * 4
-            ? new VideoConversionSample(durationSeconds * 0.25, SampleSeconds)
-            : null;
-
-    /// <summary>
-    /// Scales a trial encode up to the size the whole file would be. Both figures include audio and
-    /// container overhead, because the trial is produced by the same command as the real conversion.
-    /// </summary>
-    public static long ProjectFullSize(long sampleBytes, double sampleSeconds, double durationSeconds)
-        => sampleSeconds <= 0 ? 0 : (long)(sampleBytes * (durationSeconds / sampleSeconds));
-
-    /// <summary>True when a projection is far enough above the source that encoding it would be wasted.</summary>
-    public static bool ProjectsLarger(long projectedBytes, long sourceBytes)
-        => projectedBytes > 0 && sourceBytes > 0 && projectedBytes > sourceBytes * ProjectionMargin;
 
         /// <summary>The full-decode check a converted file must pass before it can replace the original.</summary>
     public static string DecodeCheckArguments(string path, string? decodeInputArgs)

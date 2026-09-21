@@ -334,44 +334,6 @@ internal static class FfmpegHwAccel
         };
     }
 
-    public static string ConversionVideoEncodeArgs(string encoder, int quality, VideoConversionEffort effort, bool tenBit)
-    {
-        var profile = VideoConversionPlanner.Profile(effort);
-        var softwarePreset = profile.SoftwarePreset;
-        var hardwarePreset = profile.HardwarePreset;
-        var isH264 = encoder.StartsWith("h264_", StringComparison.Ordinal) || encoder == "libx264";
-        var keepTenBit = tenBit && !isH264;
-        var isHevc = encoder.StartsWith("hevc_", StringComparison.Ordinal) || encoder == "libx265";
-
-        return encoder switch
-        {
-            "libx264" or "libx265" =>
-                $"-c:v {encoder} -preset {softwarePreset} -crf {quality}"
-                + (encoder == "libx265" ? " -x265-params log-level=error" : string.Empty)
-                + $" -pix_fmt {(keepTenBit ? "yuv420p10le" : "yuv420p")}",
-            "libsvtav1" =>
-                $"-c:v libsvtav1 -preset {(softwarePreset == "slow" ? 5 : 7)} -crf {quality}"
-                + $" -pix_fmt {(keepTenBit ? "yuv420p10le" : "yuv420p")}",
-            _ when encoder.EndsWith("_nvenc", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -preset {hardwarePreset} -tune hq -rc vbr -cq {quality} -b:v 0"
-                + (keepTenBit ? " -pix_fmt p010le" + (isHevc ? " -profile:v main10" : string.Empty) : " -pix_fmt yuv420p"),
-            _ when encoder.EndsWith("_qsv", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -preset {softwarePreset} -global_quality {quality}"
-                + $" -pix_fmt {(keepTenBit ? "p010le" : "nv12")}",
-            _ when encoder.EndsWith("_amf", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -quality {(softwarePreset == "slow" ? "quality" : "balanced")} -rc cqp -qp_i {quality} -qp_p {quality}"
-                + (isH264 ? $" -qp_b {quality}" : string.Empty)
-                + $" -pix_fmt {(keepTenBit ? "p010le" : "nv12")}",
-            // VAAPI encodes from GPU surfaces; ConversionVideoFilter uploads the frames in the right format.
-            _ when encoder.EndsWith("_vaapi", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -rc_mode CQP -qp {quality}" + (keepTenBit && isHevc ? " -profile:v main10" : string.Empty),
-            _ when encoder.EndsWith("_videotoolbox", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -q:v {Math.Clamp(65 - quality, 1, 100)}"
-                + (keepTenBit ? " -pix_fmt p010le" + (isHevc ? " -profile:v main10" : string.Empty) : " -pix_fmt yuv420p"),
-            _ => throw new ArgumentOutOfRangeException(nameof(encoder), encoder, "Not an encoder Cove converts with."),
-        };
-    }
-
     /// <summary>The <c>-vf</c> argument a conversion encode needs, or an empty string. Only VAAPI needs one:
     /// it encodes from GPU surfaces, so frames are converted and uploaded first.</summary>
     public static string ConversionVideoFilter(string encoder, bool tenBit)

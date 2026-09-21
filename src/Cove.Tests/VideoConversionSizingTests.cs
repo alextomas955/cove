@@ -243,7 +243,7 @@ public class VideoConversionSizingTests
 
         var plan = VideoConversionPlanner.Build(
             source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.HighHardware, fps: 30),
-            "hevc_nvenc", null, sample: null, targetKbps: 9000, outputFrameRate: 30);
+            "hevc_nvenc", null, targetKbps: 9000, outputFrameRate: 30);
 
         Assert.Contains("-r 30", plan.Arguments);
         Assert.DoesNotContain("-fps_mode passthrough", plan.Arguments);
@@ -261,7 +261,7 @@ public class VideoConversionSizingTests
 
         var plan = VideoConversionPlanner.Build(
             source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.HighHardware),
-            "hevc_nvenc", null, sample: null, targetKbps: 15000);
+            "hevc_nvenc", null, targetKbps: 15000);
 
         Assert.Contains("-fps_mode passthrough", plan.Arguments);
         Assert.DoesNotContain(" -r ", plan.Arguments);
@@ -277,7 +277,7 @@ public class VideoConversionSizingTests
 
         var plan = VideoConversionPlanner.Build(
             source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.HighHardware),
-            "hevc_nvenc", null, sample: null, targetKbps: 15000);
+            "hevc_nvenc", null, targetKbps: 15000);
 
         Assert.Contains("-b:v 15000k", plan.Arguments);
         Assert.Contains("-maxrate 22500k", plan.Arguments);
