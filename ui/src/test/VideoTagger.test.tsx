@@ -250,6 +250,480 @@ describe("VideoTagger", () => {
     );
   });
 
+  it("drops performers whose gender the settings exclude from the preview and the import", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    mocks.searchMetadataServer.mockResolvedValue([
+      {
+        id: "first-video-id",
+        endpoint: "https://first.example/graphql",
+        metadataServerName: "First provider",
+        title: "First provider result",
+        code: null,
+        details: null,
+        director: null,
+        date: null,
+        duration: 60,
+        urls: [],
+        images: [],
+        studioName: null,
+        studioCandidate: null,
+        performerNames: ["Kept Performer", "Excluded Performer"],
+        performerCandidates: [
+          { remoteId: "p-female", name: "Kept Performer", existsLocally: false, gender: "FEMALE" },
+          { remoteId: "p-male", name: "Excluded Performer", existsLocally: false, gender: "MALE" },
+        ],
+        tagNames: [],
+        tagCandidates: [],
+        fingerprints: [],
+        fingerprintAlgorithms: [],
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    expect(await screen.findByText("Excluded Performer")).toBeInTheDocument();
+
+    // Unchecking the gender takes effect on the match already on screen; no second search is needed.
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Male" }));
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+
+    expect(screen.queryByText("Excluded Performer")).not.toBeInTheDocument();
+    expect(screen.getByText("Kept Performer")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (1)" }));
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+
+    const [, request] = mocks.importFromMetadataServer.mock.calls[0];
+    expect(request.performerGenders).toEqual(expect.arrayContaining(["Female", "Unknown"]));
+    expect(request.performerGenders).not.toContain("Male");
+    expect(request.performerOverrides ?? []).not.toContainEqual(expect.objectContaining({ remoteId: "p-male" }));
+  });
+
+  it("keeps every performer out when no gender is checked, and says so in the request", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    mocks.searchMetadataServer.mockResolvedValue([
+      {
+        id: "first-video-id",
+        endpoint: "https://first.example/graphql",
+        metadataServerName: "First provider",
+        title: "First provider result",
+        code: null,
+        details: null,
+        director: null,
+        date: null,
+        duration: 60,
+        urls: [],
+        images: [],
+        studioName: null,
+        studioCandidate: null,
+        performerNames: ["Excluded Performer"],
+        performerCandidates: [
+          { remoteId: "p-female", name: "Excluded Performer", existsLocally: false, gender: "FEMALE" },
+        ],
+        tagNames: [],
+        tagCandidates: [],
+        fingerprints: [],
+        fingerprintAlgorithms: [],
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    expect(await screen.findByText("Excluded Performer")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    for (const gender of [
+      "Female",
+      "Male",
+      "Transgender Female",
+      "Transgender Male",
+      "Intersex",
+      "Non-Binary",
+      "Unknown",
+    ]) {
+      await userEvent.click(screen.getByRole("checkbox", { name: gender }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+
+    expect(screen.queryByText("Excluded Performer")).not.toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (1)" }));
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    // An empty list must reach the backend as "no gender allowed"; omitting it would mean the opposite.
+    expect(mocks.importFromMetadataServer.mock.calls[0][1].performerGenders).toEqual([]);
+  });
+
+  it("adds Unknown to a config saved before the option existed, and then leaves the choice alone", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    // A config from before the setting worked: one gender unchecked, and no record of Unknown either way.
+    localStorage.setItem(
+      "cove-tagger-config",
+      JSON.stringify({ performerGenders: ["Female", "Transgender Female", "Intersex", "Non-Binary"] }),
+    );
+
+    const first = render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    expect(screen.getByRole("checkbox", { name: "Unknown" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Male" })).not.toBeChecked();
+
+    // Unchecking it is a real choice, so the upgrade must not hand it back on the next visit.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Unknown" }));
+    first.unmount();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    expect(screen.getByRole("checkbox", { name: "Unknown" })).not.toBeChecked();
+  });
+
+  it.each([
+    ["the migration has already run", 2],
+    ["the config is newer than the migration", 99],
+  ])("leaves a deliberately empty gender selection alone once %s", async (_case, configVersion) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    // Emptied on purpose after the setting started working, so it must survive rather than be read as a
+    // legacy config and filled back in.
+    localStorage.setItem("cove-tagger-config", JSON.stringify({ configVersion, performerGenders: [] }));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    for (const gender of ["Female", "Male", "Unknown"]) {
+      expect(screen.getByRole("checkbox", { name: gender })).not.toBeChecked();
+    }
+  });
+
+  it("shows a gender checked when the saved config spells it differently", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    localStorage.setItem(
+      "cove-tagger-config",
+      JSON.stringify({ configVersion: 2, performerGenders: ["FEMALE", "Non Binary"] }),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    // The filter compares by key, so the boxes must agree with it rather than with the exact strings.
+    expect(screen.getByRole("checkbox", { name: "Female" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Non-Binary" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Male" })).not.toBeChecked();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Female" }));
+    expect(screen.getByRole("checkbox", { name: "Female" })).not.toBeChecked();
+  });
+
+  it("reads a legacy config with no gender checked as the filter it actually was: none", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    // Saved while the setting did nothing, so the user saw every performer whatever the boxes said.
+    localStorage.setItem("cove-tagger-config", JSON.stringify({ performerGenders: [] }));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
+    for (const gender of ["Female", "Male", "Unknown"]) {
+      expect(screen.getByRole("checkbox", { name: gender })).toBeChecked();
+    }
+  });
+
+  it("sends no gender filter while every performer gender is checked", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+    mocks.searchMetadataServer.mockResolvedValue([
+      {
+        id: "first-video-id",
+        endpoint: "https://first.example/graphql",
+        metadataServerName: "First provider",
+        title: "First provider result",
+        code: null,
+        details: null,
+        director: null,
+        date: null,
+        duration: 60,
+        urls: [],
+        images: [],
+        studioName: null,
+        studioCandidate: null,
+        // A gender the server did not state must survive the default settings.
+        performerNames: ["Kept Performer"],
+        performerCandidates: [{ remoteId: "p-unknown", name: "Kept Performer", existsLocally: false }],
+        tagNames: [],
+        tagCandidates: [],
+        fingerprints: [],
+        fingerprintAlgorithms: [],
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    expect(await screen.findByText("Kept Performer")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (1)" }));
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    expect(mocks.importFromMetadataServer.mock.calls[0][1].performerGenders).toBeUndefined();
+  });
+
+  it("applies all only to the videos that have a match", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 456, title: "Second local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    // Only the first video matches; the second returns nothing and so must be left alone.
+    mocks.searchMetadataServer.mockImplementation((videoId: number) =>
+      Promise.resolve(
+        videoId === 123
+          ? [
+              {
+                id: "first-video-id",
+                endpoint: "https://first.example/graphql",
+                metadataServerName: "First provider",
+                title: "First provider result",
+                code: null,
+                details: null,
+                director: null,
+                date: null,
+                duration: 60,
+                urls: [],
+                images: [],
+                studioName: null,
+                studioCandidate: null,
+                performerNames: [],
+                performerCandidates: [],
+                tagNames: [],
+                tagCandidates: [],
+                fingerprints: [],
+                fingerprintAlgorithms: [],
+              },
+            ]
+          : [],
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
+
+    const applyAll = await screen.findByRole("button", { name: "Apply all (1)" });
+    await userEvent.click(applyAll);
+
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(123, expect.anything());
+  });
+
+  it("keeps a dismissed video off the list and out of Apply all until it is restored", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 456, title: "Second local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    // Both videos match, so Apply all would take both until one is dismissed.
+    mocks.searchMetadataServer.mockImplementation((videoId: number) =>
+      Promise.resolve([
+        {
+          id: `remote-${videoId}`,
+          endpoint: "https://first.example/graphql",
+          metadataServerName: "First provider",
+          title: `Result for ${videoId}`,
+          code: null,
+          details: null,
+          director: null,
+          date: null,
+          duration: 60,
+          urls: [],
+          images: [],
+          studioName: null,
+          studioCandidate: null,
+          performerNames: [],
+          performerCandidates: [],
+          tagNames: [],
+          tagCandidates: [],
+          fingerprints: [],
+          fingerprintAlgorithms: [],
+        },
+      ]),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Apply all (2)" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Dismiss video" })[0]);
+
+    expect(screen.queryByText("First local video")).not.toBeInTheDocument();
+    expect(screen.getByText("Second local video")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply all (1)" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Apply all (1)" }));
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(456, expect.anything());
+
+    await userEvent.click(screen.getByRole("button", { name: "Restore 1 dismissed" }));
+    expect(screen.getByText("First local video")).toBeInTheDocument();
+  });
+
+  it("starts each visit showing unmatched videos and never stores the toggle", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+
+    const first = render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Hide Unmatched" }));
+    expect(screen.getByRole("button", { name: "Show Unmatched" })).toBeInTheDocument();
+    // Other tagger settings are stored; this one must stay out of the persisted config.
+    expect(JSON.parse(localStorage.getItem("cove-tagger-config") ?? "{}")).not.toHaveProperty("showUnmatched");
+
+    // A remount stands in for the page reload: the toggle is back to showing unmatched videos.
+    first.unmount();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Hide Unmatched" })).toBeInTheDocument();
+  });
+
+  it("disables Apply all until something matches", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Apply all" })).toBeDisabled();
+  });
+
   it("saves and uses a default bulk match strategy", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const video = {
@@ -268,8 +742,7 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
-    await userEvent.click(screen.getByTitle("Tagger settings"));
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
     await userEvent.selectOptions(screen.getByLabelText("Default bulk match strategy"), "remote-id");
     await userEvent.click(screen.getByRole("button", { name: "Save default" }));
     await userEvent.click(screen.getByRole("button", { name: "Search all" }));
@@ -300,12 +773,13 @@ describe("VideoTagger", () => {
         <VideoTagger videos={[video]} />
       </QueryClientProvider>,
     );
-    const menu = screen.getByRole("button", { name: "More tagger options" }).closest("details")!;
-    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
+    // The overflow menu is gone; the bulk search strategy picker is the toolbar's remaining menu.
+    const menu = screen.getByRole("button", { name: "Choose search strategy" }).closest("details")!;
+    await userEvent.click(screen.getByRole("button", { name: "Choose search strategy" }));
     expect(menu.open).toBe(true);
     await userEvent.click(document.body);
     expect(menu.open).toBe(false);
-    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
+    await userEvent.click(screen.getByRole("button", { name: "Choose search strategy" }));
     expect(menu.open).toBe(true);
     await userEvent.keyboard("{Escape}");
     expect(menu.open).toBe(false);

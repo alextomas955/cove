@@ -24,7 +24,7 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.VideosRead)]
-public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null) : ControllerBase
+public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null, VideoCoverComparisonService? coverComparisonService = null) : ControllerBase
 {
     // The candidate pass projects ids only, so this just bounds how much of the library one
     // extension-filtered query walks; it is not a page size.
@@ -736,6 +736,25 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         PublishVideoEvent(EventType.VideoUpdated, id);
         var updated = await videoRepo.GetByIdWithRelationsAsync(id, ct);
         return Ok((await MapToDtoWithProvenanceAsync(updated!, cancellationToken: ct)) with { ImportWarnings = importWarnings });
+    }
+
+    /// <summary>
+    /// Compares a candidate cover with the one the video already carries, by perceptual hash rather
+    /// than by URL, so a review can tell "the same cover again" from a real choice. Reads only.
+    /// </summary>
+    // Write permission, although nothing is written: the comparison fetches a URL the caller supplies
+    // and reports what came back, which is not something a read-only caller should be able to ask for.
+    [HttpPost("{id:int}/cover-comparison")]
+    [RequiresPermission(Permissions.VideosWrite)]
+    [RequiresEntityAccess(EntityKinds.Video, Permissions.VideosWrite)]
+    public async Task<ActionResult<VideoCoverComparisonDto>> CompareCover(int id, [FromBody] VideoCoverComparisonRequestDto dto, CancellationToken ct)
+    {
+        if (coverComparisonService == null)
+            return Ok(new VideoCoverComparisonDto());
+        if (!await db.Videos.AsNoTracking().AnyAsync(video => video.Id == id, ct))
+            return NotFound();
+
+        return Ok(await coverComparisonService.CompareAsync(id, dto.ImageUrl, ct));
     }
 
     [HttpPost("{id:int}/metadata-server/submit-fingerprints")]

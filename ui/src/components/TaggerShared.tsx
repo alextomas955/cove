@@ -1,16 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  Check,
-  ChevronDown,
-  CloudDownload,
-  Eye,
-  EyeOff,
-  Loader2,
-  MoreHorizontal,
-  RefreshCw,
-  Settings2,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, CloudDownload, Eye, EyeOff, Loader2, RefreshCw, Settings2, Undo2, X } from "lucide-react";
 import type { CollectionMode } from "./videoScrapeUtils";
 
 // Reduce an endpoint to its registrable domain (last two labels, "www." dropped) so a remote id stored
@@ -88,7 +77,7 @@ export interface TaggerRunAllOption {
   description: string;
 }
 
-export const DEFAULT_TAGGER_BLACKLIST = ["\\sXXX\\s", "1080p", "720p", "2160p", "4K", "KTR", "RARBG", "\\smp4\\s"];
+export const DEFAULT_TAGGER_DENYLIST = ["\\sXXX\\s", "1080p", "720p", "2160p", "4K", "KTR", "RARBG", "\\smp4\\s"];
 
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const ddmmyyRegex = /\.(\d\d)\.(\d\d)\.(\d\d)\./;
@@ -134,13 +123,13 @@ function handleSpecialQueryStrings(input: string): string {
   return output.replace(/-/g, " ");
 }
 
-export function cleanTaggerQueryString(input: string, blacklist: string[]): string {
+export function cleanTaggerQueryString(input: string, denylist: string[]): string {
   let cleaned = input.replace(/[._]/g, " ");
-  for (const pattern of blacklist) {
+  for (const pattern of denylist) {
     try {
       cleaned = cleaned.replace(new RegExp(pattern, "gi"), "");
     } catch {
-      // Invalid blacklist regexes are ignored so one bad entry does not break tagging.
+      // Invalid denylist regexes are ignored so one bad entry does not break tagging.
     }
   }
   cleaned = handleSpecialQueryStrings(cleaned);
@@ -189,6 +178,8 @@ export function TaggerToolbar({
   runAllLabel = "Search all",
   showRunAll = true,
   countLabel,
+  dismissed,
+  applyAll,
   settingsOpen,
   onToggleSettings,
 }: {
@@ -208,6 +199,19 @@ export function TaggerToolbar({
   runAllLabel?: string;
   showRunAll?: boolean;
   countLabel: string;
+  /** Rows the user took off this pass, with a way back that does not need a page reload. */
+  dismissed?: {
+    count: number;
+    onRestore: () => void;
+  };
+  /** Bulk apply for rows that already have a match, alongside the bulk search. */
+  applyAll?: {
+    onApply: () => void;
+    onCancel: () => void;
+    busy: boolean;
+    /** How many rows would be applied; the button is disabled at zero. */
+    count: number;
+  };
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
 }) {
@@ -227,6 +231,32 @@ export function TaggerToolbar({
           ))}
         </select>
       </div>
+
+      <span className="ml-auto text-xs text-muted">{countLabel}</span>
+
+      {dismissed && dismissed.count > 0 && (
+        <button
+          type="button"
+          onClick={dismissed.onRestore}
+          title="Put the videos dismissed in this search session back on the list"
+          className="flex cursor-pointer items-center gap-1.5 rounded border border-border bg-input px-2 py-1 text-xs text-secondary hover:text-foreground"
+        >
+          <Undo2 className="w-3.5 h-3.5" />
+          Restore {dismissed.count} dismissed
+        </button>
+      )}
+
+      {showToggle && (
+        <button
+          type="button"
+          onClick={() => showToggle.onChange(!showToggle.value)}
+          aria-pressed={!showToggle.value}
+          className="flex cursor-pointer items-center gap-1.5 rounded border border-border bg-input px-2 py-1 text-xs text-secondary hover:text-foreground"
+        >
+          {showToggle.value ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
+        </button>
+      )}
 
       {showRunAll &&
         (batchSearching ? (
@@ -257,7 +287,9 @@ export function TaggerToolbar({
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </summary>
-                <div className="absolute left-0 z-30 mt-1 w-72 overflow-hidden rounded border border-border bg-card shadow-xl">
+                {/* Anchored to the right edge: the button now sits near the end of the toolbar, so a
+                    left-anchored panel would run off the viewport. */}
+                <div className="absolute right-0 z-30 mt-1 w-72 overflow-hidden rounded border border-border bg-card shadow-xl">
                   {runAllOptions.map((option) => (
                     <button
                       key={option.value}
@@ -278,58 +310,48 @@ export function TaggerToolbar({
           </div>
         ))}
 
-      <span className="ml-auto text-xs text-muted">{countLabel}</span>
-
-      {(showToggle || onToggleSettings) && (
-        // Everything that is not "pick a source and scrape" sits behind one menu.
-        <DismissibleMenu className="relative">
-          <summary
-            role="button"
-            aria-label="More tagger options"
-            title="More tagger options"
-            className={`flex cursor-pointer list-none items-center rounded border px-1.5 py-1 [&::-webkit-details-marker]:hidden ${
-              settingsOpen
-                ? "border-accent bg-input text-accent"
-                : "border-border bg-input text-secondary hover:text-foreground"
-            }`}
+      {applyAll &&
+        (applyAll.busy ? (
+          <button
+            type="button"
+            onClick={applyAll.onCancel}
+            className="flex items-center gap-1.5 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-500"
           >
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </summary>
-          <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded border border-border bg-card shadow-xl">
-            {showToggle && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.currentTarget.closest("details")?.removeAttribute("open");
-                  showToggle.onChange(!showToggle.value);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface"
-              >
-                {showToggle.value ? (
-                  <Eye className="w-3.5 h-3.5 text-muted" />
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5 text-muted" />
-                )}
-                {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
-              </button>
-            )}
-            {onToggleSettings && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.currentTarget.closest("details")?.removeAttribute("open");
-                  onToggleSettings();
-                }}
-                title="Tagger settings"
-                aria-expanded={settingsOpen}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface ${settingsOpen ? "text-accent" : "text-foreground"}`}
-              >
-                <Settings2 className="w-3.5 h-3.5 text-muted" />
-                Tagger settings
-              </button>
-            )}
-          </div>
-        </DismissibleMenu>
+            <X className="w-3.5 h-3.5" />
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={applyAll.onApply}
+            disabled={applyAll.count === 0}
+            title={
+              applyAll.count === 0
+                ? "No matched videos to apply"
+                : `Apply the selected match on ${applyAll.count} video${applyAll.count === 1 ? "" : "s"}`
+            }
+            className="flex items-center gap-1.5 rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Apply all{applyAll.count > 0 ? ` (${applyAll.count})` : ""}
+          </button>
+        ))}
+
+      {onToggleSettings && (
+        <button
+          type="button"
+          onClick={onToggleSettings}
+          title="Tagger settings"
+          aria-label="Tagger settings"
+          aria-expanded={settingsOpen}
+          className={`flex cursor-pointer items-center rounded border px-1.5 py-1 ${
+            settingsOpen
+              ? "border-accent bg-input text-accent"
+              : "border-border bg-input text-secondary hover:text-foreground"
+          }`}
+        >
+          <Settings2 className="w-3.5 h-3.5" />
+        </button>
       )}
     </div>
   );
@@ -337,31 +359,31 @@ export function TaggerToolbar({
 
 export function TaggerSettingsPanel({
   children,
-  blacklist,
-  onBlacklistChange,
+  denylist,
+  onDenylistChange,
 }: {
   children?: ReactNode;
-  blacklist?: string[];
-  onBlacklistChange?: (items: string[]) => void;
+  denylist?: string[];
+  onDenylistChange?: (items: string[]) => void;
 }) {
   const hasConfiguration = Boolean(children);
-  const hasBlacklist = Boolean(blacklist && onBlacklistChange);
+  const hasDenylist = Boolean(denylist && onDenylistChange);
 
   return (
     <div className="bg-card border-b border-border px-4 py-3 space-y-4">
-      <div className={hasConfiguration && hasBlacklist ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : "space-y-3"}>
+      <div className={hasConfiguration && hasDenylist ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : "space-y-3"}>
         {hasConfiguration && (
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-foreground italic">Configuration</h3>
             {children}
           </div>
         )}
-        {blacklist && onBlacklistChange && (
+        {denylist && onDenylistChange && (
           <div className={hasConfiguration ? "space-y-2" : "max-w-3xl space-y-2"}>
-            <h3 className="text-sm font-bold text-foreground italic">Blacklist</h3>
-            <BlacklistEditor items={blacklist} onChange={onBlacklistChange} />
+            <h3 className="text-sm font-bold text-foreground italic">Denylist</h3>
+            <DenylistEditor items={denylist} onChange={onDenylistChange} />
             <p className="text-[10px] text-muted">
-              Blacklist items are excluded from queries. They are case-insensitive regular expressions. Escape special
+              Denylist items are excluded from queries. They are case-insensitive regular expressions. Escape special
               characters with a backslash: <code className="text-pink-400">{`[\\.^$.|?*+()`}</code>
             </p>
           </div>
@@ -371,7 +393,7 @@ export function TaggerSettingsPanel({
   );
 }
 
-export function BlacklistEditor({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
+export function DenylistEditor({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
   const [input, setInput] = useState("");
 
   const addItem = () => {

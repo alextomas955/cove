@@ -14,7 +14,7 @@ import { createNestedRouteLinkProps } from "./cardNavigation";
 import { DEFAULT_COLLECTION_MODES, pickBestSourceUrl, type CollectionMode } from "./videoScrapeUtils";
 import { buildRelationActionMap, relationKey, type ScrapeRelationActionMap } from "./ScrapeRelationChoices";
 import {
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
   TaggerToolbar,
@@ -57,7 +57,7 @@ interface TaggerConfig {
   selectedEndpoint: string;
   showTagged: boolean;
   createMissingTags: boolean;
-  blacklist: string[];
+  denylist: string[];
 }
 
 interface PerformerSearchState {
@@ -130,7 +130,7 @@ function loadPerformerTaggerConfig(defaultEndpoint: string): TaggerConfig {
     selectedEndpoint: defaultEndpoint,
     showTagged: false,
     createMissingTags: true,
-    blacklist: [...DEFAULT_TAGGER_BLACKLIST],
+    denylist: [...DEFAULT_TAGGER_DENYLIST],
   };
   if (typeof window === "undefined") return fallback;
   try {
@@ -141,7 +141,7 @@ function loadPerformerTaggerConfig(defaultEndpoint: string): TaggerConfig {
       ...fallback,
       ...parsed,
       selectedEndpoint: parsed.selectedEndpoint ?? fallback.selectedEndpoint,
-      blacklist: parsed.blacklist ?? fallback.blacklist,
+      denylist: parsed.denylist ?? fallback.denylist,
     };
   } catch {
     return fallback;
@@ -460,9 +460,9 @@ export function PerformerTagger({
         return pickBestSourceUrl(performer.urls, selectedSource.scraper) ?? "";
       }
 
-      return cleanTaggerQueryString(performer.name, taggerConfig.blacklist);
+      return cleanTaggerQueryString(performer.name, taggerConfig.denylist);
     },
-    [getScraperInputKind, queryOverrides, selectedSource, taggerConfig.blacklist],
+    [getScraperInputKind, queryOverrides, selectedSource, taggerConfig.denylist],
   );
 
   const updateSearchState = useCallback((performerId: number, update: Partial<PerformerSearchState>) => {
@@ -479,10 +479,10 @@ export function PerformerTagger({
             ? ((source?.kind === "scraper"
                 ? pickBestSourceUrl(performer.urls, source.scraper)
                 : performer.urls.find((url) => url.trim())) ?? "")
-            : cleanTaggerQueryString(performer.name, taggerConfig.blacklist),
+            : cleanTaggerQueryString(performer.name, taggerConfig.denylist),
       }));
     },
-    [taggerConfig.blacklist],
+    [taggerConfig.denylist],
   );
 
   const searchPerformer = useCallback(
@@ -605,8 +605,8 @@ export function PerformerTagger({
       />
       {showSettings && (
         <TaggerSettingsPanel
-          blacklist={taggerConfig.blacklist}
-          onBlacklistChange={(items) => setTaggerConfig((current) => ({ ...current, blacklist: items }))}
+          denylist={taggerConfig.denylist}
+          onDenylistChange={(items) => setTaggerConfig((current) => ({ ...current, denylist: items }))}
         >
           <label className="flex items-center gap-2 text-xs text-foreground">
             <input

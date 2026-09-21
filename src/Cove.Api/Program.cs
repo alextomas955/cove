@@ -326,6 +326,7 @@ try
         provider.GetRequiredService<ExtensionIdentityLinkService>());
     builder.Services.AddSingleton<ScraperService>();
     builder.Services.AddSingleton<IVideoCoverService, VideoCoverService>();
+    builder.Services.AddScoped<VideoCoverComparisonService>();
     builder.Services.AddScoped<IVideoMetadataApplyService, VideoMetadataApplyService>();
     builder.Services.AddScoped<IGroupMetadataApplyService, GroupMetadataApplyService>();
     builder.Services.AddScoped<PerformerScrapeService>();

@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -11,6 +11,7 @@ import type {
   ScrapeAttempt,
   ScraperSummary,
   ScrapeCollectionItemSelection,
+  VideoCoverComparison,
 } from "../api/types";
 import { useAppConfig, useOptionalAppConfig } from "../state/AppConfigContext";
 import { formatDuration, getResolutionLabel } from "./shared";
@@ -43,7 +44,7 @@ import {
   type TaggerReviewInput,
 } from "./VideoTaggerReview";
 import {
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
   TaggerToolbar,
@@ -72,6 +73,13 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toggleOptionsFromEvent, withOrderedToggle, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
+import {
+  PERFORMER_GENDER_OPTIONS,
+  buildAllowedGenderKeys,
+  isGenderOptionChecked,
+  isPerformerGenderAllowed,
+  toggleGenderOption,
+} from "../utils/performerGenders";
 import { VideoPreviewThumbnail } from "./VideoPreviewThumbnail";
 import type { EntityMediaFit } from "./EntityMedia";
 
@@ -86,7 +94,6 @@ interface VideoTaggerProps {
 
 interface TaggerConfig {
   selectedEndpoint: string;
-  showUnmatched: boolean;
   setCoverImage: boolean;
   setTags: boolean;
   setPerformers: boolean;
@@ -98,11 +105,57 @@ interface TaggerConfig {
   bulkMatchStrategy: VideoMetadataSearchStrategy;
   queryMode: TaggerQueryMode;
   defaultScraperInputKind: InputKind | "auto";
-  blacklist: string[];
-  createParentStudios: boolean;
-  createParentTags: boolean;
-  showMales: boolean;
+  denylist: string[];
   performerGenders: string[];
+  // Stamped on every save so a one-time upgrade of the stored settings runs once and never undoes a
+  // choice the user made afterwards.
+  configVersion: number;
+}
+
+const TAGGER_CONFIG_VERSION = 2;
+
+// Drops the performers whose gender the settings exclude, from both the candidates and the plain name
+// list the collection modes and summaries read, so nothing downstream can reintroduce them.
+function filterMatchPerformersByGender<T extends MetadataServerVideoMatch>(match: T, allowed: Set<string> | null): T {
+  if (allowed == null) return match;
+  // A match with no candidates falls back to bare names, which state no gender; the "Unknown" rule
+  // decides all of them together, exactly as it would for the candidates the fallback stands in for.
+  if (match.performerCandidates.length === 0) {
+    return isPerformerGenderAllowed(undefined, allowed) ? match : { ...match, performerNames: [] };
+  }
+  const kept = match.performerCandidates.filter((candidate) => isPerformerGenderAllowed(candidate.gender, allowed));
+  if (kept.length === match.performerCandidates.length) return match;
+  // A name is dropped only when a surviving candidate no longer claims it, so two performers sharing a
+  // name cannot take each other's entry off the list. A name no candidate claims at all states no
+  // gender, so the "Unknown" rule decides it, the same rule the candidate-less match above uses.
+  const nameKey = (name: string) => name.trim().toLowerCase();
+  const keptNames = new Set(kept.map((candidate) => nameKey(candidate.name)));
+  const claimedNames = new Set(match.performerCandidates.map((candidate) => nameKey(candidate.name)));
+  const keepUnclaimed = isPerformerGenderAllowed(undefined, allowed);
+  return {
+    ...match,
+    performerCandidates: kept,
+    performerNames: match.performerNames.filter((name) =>
+      claimedNames.has(nameKey(name)) ? keptNames.has(nameKey(name)) : keepUnclaimed,
+    ),
+  };
+}
+
+// The gender list predates the "Unknown" option, and the setting did nothing at all back then, so no
+// saved config records a choice about it. Add it once, on the upgrade, rather than reading its absence
+// as a decision to hide every performer whose gender the metadata server does not state. The gate is a
+// floor, not an equality: a later version bump must not run this migration a second time.
+const PERFORMER_GENDERS_MIGRATION_VERSION = 2;
+
+function upgradeSavedPerformerGenders(saved: Partial<TaggerConfig>) {
+  const genders = saved.performerGenders;
+  if (!genders) return [...PERFORMER_GENDER_OPTIONS];
+  if ((saved.configVersion ?? 0) >= PERFORMER_GENDERS_MIGRATION_VERSION) return genders;
+  // Every gender unchecked was as inert as every gender checked while the setting did nothing, and the
+  // user saw every performer either way; adding "Unknown" to an empty list would invent a filter that
+  // hides all of them but the gender-less ones.
+  if (genders.length === 0) return [...PERFORMER_GENDER_OPTIONS];
+  return isGenderOptionChecked(genders, "Unknown") ? genders : [...genders, "Unknown"];
 }
 
 type VideoMetadataSearchStrategy =
@@ -409,6 +462,34 @@ function getVideoImageReplace(
   );
 }
 
+/**
+ * How the selected result's cover compares with the one the video already carries. Only the server
+ * can answer it: it alone reads both images' pixels and their real sizes, where the browser sees two
+ * unrelated URLs and a delivery-resized copy of its own cover.
+ *
+ * Asked only for a cover the person actually set; an auto-generated frame is replaceable anyway, and
+ * will not resemble a studio's artwork.
+ */
+function useCoverComparison(video: Video, imageUrl?: string | null): VideoCoverComparison | undefined {
+  const enabled = !!imageUrl && !!video.imagePath;
+  const { data } = useQuery({
+    queryKey: ["video-cover-comparison", video.id, imageUrl],
+    queryFn: () => videos.compareCover(video.id, imageUrl ?? ""),
+    enabled,
+    // The comparison downloads the candidate cover, so it is kept for as long as the visit lasts.
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+  return enabled ? data : undefined;
+}
+
+/** The suggestion an "upgrade" verdict is worth making, as the cover panel's sentence. */
+function coverComparisonNote(comparison?: VideoCoverComparison) {
+  if (comparison?.verdict !== "upgrade" || !comparison.current || !comparison.candidate) return undefined;
+  const size = (image: { width: number; height: number }) => `${image.width}×${image.height}`;
+  return `same cover, larger here (${size(comparison.candidate)} vs ${size(comparison.current)})`;
+}
+
 function buildDefaultVideoCollectionModes(
   result: UnifiedVideoMatch,
   state: VideoSearchState | undefined,
@@ -528,7 +609,9 @@ function buildScraperVideoApplyRequest(
     createMissingPerformers: !taggerConfig.onlyExistingPerformers,
     createMissingStudio: !taggerConfig.onlyExistingStudio,
     markOrganized: taggerConfig.markOrganized,
-    hydratePerformers: taggerConfig.createParentTags,
+    // The tagger always fills in a created performer's details from the scrape; it used to read this off
+    // an unrelated, invisible "create parent tags" flag that nothing else consulted.
+    hydratePerformers: true,
     selectedCandidateIndex: result.selectedCandidateIndex,
     tagSelections:
       result.tagNames.length > 0
@@ -614,7 +697,6 @@ export function VideoTagger({
 
   const DEFAULT_TAGGER_CONFIG: TaggerConfig = {
     selectedEndpoint: metadataServers[0] ? sourceValue("metadata-server", metadataServers[0].endpoint) : "",
-    showUnmatched: true,
     setCoverImage: true,
     setTags: true,
     setPerformers: true,
@@ -626,11 +708,9 @@ export function VideoTagger({
     bulkMatchStrategy: "remote-id-and-fingerprint-text",
     queryMode: "auto",
     defaultScraperInputKind: "auto",
-    blacklist: [...DEFAULT_TAGGER_BLACKLIST],
-    createParentStudios: true,
-    createParentTags: true,
-    showMales: true,
-    performerGenders: ["Female", "Male", "Transgender Female", "Transgender Male", "Intersex", "Non-Binary"],
+    denylist: [...DEFAULT_TAGGER_DENYLIST],
+    performerGenders: [...PERFORMER_GENDER_OPTIONS],
+    configVersion: TAGGER_CONFIG_VERSION,
   };
 
   const [taggerConfig, _setTaggerConfig] = useState<TaggerConfig>(() => {
@@ -645,8 +725,12 @@ export function VideoTagger({
           bulkMatchStrategy: isVideoMetadataSearchStrategy(parsed.bulkMatchStrategy)
             ? parsed.bulkMatchStrategy
             : DEFAULT_TAGGER_CONFIG.bulkMatchStrategy,
-          blacklist: parsed.blacklist ?? DEFAULT_TAGGER_CONFIG.blacklist,
-          performerGenders: parsed.performerGenders ?? DEFAULT_TAGGER_CONFIG.performerGenders,
+          denylist: parsed.denylist ?? DEFAULT_TAGGER_CONFIG.denylist,
+          // Upgraded in memory; the stamp reaches storage on the next settings change. A visit that
+          // changes nothing replays the upgrade next time, which is harmless because it is idempotent —
+          // a later migration has to stay idempotent too, or write the stamp back on load itself.
+          performerGenders: upgradeSavedPerformerGenders(parsed),
+          configVersion: TAGGER_CONFIG_VERSION,
         };
       }
     } catch {
@@ -667,6 +751,10 @@ export function VideoTagger({
     });
   }, []);
   const [showConfig, setShowConfig] = useState(false);
+  // Deliberately outside the persisted config: hiding unmatched is a way to work through one pass of
+  // results, not a preference, and a stored "hide" would greet the next visit with an empty list before
+  // anything has been searched.
+  const [showUnmatched, setShowUnmatched] = useState(true);
   const [bulkStrategyDraft, setBulkStrategyDraft] = useState<VideoMetadataSearchStrategy>(
     taggerConfig.bulkMatchStrategy,
   );
@@ -699,30 +787,30 @@ export function VideoTagger({
         ]
           .filter((s) => s !== "")
           .join(" ");
-        str = cleanTaggerQueryString(str, taggerConfig.blacklist);
+        str = cleanTaggerQueryString(str, taggerConfig.denylist);
         return str;
       }
 
       // filename/dir/path modes: derive from file path
       if (mode === "filename" && file?.basename) {
-        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.denylist);
       }
       if (mode === "dir" && file?.path) {
         const parts = file.path.replace(/\\/g, "/").split("/");
-        return parts.length > 1 ? cleanTaggerQueryString(parts[parts.length - 2], taggerConfig.blacklist) : "";
+        return parts.length > 1 ? cleanTaggerQueryString(parts[parts.length - 2], taggerConfig.denylist) : "";
       }
       if (mode === "path" && file?.path) {
-        return cleanTaggerQueryString(file.path, taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.path, taggerConfig.denylist);
       }
 
-      // auto mode: try title first, then filename — always apply blacklist
-      if (video.title) return cleanTaggerQueryString(video.title, taggerConfig.blacklist);
+      // auto mode: try title first, then filename — always apply denylist
+      if (video.title) return cleanTaggerQueryString(video.title, taggerConfig.denylist);
       if (file?.basename) {
-        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.denylist);
       }
       return "";
     },
-    [queryOverrides, taggerConfig.queryMode, taggerConfig.blacklist],
+    [queryOverrides, taggerConfig.queryMode, taggerConfig.denylist],
   );
 
   const getScraperInputKind = useCallback(
@@ -946,6 +1034,56 @@ export function VideoTagger({
     setBatchSearching(false);
   }, []);
 
+  // Videos the user has taken off this pass, so a bad or unwanted match stops occupying the list and
+  // stays out of Apply all. Deliberately component state and nothing more: a dismissal lasts for this
+  // visit to the tagger and the video is back on the next load.
+  const [dismissedIds, setDismissedIds] = useState<ReadonlySet<number>>(() => new Set());
+  const dismissVideo = useCallback((videoId: number) => {
+    setDismissedIds((current) => new Set(current).add(videoId));
+  }, []);
+  const restoreDismissed = useCallback(() => setDismissedIds(new Set()), []);
+
+  // Bulk apply. Each row publishes its own apply here, so Apply all sends exactly the request the
+  // row's own Apply button would, honouring every per-row exclusion and field choice already made.
+  const applyHandlersRef = useRef(new Map<number, () => Promise<unknown>>());
+  const registerApply = useCallback((videoId: number, apply: (() => Promise<unknown>) | null) => {
+    if (apply) applyHandlersRef.current.set(videoId, apply);
+    else applyHandlersRef.current.delete(videoId);
+  }, []);
+  const [applyingAll, setApplyingAll] = useState(false);
+  const applyAbortRef = useRef<AbortController | null>(null);
+  // A video counts as matched once a search returned results it has not been saved from yet.
+  const applyAllTargets = videoList
+    .filter((video) => {
+      if (dismissedIds.has(video.id)) return false;
+      const videoState = searchStates[video.id];
+      return !videoState?.saved && !!videoState?.results && videoState.results.length > 0;
+    })
+    .map((video) => video.id);
+  const applyAll = useCallback(async () => {
+    setApplyingAll(true);
+    const controller = new AbortController();
+    applyAbortRef.current = controller;
+    await runWithConcurrency(
+      applyAllTargets,
+      async (videoId) => {
+        // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
+        const apply = applyHandlersRef.current.get(videoId);
+        if (!apply) return;
+        // One row's failure is reported on that row, so it must not abandon the rest of the batch.
+        await apply().catch(() => undefined);
+      },
+      CONCURRENCY_LIMIT,
+      controller.signal,
+    );
+    setApplyingAll(false);
+    applyAbortRef.current = null;
+  }, [applyAllTargets]);
+  const cancelApplyAll = useCallback(() => {
+    applyAbortRef.current?.abort();
+    setApplyingAll(false);
+  }, []);
+
   if (taggerSources.length === 0) {
     return (
       <div className="px-4 py-12 text-center">
@@ -956,16 +1094,23 @@ export function VideoTagger({
     );
   }
 
-  // Detail mode was opened for this specific video, so always show it (the bulk "hide matched"
-  // convenience filter would otherwise leave the dialog empty).
-  const visibleVideos =
-    mode === "detail" || taggerConfig.showUnmatched
+  // Detail mode was opened for this specific video, so always show it (the bulk "hide unmatched"
+  // convenience filter would otherwise leave the dialog empty). Hiding unmatched keeps only videos
+  // that actually have a match right now: one that has not been searched at all is unmatched too.
+  const matchingList =
+    mode === "detail" || showUnmatched
       ? videoList
       : videoList.filter((s) => {
           const state = searchStates[s.id];
-          return !state || !state.results || state.results.length > 0;
+          return !!state?.results && state.results.length > 0;
         });
+  // Detail mode is about one video the user opened deliberately, so a stale dismissal must not empty it.
+  const visibleVideos =
+    mode === "detail" || dismissedIds.size === 0
+      ? matchingList
+      : matchingList.filter((video) => !dismissedIds.has(video.id));
   const visibleVideoIds = visibleVideos.map((video) => video.id);
+  const dismissedVisibleCount = matchingList.length - visibleVideos.length;
 
   return (
     <div className="space-y-0">
@@ -981,8 +1126,8 @@ export function VideoTagger({
         showToggle={
           mode === "bulk"
             ? {
-                value: taggerConfig.showUnmatched,
-                onChange: (value) => setTaggerConfig((c) => ({ ...c, showUnmatched: value })),
+                value: showUnmatched,
+                onChange: setShowUnmatched,
                 enabledLabel: "Hide Unmatched",
                 disabledLabel: "Show Unmatched",
               }
@@ -994,14 +1139,25 @@ export function VideoTagger({
         runAllOptions={selectedSource?.kind === "metadata-server" ? VIDEO_METADATA_SEARCH_STRATEGIES : undefined}
         showRunAll={mode === "bulk"}
         countLabel={`${visibleVideos.length} video${visibleVideos.length !== 1 ? "s" : ""}`}
+        dismissed={mode === "bulk" ? { count: dismissedVisibleCount, onRestore: restoreDismissed } : undefined}
+        applyAll={
+          mode === "bulk"
+            ? {
+                onApply: () => void applyAll(),
+                onCancel: cancelApplyAll,
+                busy: applyingAll,
+                count: applyAllTargets.length,
+              }
+            : undefined
+        }
         settingsOpen={showConfig}
         onToggleSettings={() => setShowConfig((current) => !current)}
       />
 
       {showConfig && (
         <TaggerSettingsPanel
-          blacklist={taggerConfig.blacklist}
-          onBlacklistChange={(items) => setTaggerConfig((c) => ({ ...c, blacklist: items }))}
+          denylist={taggerConfig.denylist}
+          onDenylistChange={(items) => setTaggerConfig((c) => ({ ...c, denylist: items }))}
         >
           {selectedSource?.kind === "metadata-server" && mode === "bulk" && (
             <div>
@@ -1041,17 +1197,15 @@ export function VideoTagger({
           <div>
             <p className="text-xs text-muted mb-1.5">Performer genders</p>
             <div className="space-y-1">
-              {["Female", "Male", "Transgender Female", "Transgender Male", "Intersex", "Non-Binary"].map((g) => (
+              {PERFORMER_GENDER_OPTIONS.map((g) => (
                 <label key={g} className="flex items-center gap-2 text-xs text-foreground">
                   <input
                     type="checkbox"
-                    checked={taggerConfig.performerGenders.includes(g)}
+                    checked={isGenderOptionChecked(taggerConfig.performerGenders, g)}
                     onChange={(e) =>
                       setTaggerConfig((c) => ({
                         ...c,
-                        performerGenders: e.target.checked
-                          ? [...c.performerGenders, g]
-                          : c.performerGenders.filter((x) => x !== g),
+                        performerGenders: toggleGenderOption(c.performerGenders, g, e.target.checked),
                       }))
                     }
                     className="rounded border-border"
@@ -1061,7 +1215,8 @@ export function VideoTagger({
               ))}
             </div>
             <p className="text-[10px] text-muted mt-1">
-              Performers with these genders will be shown when tagging videos.
+              Performers with these genders will be shown when tagging videos. Only a metadata server states a
+              performer's gender, so scraper results are unaffected.
             </p>
           </div>
 
@@ -1255,6 +1410,8 @@ export function VideoTagger({
             selecting={selecting}
             onSelect={onSelect ? withOrderedToggle(onSelect, visibleVideoIds) : undefined}
             detailMode={mode === "detail"}
+            onRegisterApply={registerApply}
+            onDismiss={mode === "bulk" ? () => dismissVideo(video.id) : undefined}
           />
         ))}
       </div>
@@ -1284,6 +1441,14 @@ interface TaggerVideoRowProps {
   selecting?: boolean;
   onSelect?: (videoId: number, options?: MultiSelectToggleOptions) => void;
   detailMode?: boolean;
+  /**
+   * Publishes this row's apply action so the toolbar's Apply all can drive it. The row owns the
+   * request it would send, so bulk apply reuses that instead of rebuilding it from the outside.
+   * Called with null when the row has nothing to apply.
+   */
+  onRegisterApply?: (videoId: number, apply: (() => Promise<unknown>) | null) => void;
+  /** Takes this row off the list for the rest of the visit. Absent when dismissing does not apply. */
+  onDismiss?: () => void;
 }
 
 function TaggerVideoRow({
@@ -1306,6 +1471,8 @@ function TaggerVideoRow({
   selecting = false,
   onSelect,
   detailMode = false,
+  onRegisterApply,
+  onDismiss,
 }: TaggerVideoRowProps) {
   const file = video.files.find((candidate) => candidate.id === video.primaryFileId);
   const [refreshBusyEndpoint, setRefreshBusyEndpoint] = useState<string | null>(null);
@@ -1348,12 +1515,19 @@ function TaggerVideoRow({
   );
   const tagMatchInfo = useMemo(() => buildMatchInfo(resolvedRelations?.tags), [resolvedRelations]);
   const performerMatchInfo = useMemo(() => buildMatchInfo(resolvedRelations?.performers), [resolvedRelations]);
+  const allowedGenderKeys = useMemo(
+    () => buildAllowedGenderKeys(taggerConfig.performerGenders),
+    [taggerConfig.performerGenders],
+  );
   const enrichedResults = useMemo(() => {
     const results = state?.results;
     if (!results) return results;
     return results.map((r) =>
       r.sourceKind !== "scraper"
-        ? r
+        ? // Only a metadata server states a performer's gender, so only its matches can be filtered by
+          // one. Dropping the excluded performers here keeps the preview, its counts and the apply
+          // request agreed on one list, and re-runs when the setting changes without a new search.
+          filterMatchPerformersByGender(r, allowedGenderKeys)
         : {
             ...r,
             tagCandidates: r.tagCandidates.map((c) => ({
@@ -1366,8 +1540,9 @@ function TaggerVideoRow({
             })),
           },
     );
-  }, [state?.results, existingTagKeys, existingPerformerKeys]);
+  }, [state?.results, existingTagKeys, existingPerformerKeys, allowedGenderKeys]);
   const selectedResult = enrichedResults?.[state?.selectedIndex ?? 0];
+  const coverComparison = useCoverComparison(video, selectedResult?.imageUrl);
   const videoLinkProps = createNestedRouteLinkProps<HTMLAnchorElement>({ page: "video", id: video.id }, () =>
     onNavigate?.(video.id),
   );
@@ -1462,6 +1637,10 @@ function TaggerVideoRow({
         onlyExistingPerformers: taggerConfig.onlyExistingPerformers,
         onlyExistingStudio: taggerConfig.onlyExistingStudio,
         markOrganized: taggerConfig.markOrganized,
+        // The preview already dropped the excluded genders; send the same selection the filter above
+        // used, so a performer it hides can never be written by the parts of the import the overrides
+        // do not cover. Omitted, and only omitted, when nothing is filtered.
+        performerGenders: allowedGenderKeys ? taggerConfig.performerGenders : undefined,
         excludedTagNames: excludedTags.length > 0 ? excludedTags : undefined,
         performerOverrides: performerOverrides.length > 0 ? performerOverrides : undefined,
         tagOverrides,
@@ -1480,6 +1659,17 @@ function TaggerVideoRow({
       await invalidateVideoMetadataQueries(queryClient, video.id);
     },
   });
+
+  // Keep the published apply pointed at the current mutation without re-registering on every render:
+  // the registration effect depends only on whether this row has something to apply.
+  const applyRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  applyRef.current = () => importMut.mutateAsync();
+  const canApply = Boolean(selectedResult) && !state?.saved;
+  useEffect(() => {
+    if (!onRegisterApply) return;
+    onRegisterApply(video.id, canApply ? () => applyRef.current() : null);
+    return () => onRegisterApply(video.id, null);
+  }, [onRegisterApply, video.id, canApply]);
 
   const submitEndpoint = source?.kind === "metadata-server" ? source.endpoint : undefined;
   const normalizedSubmitEndpoint = normalizeEndpoint(submitEndpoint);
@@ -1638,6 +1828,20 @@ function TaggerVideoRow({
               {state?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
               <span className="hidden sm:inline">Search</span>
             </button>
+            {onDismiss && (
+              // Sits beside Search so a row can be cleared whether or not it found a match.
+              <button
+                type="button"
+                onClick={onDismiss}
+                aria-label="Dismiss video"
+                title="Dismiss video from this search session. It will be included in future search sessions."
+                className={`flex shrink-0 items-center rounded border border-border bg-surface px-1.5 text-muted hover:border-red-500/40 hover:text-red-400 ${
+                  isFragmentInput ? "h-fit py-1" : ""
+                }`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
             {source?.kind === "metadata-server" && (
               // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
               <DismissibleMenu className="relative shrink-0">
@@ -1846,6 +2050,7 @@ function TaggerVideoRow({
                 onUpdateState(key === "tags" ? { tagEdits: edits } : { performerEdits: edits })
               }
               taggerConfig={taggerConfig}
+              coverComparison={coverComparison}
             />
           )}
 
@@ -1898,6 +2103,8 @@ interface TaggerResultsProps {
   performerEdits?: TaggerRelationshipEdits;
   onRelationshipEditsChange: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
+  /** Pixel verdict on the selected result's cover; absent until it has been asked for and answered. */
+  coverComparison?: VideoCoverComparison;
 }
 
 function TaggerResults({
@@ -1928,6 +2135,7 @@ function TaggerResults({
   performerEdits,
   onRelationshipEditsChange,
   taggerConfig,
+  coverComparison,
 }: TaggerResultsProps) {
   const current = results[selectedIndex] ? selectedIndex : 0;
   const row = (result: UnifiedVideoMatch, i: number) => (
@@ -1961,6 +2169,7 @@ function TaggerResults({
       performerEdits={performerEdits}
       onRelationshipEditsChange={i === current ? onRelationshipEditsChange : undefined}
       taggerConfig={taggerConfig}
+      coverComparison={i === current ? coverComparison : undefined}
     />
   );
   const others = results.map((result, i) => ({ result, i })).filter(({ i }) => i !== current);
@@ -2010,6 +2219,7 @@ function TaggerResultRow({
   performerEdits,
   onRelationshipEditsChange,
   taggerConfig,
+  coverComparison,
 }: {
   video: Video;
   result: MetadataServerVideoMatch;
@@ -2039,6 +2249,7 @@ function TaggerResultRow({
   performerEdits?: TaggerRelationshipEdits;
   onRelationshipEditsChange?: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
+  coverComparison?: VideoCoverComparison;
 }) {
   const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   // Accept-all is the common case, so the review opens as a list of facts; the full side-by-side
@@ -2080,6 +2291,7 @@ function TaggerResultRow({
     metadataServers,
     fieldStrategies,
     imageReplace: (fieldStrategies.image ?? defaultVideoImageStrategy(video, taggerConfig)) === "overwrite",
+    coverComparison,
     collectionModes,
     showStudio: taggerConfig.setStudio,
     showTags: taggerConfig.setTags,
@@ -2186,7 +2398,12 @@ function TaggerResultRow({
           <img src={result.imageUrl} alt="" className="h-9 w-16 shrink-0 rounded object-cover" loading="lazy" />
         )}
         {isSelected && review ? (
-          <CoverPanel review={review} onChange={handleSelectionChange} disabled={saving} />
+          <CoverPanel
+            review={review}
+            onChange={handleSelectionChange}
+            disabled={saving}
+            coverComparison={coverComparison}
+          />
         ) : null}
         <div className="min-w-0 flex-1 self-start">
           <p
@@ -2222,7 +2439,12 @@ function TaggerResultRow({
           ) : (
             <div className="py-1">
               <MetadataDiffSummary
-                fields={review.fields.filter((field) => field.key !== "image")}
+                // The cover has its own panel, so it is not a row here — except when it is unchanged,
+                // where it belongs among the unchanged labels the footer is already counting it in.
+                fields={review.fields.filter(
+                  (field) => field.key !== "image" || scalarStatus(field, review.source, review.target) === "identical",
+                )}
+
                 source={review.source}
                 target={review.target}
                 value={review.selection}
@@ -2231,32 +2453,35 @@ function TaggerResultRow({
               />
             </div>
           )}
+          {/* Summary reads left to right; the actions that act on it are grouped at the right edge. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface/60 px-3 py-2">
-            {onSave && (
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                {summary?.changeCount
-                  ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
-                  : "Apply"}
-              </button>
-            )}
             {summary ? (
               <span className="hidden min-w-0 flex-1 truncate text-[11px] text-muted sm:inline">
                 {summary.changes.map((change) => change.text).join(" · ")}
               </span>
             ) : null}
-            <button
-              type="button"
-              aria-expanded={adjusting}
-              onClick={() => setAdjusting((current) => !current)}
-              className="ml-auto text-xs text-accent hover:underline"
-            >
-              {adjusting ? "Done adjusting" : "Adjust…"}
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                aria-expanded={adjusting}
+                onClick={() => setAdjusting((current) => !current)}
+                className="text-xs text-accent hover:underline"
+              >
+                {adjusting ? "Done adjusting" : "Adjust…"}
+              </button>
+              {onSave && (
+                <button
+                  onClick={onSave}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {summary?.changeCount
+                    ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+                    : "Apply"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2269,16 +2494,19 @@ function CoverPanel({
   review,
   onChange,
   disabled,
+  coverComparison,
 }: {
   review: ReturnType<typeof buildTaggerReview>;
   onChange: (next: DiffSelection) => void;
   disabled?: boolean;
+  coverComparison?: VideoCoverComparison;
 }) {
   const field = review.fields.find((entry) => entry.key === "image");
   if (!field) return null;
   return (
     <ReviewCoverPanel
       status={scalarStatus(field, review.source, review.target)}
+      note={coverComparisonNote(coverComparison)}
       chosen={review.selection.image === "source" ? "source" : "target"}
       currentUrl={review.target.values.image ? String(review.target.values.image) : null}
       candidates={[String(review.source.values.image ?? "")]}

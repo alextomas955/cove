@@ -84,8 +84,320 @@ public sealed class MetadataServerServiceTests
         Assert.Equal(["Action"], match.TagNames);
         Assert.NotNull(match.StudioCandidate);
         Assert.True(match.StudioCandidate.ExistsLocally);
-        Assert.Contains(match.PerformerCandidates, candidate => candidate.Name == "Jane Doe" && candidate.ExistsLocally);
+        // The gender travels with the candidate so the tagger can filter its preview by the same
+        // performer genders the import filters by.
+        Assert.Contains(match.PerformerCandidates, candidate => candidate.Name == "Jane Doe" && candidate.ExistsLocally && candidate.Gender == "FEMALE");
         Assert.Contains(match.TagCandidates, candidate => candidate.Name == "Action" && candidate.ExistsLocally);
+    }
+
+    // The tagger mirrors these rules client-side to filter its preview, so they are a contract: an absent
+    // list filters nothing, a present one filters by normalized key, an unstated gender counts as
+    // "Unknown", and a present but empty list allows no performer at all.
+    [Theory]
+    [InlineData(null, "Jane Doe,John Roe,Tess Poe,Sam Roe")]
+    [InlineData("Female", "Jane Doe")]
+    [InlineData("Female;Male", "Jane Doe,John Roe")]
+    [InlineData("Transgender Female", "Tess Poe")]
+    [InlineData("Unknown", "Sam Roe")]
+    [InlineData("", "")]
+    public async Task MergeVideoWithWarningsAsync_AppliesThePerformerGenderFilter(string? genders, string expectedNames)
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = genders == null ? null : [.. genders.Split(';', StringSplitOptions.RemoveEmptyEntries)],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var applied = video.VideoPerformers
+            .Select(link => link.Performer?.Name)
+            .OfType<string>()
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        var expected = expectedNames.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(expected, applied);
+    }
+
+    // The tagger's preview drops a filtered performer and then sends the surviving ones as overrides, so
+    // the gender filter has to outrank an override that asks for one of the dropped performers by name.
+    [Theory]
+    [InlineData("existing")]
+    [InlineData("create")]
+    public async Task MergeVideoWithWarningsAsync_GenderFilterOutranksAPerformerOverride(string action)
+    {
+        await using var context = CreateContext();
+        var existing = new Performer { Name = "John Roe" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = ["Female"],
+                PerformerOverrides =
+                [
+                    new MetadataServerVideoEntityOverrideDto
+                    {
+                        RemoteId = "remote-performer-2",
+                        Name = "John Roe",
+                        Action = action,
+                        LocalId = action == "existing" ? existing.Id : null,
+                    },
+                ],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.DoesNotContain(video.VideoPerformers, link => link.Performer?.Name == "John Roe" || link.PerformerId == existing.Id);
+        Assert.Contains(video.VideoPerformers, link => link.Performer?.Name == "Jane Doe");
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsExistingPerformersWhenTheGenderFilterAdmitsNothing()
+    {
+        await using var context = CreateContext();
+        var current = new Performer { Name = "Already Linked" };
+        var video = new Video { Title = "Original Video" };
+        video.VideoPerformers.Add(new VideoPerformer { Performer = current });
+        context.AddRange(current, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        // Overwrite would normally clear the video's performers before applying the remote list. With a
+        // filter that admits no gender, clearing them would delete what is there and put nothing back.
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = [],
+                FieldStrategies = new Dictionary<string, string> { ["performers"] = "overwrite" },
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var linked = Assert.Single(video.VideoPerformers);
+        Assert.Equal(current.Id, linked.PerformerId == 0 ? linked.Performer?.Id : linked.PerformerId);
+    }
+
+    // Tagging a video links performers; it never edits them. Only a performer this import creates is
+    // populated from the remote.
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_LeavesAnExistingPerformerUntouched()
+    {
+        await using var context = CreateContext();
+        // Matched by identity: same name and disambiguation as the remote, everything else its own.
+        var existing = new Performer
+        {
+            Name = "Jane Doe",
+            Gender = GenderEnum.NonBinary,
+            Country = "FI",
+        };
+        existing.RemoteIds.Add(new PerformerRemoteId { Endpoint = Endpoint, RemoteId = "another-remote-performer" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Contains(video.VideoPerformers, link => link.PerformerId == existing.Id || ReferenceEquals(link.Performer, existing));
+        // The remote fixture states a different gender, country and alias set; none of it lands.
+        Assert.Equal("Jane Doe", existing.Name);
+        Assert.Null(existing.Disambiguation);
+        Assert.Equal(GenderEnum.NonBinary, existing.Gender);
+        Assert.Equal("FI", existing.Country);
+        Assert.Empty(existing.Aliases);
+        // The link it already had for this endpoint is not repointed at the matched entry.
+        var remoteId = Assert.Single(existing.RemoteIds);
+        Assert.Equal("another-remote-performer", remoteId.RemoteId);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PopulatesAndLinksAPerformerItCreates()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var created = await context.Performers
+            .Include(performer => performer.RemoteIds)
+            .SingleAsync(performer => performer.Name == "Jane Doe", TestContext.Current.CancellationToken);
+        Assert.Equal(GenderEnum.Female, created.Gender);
+        Assert.Equal("US", created.Country);
+        Assert.Contains(created.RemoteIds, id => id.Endpoint == Endpoint && id.RemoteId == "remote-performer-1");
+    }
+
+    // Two local studios can legitimately share one remote id. The import used to take whichever row the
+    // database returned first and rename it to the remote name, which either renamed a studio nobody
+    // pointed at or, when the name was taken, failed the whole import with a name conflict.
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PrefersTheRemoteIdOwnerTheRemoteNames()
+    {
+        await using var context = CreateContext();
+        var namesake = new Studio { Name = "Other Studio" };
+        namesake.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        var named = new Studio { Name = "Fixture Studio" };
+        named.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(namesake, named, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Equal(named.Id, video.StudioId == 0 ? video.Studio?.Id : video.StudioId);
+        // The studio that was not chosen keeps its own name.
+        Assert.Equal("Other Studio", namesake.Name);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_LeavesAnExistingStudioUntouched()
+    {
+        await using var context = CreateContext();
+        var linked = new Studio { Name = "Linked Studio" };
+        linked.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        // A second studio already answers to the remote's name: renaming the linked one would have
+        // failed the whole import on the unique-name rule.
+        var namesake = new Studio { Name = "Fixture Studio" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(linked, namesake, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Equal("Linked Studio", linked.Name);
+        Assert.Equal("Fixture Studio", namesake.Name);
+        Assert.Empty(linked.Aliases);
+        Assert.Equal(linked.Id, video.StudioId == 0 ? video.Studio?.Id : video.StudioId);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_LeavesAnExistingTagUntouched()
+    {
+        await using var context = CreateContext();
+        var existing = new Tag { Name = "Local Tag Name", Description = "Local description" };
+        existing.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        // The remote calls this tag "Action", with the alias "Activity" and its own description.
+        Assert.Equal("Local Tag Name", existing.Name);
+        Assert.Equal("Local description", existing.Description);
+        Assert.Empty(existing.Aliases);
+        Assert.Contains(video.VideoTags, link => link.TagId == existing.Id || ReferenceEquals(link.Tag, existing));
     }
 
     [Fact]
@@ -916,6 +1228,87 @@ public sealed class MetadataServerServiceTests
     }
 
     [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsAConflictingRelatedTagAliasSilentWhenTheRemoteIdMatched()
+    {
+        await using var context = CreateContext();
+        var owner = new Tag { Name = "Action" };
+        owner.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var aliasOwner = new Tag { Name = "Activity" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(owner, aliasOwner, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        // The remote id already resolved the right tag, so another tag owning the remote's alias is not
+        // the operator's problem: the alias is dropped without a warning and no other record changes.
+        Assert.Empty(result.Warnings);
+        Assert.Contains(video.VideoTags, link => link.TagId == owner.Id || ReferenceEquals(link.Tag, owner));
+        var savedOwner = await context.Tags.Include(tag => tag.Aliases).SingleAsync(tag => tag.Id == owner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Empty(savedOwner.Aliases);
+        var savedAliasOwner = await context.Tags.Include(tag => tag.Aliases).SingleAsync(tag => tag.Id == aliasOwner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Activity", savedAliasOwner.Name);
+        Assert.Empty(savedAliasOwner.Aliases);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PrefersThePersistedRemoteIdOwnerOverATagAddedByNameInTheSameSave()
+    {
+        await using var context = CreateContext();
+        var owner = new Tag { Name = "Local canonical" };
+        owner.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(owner, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // The earlier remote tag creates a tracked "Action" during this save. The later one carries the
+        // remote id the persisted tag already holds, so it must resolve to that tag and not to the
+        // freshly added namesake.
+        var conflictingTag = "{ \"id\": \"remote-tag-2\", \"name\": \"Action\", \"description\": null, \"aliases\": [] }";
+        var remoteTag = "{ \"id\": \"remote-tag-1\", \"name\": \"Action\", \"description\": \"Movement\", \"aliases\": [\"Activity\"] }";
+        var remoteVideoJson = RemoteVideoJson.Replace(remoteTag, $"{conflictingTag}, {remoteTag}", StringComparison.Ordinal);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{remoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Empty(result.Warnings);
+        var savedOwner = await context.Tags
+            .Include(tag => tag.RemoteIds)
+            .SingleAsync(tag => tag.Id == owner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Local canonical", savedOwner.Name);
+        Assert.Contains(savedOwner.RemoteIds, id => id.RemoteId == "remote-tag-1");
+        Assert.Contains(video.VideoTags, link => link.TagId == owner.Id || ReferenceEquals(link.Tag, owner));
+        var namesake = await context.Tags
+            .Include(tag => tag.RemoteIds)
+            .SingleAsync(tag => tag.Name == "Action", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotEqual(owner.Id, namesake.Id);
+        Assert.Contains(namesake.RemoteIds, id => id.RemoteId == "remote-tag-2");
+    }
+
+    [Fact]
     public async Task MergeVideoWithWarningsAsync_LinksTheExistingOwnerWhenRemoteNameMatchesItsAlias()
     {
         await using var context = CreateContext();
@@ -1398,6 +1791,31 @@ public sealed class MetadataServerServiceTests
            }
            """;
 
+    // One performer per gender shape the filter has to tell apart: a plain one, one whose gender only
+    // matches after normalization, and one the server states no gender for.
+    private const string MixedGenderRemoteVideoJson = """
+        {
+          "id": "remote-video-1",
+          "title": "Remote Video",
+          "code": null,
+          "details": null,
+          "director": null,
+          "duration": 120,
+          "date": null,
+          "urls": [],
+          "images": [],
+          "studio": null,
+          "tags": [],
+          "performers": [
+            { "performer": { "id": "remote-performer-1", "name": "Jane Doe", "disambiguation": null, "aliases": [], "gender": "FEMALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-2", "name": "John Roe", "disambiguation": null, "aliases": [], "gender": "MALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-3", "name": "Tess Poe", "disambiguation": null, "aliases": [], "gender": "TRANSGENDER_FEMALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-4", "name": "Sam Roe", "disambiguation": null, "aliases": [], "gender": null, "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } }
+          ],
+          "fingerprints": []
+        }
+        """;
+
     private const string RemoteVideoJson = """
         {
           "id": "remote-video-1",
@@ -1568,5 +1986,8 @@ public sealed class MetadataServerServiceTests
     {
         public Task<bool> TryApplyRemoteCoverAsync(Video video, string? imageUrl, CancellationToken ct = default)
             => Task.FromResult(true);
+
+        public Task<FetchedImage?> TryFetchImageAsync(string? imageUrl, CancellationToken ct = default)
+            => Task.FromResult<FetchedImage?>(null);
     }
 }
