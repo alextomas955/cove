@@ -72,6 +72,13 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toggleOptionsFromEvent, withOrderedToggle, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
+import {
+  PERFORMER_GENDER_OPTIONS,
+  buildAllowedGenderKeys,
+  isGenderOptionChecked,
+  isPerformerGenderAllowed,
+  toggleGenderOption,
+} from "../utils/performerGenders";
 import { VideoPreviewThumbnail } from "./VideoPreviewThumbnail";
 import type { EntityMediaFit } from "./EntityMedia";
 
@@ -98,10 +105,56 @@ interface TaggerConfig {
   queryMode: TaggerQueryMode;
   defaultScraperInputKind: InputKind | "auto";
   blacklist: string[];
-  createParentStudios: boolean;
-  createParentTags: boolean;
-  showMales: boolean;
   performerGenders: string[];
+  // Stamped on every save so a one-time upgrade of the stored settings runs once and never undoes a
+  // choice the user made afterwards.
+  configVersion: number;
+}
+
+const TAGGER_CONFIG_VERSION = 2;
+
+// Drops the performers whose gender the settings exclude, from both the candidates and the plain name
+// list the collection modes and summaries read, so nothing downstream can reintroduce them.
+function filterMatchPerformersByGender<T extends MetadataServerVideoMatch>(match: T, allowed: Set<string> | null): T {
+  if (allowed == null) return match;
+  // A match with no candidates falls back to bare names, which state no gender; the "Unknown" rule
+  // decides all of them together, exactly as it would for the candidates the fallback stands in for.
+  if (match.performerCandidates.length === 0) {
+    return isPerformerGenderAllowed(undefined, allowed) ? match : { ...match, performerNames: [] };
+  }
+  const kept = match.performerCandidates.filter((candidate) => isPerformerGenderAllowed(candidate.gender, allowed));
+  if (kept.length === match.performerCandidates.length) return match;
+  // A name is dropped only when a surviving candidate no longer claims it, so two performers sharing a
+  // name cannot take each other's entry off the list. A name no candidate claims at all states no
+  // gender, so the "Unknown" rule decides it, the same rule the candidate-less match above uses.
+  const nameKey = (name: string) => name.trim().toLowerCase();
+  const keptNames = new Set(kept.map((candidate) => nameKey(candidate.name)));
+  const claimedNames = new Set(match.performerCandidates.map((candidate) => nameKey(candidate.name)));
+  const keepUnclaimed = isPerformerGenderAllowed(undefined, allowed);
+  return {
+    ...match,
+    performerCandidates: kept,
+    performerNames: match.performerNames.filter((name) =>
+      claimedNames.has(nameKey(name)) ? keptNames.has(nameKey(name)) : keepUnclaimed,
+    ),
+  };
+}
+
+// The gender list predates the "Unknown" option, and the setting did nothing at all back then, so no
+// saved config records a choice about it. Add it once, on the upgrade, rather than reading its absence
+// as a decision to hide every performer whose gender the metadata server does not state. The gate is a
+// floor, not an equality: a later version bump must not run this migration a second time.
+const PERFORMER_GENDERS_MIGRATION_VERSION = 2;
+
+function upgradeSavedPerformerGenders(saved: Partial<TaggerConfig>) {
+  const genders = saved.performerGenders;
+  if (!genders) return [...PERFORMER_GENDER_OPTIONS];
+  if ((saved.configVersion ?? 0) >= PERFORMER_GENDERS_MIGRATION_VERSION) return genders;
+  // Every gender unchecked was as inert as every gender checked while the setting did nothing, and the
+  // user saw every performer either way; adding "Unknown" to an empty list would invent a filter that
+  // hides all of them but the gender-less ones.
+  if (genders.length === 0) return [...PERFORMER_GENDER_OPTIONS];
+  return isGenderOptionChecked(genders, "Unknown") ? genders : [...genders, "Unknown"];
 }
 
 type VideoMetadataSearchStrategy =
@@ -527,7 +580,9 @@ function buildScraperVideoApplyRequest(
     createMissingPerformers: !taggerConfig.onlyExistingPerformers,
     createMissingStudio: !taggerConfig.onlyExistingStudio,
     markOrganized: taggerConfig.markOrganized,
-    hydratePerformers: taggerConfig.createParentTags,
+    // The tagger always fills in a created performer's details from the scrape; it used to read this off
+    // an unrelated, invisible "create parent tags" flag that nothing else consulted.
+    hydratePerformers: true,
     selectedCandidateIndex: result.selectedCandidateIndex,
     tagSelections:
       result.tagNames.length > 0
@@ -625,10 +680,8 @@ export function VideoTagger({
     queryMode: "auto",
     defaultScraperInputKind: "auto",
     blacklist: [...DEFAULT_TAGGER_BLACKLIST],
-    createParentStudios: true,
-    createParentTags: true,
-    showMales: true,
-    performerGenders: ["Female", "Male", "Transgender Female", "Transgender Male", "Intersex", "Non-Binary"],
+    performerGenders: [...PERFORMER_GENDER_OPTIONS],
+    configVersion: TAGGER_CONFIG_VERSION,
   };
 
   const [taggerConfig, _setTaggerConfig] = useState<TaggerConfig>(() => {
@@ -644,7 +697,11 @@ export function VideoTagger({
             ? parsed.bulkMatchStrategy
             : DEFAULT_TAGGER_CONFIG.bulkMatchStrategy,
           blacklist: parsed.blacklist ?? DEFAULT_TAGGER_CONFIG.blacklist,
-          performerGenders: parsed.performerGenders ?? DEFAULT_TAGGER_CONFIG.performerGenders,
+          // Upgraded in memory; the stamp reaches storage on the next settings change. A visit that
+          // changes nothing replays the upgrade next time, which is harmless because it is idempotent —
+          // a later migration has to stay idempotent too, or write the stamp back on load itself.
+          performerGenders: upgradeSavedPerformerGenders(parsed),
+          configVersion: TAGGER_CONFIG_VERSION,
         };
       }
     } catch {
@@ -1053,9 +1110,7 @@ export function VideoTagger({
         runAllOptions={selectedSource?.kind === "metadata-server" ? VIDEO_METADATA_SEARCH_STRATEGIES : undefined}
         showRunAll={mode === "bulk"}
         countLabel={`${visibleVideos.length} video${visibleVideos.length !== 1 ? "s" : ""}`}
-        dismissed={
-          mode === "bulk" ? { count: dismissedVisibleCount, onRestore: restoreDismissed } : undefined
-        }
+        dismissed={mode === "bulk" ? { count: dismissedVisibleCount, onRestore: restoreDismissed } : undefined}
         applyAll={
           mode === "bulk"
             ? {
@@ -1113,17 +1168,15 @@ export function VideoTagger({
           <div>
             <p className="text-xs text-muted mb-1.5">Performer genders</p>
             <div className="space-y-1">
-              {["Female", "Male", "Transgender Female", "Transgender Male", "Intersex", "Non-Binary"].map((g) => (
+              {PERFORMER_GENDER_OPTIONS.map((g) => (
                 <label key={g} className="flex items-center gap-2 text-xs text-foreground">
                   <input
                     type="checkbox"
-                    checked={taggerConfig.performerGenders.includes(g)}
+                    checked={isGenderOptionChecked(taggerConfig.performerGenders, g)}
                     onChange={(e) =>
                       setTaggerConfig((c) => ({
                         ...c,
-                        performerGenders: e.target.checked
-                          ? [...c.performerGenders, g]
-                          : c.performerGenders.filter((x) => x !== g),
+                        performerGenders: toggleGenderOption(c.performerGenders, g, e.target.checked),
                       }))
                     }
                     className="rounded border-border"
@@ -1133,7 +1186,8 @@ export function VideoTagger({
               ))}
             </div>
             <p className="text-[10px] text-muted mt-1">
-              Performers with these genders will be shown when tagging videos.
+              Performers with these genders will be shown when tagging videos. Only a metadata server states a
+              performer's gender, so scraper results are unaffected.
             </p>
           </div>
 
@@ -1432,12 +1486,19 @@ function TaggerVideoRow({
   );
   const tagMatchInfo = useMemo(() => buildMatchInfo(resolvedRelations?.tags), [resolvedRelations]);
   const performerMatchInfo = useMemo(() => buildMatchInfo(resolvedRelations?.performers), [resolvedRelations]);
+  const allowedGenderKeys = useMemo(
+    () => buildAllowedGenderKeys(taggerConfig.performerGenders),
+    [taggerConfig.performerGenders],
+  );
   const enrichedResults = useMemo(() => {
     const results = state?.results;
     if (!results) return results;
     return results.map((r) =>
       r.sourceKind !== "scraper"
-        ? r
+        ? // Only a metadata server states a performer's gender, so only its matches can be filtered by
+          // one. Dropping the excluded performers here keeps the preview, its counts and the apply
+          // request agreed on one list, and re-runs when the setting changes without a new search.
+          filterMatchPerformersByGender(r, allowedGenderKeys)
         : {
             ...r,
             tagCandidates: r.tagCandidates.map((c) => ({
@@ -1450,7 +1511,7 @@ function TaggerVideoRow({
             })),
           },
     );
-  }, [state?.results, existingTagKeys, existingPerformerKeys]);
+  }, [state?.results, existingTagKeys, existingPerformerKeys, allowedGenderKeys]);
   const selectedResult = enrichedResults?.[state?.selectedIndex ?? 0];
   const videoLinkProps = createNestedRouteLinkProps<HTMLAnchorElement>({ page: "video", id: video.id }, () =>
     onNavigate?.(video.id),
@@ -1546,6 +1607,10 @@ function TaggerVideoRow({
         onlyExistingPerformers: taggerConfig.onlyExistingPerformers,
         onlyExistingStudio: taggerConfig.onlyExistingStudio,
         markOrganized: taggerConfig.markOrganized,
+        // The preview already dropped the excluded genders; send the same selection the filter above
+        // used, so a performer it hides can never be written by the parts of the import the overrides
+        // do not cover. Omitted, and only omitted, when nothing is filtered.
+        performerGenders: allowedGenderKeys ? taggerConfig.performerGenders : undefined,
         excludedTagNames: excludedTags.length > 0 ? excludedTags : undefined,
         performerOverrides: performerOverrides.length > 0 ? performerOverrides : undefined,
         tagOverrides,

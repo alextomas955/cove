@@ -84,8 +84,148 @@ public sealed class MetadataServerServiceTests
         Assert.Equal(["Action"], match.TagNames);
         Assert.NotNull(match.StudioCandidate);
         Assert.True(match.StudioCandidate.ExistsLocally);
-        Assert.Contains(match.PerformerCandidates, candidate => candidate.Name == "Jane Doe" && candidate.ExistsLocally);
+        // The gender travels with the candidate so the tagger can filter its preview by the same
+        // performer genders the import filters by.
+        Assert.Contains(match.PerformerCandidates, candidate => candidate.Name == "Jane Doe" && candidate.ExistsLocally && candidate.Gender == "FEMALE");
         Assert.Contains(match.TagCandidates, candidate => candidate.Name == "Action" && candidate.ExistsLocally);
+    }
+
+    // The tagger mirrors these rules client-side to filter its preview, so they are a contract: an absent
+    // list filters nothing, a present one filters by normalized key, an unstated gender counts as
+    // "Unknown", and a present but empty list allows no performer at all.
+    [Theory]
+    [InlineData(null, "Jane Doe,John Roe,Tess Poe,Sam Roe")]
+    [InlineData("Female", "Jane Doe")]
+    [InlineData("Female;Male", "Jane Doe,John Roe")]
+    [InlineData("Transgender Female", "Tess Poe")]
+    [InlineData("Unknown", "Sam Roe")]
+    [InlineData("", "")]
+    public async Task MergeVideoWithWarningsAsync_AppliesThePerformerGenderFilter(string? genders, string expectedNames)
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = genders == null ? null : [.. genders.Split(';', StringSplitOptions.RemoveEmptyEntries)],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var applied = video.VideoPerformers
+            .Select(link => link.Performer?.Name)
+            .OfType<string>()
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        var expected = expectedNames.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(expected, applied);
+    }
+
+    // The tagger's preview drops a filtered performer and then sends the surviving ones as overrides, so
+    // the gender filter has to outrank an override that asks for one of the dropped performers by name.
+    [Theory]
+    [InlineData("existing")]
+    [InlineData("create")]
+    public async Task MergeVideoWithWarningsAsync_GenderFilterOutranksAPerformerOverride(string action)
+    {
+        await using var context = CreateContext();
+        var existing = new Performer { Name = "John Roe" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = ["Female"],
+                PerformerOverrides =
+                [
+                    new MetadataServerVideoEntityOverrideDto
+                    {
+                        RemoteId = "remote-performer-2",
+                        Name = "John Roe",
+                        Action = action,
+                        LocalId = action == "existing" ? existing.Id : null,
+                    },
+                ],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.DoesNotContain(video.VideoPerformers, link => link.Performer?.Name == "John Roe" || link.PerformerId == existing.Id);
+        Assert.Contains(video.VideoPerformers, link => link.Performer?.Name == "Jane Doe");
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsExistingPerformersWhenTheGenderFilterAdmitsNothing()
+    {
+        await using var context = CreateContext();
+        var current = new Performer { Name = "Already Linked" };
+        var video = new Video { Title = "Original Video" };
+        video.VideoPerformers.Add(new VideoPerformer { Performer = current });
+        context.AddRange(current, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        // Overwrite would normally clear the video's performers before applying the remote list. With a
+        // filter that admits no gender, clearing them would delete what is there and put nothing back.
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = [],
+                FieldStrategies = new Dictionary<string, string> { ["performers"] = "overwrite" },
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var linked = Assert.Single(video.VideoPerformers);
+        Assert.Equal(current.Id, linked.PerformerId == 0 ? linked.Performer?.Id : linked.PerformerId);
     }
 
     [Fact]
@@ -1478,6 +1618,31 @@ public sealed class MetadataServerServiceTests
              }
            }
            """;
+
+    // One performer per gender shape the filter has to tell apart: a plain one, one whose gender only
+    // matches after normalization, and one the server states no gender for.
+    private const string MixedGenderRemoteVideoJson = """
+        {
+          "id": "remote-video-1",
+          "title": "Remote Video",
+          "code": null,
+          "details": null,
+          "director": null,
+          "duration": 120,
+          "date": null,
+          "urls": [],
+          "images": [],
+          "studio": null,
+          "tags": [],
+          "performers": [
+            { "performer": { "id": "remote-performer-1", "name": "Jane Doe", "disambiguation": null, "aliases": [], "gender": "FEMALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-2", "name": "John Roe", "disambiguation": null, "aliases": [], "gender": "MALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-3", "name": "Tess Poe", "disambiguation": null, "aliases": [], "gender": "TRANSGENDER_FEMALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-4", "name": "Sam Roe", "disambiguation": null, "aliases": [], "gender": null, "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } }
+          ],
+          "fingerprints": []
+        }
+        """;
 
     private const string RemoteVideoJson = """
         {

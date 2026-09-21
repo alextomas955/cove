@@ -1440,7 +1440,13 @@ query Me {
         }
 
         var performersStrategy = GetMetadataFieldStrategy(fieldStrategies, "performers", MetadataFieldStrategy.Merge);
-        if (setPerformers && performersStrategy != MetadataFieldStrategy.Ignore)
+        // A filter that admits no gender at all is a request to leave performers alone, so an overwrite
+        // does not clear the ones the video already has and put none back. A filter that admits some
+        // gender is a real instruction: overwriting with a remote cast it happens to empty still clears
+        // them, because "replace the performers with the female ones" is a request even when there are
+        // none.
+        var performerGenderFilterAdmitsNothing = allowedPerformerGenders is { Count: 0 };
+        if (setPerformers && performersStrategy != MetadataFieldStrategy.Ignore && !performerGenderFilterAdmitsNothing)
         {
             if (performersStrategy == MetadataFieldStrategy.Overwrite)
                 video.VideoPerformers.Clear();
@@ -3039,7 +3045,10 @@ query Me {
                 name,
                 exists,
                 exists ? localId : null,
-                EntityNameRules.NormalizeDisambiguation(remotePerformer.Disambiguation)));
+                EntityNameRules.NormalizeDisambiguation(remotePerformer.Disambiguation))
+            {
+                Gender = remotePerformer.Gender,
+            });
         }
         return result;
     }
@@ -3270,9 +3279,11 @@ query Me {
         return nextValue;
     }
 
+    // An absent list means no gender filter. A list that is present but empty means the caller allowed no
+    // gender at all, so it must keep every performer out rather than read as "no filter" and let them all in.
     private static HashSet<string>? BuildAllowedPerformerGenderSet(IReadOnlyCollection<string>? values)
     {
-        if (values == null || values.Count == 0)
+        if (values == null)
             return null;
 
         return values

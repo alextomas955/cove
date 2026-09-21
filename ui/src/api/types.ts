@@ -2777,6 +2777,8 @@ export interface MetadataServerEntityCandidate {
   existsLocally: boolean;
   localId?: number;
   disambiguation?: string;
+  // Performer candidates only: the remote gender as the metadata server spells it (e.g. TRANSGENDER_FEMALE).
+  gender?: string;
 }
 
 export interface MetadataServerVideoEntityOverride {
@@ -2828,6 +2830,8 @@ export interface MetadataServerVideoImportRequest {
   onlyExistingPerformers?: boolean;
   onlyExistingStudio?: boolean;
   markOrganized?: boolean;
+  // Remote genders to keep, as the metadata server spells them. Omitted means no gender filter.
+  performerGenders?: string[];
   excludedTagNames?: string[];
   excludedPerformerNames?: string[];
   studioOverride?: MetadataServerVideoEntityOverride;
