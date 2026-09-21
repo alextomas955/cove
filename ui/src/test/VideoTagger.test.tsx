@@ -303,6 +303,63 @@ describe("VideoTagger", () => {
     expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(123, expect.anything());
   });
 
+  it("keeps a dismissed video off the list and out of Apply all until it is restored", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 456, title: "Second local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    // Both videos match, so Apply all would take both until one is dismissed.
+    mocks.searchMetadataServer.mockImplementation((videoId: number) =>
+      Promise.resolve([
+        {
+          id: `remote-${videoId}`,
+          endpoint: "https://first.example/graphql",
+          metadataServerName: "First provider",
+          title: `Result for ${videoId}`,
+          code: null,
+          details: null,
+          director: null,
+          date: null,
+          duration: 60,
+          urls: [],
+          images: [],
+          studioName: null,
+          studioCandidate: null,
+          performerNames: [],
+          performerCandidates: [],
+          tagNames: [],
+          tagCandidates: [],
+          fingerprints: [],
+          fingerprintAlgorithms: [],
+        },
+      ]),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Apply all (2)" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Dismiss video" })[0]);
+
+    expect(screen.queryByText("First local video")).not.toBeInTheDocument();
+    expect(screen.getByText("Second local video")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply all (1)" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Apply all (1)" }));
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(456, expect.anything());
+
+    await userEvent.click(screen.getByRole("button", { name: "Restore 1 dismissed" }));
+    expect(screen.getByText("First local video")).toBeInTheDocument();
+  });
+
   it("disables Apply all until something matches", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const video = {

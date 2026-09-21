@@ -8,6 +8,7 @@ import {
   Loader2,
   RefreshCw,
   Settings2,
+  Undo2,
   X,
 } from "lucide-react";
 import type { CollectionMode } from "./videoScrapeUtils";
@@ -188,6 +189,7 @@ export function TaggerToolbar({
   runAllLabel = "Search all",
   showRunAll = true,
   countLabel,
+  dismissed,
   applyAll,
   settingsOpen,
   onToggleSettings,
@@ -208,6 +210,11 @@ export function TaggerToolbar({
   runAllLabel?: string;
   showRunAll?: boolean;
   countLabel: string;
+  /** Rows the user took off this pass, with a way back that does not need a page reload. */
+  dismissed?: {
+    count: number;
+    onRestore: () => void;
+  };
   /** Bulk apply for rows that already have a match, alongside the bulk search. */
   applyAll?: {
     onApply: () => void;
@@ -237,6 +244,18 @@ export function TaggerToolbar({
       </div>
 
       <span className="ml-auto text-xs text-muted">{countLabel}</span>
+
+      {dismissed && dismissed.count > 0 && (
+        <button
+          type="button"
+          onClick={dismissed.onRestore}
+          title="Put the videos dismissed in this search session back on the list"
+          className="flex cursor-pointer items-center gap-1.5 rounded border border-border bg-input px-2 py-1 text-xs text-secondary hover:text-foreground"
+        >
+          <Undo2 className="w-3.5 h-3.5" />
+          Restore {dismissed.count} dismissed
+        </button>
+      )}
 
       {showToggle && (
         <button

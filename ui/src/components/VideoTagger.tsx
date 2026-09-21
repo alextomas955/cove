@@ -946,6 +946,15 @@ export function VideoTagger({
     setBatchSearching(false);
   }, []);
 
+  // Videos the user has taken off this pass, so a bad or unwanted match stops occupying the list and
+  // stays out of Apply all. Deliberately component state and nothing more: a dismissal lasts for this
+  // visit to the tagger and the video is back on the next load.
+  const [dismissedIds, setDismissedIds] = useState<ReadonlySet<number>>(() => new Set());
+  const dismissVideo = useCallback((videoId: number) => {
+    setDismissedIds((current) => new Set(current).add(videoId));
+  }, []);
+  const restoreDismissed = useCallback(() => setDismissedIds(new Set()), []);
+
   // Bulk apply. Each row publishes its own apply here, so Apply all sends exactly the request the
   // row's own Apply button would, honouring every per-row exclusion and field choice already made.
   const applyHandlersRef = useRef(new Map<number, () => Promise<unknown>>());
@@ -958,6 +967,7 @@ export function VideoTagger({
   // A video counts as matched once a search returned results it has not been saved from yet.
   const applyAllTargets = videoList
     .filter((video) => {
+      if (dismissedIds.has(video.id)) return false;
       const videoState = searchStates[video.id];
       return !videoState?.saved && !!videoState?.results && videoState.results.length > 0;
     })
@@ -999,14 +1009,20 @@ export function VideoTagger({
   // Detail mode was opened for this specific video, so always show it (the bulk "hide unmatched"
   // convenience filter would otherwise leave the dialog empty). Hiding unmatched keeps only videos
   // that actually have a match right now: one that has not been searched at all is unmatched too.
-  const visibleVideos =
+  const matchingList =
     mode === "detail" || taggerConfig.showUnmatched
       ? videoList
       : videoList.filter((s) => {
           const state = searchStates[s.id];
           return !!state?.results && state.results.length > 0;
         });
+  // Detail mode is about one video the user opened deliberately, so a stale dismissal must not empty it.
+  const visibleVideos =
+    mode === "detail" || dismissedIds.size === 0
+      ? matchingList
+      : matchingList.filter((video) => !dismissedIds.has(video.id));
   const visibleVideoIds = visibleVideos.map((video) => video.id);
+  const dismissedVisibleCount = matchingList.length - visibleVideos.length;
 
   return (
     <div className="space-y-0">
@@ -1035,6 +1051,9 @@ export function VideoTagger({
         runAllOptions={selectedSource?.kind === "metadata-server" ? VIDEO_METADATA_SEARCH_STRATEGIES : undefined}
         showRunAll={mode === "bulk"}
         countLabel={`${visibleVideos.length} video${visibleVideos.length !== 1 ? "s" : ""}`}
+        dismissed={
+          mode === "bulk" ? { count: dismissedVisibleCount, onRestore: restoreDismissed } : undefined
+        }
         applyAll={
           mode === "bulk"
             ? {
@@ -1307,6 +1326,7 @@ export function VideoTagger({
             onSelect={onSelect ? withOrderedToggle(onSelect, visibleVideoIds) : undefined}
             detailMode={mode === "detail"}
             onRegisterApply={registerApply}
+            onDismiss={mode === "bulk" ? () => dismissVideo(video.id) : undefined}
           />
         ))}
       </div>
@@ -1342,6 +1362,8 @@ interface TaggerVideoRowProps {
    * Called with null when the row has nothing to apply.
    */
   onRegisterApply?: (videoId: number, apply: (() => Promise<unknown>) | null) => void;
+  /** Takes this row off the list for the rest of the visit. Absent when dismissing does not apply. */
+  onDismiss?: () => void;
 }
 
 function TaggerVideoRow({
@@ -1365,6 +1387,7 @@ function TaggerVideoRow({
   onSelect,
   detailMode = false,
   onRegisterApply,
+  onDismiss,
 }: TaggerVideoRowProps) {
   const file = video.files.find((candidate) => candidate.id === video.primaryFileId);
   const [refreshBusyEndpoint, setRefreshBusyEndpoint] = useState<string | null>(null);
@@ -1708,6 +1731,20 @@ function TaggerVideoRow({
               {state?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
               <span className="hidden sm:inline">Search</span>
             </button>
+            {onDismiss && (
+              // Sits beside Search so a row can be cleared whether or not it found a match.
+              <button
+                type="button"
+                onClick={onDismiss}
+                aria-label="Dismiss video"
+                title="Dismiss video from this search session. It will be included in future search sessions."
+                className={`flex shrink-0 items-center rounded border border-border bg-surface px-1.5 text-muted hover:border-red-500/40 hover:text-red-400 ${
+                  isFragmentInput ? "h-fit py-1" : ""
+                }`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
             {source?.kind === "metadata-server" && (
               // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
               <DismissibleMenu className="relative shrink-0">
