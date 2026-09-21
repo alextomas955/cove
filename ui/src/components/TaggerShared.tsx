@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  MoreHorizontal,
   RefreshCw,
   Settings2,
   X,
@@ -280,56 +279,33 @@ export function TaggerToolbar({
 
       <span className="ml-auto text-xs text-muted">{countLabel}</span>
 
-      {(showToggle || onToggleSettings) && (
-        // Everything that is not "pick a source and scrape" sits behind one menu.
-        <DismissibleMenu className="relative">
-          <summary
-            role="button"
-            aria-label="More tagger options"
-            title="More tagger options"
-            className={`flex cursor-pointer list-none items-center rounded border px-1.5 py-1 [&::-webkit-details-marker]:hidden ${
-              settingsOpen
-                ? "border-accent bg-input text-accent"
-                : "border-border bg-input text-secondary hover:text-foreground"
-            }`}
-          >
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </summary>
-          <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded border border-border bg-card shadow-xl">
-            {showToggle && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.currentTarget.closest("details")?.removeAttribute("open");
-                  showToggle.onChange(!showToggle.value);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface"
-              >
-                {showToggle.value ? (
-                  <Eye className="w-3.5 h-3.5 text-muted" />
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5 text-muted" />
-                )}
-                {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
-              </button>
-            )}
-            {onToggleSettings && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.currentTarget.closest("details")?.removeAttribute("open");
-                  onToggleSettings();
-                }}
-                title="Tagger settings"
-                aria-expanded={settingsOpen}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface ${settingsOpen ? "text-accent" : "text-foreground"}`}
-              >
-                <Settings2 className="w-3.5 h-3.5 text-muted" />
-                Tagger settings
-              </button>
-            )}
-          </div>
-        </DismissibleMenu>
+      {showToggle && (
+        <button
+          type="button"
+          onClick={() => showToggle.onChange(!showToggle.value)}
+          aria-pressed={!showToggle.value}
+          className="flex cursor-pointer items-center gap-1.5 rounded border border-border bg-input px-2 py-1 text-xs text-secondary hover:text-foreground"
+        >
+          {showToggle.value ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
+        </button>
+      )}
+
+      {onToggleSettings && (
+        <button
+          type="button"
+          onClick={onToggleSettings}
+          title="Tagger settings"
+          aria-label="Tagger settings"
+          aria-expanded={settingsOpen}
+          className={`flex cursor-pointer items-center rounded border px-1.5 py-1 ${
+            settingsOpen
+              ? "border-accent bg-input text-accent"
+              : "border-border bg-input text-secondary hover:text-foreground"
+          }`}
+        >
+          <Settings2 className="w-3.5 h-3.5" />
+        </button>
       )}
     </div>
   );

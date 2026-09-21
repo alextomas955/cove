@@ -956,14 +956,15 @@ export function VideoTagger({
     );
   }
 
-  // Detail mode was opened for this specific video, so always show it (the bulk "hide matched"
-  // convenience filter would otherwise leave the dialog empty).
+  // Detail mode was opened for this specific video, so always show it (the bulk "hide unmatched"
+  // convenience filter would otherwise leave the dialog empty). Hiding unmatched keeps only videos
+  // that actually have a match right now: one that has not been searched at all is unmatched too.
   const visibleVideos =
     mode === "detail" || taggerConfig.showUnmatched
       ? videoList
       : videoList.filter((s) => {
           const state = searchStates[s.id];
-          return !state || !state.results || state.results.length > 0;
+          return !!state?.results && state.results.length > 0;
         });
   const visibleVideoIds = visibleVideos.map((video) => video.id);
 
