@@ -2280,19 +2280,46 @@ query Me {
             return null;
         }
 
-        if (performer == null)
+        if (performer != null)
         {
-            performer = new Performer
-            {
-                Name = EntityNameRules.NormalizeCanonicalName(remote.Name),
-                Disambiguation = EntityNameRules.NormalizeDisambiguation(remote.Disambiguation),
-            };
-            _db.Performers.Add(performer);
+            // Tagging a video links a performer; it does not edit one. A performer the library already
+            // has keeps its name, disambiguation, gender, dates, aliases, urls and image exactly as they
+            // are, whatever the remote says about them. Only the endpoint link is added, and only when
+            // the performer has none for it, so an existing link to a different remote entry survives
+            // too. Editing a performer from a remote is what the performer tagger is for.
+            AddRemoteIdIfMissing(
+                performer.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new PerformerRemoteId { Endpoint = endpoint, RemoteId = value });
+            return performer;
         }
+
+        performer = new Performer
+        {
+            Name = EntityNameRules.NormalizeCanonicalName(remote.Name),
+            Disambiguation = EntityNameRules.NormalizeDisambiguation(remote.Disambiguation),
+        };
+        _db.Performers.Add(performer);
 
         ApplyRemotePerformer(performer, endpoint, remote);
         await DownloadPerformerImageAsync(performer, remote, MetadataFieldStrategy.Merge, ct);
         return performer;
+    }
+
+    // Links an entity to a remote entry without touching a link it already has for that endpoint: a
+    // second local record legitimately carrying the same remote id is not something an import repairs,
+    // and neither is a local record pointing at a different remote entry than this match does.
+    private static void AddRemoteIdIfMissing<TRemoteId>(
+        ICollection<TRemoteId> collection,
+        string endpoint,
+        string remoteId,
+        Func<TRemoteId, string> getEndpoint,
+        Func<string, TRemoteId> create)
+    {
+        if (!collection.Any(item => string.Equals(getEndpoint(item), endpoint, StringComparison.OrdinalIgnoreCase)))
+            collection.Add(create(remoteId));
     }
 
     private async Task<Studio?> FindOrCreateStudioAsync(MetadataServerRemoteStudio remote, string endpoint, CancellationToken ct, bool allowCreate = true)
@@ -2301,11 +2328,7 @@ query Me {
                 entity.Id <= 0
                 && _db.Entry(entity).State != EntityState.Deleted
                 && entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id))
-            ?? await _db.Studios
-            .Include(entity => entity.RemoteIds)
-            .Include(entity => entity.Aliases)
-            .Include(entity => entity.Urls)
-            .FirstOrDefaultAsync(entity => entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id), ct)
+            ?? await FindStudioByRemoteIdAsync(endpoint, remote.Id, remote.Name, ct)
             ?? await FindStudioByIdentityAsync(remote.Name, ct);
 
         if (studio == null && !allowCreate)
@@ -2313,11 +2336,23 @@ query Me {
             return null;
         }
 
-        if (studio == null)
+        if (studio != null)
         {
-            studio = new Studio { Name = EntityNameRules.NormalizeCanonicalName(remote.Name) };
-            _db.Studios.Add(studio);
+            // Tagging a video links a studio; it does not edit one. The studio keeps its name, aliases,
+            // urls, image and parent, and keeps the endpoint link it already has. Renaming it here used
+            // to fail the whole import when another studio held that name, and to quietly rename a
+            // studio nobody pointed at when none did.
+            AddRemoteIdIfMissing(
+                studio.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new StudioRemoteId { Endpoint = endpoint, RemoteId = value });
+            return studio;
         }
+
+        studio = new Studio { Name = EntityNameRules.NormalizeCanonicalName(remote.Name) };
+        _db.Studios.Add(studio);
 
         studio.Name = remote.Name.Trim();
         MergeAliases(studio, remote.Aliases);
@@ -2330,9 +2365,7 @@ query Me {
         // Resolve parent studio
         if (remote.Parent != null && studio.ParentId == null)
         {
-            var parent = await _db.Studios
-                .Include(s => s.RemoteIds)
-                .FirstOrDefaultAsync(s => s.RemoteIds.Any(id => id.Endpoint == endpoint && id.RemoteId == remote.Parent.Id), ct)
+            var parent = await FindStudioByRemoteIdAsync(endpoint, remote.Parent.Id, remote.Parent.Name, ct)
                 ?? await FindStudioByIdentityAsync(remote.Parent.Name, ct);
 
             if (parent == null)
@@ -2410,21 +2443,49 @@ query Me {
             .SingleAsync(entity => entity.Id == persisted[0], ct);
     }
 
-    private async Task<Studio?> FindStudioByIdentityAsync(string name, CancellationToken ct)
+    // More than one local studio can legitimately carry the same remote id: a network and one of its
+    // sites, or two records a metadata server considers the same entity. An unordered FirstOrDefault
+    // picked whichever row the database happened to return, so the same apply could resolve differently
+    // from one run to the next. Prefer the studio the remote actually names, then the lowest id.
+    private async Task<Studio?> FindStudioByRemoteIdAsync(string endpoint, string remoteId, string remoteName, CancellationToken ct)
     {
-        var identityKey = EntityNameRules.StudioIdentityKey(name);
-        _studioIdentityIndex ??= (await _db.Studios
+        var matches = await _db.Studios
+            .Include(entity => entity.RemoteIds)
+            .Include(entity => entity.Aliases)
+            .Include(entity => entity.Urls)
+            .Where(entity => entity.RemoteIds.Any(id => id.Endpoint == endpoint && id.RemoteId == remoteId))
+            .OrderBy(entity => entity.Id)
+            .ToListAsync(ct);
+
+        if (matches.Count <= 1)
+            return matches.FirstOrDefault();
+
+        var remoteKey = EntityNameRules.StudioIdentityKey(remoteName);
+        return matches.FirstOrDefault(entity =>
+                string.Equals(EntityNameRules.StudioIdentityKey(entity.Name), remoteKey, StringComparison.Ordinal))
+            ?? matches[0];
+    }
+
+    private async Task<Dictionary<string, int[]>> EnsureStudioIdentityIndexAsync(CancellationToken ct)
+    {
+        return _studioIdentityIndex ??= (await _db.Studios
                 .AsNoTracking()
                 .Select(entity => new { entity.Id, entity.Name })
                 .ToListAsync(ct))
             .GroupBy(entity => EntityNameRules.StudioIdentityKey(entity.Name), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(entity => entity.Id).Order().ToArray(), StringComparer.Ordinal);
+    }
+
+    private async Task<Studio?> FindStudioByIdentityAsync(string name, CancellationToken ct)
+    {
+        var identityKey = EntityNameRules.StudioIdentityKey(name);
+        var identityIndex = await EnsureStudioIdentityIndexAsync(ct);
 
         var trackedIds = _db.ChangeTracker.Entries<Studio>()
             .Where(entry => entry.Entity.Id > 0)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var persistedIds = _studioIdentityIndex.GetValueOrDefault(identityKey, [])
+        var persistedIds = identityIndex.GetValueOrDefault(identityKey, [])
             .Where(id => !trackedIds.Contains(id));
         var local = _db.ChangeTracker.Entries<Studio>()
             .Where(entry => entry.State != EntityState.Deleted
@@ -2636,26 +2697,44 @@ query Me {
             return new ResolvedVideoTag(null, []);
         }
 
+        // Tagging a video links a tag; it does not edit one. A tag the library already has keeps its
+        // name, aliases and description, and keeps the endpoint link it already has. Only a tag this
+        // import creates takes the remote's identity. (A tag added earlier in this same save is one of
+        // those, so it is still filled in here.)
+        if (tag is { Id: > 0 })
+        {
+            AddRemoteIdIfMissing(
+                tag.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
+            return new ResolvedVideoTag(tag, []);
+        }
+
         if (tag == null)
         {
             tag = new Tag { Name = remote.Name };
             _db.Tags.Add(tag);
         }
 
-        // A tag resolved by remote id is already the right tag, so the remote's own name and alias list
-        // are incidental here: another tag holding one of those names changes nothing about this video
-        // and no other record is touched. Report namespace conflicts only when the match came from a
-        // name, where the collision is what kept the tag from taking the remote identity.
+        // Report namespace conflicts only when the match came from a name, where the collision is what
+        // kept the tag from taking the remote identity; a tag resolved by remote id is already the right
+        // tag, so another tag holding one of the remote's names changes nothing about this video.
         var identity = await ApplyRemoteTagIdentityAsync(
             tag,
             remote.Name,
             remote.Aliases,
             ct,
-            importCanonicalName: tag.Id == 0 || matchedByRemoteId,
+            importCanonicalName: true,
             reportNamespaceConflicts: !matchedByRemoteId);
         tag.Description = Coalesce(tag.Description, remote.Description) ?? tag.Description;
-        if (!matchedTrackedNamespace || !tag.RemoteIds.Any(id => string.Equals(id.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase)))
-            UpsertRemoteId(tag.RemoteIds, endpoint, remote.Id, id => id.Endpoint, id => id.RemoteId, (id, value) => id.RemoteId = value, value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
+        AddRemoteIdIfMissing(
+            tag.RemoteIds,
+            endpoint,
+            remote.Id,
+            id => id.Endpoint,
+            value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
         return new ResolvedVideoTag(tag, identity.Warnings);
     }
 
