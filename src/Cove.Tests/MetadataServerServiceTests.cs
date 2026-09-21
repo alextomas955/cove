@@ -916,6 +916,87 @@ public sealed class MetadataServerServiceTests
     }
 
     [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsAConflictingRelatedTagAliasSilentWhenTheRemoteIdMatched()
+    {
+        await using var context = CreateContext();
+        var owner = new Tag { Name = "Action" };
+        owner.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var aliasOwner = new Tag { Name = "Activity" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(owner, aliasOwner, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        // The remote id already resolved the right tag, so another tag owning the remote's alias is not
+        // the operator's problem: the alias is dropped without a warning and no other record changes.
+        Assert.Empty(result.Warnings);
+        Assert.Contains(video.VideoTags, link => link.TagId == owner.Id || ReferenceEquals(link.Tag, owner));
+        var savedOwner = await context.Tags.Include(tag => tag.Aliases).SingleAsync(tag => tag.Id == owner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Empty(savedOwner.Aliases);
+        var savedAliasOwner = await context.Tags.Include(tag => tag.Aliases).SingleAsync(tag => tag.Id == aliasOwner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Activity", savedAliasOwner.Name);
+        Assert.Empty(savedAliasOwner.Aliases);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PrefersThePersistedRemoteIdOwnerOverATagAddedByNameInTheSameSave()
+    {
+        await using var context = CreateContext();
+        var owner = new Tag { Name = "Local canonical" };
+        owner.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(owner, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // The earlier remote tag creates a tracked "Action" during this save. The later one carries the
+        // remote id the persisted tag already holds, so it must resolve to that tag and not to the
+        // freshly added namesake.
+        var conflictingTag = "{ \"id\": \"remote-tag-2\", \"name\": \"Action\", \"description\": null, \"aliases\": [] }";
+        var remoteTag = "{ \"id\": \"remote-tag-1\", \"name\": \"Action\", \"description\": \"Movement\", \"aliases\": [\"Activity\"] }";
+        var remoteVideoJson = RemoteVideoJson.Replace(remoteTag, $"{conflictingTag}, {remoteTag}", StringComparison.Ordinal);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{remoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Empty(result.Warnings);
+        var savedOwner = await context.Tags
+            .Include(tag => tag.RemoteIds)
+            .SingleAsync(tag => tag.Id == owner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Local canonical", savedOwner.Name);
+        Assert.Contains(savedOwner.RemoteIds, id => id.RemoteId == "remote-tag-1");
+        Assert.Contains(video.VideoTags, link => link.TagId == owner.Id || ReferenceEquals(link.Tag, owner));
+        var namesake = await context.Tags
+            .Include(tag => tag.RemoteIds)
+            .SingleAsync(tag => tag.Name == "Action", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotEqual(owner.Id, namesake.Id);
+        Assert.Contains(namesake.RemoteIds, id => id.RemoteId == "remote-tag-2");
+    }
+
+    [Fact]
     public async Task MergeVideoWithWarningsAsync_LinksTheExistingOwnerWhenRemoteNameMatchesItsAlias()
     {
         await using var context = CreateContext();

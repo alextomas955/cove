@@ -2454,7 +2454,8 @@ query Me {
         IEnumerable<string>? remoteAliases,
         CancellationToken ct,
         bool importCanonicalName = true,
-        bool allowRemoveRedundantAlias = true)
+        bool allowRemoveRedundantAlias = true,
+        bool reportNamespaceConflicts = true)
     {
         var proposedName = TagNameRules.NormalizeCanonicalName(remoteName);
         var proposedAliases = CleanStrings(remoteAliases)
@@ -2567,7 +2568,8 @@ query Me {
                         ? TagNameConflictException.ForExistingAlias(existingClaim.DisplayName, proposedName)
                         : TagNameConflictException.ForExistingTagName(existingClaim.DisplayName, proposedName);
                 }
-                warnings.Add($"Kept the local tag name because the remote name '{proposedName}' is already claimed by another tag.");
+                if (reportNamespaceConflicts)
+                    warnings.Add($"Kept the local tag name because the remote name '{proposedName}' is already claimed by another tag.");
             }
             else
             {
@@ -2586,7 +2588,8 @@ query Me {
                 continue;
             if (FindClaimByAnotherTag(alias) != null)
             {
-                warnings.Add($"Skipped remote alias '{alias}' because it is already claimed by another tag.");
+                if (reportNamespaceConflicts)
+                    warnings.Add($"Skipped remote alias '{alias}' because it is already claimed by another tag.");
                 continue;
             }
 
@@ -2605,6 +2608,13 @@ query Me {
             .FirstOrDefault(entity => entity.RemoteIds.Any(remoteId =>
                 string.Equals(remoteId.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(remoteId.RemoteId, remote.Id, StringComparison.Ordinal)));
+        // The remote id is the identity the remote actually asserts, so it decides the match before any
+        // name or alias lookup. A persisted tag already carrying this endpoint's id must win over a tag
+        // that merely shares the remote's name, including one added earlier in this same save.
+        tag ??= await _db.Tags
+            .Include(entity => entity.RemoteIds)
+            .Include(entity => entity.Aliases)
+            .FirstOrDefaultAsync(entity => entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id), ct);
         var matchedByRemoteId = tag != null;
         var remoteNameKey = TagNameKey(remote.Name);
         tag ??= _db.ChangeTracker.Entries<Tag>()
@@ -2613,11 +2623,6 @@ query Me {
             .FirstOrDefault(entity => TagNameKey(entity.Name) == remoteNameKey
                 || entity.Aliases.Any(alias => TagAliasKey(alias.Alias) == remoteNameKey));
         var matchedTrackedNamespace = tag != null && !matchedByRemoteId;
-        tag ??= await _db.Tags
-            .Include(entity => entity.RemoteIds)
-            .Include(entity => entity.Aliases)
-            .FirstOrDefaultAsync(entity => entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id), ct);
-        matchedByRemoteId = tag != null && !matchedTrackedNamespace;
         tag ??= (await RelationNameResolver.ResolveTagsAsync(_db, [remote.Name], ct)).GetValueOrDefault(remote.Name.Trim());
 
         if (tag == null && !allowCreate)
@@ -2631,12 +2636,17 @@ query Me {
             _db.Tags.Add(tag);
         }
 
+        // A tag resolved by remote id is already the right tag, so the remote's own name and alias list
+        // are incidental here: another tag holding one of those names changes nothing about this video
+        // and no other record is touched. Report namespace conflicts only when the match came from a
+        // name, where the collision is what kept the tag from taking the remote identity.
         var identity = await ApplyRemoteTagIdentityAsync(
             tag,
             remote.Name,
             remote.Aliases,
             ct,
-            importCanonicalName: tag.Id == 0 || matchedByRemoteId);
+            importCanonicalName: tag.Id == 0 || matchedByRemoteId,
+            reportNamespaceConflicts: !matchedByRemoteId);
         tag.Description = Coalesce(tag.Description, remote.Description) ?? tag.Description;
         if (!matchedTrackedNamespace || !tag.RemoteIds.Any(id => string.Equals(id.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase)))
             UpsertRemoteId(tag.RemoteIds, endpoint, remote.Id, id => id.Endpoint, id => id.RemoteId, (id, value) => id.RemoteId = value, value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
