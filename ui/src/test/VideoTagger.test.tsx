@@ -268,8 +268,7 @@ describe("VideoTagger", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
-    await userEvent.click(screen.getByTitle("Tagger settings"));
+    await userEvent.click(screen.getByRole("button", { name: "Tagger settings" }));
     await userEvent.selectOptions(screen.getByLabelText("Default bulk match strategy"), "remote-id");
     await userEvent.click(screen.getByRole("button", { name: "Save default" }));
     await userEvent.click(screen.getByRole("button", { name: "Search all" }));
@@ -300,12 +299,13 @@ describe("VideoTagger", () => {
         <VideoTagger videos={[video]} />
       </QueryClientProvider>,
     );
-    const menu = screen.getByRole("button", { name: "More tagger options" }).closest("details")!;
-    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
+    // The overflow menu is gone; the bulk search strategy picker is the toolbar's remaining menu.
+    const menu = screen.getByRole("button", { name: "Choose search strategy" }).closest("details")!;
+    await userEvent.click(screen.getByRole("button", { name: "Choose search strategy" }));
     expect(menu.open).toBe(true);
     await userEvent.click(document.body);
     expect(menu.open).toBe(false);
-    await userEvent.click(screen.getByRole("button", { name: "More tagger options" }));
+    await userEvent.click(screen.getByRole("button", { name: "Choose search strategy" }));
     expect(menu.open).toBe(true);
     await userEvent.keyboard("{Escape}");
     expect(menu.open).toBe(false);
