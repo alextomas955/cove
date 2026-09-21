@@ -274,8 +274,11 @@ public sealed class ScanFileValidator(
             if (!hasWidth || !hasHeight)
                 continue;
 
-            widthValue = hasWidth ? parsedWidth : null;
-            heightValue = hasHeight ? parsedHeight : null;
+            // Store what a viewer sees, not the coded grid: a rotation-flagged portrait recording
+            // reports its landscape pixel grid plus a display matrix standing it up.
+            var (displayWidth, displayHeight) = FfprobeDisplayOrientation.Apply(stream, parsedWidth, parsedHeight);
+            widthValue = displayWidth;
+            heightValue = displayHeight;
             return true;
         }
 

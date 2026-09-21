@@ -75,6 +75,41 @@ public class CoveContextDerivedMetricsTests
         Assert.Equal("E:/media/images/direct.jpg", image.MinPath);
     }
 
+    [Theory]
+    [InlineData(1920, 1080)]
+    [InlineData(1080, 1920)]
+    public async Task SaveChangesAsync_MaxResolution_IsUnchangedByRotatingAFile(int width, int height)
+    {
+        // Storing display rather than coded dimensions transposes rotated files. MaxResolution is
+        // the long edge, so it must not notice — resolution filters and the 1080p badge are derived
+        // from it, and a rotated video must not change bucket. Pinned because the symmetry is
+        // incidental to Math.Max: narrowing this to file.Width would silently rebucket every
+        // rotated video in the library.
+        await using var context = CreateContext();
+        var video = new Video
+        {
+            Title = "Rotated",
+            Files =
+            [
+                new VideoFile
+                {
+                    Basename = "rotated.mp4",
+                    ParentFolder = new Folder { Path = "E:/media/videos" },
+                    Size = 1234,
+                    Duration = 12.5,
+                    Width = width,
+                    Height = height,
+                    ModTime = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+                }
+            ],
+        };
+
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1920, video.MaxResolution);
+    }
+
     private static CoveContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<CoveContext>()

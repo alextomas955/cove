@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace Cove.ApiTests.Infrastructure;
@@ -246,6 +248,139 @@ public sealed class ApiTestFileSystem
 
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-1));
         return path;
+    }
+
+    /// <summary>
+    /// Creates a synthetic video carrying a display-matrix rotation, the way a phone records portrait
+    /// footage: the coded frame stays <paramref name="width"/>x<paramref name="height"/> and a matrix
+    /// says to turn it. The rotation is applied by remuxing, because ffmpeg silently ignores
+    /// <c>-metadata:s:v:0 rotate=</c>, and the result is re-probed so a fixture that lost its
+    /// rotation fails here instead of quietly weakening the test that uses it.
+    /// </summary>
+    public async Task<string> CreateRotatedSyntheticVideoAsync(
+        string ffmpegPath,
+        string ffprobePath,
+        string fileName,
+        int width,
+        int height,
+        int rotationDegrees,
+        double durationSeconds,
+        string color,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ffprobePath);
+        if (rotationDegrees is not (90 or 180 or 270))
+            throw new ArgumentOutOfRangeException(nameof(rotationDegrees), "Display-matrix fixtures use a quarter or half turn.");
+
+        var uprightName = $"upright-{fileName}";
+        var uprightPath = await CreateSyntheticVideoAsync(ffmpegPath, uprightName, width, height, durationSeconds, color, cancellationToken);
+
+        var path = Path.Combine(LibraryPath, fileName);
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        ApplyFfmpegLibrarySearchPath(startInfo, ffmpegPath);
+        foreach (var argument in new[]
+        {
+            "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+            // An input option: it rewrites the display matrix while copying the encoded frames, so
+            // the pixels are untouched and only the rotation metadata differs from the source.
+            "-display_rotation", rotationDegrees.ToString(CultureInfo.InvariantCulture),
+            "-i", uprightPath,
+            "-c", "copy",
+            path,
+        })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using (var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("FFmpeg could not be started for the rotated API-test video fixture."))
+        {
+            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                throw new TimeoutException("FFmpeg did not create the rotated API-test video within 20 seconds.");
+            }
+
+            var error = await standardError;
+            if (process.ExitCode != 0 || !File.Exists(path) || new FileInfo(path).Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"FFmpeg failed to create the rotated API-test video (exit {process.ExitCode}): {error}");
+            }
+        }
+
+        File.Delete(uprightPath);
+        await AssertRotationLandedAsync(ffprobePath, path, rotationDegrees, cancellationToken);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-1));
+        return path;
+    }
+
+    private static async Task AssertRotationLandedAsync(
+        string ffprobePath,
+        string path,
+        int rotationDegrees,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = ffprobePath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        ApplyFfmpegLibrarySearchPath(startInfo, ffprobePath);
+        foreach (var argument in new[] { "-v", "error", "-print_format", "json", "-show_streams", path })
+            startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("FFprobe could not be started to verify the rotated fixture.");
+        var json = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        using var document = JsonDocument.Parse(json);
+        var rotations = document.RootElement.GetProperty("streams").EnumerateArray()
+            .Where(stream => stream.TryGetProperty("codec_type", out var type) && type.GetString() == "video")
+            .SelectMany(stream => stream.TryGetProperty("side_data_list", out var list) && list.ValueKind == JsonValueKind.Array
+                ? list.EnumerateArray()
+                : Enumerable.Empty<JsonElement>())
+            .Where(sideData => sideData.TryGetProperty("rotation", out _))
+            .Select(sideData => Math.Abs(sideData.GetProperty("rotation").GetDouble()) % 360)
+            .ToArray();
+
+        // ffprobe reports a quarter turn signed, so 270 comes back as -90.
+        var expected = Math.Abs(rotationDegrees) % 360 is 270 ? 90 : Math.Abs(rotationDegrees) % 360;
+        if (!rotations.Contains(expected))
+        {
+            throw new InvalidOperationException(
+                $"The rotated fixture '{Path.GetFileName(path)}' does not carry a {rotationDegrees} degree display matrix "
+                + $"(ffprobe reported [{string.Join(", ", rotations)}]). The fixture would have tested nothing.");
+        }
+    }
+
+    private static void ApplyFfmpegLibrarySearchPath(ProcessStartInfo startInfo, string executablePath)
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var directory = Path.GetDirectoryName(executablePath)!;
+        startInfo.Environment.TryGetValue("LD_LIBRARY_PATH", out var inherited);
+        startInfo.Environment["LD_LIBRARY_PATH"] = string.IsNullOrWhiteSpace(inherited)
+            ? directory
+            : $"{directory}{Path.PathSeparator}{inherited}";
     }
 
     public string CreateLibraryDirectory(string relativePath)
