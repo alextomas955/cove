@@ -43,7 +43,7 @@ import {
   type TaggerReviewInput,
 } from "./VideoTaggerReview";
 import {
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
   TaggerToolbar,
@@ -104,7 +104,7 @@ interface TaggerConfig {
   bulkMatchStrategy: VideoMetadataSearchStrategy;
   queryMode: TaggerQueryMode;
   defaultScraperInputKind: InputKind | "auto";
-  blacklist: string[];
+  denylist: string[];
   performerGenders: string[];
   // Stamped on every save so a one-time upgrade of the stored settings runs once and never undoes a
   // choice the user made afterwards.
@@ -679,7 +679,7 @@ export function VideoTagger({
     bulkMatchStrategy: "remote-id-and-fingerprint-text",
     queryMode: "auto",
     defaultScraperInputKind: "auto",
-    blacklist: [...DEFAULT_TAGGER_BLACKLIST],
+    denylist: [...DEFAULT_TAGGER_DENYLIST],
     performerGenders: [...PERFORMER_GENDER_OPTIONS],
     configVersion: TAGGER_CONFIG_VERSION,
   };
@@ -696,7 +696,7 @@ export function VideoTagger({
           bulkMatchStrategy: isVideoMetadataSearchStrategy(parsed.bulkMatchStrategy)
             ? parsed.bulkMatchStrategy
             : DEFAULT_TAGGER_CONFIG.bulkMatchStrategy,
-          blacklist: parsed.blacklist ?? DEFAULT_TAGGER_CONFIG.blacklist,
+          denylist: parsed.denylist ?? DEFAULT_TAGGER_CONFIG.denylist,
           // Upgraded in memory; the stamp reaches storage on the next settings change. A visit that
           // changes nothing replays the upgrade next time, which is harmless because it is idempotent —
           // a later migration has to stay idempotent too, or write the stamp back on load itself.
@@ -758,30 +758,30 @@ export function VideoTagger({
         ]
           .filter((s) => s !== "")
           .join(" ");
-        str = cleanTaggerQueryString(str, taggerConfig.blacklist);
+        str = cleanTaggerQueryString(str, taggerConfig.denylist);
         return str;
       }
 
       // filename/dir/path modes: derive from file path
       if (mode === "filename" && file?.basename) {
-        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.denylist);
       }
       if (mode === "dir" && file?.path) {
         const parts = file.path.replace(/\\/g, "/").split("/");
-        return parts.length > 1 ? cleanTaggerQueryString(parts[parts.length - 2], taggerConfig.blacklist) : "";
+        return parts.length > 1 ? cleanTaggerQueryString(parts[parts.length - 2], taggerConfig.denylist) : "";
       }
       if (mode === "path" && file?.path) {
-        return cleanTaggerQueryString(file.path, taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.path, taggerConfig.denylist);
       }
 
-      // auto mode: try title first, then filename — always apply blacklist
-      if (video.title) return cleanTaggerQueryString(video.title, taggerConfig.blacklist);
+      // auto mode: try title first, then filename — always apply denylist
+      if (video.title) return cleanTaggerQueryString(video.title, taggerConfig.denylist);
       if (file?.basename) {
-        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.denylist);
       }
       return "";
     },
-    [queryOverrides, taggerConfig.queryMode, taggerConfig.blacklist],
+    [queryOverrides, taggerConfig.queryMode, taggerConfig.denylist],
   );
 
   const getScraperInputKind = useCallback(
@@ -1127,8 +1127,8 @@ export function VideoTagger({
 
       {showConfig && (
         <TaggerSettingsPanel
-          blacklist={taggerConfig.blacklist}
-          onBlacklistChange={(items) => setTaggerConfig((c) => ({ ...c, blacklist: items }))}
+          denylist={taggerConfig.denylist}
+          onDenylistChange={(items) => setTaggerConfig((c) => ({ ...c, denylist: items }))}
         >
           {selectedSource?.kind === "metadata-server" && mode === "bulk" && (
             <div>

@@ -1,16 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  Check,
-  ChevronDown,
-  CloudDownload,
-  Eye,
-  EyeOff,
-  Loader2,
-  RefreshCw,
-  Settings2,
-  Undo2,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, CloudDownload, Eye, EyeOff, Loader2, RefreshCw, Settings2, Undo2, X } from "lucide-react";
 import type { CollectionMode } from "./videoScrapeUtils";
 
 // Reduce an endpoint to its registrable domain (last two labels, "www." dropped) so a remote id stored
@@ -88,7 +77,7 @@ export interface TaggerRunAllOption {
   description: string;
 }
 
-export const DEFAULT_TAGGER_BLACKLIST = ["\\sXXX\\s", "1080p", "720p", "2160p", "4K", "KTR", "RARBG", "\\smp4\\s"];
+export const DEFAULT_TAGGER_DENYLIST = ["\\sXXX\\s", "1080p", "720p", "2160p", "4K", "KTR", "RARBG", "\\smp4\\s"];
 
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const ddmmyyRegex = /\.(\d\d)\.(\d\d)\.(\d\d)\./;
@@ -134,13 +123,13 @@ function handleSpecialQueryStrings(input: string): string {
   return output.replace(/-/g, " ");
 }
 
-export function cleanTaggerQueryString(input: string, blacklist: string[]): string {
+export function cleanTaggerQueryString(input: string, denylist: string[]): string {
   let cleaned = input.replace(/[._]/g, " ");
-  for (const pattern of blacklist) {
+  for (const pattern of denylist) {
     try {
       cleaned = cleaned.replace(new RegExp(pattern, "gi"), "");
     } catch {
-      // Invalid blacklist regexes are ignored so one bad entry does not break tagging.
+      // Invalid denylist regexes are ignored so one bad entry does not break tagging.
     }
   }
   cleaned = handleSpecialQueryStrings(cleaned);
@@ -370,31 +359,31 @@ export function TaggerToolbar({
 
 export function TaggerSettingsPanel({
   children,
-  blacklist,
-  onBlacklistChange,
+  denylist,
+  onDenylistChange,
 }: {
   children?: ReactNode;
-  blacklist?: string[];
-  onBlacklistChange?: (items: string[]) => void;
+  denylist?: string[];
+  onDenylistChange?: (items: string[]) => void;
 }) {
   const hasConfiguration = Boolean(children);
-  const hasBlacklist = Boolean(blacklist && onBlacklistChange);
+  const hasDenylist = Boolean(denylist && onDenylistChange);
 
   return (
     <div className="bg-card border-b border-border px-4 py-3 space-y-4">
-      <div className={hasConfiguration && hasBlacklist ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : "space-y-3"}>
+      <div className={hasConfiguration && hasDenylist ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : "space-y-3"}>
         {hasConfiguration && (
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-foreground italic">Configuration</h3>
             {children}
           </div>
         )}
-        {blacklist && onBlacklistChange && (
+        {denylist && onDenylistChange && (
           <div className={hasConfiguration ? "space-y-2" : "max-w-3xl space-y-2"}>
-            <h3 className="text-sm font-bold text-foreground italic">Blacklist</h3>
-            <BlacklistEditor items={blacklist} onChange={onBlacklistChange} />
+            <h3 className="text-sm font-bold text-foreground italic">Denylist</h3>
+            <DenylistEditor items={denylist} onChange={onDenylistChange} />
             <p className="text-[10px] text-muted">
-              Blacklist items are excluded from queries. They are case-insensitive regular expressions. Escape special
+              Denylist items are excluded from queries. They are case-insensitive regular expressions. Escape special
               characters with a backslash: <code className="text-pink-400">{`[\\.^$.|?*+()`}</code>
             </p>
           </div>
@@ -404,7 +393,7 @@ export function TaggerSettingsPanel({
   );
 }
 
-export function BlacklistEditor({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
+export function DenylistEditor({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
   const [input, setInput] = useState("");
 
   const addItem = () => {
