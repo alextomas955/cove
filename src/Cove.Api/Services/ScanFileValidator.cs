@@ -323,7 +323,10 @@ public sealed class ScanFileValidator(
         var image = await SixLabors.ImageSharp.Image.IdentifyAsync(stream, ct);
         if (image == null || image.Width <= 0 || image.Height <= 0)
             throw new InvalidDataException("the image has invalid dimensions");
-        return (image.Width, image.Height);
+
+        // Identify reports the stored grid and ignores EXIF orientation, while the thumbnail is
+        // auto-oriented, so a portrait photo would otherwise be recorded as landscape.
+        return ExifDisplayOrientation.Apply(image, image.Width, image.Height);
     }
 
     private static async Task ValidateSvgStreamAsync(FileStream stream, CancellationToken ct)
