@@ -54,6 +54,21 @@ public class VideoConversionSizingTests
     }
 
     /// <summary>
+    /// Both judged points must lie on the curve. 4K at 16541 kbps was called practically identical to
+    /// the original; 1080p at 4055 was called just short of High, so the target must sit above it.
+    /// </summary>
+    [Fact]
+    public void CurvePassesThroughBothJudgedPoints()
+    {
+        var uhd = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, 3840, 2160, 59.94);
+        Assert.InRange(uhd, (int)(16541 * 0.97), (int)(16541 * 1.03));
+
+        const int judgedShortOfHigh = 4055;
+        var hd = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, 1920, 1080, 30);
+        Assert.True(hd > judgedShortOfHigh * 1.10, $"1080p target {hd} must clear the level judged short of High");
+    }
+
+    /// <summary>
     /// Every published ladder puts 60fps at roughly 1.5x its 30fps tier, not 2x, because consecutive
     /// frames are more alike the faster they come.
     /// </summary>

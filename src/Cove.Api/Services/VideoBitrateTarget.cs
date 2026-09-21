@@ -28,8 +28,8 @@ namespace Cove.Api.Services;
 /// each frame MORE bits at lower frame rates - 364 kbit/frame at 30fps against 276 at 60 - which is why
 /// halving the frame rate halves the file without visibly costing per-frame detail.
 ///
-/// The pixel term is extrapolated, not measured: every judged point was 4K. It is insensitive (moving
-/// the exponent from 0.70 to 0.82 shifts 1080p by about 5%), but sub-4K targets are unverified.
+/// The pixel term is fitted to two judged points, at 4K and at 1080p, both on flat (non-VR) material.
+/// Resolutions between them are interpolation; 720p and below are extrapolation and unverified.
 ///
 /// The caveat is the one Netflix's per-title work exists for: content complexity dominates, so a fixed
 /// target is an approximation. Grain and fine detail need more than this; flat animation needs far
@@ -39,16 +39,23 @@ namespace Cove.Api.Services;
 public static class VideoBitrateTarget
 {
     /// <summary>
-    /// Scales the whole ladder. Anchored on a judged point rather than a published table: a
-    /// 3840x2160 59.94fps source re-encoded to HEVC at 16541 kbps was reported practically identical
-    /// to its 54828 kbps H.264 original, so that level is what "High" means and this constant is set
-    /// to reproduce it. The same constant then predicted three further conversions of 4K material at
-    /// 30fps to within 2% of what they measured, all of which were judged acceptable.
+    /// Scales the whole ladder. Set, with <see cref="PixelExponent"/>, so the curve passes through both
+    /// judged points: 16541 kbps at 3840x2160/59.94 and 4800 kbps at 1920x1080/30.
     /// </summary>
-    private const double BaseKbpsPerMegapixel = 2187d;
+    private const double BaseKbpsPerMegapixel = 3115d;
 
-    /// <summary>Pixel-count exponent. 1.0 would be linear; measured ladders sit near 0.76.</summary>
-    private const double PixelExponent = 0.76d;
+    /// <summary>
+    /// Pixel-count exponent. 1.0 would be linear.
+    ///
+    /// Fitted rather than taken from published ladders, which sit nearer 0.76. At that value 1080p was
+    /// judged to fall just short of High while 4K was right, so the curve between them was too steep:
+    /// smaller frames need proportionally more bits than a published ladder implies for this material
+    /// and viewing distance. Fitting both judged points gives 0.593, which raises 1080p by about a
+    /// quarter and leaves 4K untouched.
+    ///
+    /// Everything below 1080p is extrapolated beyond both fitted points and is unverified.
+    /// </summary>
+    private const double PixelExponent = 0.593d;
 
     /// <summary>Frame-rate exponent. 0.6 puts 60fps at about 1.5x the 30fps tier.</summary>
     private const double FrameRateExponent = 0.6d;
