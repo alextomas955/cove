@@ -5,14 +5,12 @@ using Cove.Core.Entities;
 namespace Cove.Tests;
 
 /// <summary>
-/// The JSON in these tests is not hand-written: each case was captured from ffprobe 8.1.2 reading a
-/// real file with Cove's own probe arguments. Every expectation is the size ffmpeg actually decodes
-/// from that file, so a stored size disagreeing with the thumbnail Cove would render fails here.
-/// VideoRotationApiTests covers the same cases end to end against freshly generated media.
+/// The JSON here was captured from ffprobe 8.1.2 reading real files with Cove's own probe arguments,
+/// and every expectation is the size ffmpeg actually decodes from that file rather than a value read
+/// off a specification. VideoRotationApiTests covers the same cases end to end.
 /// </summary>
 public class FfprobeDisplayOrientationTests
 {
-    // No rotation at all: the coded grid is already what a viewer sees.
     private const string LandscapeJson = """
     { "codec_type": "video", "width": 1920, "height": 1080 }
     """;
@@ -55,17 +53,12 @@ public class FfprobeDisplayOrientationTests
     private static JsonElement Stream(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
     [Theory]
-    // Fixture 1: control, ffmpeg decodes 1920x1080.
     [InlineData(LandscapeJson, 1920, 1080)]
-    // Fixture 2: ffmpeg decodes 1080x1920, so the stored size must transpose.
     [InlineData(DisplayMatrix90Json, 1080, 1920)]
-    // Fixture 3: 270 degrees, reported as -90. ffmpeg decodes 1080x1920.
     [InlineData(DisplayMatrix270Json, 1080, 1920)]
-    // Fixture 4: a half turn keeps the axes. ffmpeg decodes 1920x1080.
     [InlineData(DisplayMatrix180Json, 1920, 1080)]
-    // Fixture 5: ffmpeg ignores the legacy tag and decodes 1920x1080, so Cove must not transpose.
+    // ffmpeg ignores the legacy tag, so this one is a control.
     [InlineData(LegacyRotateTagJson, 1920, 1080)]
-    // Fixture 6: control, already portrait with no rotation.
     [InlineData(NativePortraitJson, 1080, 1920)]
     public void Apply_StoresTheDimensionsFfmpegActuallyDecodes(string streamJson, int expectedWidth, int expectedHeight)
     {
@@ -144,8 +137,6 @@ public class FfprobeDisplayOrientationTests
     [Fact]
     public void ApplyFfprobeMetadata_StoresDisplayDimensionsForARotatedFile()
     {
-        // The end of the real path: what ScanVideoProcessor writes to the entity is what reaches
-        // the database and drives the card's aspect ratio.
         var videoFile = new VideoFile();
 
         ScanService.ApplyFfprobeMetadata(videoFile, $$"""

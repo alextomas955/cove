@@ -274,8 +274,6 @@ public sealed class ScanFileValidator(
             if (!hasWidth || !hasHeight)
                 continue;
 
-            // Store what a viewer sees, not the coded grid: a rotation-flagged portrait recording
-            // reports its landscape pixel grid plus a display matrix standing it up.
             var (displayWidth, displayHeight) = FfprobeDisplayOrientation.Apply(stream, parsedWidth, parsedHeight);
             widthValue = displayWidth;
             heightValue = displayHeight;
@@ -324,8 +322,7 @@ public sealed class ScanFileValidator(
         if (image == null || image.Width <= 0 || image.Height <= 0)
             throw new InvalidDataException("the image has invalid dimensions");
 
-        // Identify reports the stored grid and ignores EXIF orientation, while the thumbnail is
-        // auto-oriented, so a portrait photo would otherwise be recorded as landscape.
+        // Identify ignores EXIF orientation; the thumbnail does not.
         return ExifDisplayOrientation.Apply(image, image.Width, image.Height);
     }
 

@@ -8,9 +8,8 @@ using SixLabors.ImageSharp.Processing;
 namespace Cove.Tests;
 
 /// <summary>
-/// The expectations here are not read off the EXIF specification: each one is measured against
-/// ImageSharp's AutoOrient, which is the operation ThumbnailService applies when it renders an
-/// image thumbnail. A recorded size that disagrees with the thumbnail Cove would render fails here.
+/// Expectations are measured against ImageSharp's AutoOrient, the operation ThumbnailService applies
+/// when rendering a thumbnail, rather than read off the EXIF specification.
 /// </summary>
 public class ExifDisplayOrientationTests
 {

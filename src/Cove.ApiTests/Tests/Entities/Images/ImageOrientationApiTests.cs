@@ -3,9 +3,8 @@ using Cove.ApiTests.Infrastructure;
 namespace Cove.ApiTests.Tests.Entities.Images;
 
 /// <summary>
-/// A phone photographed in portrait stores a landscape grid plus an EXIF orientation saying to turn
-/// it. These tests drive such files through the scanner and assert the dimensions the API reports,
-/// which are what the image grid builds each card's shape from and what the thumbnail comes out at.
+/// Drives photos carrying an EXIF orientation through the scanner and asserts the dimensions the
+/// API reports.
 /// </summary>
 public sealed class ImageOrientationApiTests(
     ITestOutputHelper output,
@@ -27,8 +26,7 @@ public sealed class ImageOrientationApiTests(
     [Fact]
     public async Task GivenMirroredQuarterTurnedPhoto_WhenScanned_ThenFileReportsTheDimensionsAViewerSees()
     {
-        // Orientation 5 combines a mirror with a quarter turn. The mirror changes nothing about the
-        // dimensions, but the quarter turn still transposes them.
+        // A mirror combined with a quarter turn: the mirror changes no dimensions, the turn does.
         var fileName = $"oriented-5-{Guid.NewGuid():N}.jpg";
         var path = AsTestFileSystem().CreateLibraryFile(fileName, ApiTestImages.OrientedJpeg(1920, 1080, orientation: 5));
 
@@ -42,7 +40,6 @@ public sealed class ImageOrientationApiTests(
     [Fact]
     public async Task GivenHalfTurnedPhoto_WhenScanned_ThenFileKeepsItsStoredDimensions()
     {
-        // A half turn preserves the axes, so this must come back unchanged.
         var fileName = $"oriented-3-{Guid.NewGuid():N}.jpg";
         var path = AsTestFileSystem().CreateLibraryFile(fileName, ApiTestImages.OrientedJpeg(1920, 1080, orientation: 3));
 

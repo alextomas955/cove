@@ -3,10 +3,7 @@ using Cove.ApiTests.Infrastructure;
 namespace Cove.ApiTests.Tests.Entities.Videos;
 
 /// <summary>
-/// Rotation-flagged recordings — how phones record portrait video — store a landscape pixel grid
-/// plus a display matrix standing it up. These tests drive real rotated files through the scanner
-/// and assert the dimensions the API reports, because those dimensions are what the media grid
-/// builds each card's aspect ratio from.
+/// Drives real rotated files through the scanner and asserts the dimensions the API reports.
 /// </summary>
 public sealed class VideoRotationApiTests(
     ITestOutputHelper output,
@@ -52,8 +49,7 @@ public sealed class VideoRotationApiTests(
     [Fact]
     public async Task GivenHalfTurnedRecording_WhenScanned_ThenFileKeepsItsCodedDimensions()
     {
-        // A half turn preserves the axes, so this file must come back unchanged. ffprobe reports it
-        // as -180, so an implementation testing for a non-zero rotation would wrongly transpose it.
+        // ffprobe reports this as -180, so testing for a non-zero rotation would wrongly transpose it.
         var (ffmpegPath, ffprobePath) = await ResolveFfmpegAsync();
         var fileName = $"rotated-180-{Guid.NewGuid():N}.mp4";
 
