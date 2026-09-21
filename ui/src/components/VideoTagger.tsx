@@ -86,7 +86,6 @@ interface VideoTaggerProps {
 
 interface TaggerConfig {
   selectedEndpoint: string;
-  showUnmatched: boolean;
   setCoverImage: boolean;
   setTags: boolean;
   setPerformers: boolean;
@@ -614,7 +613,6 @@ export function VideoTagger({
 
   const DEFAULT_TAGGER_CONFIG: TaggerConfig = {
     selectedEndpoint: metadataServers[0] ? sourceValue("metadata-server", metadataServers[0].endpoint) : "",
-    showUnmatched: true,
     setCoverImage: true,
     setTags: true,
     setPerformers: true,
@@ -667,6 +665,10 @@ export function VideoTagger({
     });
   }, []);
   const [showConfig, setShowConfig] = useState(false);
+  // Deliberately outside the persisted config: hiding unmatched is a way to work through one pass of
+  // results, not a preference, and a stored "hide" would greet the next visit with an empty list before
+  // anything has been searched.
+  const [showUnmatched, setShowUnmatched] = useState(true);
   const [bulkStrategyDraft, setBulkStrategyDraft] = useState<VideoMetadataSearchStrategy>(
     taggerConfig.bulkMatchStrategy,
   );
@@ -1010,7 +1012,7 @@ export function VideoTagger({
   // convenience filter would otherwise leave the dialog empty). Hiding unmatched keeps only videos
   // that actually have a match right now: one that has not been searched at all is unmatched too.
   const matchingList =
-    mode === "detail" || taggerConfig.showUnmatched
+    mode === "detail" || showUnmatched
       ? videoList
       : videoList.filter((s) => {
           const state = searchStates[s.id];
@@ -1038,8 +1040,8 @@ export function VideoTagger({
         showToggle={
           mode === "bulk"
             ? {
-                value: taggerConfig.showUnmatched,
-                onChange: (value) => setTaggerConfig((c) => ({ ...c, showUnmatched: value })),
+                value: showUnmatched,
+                onChange: setShowUnmatched,
                 enabledLabel: "Hide Unmatched",
                 disabledLabel: "Show Unmatched",
               }

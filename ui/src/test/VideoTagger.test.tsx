@@ -360,6 +360,39 @@ describe("VideoTagger", () => {
     expect(screen.getByText("First local video")).toBeInTheDocument();
   });
 
+  it("starts each visit showing unmatched videos and never stores the toggle", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+
+    const first = render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Hide Unmatched" }));
+    expect(screen.getByRole("button", { name: "Show Unmatched" })).toBeInTheDocument();
+    // Other tagger settings are stored; this one must stay out of the persisted config.
+    expect(JSON.parse(localStorage.getItem("cove-tagger-config") ?? "{}")).not.toHaveProperty("showUnmatched");
+
+    // A remount stands in for the page reload: the toggle is back to showing unmatched videos.
+    first.unmount();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Hide Unmatched" })).toBeInTheDocument();
+  });
+
   it("disables Apply all until something matches", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const video = {
