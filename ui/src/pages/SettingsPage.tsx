@@ -6902,6 +6902,35 @@ function ThemePalettePreview({ cssVariables }: { cssVariables?: Record<string, s
   );
 }
 
+/**
+ * True when a real palette is selected but the manifest is not currently offering it — the theme was
+ * uninstalled, or its manifest/bundle is transiently missing. The selection is kept either way, so
+ * the picker has to account for an active palette that none of its cards represent.
+ */
+export function isActivePaletteUnavailable(
+  activeThemeId: string | null,
+  availableThemes: readonly { id: string; name: string }[],
+) {
+  if (!activeThemeId || activeThemeId === "custom") return false;
+  return !availableThemes.some((candidate) => candidate.id === activeThemeId);
+}
+
+/**
+ * Label for the collapsed Color Palette section. A selected palette that the manifest does not
+ * currently offer is named and marked unavailable rather than silently reported as the default: the
+ * selection is still stored and comes back on its own once the manifest carries the theme again.
+ */
+export function describeActivePalette(
+  activeThemeId: string | null,
+  availableThemes: readonly { id: string; name: string }[],
+) {
+  if (!activeThemeId) return "Default";
+  if (activeThemeId === "custom") return "Custom";
+  const theme = availableThemes.find((candidate) => candidate.id === activeThemeId);
+  // No parentheses: CollapsibleSection already renders the subtitle inside its own pair.
+  return theme ? theme.name : `${activeThemeId} — unavailable`;
+}
+
 function ThemeSelector() {
   const { user } = useAuth();
   const {
@@ -7279,13 +7308,26 @@ function ThemeSelector() {
         {/* --- Color Palette --- */}
         <CollapsibleSection
           title="Color Palette"
-          subtitle={
-            activeThemeId ? (availableThemes.find((t) => t.id === activeThemeId)?.name ?? activeThemeId) : "Default"
-          }
+          subtitle={describeActivePalette(activeThemeId, availableThemes)}
           expanded={expandedSections.has("palette")}
           onToggle={() => toggleSection("palette")}
         >
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {/* The selected palette, while the manifest is not offering it. Without a card for it no
+                option in this grid looks selected, which invites the user to pick another one and
+                overwrite a choice that is only temporarily unavailable and returns on its own. */}
+            {isActivePaletteUnavailable(activeThemeId, availableThemes) && (
+              <div
+                className="theme-option-card rounded-xl border border-accent bg-accent/10 p-4 text-left opacity-70"
+                aria-current="true"
+              >
+                <div className="text-sm font-medium text-foreground">{activeThemeId}</div>
+                <div className="text-xs text-secondary mt-1">
+                  Currently unavailable. It stays selected and returns when its extension loads.
+                </div>
+              </div>
+            )}
+
             {/* Extension themes */}
             {availableThemes.map((theme) => (
               <button
