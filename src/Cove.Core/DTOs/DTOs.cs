@@ -1798,6 +1798,44 @@ public record MetadataServerVideoMatchDto(
 
 public record MetadataServerFingerprintDto(string Algorithm, string Hash, int? Duration);
 
+/// <summary>
+/// A tagger cover decision that pixels, not URLs, can answer: does the incoming cover show the same
+/// image the video already carries, and if so, is it worth taking for its resolution alone.
+/// </summary>
+public record VideoCoverComparisonRequestDto
+{
+    public string ImageUrl { get; init; } = string.Empty;
+}
+
+public record VideoCoverImageDto
+{
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int ByteSize { get; init; }
+}
+
+public record VideoCoverComparisonDto
+{
+    /// <summary>
+    /// <c>same</c>: the same image, with nothing to gain by taking it. <c>upgrade</c>: the same image at a
+    /// higher resolution, worth suggesting. <c>differs</c>: a genuine choice between two covers.
+    /// <c>unavailable</c>: one of the two could not be read, so the caller keeps its URL-based default.
+    /// </summary>
+    public string Verdict { get; init; } = VideoCoverComparisonVerdicts.Unavailable;
+    /// <summary>Hamming distance between the two perceptual hashes; null when one could not be computed.</summary>
+    public int? Distance { get; init; }
+    public VideoCoverImageDto? Current { get; init; }
+    public VideoCoverImageDto? Candidate { get; init; }
+}
+
+public static class VideoCoverComparisonVerdicts
+{
+    public const string Same = "same";
+    public const string Upgrade = "upgrade";
+    public const string Differs = "differs";
+    public const string Unavailable = "unavailable";
+}
+
 public record MetadataServerVideoImportRequestDto
 {
     public string Endpoint { get; init; } = string.Empty;

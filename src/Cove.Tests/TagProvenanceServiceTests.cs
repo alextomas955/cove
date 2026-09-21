@@ -361,6 +361,9 @@ public sealed class TagProvenanceServiceTests
     {
         public Task<bool> TryApplyRemoteCoverAsync(Video video, string? imageUrl, CancellationToken ct = default)
             => Task.FromResult(false);
+
+        public Task<FetchedImage?> TryFetchImageAsync(string? imageUrl, CancellationToken ct = default)
+            => Task.FromResult<FetchedImage?>(null);
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

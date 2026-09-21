@@ -6,7 +6,16 @@ namespace Cove.Api.Services;
 public interface IVideoCoverService
 {
     Task<bool> TryApplyRemoteCoverAsync(Video video, string? imageUrl, CancellationToken ct = default);
+
+    /// <summary>
+    /// Downloads a remote image and identifies its type the way applying a cover does, without storing
+    /// anything. Returns null when the URL is empty, the request fails, or the bytes are not an image.
+    /// </summary>
+    Task<FetchedImage?> TryFetchImageAsync(string? imageUrl, CancellationToken ct = default);
 }
+
+/// <summary>Downloaded image bytes and the content type they were recognised as.</summary>
+public sealed record FetchedImage(byte[] Data, string ContentType);
 
 public sealed class VideoCoverService(IBlobService blobService, IHttpClientFactory httpClientFactory, ILogger<VideoCoverService> logger) : IVideoCoverService
 {
@@ -19,27 +28,15 @@ public sealed class VideoCoverService(IBlobService blobService, IHttpClientFacto
 
         try
         {
-            var client = httpClientFactory.CreateClient("scraper");
-            using var response = await client.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!response.IsSuccessStatusCode)
+            var fetched = await TryFetchImageAsync(imageUrl, ct);
+            if (fetched == null)
+            {
+                logger.LogWarning("Failed to fetch remote cover for video {VideoId}", video.Id);
                 return false;
+            }
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-            if (bytes.Length == 0)
-                return false;
-
-            var detectedContentType = DetectImageContentType(bytes);
-            var declaredContentType = response.Content.Headers.ContentType?.MediaType;
-            var contentType = detectedContentType
-                ?? (declaredContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
-                    ? declaredContentType
-                    : null);
-
-            if (string.IsNullOrWhiteSpace(contentType))
-                return false;
-
-            await using var stream = new MemoryStream(bytes);
-            var newBlobId = await blobService.StoreBlobAsync(stream, contentType, ct);
+            await using var stream = new MemoryStream(fetched.Data);
+            var newBlobId = await blobService.StoreBlobAsync(stream, fetched.ContentType, ct);
             var previousBlobId = video.ImageBlobId;
 
             video.ImageBlobId = newBlobId;
@@ -55,6 +52,41 @@ public sealed class VideoCoverService(IBlobService blobService, IHttpClientFacto
         {
             logger.LogWarning(ex, "Failed to apply remote cover for video {VideoId}", video.Id);
             return false;
+        }
+    }
+
+    public async Task<FetchedImage?> TryFetchImageAsync(string? imageUrl, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl))
+            return null;
+
+        try
+        {
+            var client = httpClientFactory.CreateClient("scraper");
+            using var response = await client.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            if (bytes.Length == 0)
+                return null;
+
+            var detectedContentType = DetectImageContentType(bytes);
+            var declaredContentType = response.Content.Headers.ContentType?.MediaType;
+            var contentType = detectedContentType
+                ?? (declaredContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
+                    ? declaredContentType
+                    : null);
+
+            if (string.IsNullOrWhiteSpace(contentType))
+                return null;
+
+            return new FetchedImage(bytes, contentType);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to fetch remote image");
+            return null;
         }
     }
 

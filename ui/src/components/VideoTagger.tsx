@@ -11,6 +11,7 @@ import type {
   ScrapeAttempt,
   ScraperSummary,
   ScrapeCollectionItemSelection,
+  VideoCoverComparison,
 } from "../api/types";
 import { useAppConfig, useOptionalAppConfig } from "../state/AppConfigContext";
 import { formatDuration, getResolutionLabel } from "./shared";
@@ -459,6 +460,34 @@ function getVideoImageReplace(
     (getVideoFieldStrategies(video, result, state).image ?? defaultVideoImageStrategy(video, taggerConfig)) ===
     "overwrite"
   );
+}
+
+/**
+ * How the selected result's cover compares with the one the video already carries. Only the server
+ * can answer it: it alone reads both images' pixels and their real sizes, where the browser sees two
+ * unrelated URLs and a delivery-resized copy of its own cover.
+ *
+ * Asked only for a cover the person actually set; an auto-generated frame is replaceable anyway, and
+ * will not resemble a studio's artwork.
+ */
+function useCoverComparison(video: Video, imageUrl?: string | null): VideoCoverComparison | undefined {
+  const enabled = !!imageUrl && !!video.imagePath;
+  const { data } = useQuery({
+    queryKey: ["video-cover-comparison", video.id, imageUrl],
+    queryFn: () => videos.compareCover(video.id, imageUrl ?? ""),
+    enabled,
+    // The comparison downloads the candidate cover, so it is kept for as long as the visit lasts.
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+  return enabled ? data : undefined;
+}
+
+/** The suggestion an "upgrade" verdict is worth making, as the cover panel's sentence. */
+function coverComparisonNote(comparison?: VideoCoverComparison) {
+  if (comparison?.verdict !== "upgrade" || !comparison.current || !comparison.candidate) return undefined;
+  const size = (image: { width: number; height: number }) => `${image.width}×${image.height}`;
+  return `same cover, larger here (${size(comparison.candidate)} vs ${size(comparison.current)})`;
 }
 
 function buildDefaultVideoCollectionModes(
@@ -1513,6 +1542,7 @@ function TaggerVideoRow({
     );
   }, [state?.results, existingTagKeys, existingPerformerKeys, allowedGenderKeys]);
   const selectedResult = enrichedResults?.[state?.selectedIndex ?? 0];
+  const coverComparison = useCoverComparison(video, selectedResult?.imageUrl);
   const videoLinkProps = createNestedRouteLinkProps<HTMLAnchorElement>({ page: "video", id: video.id }, () =>
     onNavigate?.(video.id),
   );
@@ -2020,6 +2050,7 @@ function TaggerVideoRow({
                 onUpdateState(key === "tags" ? { tagEdits: edits } : { performerEdits: edits })
               }
               taggerConfig={taggerConfig}
+              coverComparison={coverComparison}
             />
           )}
 
@@ -2072,6 +2103,8 @@ interface TaggerResultsProps {
   performerEdits?: TaggerRelationshipEdits;
   onRelationshipEditsChange: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
+  /** Pixel verdict on the selected result's cover; absent until it has been asked for and answered. */
+  coverComparison?: VideoCoverComparison;
 }
 
 function TaggerResults({
@@ -2102,6 +2135,7 @@ function TaggerResults({
   performerEdits,
   onRelationshipEditsChange,
   taggerConfig,
+  coverComparison,
 }: TaggerResultsProps) {
   const current = results[selectedIndex] ? selectedIndex : 0;
   const row = (result: UnifiedVideoMatch, i: number) => (
@@ -2135,6 +2169,7 @@ function TaggerResults({
       performerEdits={performerEdits}
       onRelationshipEditsChange={i === current ? onRelationshipEditsChange : undefined}
       taggerConfig={taggerConfig}
+      coverComparison={i === current ? coverComparison : undefined}
     />
   );
   const others = results.map((result, i) => ({ result, i })).filter(({ i }) => i !== current);
@@ -2184,6 +2219,7 @@ function TaggerResultRow({
   performerEdits,
   onRelationshipEditsChange,
   taggerConfig,
+  coverComparison,
 }: {
   video: Video;
   result: MetadataServerVideoMatch;
@@ -2213,6 +2249,7 @@ function TaggerResultRow({
   performerEdits?: TaggerRelationshipEdits;
   onRelationshipEditsChange?: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
+  coverComparison?: VideoCoverComparison;
 }) {
   const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   // Accept-all is the common case, so the review opens as a list of facts; the full side-by-side
@@ -2254,6 +2291,7 @@ function TaggerResultRow({
     metadataServers,
     fieldStrategies,
     imageReplace: (fieldStrategies.image ?? defaultVideoImageStrategy(video, taggerConfig)) === "overwrite",
+    coverComparison,
     collectionModes,
     showStudio: taggerConfig.setStudio,
     showTags: taggerConfig.setTags,
@@ -2360,7 +2398,12 @@ function TaggerResultRow({
           <img src={result.imageUrl} alt="" className="h-9 w-16 shrink-0 rounded object-cover" loading="lazy" />
         )}
         {isSelected && review ? (
-          <CoverPanel review={review} onChange={handleSelectionChange} disabled={saving} />
+          <CoverPanel
+            review={review}
+            onChange={handleSelectionChange}
+            disabled={saving}
+            coverComparison={coverComparison}
+          />
         ) : null}
         <div className="min-w-0 flex-1 self-start">
           <p
@@ -2396,7 +2439,12 @@ function TaggerResultRow({
           ) : (
             <div className="py-1">
               <MetadataDiffSummary
-                fields={review.fields.filter((field) => field.key !== "image")}
+                // The cover has its own panel, so it is not a row here — except when it is unchanged,
+                // where it belongs among the unchanged labels the footer is already counting it in.
+                fields={review.fields.filter(
+                  (field) => field.key !== "image" || scalarStatus(field, review.source, review.target) === "identical",
+                )}
+
                 source={review.source}
                 target={review.target}
                 value={review.selection}
@@ -2446,16 +2494,19 @@ function CoverPanel({
   review,
   onChange,
   disabled,
+  coverComparison,
 }: {
   review: ReturnType<typeof buildTaggerReview>;
   onChange: (next: DiffSelection) => void;
   disabled?: boolean;
+  coverComparison?: VideoCoverComparison;
 }) {
   const field = review.fields.find((entry) => entry.key === "image");
   if (!field) return null;
   return (
     <ReviewCoverPanel
       status={scalarStatus(field, review.source, review.target)}
+      note={coverComparisonNote(coverComparison)}
       chosen={review.selection.image === "source" ? "source" : "target"}
       currentUrl={review.target.values.image ? String(review.target.values.image) : null}
       candidates={[String(review.source.values.image ?? "")]}

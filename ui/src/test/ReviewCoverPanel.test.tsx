@@ -28,6 +28,25 @@ describe("ReviewCoverPanel", () => {
     expect(onChoose).toHaveBeenCalledWith("source");
   });
 
+  it("says what a conflict really is when the caller knows better than the default sentence", () => {
+    render(
+      <ReviewCoverPanel
+        status="conflict"
+        chosen="target"
+        currentUrl="/current.jpg"
+        candidates={[candidates[0]]}
+        incomingLabel="StashDB"
+        onChoose={vi.fn()}
+        note="same cover, larger here (1920×1080 vs 1280×720)"
+      />,
+    );
+
+    expect(screen.getByText(/same cover, larger here \(1920×1080 vs 1280×720\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/both have a value/)).not.toBeInTheDocument();
+    // Still a choice, never a decision made for the person.
+    expect(screen.getByRole("radio", { name: "Keep current" })).toBeChecked();
+  });
+
   it("browses several candidates without changing the decision and loads only the one on screen", async () => {
     const onActiveIndexChange = vi.fn();
     const onChoose = vi.fn();

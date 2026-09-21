@@ -1,5 +1,11 @@
 import { Plus, X } from "lucide-react";
-import type { MetadataServer, MetadataServerEntityCandidate, MetadataServerVideoMatch, Video } from "../api/types";
+import type {
+  MetadataServer,
+  MetadataServerEntityCandidate,
+  MetadataServerVideoMatch,
+  Video,
+  VideoCoverComparison,
+} from "../api/types";
 import { videos } from "../api/client";
 import { EntityReferenceMultiSelector, type EntityReferenceOption } from "./EntityReferenceSelector";
 import { metadataServerLabel } from "./MetadataServerLinks";
@@ -38,6 +44,11 @@ export interface TaggerReviewInput {
   metadataServers?: Pick<MetadataServer, "endpoint" | "name">[];
   fieldStrategies: Record<string, TaggerFieldStrategy>;
   imageReplace: boolean;
+  /**
+   * What the pixels say about the two covers, once the comparison has answered. Absent until then,
+   * and for a video whose cover is an auto-generated frame, where the URLs are the only guide.
+   */
+  coverComparison?: VideoCoverComparison;
   collectionModes: Record<string, CollectionMode>;
   showStudio: boolean;
   showTags: boolean;
@@ -398,10 +409,19 @@ export function buildTaggerReview(input: TaggerReviewInput) {
     selection[key] = input.fieldStrategies[key] === "overwrite" ? "source" : "target";
   }
   if (result.imageUrl) {
+    // Two covers only ever differ by URL here, so the URLs cannot say whether they are the same
+    // picture. Where the comparison has answered that they are, and the incoming one is no larger,
+    // the cover is not a decision at all and reads as unchanged beside every other untouched field.
+    //
+    // Not, however, once the person has chosen to take the incoming cover. The comparison answers
+    // only after a download, so that choice can be made while the panel still shows both; calling it
+    // unchanged afterwards would both misreport a write and leave no control to change it back.
+    const sameCover = input.coverComparison?.verdict === "same" && !input.imageReplace;
     fields.push({
       key: "image",
       label: "Cover",
-      alwaysVisible: true,
+      alwaysVisible: !sameCover,
+      equal: sameCover ? () => true : undefined,
       render: (value) => (
         <img src={String(value)} alt="Video cover" className="max-h-40 w-full rounded object-contain" />
       ),

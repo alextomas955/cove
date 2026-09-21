@@ -2817,6 +2817,26 @@ export interface MetadataServerFingerprint {
   duration?: number;
 }
 
+/**
+ * How a candidate cover compares with the one the video already carries, judged by perceptual hash
+ * rather than by URL. `same`: the same picture, nothing to gain. `upgrade`: the same picture, but
+ * larger. `differs`: a genuine choice. `unavailable`: one of the two could not be read.
+ */
+export type VideoCoverComparisonVerdict = "same" | "upgrade" | "differs" | "unavailable";
+
+export interface VideoCoverImage {
+  width: number;
+  height: number;
+  byteSize: number;
+}
+
+export interface VideoCoverComparison {
+  verdict: VideoCoverComparisonVerdict;
+  distance?: number | null;
+  current?: VideoCoverImage | null;
+  candidate?: VideoCoverImage | null;
+}
+
 export interface MetadataServerVideoImportRequest {
   endpoint: string;
   videoId: string;

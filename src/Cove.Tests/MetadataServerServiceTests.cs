@@ -1986,5 +1986,8 @@ public sealed class MetadataServerServiceTests
     {
         public Task<bool> TryApplyRemoteCoverAsync(Video video, string? imageUrl, CancellationToken ct = default)
             => Task.FromResult(true);
+
+        public Task<FetchedImage?> TryFetchImageAsync(string? imageUrl, CancellationToken ct = default)
+            => Task.FromResult<FetchedImage?>(null);
     }
 }

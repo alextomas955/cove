@@ -11,6 +11,7 @@ import type {
   MeResponse,
   GlobalSearchResponse,
   Video,
+  VideoCoverComparison,
   VideoCreate,
   VideoUpdate,
   VideoListEntry,
@@ -665,6 +666,12 @@ export const videos = {
     request<MetadataServerVideoMatch[]>("/videos/metadata-server/find-by-ids", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  compareCover: (id: number, imageUrl: string) =>
+    request<VideoCoverComparison>(`/videos/${id}/cover-comparison`, {
+      method: "POST",
+      body: JSON.stringify({ imageUrl }),
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
     }),
   importFromMetadataServer: (id: number, data: MetadataServerVideoImportRequest) =>
     request<Video>(`/videos/${id}/metadata-server/import`, {
