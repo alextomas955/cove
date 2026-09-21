@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Cove.Api.Services;
 using Microsoft.Data.Sqlite;
 
 namespace Cove.ApiTests.Infrastructure;
@@ -190,61 +191,23 @@ public sealed class ApiTestFileSystem
         if (!File.Exists(ffmpegPath))
             throw new FileNotFoundException("The Cove host's resolved FFmpeg executable was not found.", ffmpegPath);
         var path = Path.Combine(LibraryPath, fileName);
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = ffmpegPath,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        if (OperatingSystem.IsLinux())
-        {
-            var ffmpegDirectory = Path.GetDirectoryName(ffmpegPath)!;
-            startInfo.Environment.TryGetValue("LD_LIBRARY_PATH", out var inheritedLibraryPath);
-            startInfo.Environment["LD_LIBRARY_PATH"] = string.IsNullOrWhiteSpace(inheritedLibraryPath)
-                ? ffmpegDirectory
-                : $"{ffmpegDirectory}{Path.PathSeparator}{inheritedLibraryPath}";
-        }
-        foreach (var argument in new[]
-        {
+        var duration = durationSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+        await RunMediaToolAsync(ffmpegPath, "the synthetic API-test video",
+        [
             "-nostdin",
             "-hide_banner",
             "-loglevel", "error",
             "-y",
             "-f", "lavfi",
-            "-i", $"color=c={color}:s={width}x{height}:r=10:d={durationSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}",
+            "-i", $"color=c={color}:s={width}x{height}:r=10:d={duration}",
             "-threads", "1",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             "-an",
             path,
-        })
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("FFmpeg could not be started for the synthetic API-test video fixture.");
-        var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(20));
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            try { process.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException("FFmpeg did not create the synthetic API-test video within 20 seconds.");
-        }
-
-        var error = await standardError;
-        if (process.ExitCode != 0 || !File.Exists(path) || new FileInfo(path).Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"FFmpeg failed to create the synthetic API-test video (exit {process.ExitCode}): {error}");
-        }
+        ], cancellationToken);
+        RequireNonEmptyOutput(path, "the synthetic API-test video");
 
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-1));
         return path;
@@ -276,16 +239,8 @@ public sealed class ApiTestFileSystem
         var uprightPath = await CreateSyntheticVideoAsync(ffmpegPath, uprightName, width, height, durationSeconds, color, cancellationToken);
 
         var path = Path.Combine(LibraryPath, fileName);
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = ffmpegPath,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        ApplyFfmpegLibrarySearchPath(startInfo, ffmpegPath);
-        foreach (var argument in new[]
-        {
+        await RunMediaToolAsync(ffmpegPath, "the rotated API-test video",
+        [
             "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
             // An input option: it rewrites the display matrix while copying the encoded frames, so
             // the pixels are untouched and only the rotation metadata differs from the source.
@@ -293,34 +248,8 @@ public sealed class ApiTestFileSystem
             "-i", uprightPath,
             "-c", "copy",
             path,
-        })
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using (var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("FFmpeg could not be started for the rotated API-test video fixture."))
-        {
-            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                try { process.Kill(entireProcessTree: true); } catch { }
-                throw new TimeoutException("FFmpeg did not create the rotated API-test video within 20 seconds.");
-            }
-
-            var error = await standardError;
-            if (process.ExitCode != 0 || !File.Exists(path) || new FileInfo(path).Length == 0)
-            {
-                throw new InvalidOperationException(
-                    $"FFmpeg failed to create the rotated API-test video (exit {process.ExitCode}): {error}");
-            }
-        }
+        ], cancellationToken);
+        RequireNonEmptyOutput(path, "the rotated API-test video");
 
         File.Delete(uprightPath);
         await AssertRotationLandedAsync(ffprobePath, path, rotationDegrees, cancellationToken);
@@ -334,22 +263,10 @@ public sealed class ApiTestFileSystem
         int rotationDegrees,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = ffprobePath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        ApplyFfmpegLibrarySearchPath(startInfo, ffprobePath);
-        foreach (var argument in new[] { "-v", "error", "-print_format", "json", "-show_streams", path })
-            startInfo.ArgumentList.Add(argument);
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("FFprobe could not be started to verify the rotated fixture.");
-        var json = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        var json = await RunMediaToolAsync(ffprobePath, "the rotated API-test video",
+            ["-v", "error", "-print_format", "json", "-show_streams", path],
+            cancellationToken,
+            captureStandardOutput: true);
 
         using var document = JsonDocument.Parse(json);
         var rotations = document.RootElement.GetProperty("streams").EnumerateArray()
@@ -371,16 +288,60 @@ public sealed class ApiTestFileSystem
         }
     }
 
-    private static void ApplyFfmpegLibrarySearchPath(ProcessStartInfo startInfo, string executablePath)
+    /// <summary>
+    /// Runs ffmpeg or ffprobe with a bounded lifetime, reusing the host's own environment setup so the
+    /// fixtures resolve shared libraries exactly as Cove does rather than repeating that knowledge here.
+    /// </summary>
+    private static async Task<string> RunMediaToolAsync(
+        string executablePath,
+        string description,
+        string[] arguments,
+        CancellationToken cancellationToken,
+        bool captureStandardOutput = false)
     {
-        if (!OperatingSystem.IsLinux())
-            return;
+        if (!File.Exists(executablePath))
+            throw new FileNotFoundException("The Cove host's resolved FFmpeg executable was not found.", executablePath);
 
-        var directory = Path.GetDirectoryName(executablePath)!;
-        startInfo.Environment.TryGetValue("LD_LIBRARY_PATH", out var inherited);
-        startInfo.Environment["LD_LIBRARY_PATH"] = string.IsNullOrWhiteSpace(inherited)
-            ? directory
-            : $"{directory}{Path.PathSeparator}{inherited}";
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            RedirectStandardOutput = captureStandardOutput,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        FfmpegProcessEnvironment.Apply(startInfo, executablePath);
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        var tool = Path.GetFileNameWithoutExtension(executablePath);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"{tool} could not be started for {description}.");
+        var standardOutput = captureStandardOutput ? process.StandardOutput.ReadToEndAsync(cancellationToken) : Task.FromResult(string.Empty);
+        var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException($"{tool} did not finish {description} within 20 seconds.");
+        }
+
+        var error = await standardError;
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"{tool} failed on {description} (exit {process.ExitCode}): {error}");
+
+        return await standardOutput;
+    }
+
+    private static void RequireNonEmptyOutput(string path, string description)
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length == 0)
+            throw new InvalidOperationException($"FFmpeg produced no output for {description}.");
     }
 
     public string CreateLibraryDirectory(string relativePath)

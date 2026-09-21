@@ -155,6 +155,14 @@ describe("getResolutionLabel", () => {
     expect(getResolutionLabel(1080, 1920)).toBe("1080p");
   });
 
+  it("gives a rotated file the same label as an unrotated one", () => {
+    // Cove records display dimensions, so a rotated file's width and height are transposed. The
+    // badge reads the long and short edge, so it must not notice; that symmetry is incidental to
+    // Math.max/Math.min rather than guaranteed, and losing it would rebucket every rotated video.
+    expect(getResolutionLabel(1080, 1920)).toBe(getResolutionLabel(1920, 1080));
+    expect(getResolutionLabel(2160, 3840)).toBe(getResolutionLabel(3840, 2160));
+  });
+
   it("returns HUGE for very large resolutions", () => {
     expect(getResolutionLabel(12000, 8000)).toBe("HUGE");
   });
