@@ -600,15 +600,17 @@ export function ExtensionLoaderProvider({
     setCustomThemeColorsState(nextTheme.customThemeColors ?? {});
   }, [hasServerBackedUiPreferences, userThemePreferences]);
 
-  useEffect(() => {
-    if (!loaded || !activeThemeId || activeThemeId === "custom" || activeThemeId === FALLBACK_DEFAULT_THEME.id) {
-      return;
-    }
-
-    if (!availableThemes.some((theme) => theme.id === activeThemeId)) {
-      setActiveTheme(FALLBACK_DEFAULT_THEME.id);
-    }
-  }, [activeThemeId, availableThemes, loaded, setActiveTheme]);
+  // A selected theme that is missing from `availableThemes` is deliberately NOT rewritten to the
+  // default here. A theme is absent for two reasons this side cannot tell apart — it was
+  // uninstalled, or it is transiently missing because the manifest request failed, troubleshooting
+  // mode withdrew every extension, a refresh superseded the initial load, or its bundle failed to
+  // import (see `withoutFailedContributions`) — and writing the fallback back to localStorage and
+  // the server turned every transient case into permanent loss of the user's choice.
+  //
+  // Nothing needs to replace it: the stored selection is kept, reapplied the moment the theme is
+  // offered again, and the UI already shows the default look meanwhile. `selectedTheme` resolves to
+  // null, and `data-theme` is not left stale — on a failed first load it was never set, and when a
+  // loaded manifest goes away (troubleshooting mode) the theme effect's own cleanup removes it.
 
   const applyManifest = useCallback(
     async (nextManifest: ExtensionManifest, requestGeneration: number) => {
