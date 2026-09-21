@@ -227,6 +227,20 @@ export function TaggerToolbar({
         </select>
       </div>
 
+      <span className="ml-auto text-xs text-muted">{countLabel}</span>
+
+      {showToggle && (
+        <button
+          type="button"
+          onClick={() => showToggle.onChange(!showToggle.value)}
+          aria-pressed={!showToggle.value}
+          className="flex cursor-pointer items-center gap-1.5 rounded border border-border bg-input px-2 py-1 text-xs text-secondary hover:text-foreground"
+        >
+          {showToggle.value ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
+        </button>
+      )}
+
       {showRunAll &&
         (batchSearching ? (
           <button
@@ -256,7 +270,9 @@ export function TaggerToolbar({
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </summary>
-                <div className="absolute left-0 z-30 mt-1 w-72 overflow-hidden rounded border border-border bg-card shadow-xl">
+                {/* Anchored to the right edge: the button now sits near the end of the toolbar, so a
+                    left-anchored panel would run off the viewport. */}
+                <div className="absolute right-0 z-30 mt-1 w-72 overflow-hidden rounded border border-border bg-card shadow-xl">
                   {runAllOptions.map((option) => (
                     <button
                       key={option.value}
@@ -276,20 +292,6 @@ export function TaggerToolbar({
             ) : null}
           </div>
         ))}
-
-      <span className="ml-auto text-xs text-muted">{countLabel}</span>
-
-      {showToggle && (
-        <button
-          type="button"
-          onClick={() => showToggle.onChange(!showToggle.value)}
-          aria-pressed={!showToggle.value}
-          className="flex cursor-pointer items-center gap-1.5 rounded border border-border bg-input px-2 py-1 text-xs text-secondary hover:text-foreground"
-        >
-          {showToggle.value ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-          {showToggle.value ? showToggle.enabledLabel : showToggle.disabledLabel}
-        </button>
-      )}
 
       {onToggleSettings && (
         <button
