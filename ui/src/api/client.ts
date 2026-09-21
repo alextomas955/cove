@@ -1998,15 +1998,7 @@ export interface VideoConversionOptions {
   codec: VideoConversionCodec;
   container: "mp4" | "mkv";
   /** One rung of the conversion ladder, ordered from most quality to most speed. */
-  effort:
-    | "qualitySoftware"
-    | "qualityHardware"
-    | "test85Hardware"
-    | "test70Hardware"
-    | "test58Hardware"
-    | "test48Hardware"
-    | "smallerSoftware"
-    | "smallerHardware";
+  effort: "highSoftware" | "highHardware" | "balancedSoftware" | "balancedHardware";
   /** Re-encode at this frame rate instead of the source's. Omit to keep the source's. */
   outputFrameRate?: number | null;
   /** Convert even when the predicted saving is below the worthwhile threshold. */

@@ -13,6 +13,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   videoIds: number[];
+  /** Highest source frame rate in the selection, when known. Hides frame rates that would not lower it. */
+  maxSourceFrameRate?: number | null;
   /** Whether the viewer may delete files from disk, which replacing originals does. */
   canReplaceOriginals: boolean;
   onStarted?: () => void;
@@ -26,7 +28,7 @@ const STORAGE_KEY = "cove.convert-videos.options";
 const DEFAULT_SETTINGS: Settings = {
   codec: "hevc",
   container: "mp4",
-  effort: "qualityHardware",
+  effort: "highHardware",
   outputFrameRate: null,
   convertMarginalSavings: false,
   replaceOriginal: false,
@@ -39,53 +41,30 @@ const DEFAULT_SETTINGS: Settings = {
 // source at matched output size, libx265 scored about 2.4 VMAF above hevc_nvenc.
 const EFFORTS: ReadonlyArray<{ value: Settings["effort"]; label: string; hint: string }> = [
   {
-    value: "qualitySoftware",
-    label: "Highest quality (CPU)",
-    hint: "Targets the bitrate this resolution can actually make use of. Best quality per bit, and by far the slowest.",
+    value: "highHardware",
+    label: "High quality (GPU)",
+    hint: "Aims at the bitrate this resolution can make use of. Practically identical to the original on detailed 4K footage. Needs a supported GPU.",
   },
   {
-    value: "qualityHardware",
-    label: "Highest quality (GPU)",
-    hint: "Same bitrate target, several times faster. Needs a supported GPU.",
+    value: "highSoftware",
+    label: "High quality (CPU)",
+    hint: "Same target, better quality per bit, but several times slower.",
   },
   {
-    value: "test85Hardware",
-    label: "Test: 85% of target (GPU)",
-    hint: "Temporary, for finding where quality loss becomes visible on your own footage.",
+    value: "balancedHardware",
+    label: "Balanced — lower size, some detail lost (GPU)",
+    hint: "70% of the High target. Fine detail such as hair and freckles softens at a few feet; most of the picture holds up.",
   },
   {
-    value: "test70Hardware",
-    label: "Test: 70% of target (GPU)",
-    hint: "Temporary calibration rung.",
-  },
-  {
-    value: "test58Hardware",
-    label: "Test: 58% of target (GPU)",
-    hint: "Temporary calibration rung.",
-  },
-  {
-    value: "test48Hardware",
-    label: "Test: 48% of target (GPU)",
-    hint: "Temporary calibration rung. Expected to be visibly worse.",
-  },
-  {
-    value: "smallerSoftware",
-    label: "Smaller files (CPU)",
-    hint: "Below the transparent target. Smaller, with some visible loss.",
-  },
-  {
-    value: "smallerHardware",
-    label: "Smaller files (GPU)",
-    hint: "Below the transparent target, on the GPU.",
+    value: "balancedSoftware",
+    label: "Balanced — lower size, some detail lost (CPU)",
+    hint: "The Balanced target on the CPU. Slower, slightly better for the size.",
   },
 ];
 
-const FRAME_RATES: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "", label: "Keep source frame rate" },
-  { value: "30", label: "30 fps" },
-  { value: "25", label: "25 fps" },
-  { value: "24", label: "24 fps" },
-];
+// Only rates below the source are useful: converting up invents frames, costing size for nothing.
+const FRAME_RATE_CHOICES = [60, 30, 24] as const;
+
 
 const CODECS: ReadonlyArray<{ value: VideoConversionCodec; label: string; hint: string }> = [
   { value: "hevc", label: "HEVC (H.265)", hint: "About half the size of H.264 at the same quality." },
@@ -157,7 +136,7 @@ function EncoderHint({
 const selectClass =
   "w-full bg-input border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-accent disabled:opacity-50";
 
-export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOriginals, onStarted, title }: Props) {
+export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOriginals, onStarted, title, maxSourceFrameRate }: Props) {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [submitted, setSubmitted] = useState(false);
@@ -265,11 +244,14 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
               }
               className={selectClass}
             >
-              {FRAME_RATES.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+              <option value="">Keep source frame rate</option>
+              {FRAME_RATE_CHOICES.filter((fps) => maxSourceFrameRate == null || fps < maxSourceFrameRate - 0.01).map(
+                (fps) => (
+                  <option key={fps} value={String(fps)}>
+                    {fps} fps
+                  </option>
+                ),
+              )}
             </select>
             <p className="text-xs text-muted">
               Lowering the frame rate shrinks the file without touching per-frame detail, and lowers the

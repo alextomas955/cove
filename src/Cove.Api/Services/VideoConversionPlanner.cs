@@ -38,28 +38,23 @@ public enum VideoConversionContainer
 /// </summary>
 public enum VideoConversionEffort
 {
-    /// <summary>The transparent target, encoded in software. Best quality per bit, slowest.</summary>
-    QualitySoftware,
+    /// <summary>
+    /// The bitrate judged practically identical to the original on high-detail 4K footage. Software
+    /// encoder: best quality per bit, and by far the slowest.
+    /// </summary>
+    HighSoftware,
 
-    /// <summary>The transparent target, encoded on the GPU. Several times faster than software.</summary>
-    QualityHardware,
+    /// <summary>The same target on the GPU. Several times faster.</summary>
+    HighHardware,
 
-    // --- temporary bisection rungs -------------------------------------------------------------
-    // The transparent target is calibrated from one measured point and published ladder shapes; these
-    // rungs exist so the boundary can be found by eye on real footage rather than assumed. They sit
-    // between a level reported as indistinguishable (110% of target) and one reported as clearly worse
-    // (45%). Fold the winner into the permanent rungs and delete the rest.
-    Test85Hardware,
-    Test70Hardware,
-    Test58Hardware,
-    Test48Hardware,
-    // -------------------------------------------------------------------------------------------
+    /// <summary>
+    /// 70% of the High target. Judged to lose fine detail - hair, freckles - at a few feet, while
+    /// most of the picture holds up. Software encoder.
+    /// </summary>
+    BalancedSoftware,
 
-    /// <summary>Below the transparent target, for when size matters more than fidelity.</summary>
-    SmallerSoftware,
-
-    /// <summary>Below the transparent target, on the GPU.</summary>
-    SmallerHardware,
+    /// <summary>70% of the High target, on the GPU.</summary>
+    BalancedHardware,
 }
 
 /// <summary>What a rung resolves to: which encoder family, its preset, its quality target, and how much
@@ -303,17 +298,10 @@ public static class VideoConversionPlanner
     /// </summary>
     public static VideoConversionEffortProfile Profile(VideoConversionEffort effort) => effort switch
     {
-        VideoConversionEffort.QualitySoftware => new(false, "slow", "p4", 1.00),
-        VideoConversionEffort.QualityHardware => new(true, "medium", "p4", 1.00),
-
-        // Temporary, for finding the perceptual boundary by eye. See the enum.
-        VideoConversionEffort.Test85Hardware => new(true, "medium", "p4", 0.85),
-        VideoConversionEffort.Test70Hardware => new(true, "medium", "p4", 0.70),
-        VideoConversionEffort.Test58Hardware => new(true, "medium", "p4", 0.58),
-        VideoConversionEffort.Test48Hardware => new(true, "medium", "p4", 0.48),
-
-        VideoConversionEffort.SmallerSoftware => new(false, "medium", "p4", 0.65),
-        VideoConversionEffort.SmallerHardware => new(true, "medium", "p4", 0.65),
+        VideoConversionEffort.HighSoftware => new(false, "slow", "p4", 1.00),
+        VideoConversionEffort.HighHardware => new(true, "medium", "p4", 1.00),
+        VideoConversionEffort.BalancedSoftware => new(false, "medium", "p4", 0.70),
+        VideoConversionEffort.BalancedHardware => new(true, "medium", "p4", 0.70),
         _ => throw new ArgumentOutOfRangeException(nameof(effort), effort, "Unknown conversion effort."),
     };
 

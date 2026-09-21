@@ -34,7 +34,7 @@ public class VideoConversionSizingTests
     {
         var target = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, Fps60);
 
-        Assert.InRange(target, (int)(MeasuredTransparentKbps * 0.8), (int)(MeasuredTransparentKbps * 1.1));
+        Assert.InRange(target, (int)(MeasuredTransparentKbps * 0.97), (int)(MeasuredTransparentKbps * 1.03));
         Assert.True(target > MeasuredWorseKbps * 1.5, $"target {target} is too close to the level reported as worse");
     }
 
@@ -98,36 +98,45 @@ public class VideoConversionSizingTests
     {
         var target = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, Fps60);
 
-        foreach (var rung in new[] { VideoConversionEffort.QualitySoftware, VideoConversionEffort.QualityHardware })
+        foreach (var rung in new[] { VideoConversionEffort.HighSoftware, VideoConversionEffort.HighHardware })
             Assert.Equal(target, VideoBitrateTarget.ForEffort(VideoConversionCodec.Hevc, rung, Uhd, UhdHeight, Fps60));
 
-        foreach (var rung in new[] { VideoConversionEffort.SmallerSoftware, VideoConversionEffort.SmallerHardware })
+        foreach (var rung in new[] { VideoConversionEffort.BalancedSoftware, VideoConversionEffort.BalancedHardware })
             Assert.True(VideoBitrateTarget.ForEffort(VideoConversionCodec.Hevc, rung, Uhd, UhdHeight, Fps60) < target);
     }
 
     /// <summary>
-    /// The calibration rungs exist to find the perceptual boundary by eye, so they must bracket it:
-    /// below the level reported as indistinguishable and spanning down towards the one reported as
-    /// clearly worse.
+    /// The two rungs are the levels judged by eye on real 4K footage: High at the bitrate reported
+    /// practically identical to the original, Balanced at the one that softened fine detail such as
+    /// hair and freckles while the rest of the picture held up.
     /// </summary>
     [Fact]
-    public void CalibrationRungsBracketTheMeasuredBoundary()
+    public void RungsReproduceTheJudgedLevels()
     {
-        var rungs = new[]
-        {
-            VideoConversionEffort.Test85Hardware,
-            VideoConversionEffort.Test70Hardware,
-            VideoConversionEffort.Test58Hardware,
-            VideoConversionEffort.Test48Hardware,
-        };
+        var high = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.HighHardware, Uhd, UhdHeight, Fps60);
+        var balanced = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.BalancedHardware, Uhd, UhdHeight, Fps60);
 
-        var values = rungs
-            .Select(rung => VideoBitrateTarget.ForEffort(VideoConversionCodec.Hevc, rung, Uhd, UhdHeight, Fps60))
-            .ToList();
+        Assert.InRange(high, (int)(MeasuredTransparentKbps * 0.97), (int)(MeasuredTransparentKbps * 1.03));
+        Assert.InRange(balanced, (int)(high * 0.65), (int)(high * 0.75));
+        Assert.True(balanced > MeasuredWorseKbps, "Balanced must stay above the level judged clearly worse");
+    }
 
-        Assert.Equal(values.OrderByDescending(value => value), values);
-        Assert.True(values[0] < MeasuredTransparentKbps, "the top rung should sit below the known-good level");
-        Assert.True(values[^1] <= MeasuredWorseKbps * 1.2, "the bottom rung should reach the known-bad level");
+    /// <summary>
+    /// The frame-rate term must give each frame MORE bits at lower rates, not simply scale with them.
+    /// That is why halving the frame rate halved the file without visibly costing per-frame detail.
+    /// </summary>
+    [Fact]
+    public void LowerFrameRatesGetMoreBitsPerFrame()
+    {
+        var at60 = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.HighHardware, Uhd, UhdHeight, Fps60);
+        var at30 = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.HighHardware, Uhd, UhdHeight, 30);
+
+        Assert.True(at30 < at60, "the total bitrate must fall");
+        Assert.True(at30 / 30d > at60 / Fps60, "but each frame must get more bits");
     }
 
     // ---- deciding before encoding ----
@@ -186,7 +195,7 @@ public class VideoConversionSizingTests
         int width, int height, double fps, int sourceKbps, double duration, bool shouldConvert)
     {
         var target = VideoBitrateTarget.ForEffort(
-            VideoConversionCodec.Hevc, VideoConversionEffort.QualityHardware, width, height, fps);
+            VideoConversionCodec.Hevc, VideoConversionEffort.HighHardware, width, height, fps);
         var sourceBytes = (long)(sourceKbps * 1000d * duration / 8d);
         var projected = VideoBitrateTarget.ProjectedBytes(target, duration, 128);
 
@@ -204,9 +213,9 @@ public class VideoConversionSizingTests
     public void LoweringOutputFrameRateLowersTheTarget()
     {
         var at60 = VideoBitrateTarget.ForEffort(
-            VideoConversionCodec.Hevc, VideoConversionEffort.QualityHardware, Uhd, UhdHeight, Fps60);
+            VideoConversionCodec.Hevc, VideoConversionEffort.HighHardware, Uhd, UhdHeight, Fps60);
         var at30 = VideoBitrateTarget.ForEffort(
-            VideoConversionCodec.Hevc, VideoConversionEffort.QualityHardware, Uhd, UhdHeight, 30);
+            VideoConversionCodec.Hevc, VideoConversionEffort.HighHardware, Uhd, UhdHeight, 30);
 
         Assert.True(at30 < at60);
     }
@@ -218,7 +227,7 @@ public class VideoConversionSizingTests
             [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, 20_000, Uhd, UhdHeight, Fps60)]);
 
         var plan = VideoConversionPlanner.Build(
-            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.QualityHardware, fps: 30),
+            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.HighHardware, fps: 30),
             "hevc_nvenc", null, sample: null, targetKbps: 9000, outputFrameRate: 30);
 
         Assert.Contains("-r 30", plan.Arguments);
@@ -236,7 +245,7 @@ public class VideoConversionSizingTests
             [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, 20_000, Uhd, UhdHeight, Fps60)]);
 
         var plan = VideoConversionPlanner.Build(
-            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.QualityHardware),
+            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.HighHardware),
             "hevc_nvenc", null, sample: null, targetKbps: 15000);
 
         Assert.Contains("-fps_mode passthrough", plan.Arguments);
@@ -252,7 +261,7 @@ public class VideoConversionSizingTests
             [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, 20_000, Uhd, UhdHeight, Fps60)]);
 
         var plan = VideoConversionPlanner.Build(
-            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.QualityHardware),
+            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.HighHardware),
             "hevc_nvenc", null, sample: null, targetKbps: 15000);
 
         Assert.Contains("-b:v 15000k", plan.Arguments);

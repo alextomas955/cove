@@ -7,7 +7,7 @@ namespace Cove.Tests;
 public class VideoConversionPlannerTests
 {
     private static readonly VideoConversionSettings HevcMp4 = new(
-        VideoConversionCodec.Hevc, VideoConversionContainer.Mp4, VideoConversionEffort.QualityHardware,
+        VideoConversionCodec.Hevc, VideoConversionContainer.Mp4, VideoConversionEffort.HighHardware,
         ReplaceOriginal: false, DiscardIfLarger: true);
 
     private static ProbedStream Video(string codec, string pixFmt = "yuv420p", int index = 0, bool attachedPicture = false)
@@ -134,7 +134,7 @@ public class VideoConversionPlannerTests
     [InlineData("hevc_vaapi", true, "-c:v hevc_vaapi -rc_mode CQP -qp 22 -profile:v main10")]
     public void ConversionVideoEncodeArgs_UsesEachEncoderFamilysOwnQualityKnob(string encoder, bool tenBit, string expected)
     {
-        Assert.Equal(expected, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder, 22, VideoConversionEffort.QualityHardware, tenBit));
+        Assert.Equal(expected, FfmpegHwAccel.ConversionVideoEncodeArgs(encoder, 22, VideoConversionEffort.HighHardware, tenBit));
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class VideoConversionPlannerTests
             var outputPath = VideoConversionPlanner.ChooseOutputPath(sourcePath, HevcMp4, File.Exists);
             Assert.Equal(Path.Combine(root, "clip.mp4"), outputPath);
 
-            var plan = VideoConversionPlanner.Build(source, sourcePath, outputPath, HevcMp4 with { Effort = VideoConversionEffort.SmallerHardware }, "libx265", null);
+            var plan = VideoConversionPlanner.Build(source, sourcePath, outputPath, HevcMp4 with { Effort = VideoConversionEffort.BalancedHardware }, "libx265", null);
             var positions = new List<double>();
             var encode = await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg!, plan.Arguments,
                 line => { if (VideoConversionPlanner.TryParseProgressSeconds(line, out var seconds)) positions.Add(seconds); },

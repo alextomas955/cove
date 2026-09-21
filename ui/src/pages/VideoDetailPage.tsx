@@ -1385,6 +1385,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
             onClose={() => setShowConvert(false)}
             videoIds={[id]}
             canReplaceOriginals={canDeleteVideoFiles}
+            maxSourceFrameRate={video.files[0]?.frameRate ?? null}
             title={`Convert "${video.title || video.files[0]?.basename || "Untitled"}"`}
           />
         ) : null}

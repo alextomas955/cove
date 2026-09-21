@@ -18,11 +18,18 @@ namespace Cove.Api.Services;
 ///   * bitrate rises sub-linearly with frame rate. Every published ladder puts 60fps at roughly 1.5x
 ///     its 30fps tier, not 2x, because consecutive frames are more alike the faster they come.
 ///
-/// Calibrated against a measured point: a 3840x2160 59.94fps source re-encoded to HEVC at 16541 kbps
-/// was reported visually indistinguishable from a 54828 kbps H.264 original (and better in one spot,
-/// having removed noise), while the same source at 6797 kbps was clearly worse. This model puts the
-/// transparent target at 15124 kbps for that clip - 91% of the measured-good point and 2.2x the
-/// measured-bad one.
+/// Calibrated by eye against real footage rather than from a table. On a 3840x2160 59.94fps source,
+/// HEVC at 16541 kbps was judged practically identical to a 54828 kbps H.264 original, 10587 kbps lost
+/// fine detail such as hair and freckles at a few feet, and 6797 kbps was clearly worse. "High" is the
+/// first of those and "Balanced" the second.
+///
+/// The frame-rate term is the better-evidenced half: the same 4K material converted at 30fps instead of
+/// 60 matched the model within 2% across three videos and was judged indistinguishable. Note it gives
+/// each frame MORE bits at lower frame rates - 364 kbit/frame at 30fps against 276 at 60 - which is why
+/// halving the frame rate halves the file without visibly costing per-frame detail.
+///
+/// The pixel term is extrapolated, not measured: every judged point was 4K. It is insensitive (moving
+/// the exponent from 0.70 to 0.82 shifts 1080p by about 5%), but sub-4K targets are unverified.
 ///
 /// The caveat is the one Netflix's per-title work exists for: content complexity dominates, so a fixed
 /// target is an approximation. Grain and fine detail need more than this; flat animation needs far
@@ -31,8 +38,14 @@ namespace Cove.Api.Services;
 /// </summary>
 public static class VideoBitrateTarget
 {
-    /// <summary>Scales the whole ladder. Set so 2160p30 lands at 10 Mbps and 1080p30 at 3.5 Mbps.</summary>
-    private const double BaseKbpsPerMegapixel = 2000d;
+    /// <summary>
+    /// Scales the whole ladder. Anchored on a judged point rather than a published table: a
+    /// 3840x2160 59.94fps source re-encoded to HEVC at 16541 kbps was reported practically identical
+    /// to its 54828 kbps H.264 original, so that level is what "High" means and this constant is set
+    /// to reproduce it. The same constant then predicted three further conversions of 4K material at
+    /// 30fps to within 2% of what they measured, all of which were judged acceptable.
+    /// </summary>
+    private const double BaseKbpsPerMegapixel = 2187d;
 
     /// <summary>Pixel-count exponent. 1.0 would be linear; measured ladders sit near 0.76.</summary>
     private const double PixelExponent = 0.76d;

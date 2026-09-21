@@ -13,11 +13,10 @@ public sealed class VideoConversionRequestDto
     /// <summary>"mp4" or "mkv".</summary>
     public string Container { get; set; } = "mp4";
     /// <summary>
-    /// One rung of the conversion ladder: "qualitySoftware", "qualityHardware",
-    /// "smallerSoftware", "smallerHardware", or a temporary calibration rung
-    /// ("test85Hardware", "test70Hardware", "test58Hardware", "test48Hardware").
+    /// One rung of the conversion ladder: "highSoftware", "highHardware",
+    /// "balancedSoftware" or "balancedHardware".
     /// </summary>
-    public string Effort { get; set; } = "qualityHardware";
+    public string Effort { get; set; } = "highHardware";
 
     /// <summary>Re-encode at this frame rate instead of the source's. Null keeps the source's.</summary>
     public double? OutputFrameRate { get; set; }
@@ -63,11 +62,12 @@ public sealed class VideoConversionController(
             return BadRequest(new
             {
                 error = "Unknown conversion option. Codec is h264, hevc, av1 or copy; container is mp4 or mkv; "
-                    + "effort is qualitySoftware, qualityHardware, smallerSoftware, smallerHardware "
-                    + "or one of the temporary calibration rungs.",
+                    + "effort is highSoftware, highHardware, balancedSoftware or balancedHardware.",
             });
         }
 
+        // A requested rate only ever lowers a video's own rate; the job clamps per video, because a
+        // selection can mix source rates.
         if (dto.OutputFrameRate is { } fps && (fps < 1 || fps > 240))
             return BadRequest(new { error = "Output frame rate must be between 1 and 240." });
 

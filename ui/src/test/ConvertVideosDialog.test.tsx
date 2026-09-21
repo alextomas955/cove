@@ -55,7 +55,7 @@ describe("ConvertVideosDialog", () => {
 
     expect(await screen.findByText(/GPU encoding with hevc_nvenc/)).toBeTruthy();
     await user.selectOptions(screen.getByLabelText("Container"), "mkv");
-    await user.selectOptions(screen.getByLabelText("Quality"), "qualitySoftware");
+    await user.selectOptions(screen.getByLabelText("Quality"), "highSoftware");
     await user.click(screen.getByRole("checkbox", { name: /Replace the originals/ }));
     await user.click(screen.getByRole("button", { name: "Convert and replace" }));
 
@@ -64,7 +64,7 @@ describe("ConvertVideosDialog", () => {
       videoIds: [3, 7],
       codec: "hevc",
       container: "mkv",
-      effort: "qualitySoftware",
+      effort: "highSoftware",
       outputFrameRate: null,
       convertMarginalSavings: false,
       replaceOriginal: true,

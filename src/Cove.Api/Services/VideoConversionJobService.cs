@@ -375,8 +375,29 @@ public sealed class VideoConversionJobService(
         if (video is null)
             return 0;
 
-        var fps = settings.OutputFrameRate ?? video.FrameRate;
+        // The target follows the OUTPUT's frame rate: converting at a lower rate lowers it, which is
+        // what makes a frame-rate reduction shrink the file rather than just drop frames.
+        var fps = EffectiveFrameRate(source, settings) ?? video.FrameRate;
         return VideoBitrateTarget.ForEffort(settings.Codec, settings.Effort, video.Width, video.Height, fps);
+    }
+
+    /// <summary>
+    /// The frame rate the output will actually have. A requested rate only ever lowers: interpolating a
+    /// 30fps source up to 60 invents frames, costing size and gaining nothing, and it would also raise
+    /// the bitrate target for detail that is not there. A selection converted together can hold a mix of
+    /// source rates, so this is resolved per video rather than once for the batch.
+    /// </summary>
+    private static double? EffectiveFrameRate(ProbedMedia source, VideoConversionSettings settings)
+    {
+        if (settings.OutputFrameRate is not { } requested || requested <= 0)
+            return null;
+
+        var sourceRate = source.Video?.FrameRate ?? 0;
+        if (sourceRate <= 0)
+            return requested;
+
+        // Within a frame of the source is the source; re-timing for that gains nothing.
+        return requested < sourceRate - 0.01 ? requested : null;
     }
 
     /// <summary>
@@ -428,7 +449,7 @@ public sealed class VideoConversionJobService(
         CancellationToken ct)
     {
         var decodeArgs = config.FfmpegInputArgs;
-        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, sample: null, targetKbps, settings.OutputFrameRate);
+        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, sample: null, targetKbps, EffectiveFrameRate(source, settings));
         var action = plan.CopiesVideo ? "Remuxing" : $"Encoding with {encoder}";
 
         var result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"{action}...", 0, EncodeShare, unit, ct, encoder);
@@ -445,7 +466,7 @@ public sealed class VideoConversionJobService(
             notes.Add($"{encoder} failed ({LastLine(result.StandardError)}), so it was encoded with {software} instead.");
             DeletePartial(partialPath);
 
-            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, sample: null, targetKbps, settings.OutputFrameRate);
+            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, sample: null, targetKbps, EffectiveFrameRate(source, settings));
             result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"Encoding with {software}...", 0, EncodeShare, unit, ct, software);
             if (result.ExitCode == 0)
                 return plan;
