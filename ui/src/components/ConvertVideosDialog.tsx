@@ -78,11 +78,48 @@ const CODECS: ReadonlyArray<{ value: VideoConversionCodec; label: string; hint: 
 ];
 
 // Keeps the choices someone made last time, and falls back to the defaults when storage is unavailable.
+/**
+ * Restores the last-used choices, keeping only values this build still offers.
+ *
+ * These are persisted across sessions, so a stored choice can outlive the option that produced it: a
+ * value renamed or retired in a later build would otherwise be replayed straight into the API, which
+ * rejects the whole request. Anything unrecognised falls back to the default rather than being trusted.
+ */
 function loadSettings(): Settings {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<Settings> | null;
-    // Replacing originals deletes files, so it is never pre-selected from a previous session.
-    return { ...DEFAULT_SETTINGS, ...stored, replaceOriginal: false };
+    if (!stored || typeof stored !== "object") return DEFAULT_SETTINGS;
+
+    const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+      typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+
+    const frameRate =
+      typeof stored.outputFrameRate === "number" && Number.isFinite(stored.outputFrameRate) && stored.outputFrameRate > 0
+        ? stored.outputFrameRate
+        : null;
+
+    return {
+      ...DEFAULT_SETTINGS,
+      codec: oneOf(
+        stored.codec,
+        CODECS.map((option) => option.value),
+        DEFAULT_SETTINGS.codec,
+      ),
+      container: oneOf(stored.container, ["mp4", "mkv"] as const, DEFAULT_SETTINGS.container),
+      effort: oneOf(
+        stored.effort,
+        EFFORTS.map((option) => option.value),
+        DEFAULT_SETTINGS.effort,
+      ),
+      outputFrameRate: frameRate,
+      discardIfLarger: typeof stored.discardIfLarger === "boolean" ? stored.discardIfLarger : DEFAULT_SETTINGS.discardIfLarger,
+      convertMarginalSavings:
+        typeof stored.convertMarginalSavings === "boolean"
+          ? stored.convertMarginalSavings
+          : DEFAULT_SETTINGS.convertMarginalSavings,
+      // Replacing originals deletes files, so it is never pre-selected from a previous session.
+      replaceOriginal: false,
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }

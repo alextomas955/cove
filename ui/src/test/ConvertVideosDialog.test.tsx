@@ -102,4 +102,56 @@ describe("ConvertVideosDialog", () => {
     expect(await screen.findByText(/cannot encode AV1/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Convert" }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  // A stored choice outlives the option that produced it. When a later build renames or retires an
+  // effort, replaying the old value put it straight into the request and the API rejected the whole
+  // thing with a 400, leaving conversion unusable until browser storage was cleared by hand.
+  it("ignores a stored option this build no longer offers", async () => {
+    localStorage.setItem(
+      "cove.convert-videos.options",
+      JSON.stringify({ codec: "hevc", container: "mp4", effort: "qualitySoftware" }),
+    );
+
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+
+    await waitFor(() => expect(mocks.start).toHaveBeenCalled());
+    const sent = mocks.start.mock.calls[0][0];
+    expect(["highSoftware", "highHardware", "balancedSoftware", "balancedHardware"]).toContain(sent.effort);
+  });
+
+  it("keeps a stored option this build still offers", async () => {
+    localStorage.setItem(
+      "cove.convert-videos.options",
+      JSON.stringify({ codec: "hevc", container: "mkv", effort: "balancedHardware" }),
+    );
+
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+
+    await waitFor(() => expect(mocks.start).toHaveBeenCalled());
+    const sent = mocks.start.mock.calls[0][0];
+    expect(sent.effort).toBe("balancedHardware");
+    expect(sent.container).toBe("mkv");
+  });
+
+  it("discards stored junk rather than sending it", async () => {
+    localStorage.setItem(
+      "cove.convert-videos.options",
+      JSON.stringify({ codec: 42, container: null, effort: {}, outputFrameRate: "sixty" }),
+    );
+
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+
+    await waitFor(() => expect(mocks.start).toHaveBeenCalled());
+    const sent = mocks.start.mock.calls[0][0];
+    expect(["h264", "hevc", "av1", "copy"]).toContain(sent.codec);
+    expect(["mp4", "mkv"]).toContain(sent.container);
+    expect(["highSoftware", "highHardware", "balancedSoftware", "balancedHardware"]).toContain(sent.effort);
+    expect(sent.outputFrameRate).toBeNull();
+  });
 });
