@@ -2000,11 +2000,17 @@ export interface VideoConversionOptions {
   /** One rung of the conversion ladder, ordered from most quality to most speed. */
   effort:
     | "qualitySoftware"
-    | "highSoftware"
-    | "balancedSoftware"
-    | "smallerSoftware"
     | "qualityHardware"
+    | "test85Hardware"
+    | "test70Hardware"
+    | "test58Hardware"
+    | "test48Hardware"
+    | "smallerSoftware"
     | "smallerHardware";
+  /** Re-encode at this frame rate instead of the source's. Omit to keep the source's. */
+  outputFrameRate?: number | null;
+  /** Convert even when the predicted saving is below the worthwhile threshold. */
+  convertMarginalSavings?: boolean;
   /** Verify each converted file, make it primary and delete the original from disk. */
   replaceOriginal: boolean;
   /** Throw a re-encoded file away when it is not smaller than the original. */

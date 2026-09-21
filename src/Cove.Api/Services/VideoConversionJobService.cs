@@ -257,17 +257,16 @@ public sealed class VideoConversionJobService(
         var published = false;
         try
         {
-            // Find out what this would produce before spending the whole encode on it. A constant-quality
-            // encode of an already-compressed source can come out larger than the original, and without
-            // this that is only discovered after the full run - minutes of work thrown away.
-            if (await ProjectsLargerAsync(ffmpeg, encoder, source, sourcePath, sourceSize, settings, copiesVideo, unit, ct) is { } projection)
+            // Decided from metadata: no frames are encoded to find out whether encoding is worthwhile.
+            var targetKbps = TargetKbpsFor(source, settings);
+            if (NotWorthConverting(source, sourceSize, settings, copiesVideo, targetKbps) is { } skipReason)
             {
                 reclaimed.AddDiscardedNotSmaller();
-                unit.Complete(JobUnitOutcome.Skipped, projection);
+                unit.Complete(JobUnitOutcome.Skipped, skipReason);
                 return;
             }
 
-            var plan = await EncodeAsync(ffmpeg, copiesVideo ? null : encoder, source, sourcePath, partialPath, settings, notes, unit, ct);
+            var plan = await EncodeAsync(ffmpeg, copiesVideo ? null : encoder, source, sourcePath, partialPath, settings, targetKbps, notes, unit, ct);
             notes.AddRange(plan.Notes);
 
             var output = await ProbeAsync(partialPath, "converted", ct);
@@ -368,66 +367,52 @@ public sealed class VideoConversionJobService(
     }
 
     /// <summary>
-    /// Trial-encodes a slice and returns why the conversion was abandoned, or null to go ahead.
-    ///
-    /// Only runs where it can pay for itself: the video is being re-encoded (a stream copy's size is
-    /// already known), the user asked for results no larger than the original, and the file is long
-    /// enough that a minute of trial is small next to the whole encode. The trial uses the very command
-    /// the conversion would, so its bitrate includes audio and container overhead.
+    /// The bitrate this conversion aims for, from the OUTPUT's resolution and frame rate.
     /// </summary>
-    private async Task<string?> ProjectsLargerAsync(
-        string ffmpeg,
-        string? encoder,
-        ProbedMedia source,
-        string sourcePath,
-        long sourceSize,
-        VideoConversionSettings settings,
-        bool copiesVideo,
-        IJobUnit unit,
-        CancellationToken ct)
+    private static int TargetKbpsFor(ProbedMedia source, VideoConversionSettings settings)
     {
-        if (copiesVideo || !settings.DiscardIfLarger || encoder is null)
+        var video = source.Video;
+        if (video is null)
+            return 0;
+
+        var fps = settings.OutputFrameRate ?? video.FrameRate;
+        return VideoBitrateTarget.ForEffort(settings.Codec, settings.Effort, video.Width, video.Height, fps);
+    }
+
+    /// <summary>
+    /// Why this conversion should not run, or null to go ahead.
+    ///
+    /// This replaces a trial encode. Because the target comes from the output's resolution rather than
+    /// from a quality knob, the resulting size is arithmetic, and a file whose source already sits below
+    /// what its resolution can use is recognised without encoding a single frame.
+    /// </summary>
+    private string? NotWorthConverting(
+        ProbedMedia source, long sourceSize, VideoConversionSettings settings, bool copiesVideo, int targetKbps)
+    {
+        if (copiesVideo || targetKbps <= 0 || source.Duration <= 0)
             return null;
 
-        if (VideoConversionPlanner.ChooseSample(source.Duration) is not { } sample)
+        var audioKbps = source.Audio.Sum(stream => stream.BitRateKbps);
+        var projected = VideoBitrateTarget.ProjectedBytes(targetKbps, source.Duration, audioKbps);
+        if (projected <= 0)
             return null;
 
-        var samplePath = Path.Combine(Path.GetTempPath(), $"cove_convert_probe_{Guid.NewGuid():N}{VideoConversionPlanner.Extension(settings.Container)}");
-        try
+        if (VideoConversionPlanner.NotWorthConverting(sourceSize, projected) is { } reason)
         {
-            var plan = VideoConversionPlanner.Build(source, sourcePath, samplePath, settings, encoder, config.FfmpegInputArgs, sample, source.VideoBitRateKbps);
-            unit.Report(0, "Checking whether converting would actually save space...");
-            var result = await RunTrackedAsync(ffmpeg, plan.Arguments, sample.DurationSeconds, "Checking whether converting would actually save space...", 0, 0.05, unit, ct, encoder);
-
-            // An inconclusive trial must never block the conversion; fall through and do the real thing.
-            if (result.ExitCode != 0 || !File.Exists(samplePath))
-            {
-                logger.LogDebug("Conversion size probe did not complete for {Path}; converting anyway.", sourcePath);
-                return null;
-            }
-
-            var sampleBytes = new FileInfo(samplePath).Length;
-            var projected = VideoConversionPlanner.ProjectFullSize(sampleBytes, sample.DurationSeconds, source.Duration);
-            if (!VideoConversionPlanner.ProjectsLarger(projected, sourceSize))
-                return null;
-
             logger.LogInformation(
-                "Skipping {Path}: a {Sample:F0}s trial encode projects about {Projected} against the original's {Source}, " +
-                "so converting would not save space.",
-                sourcePath, sample.DurationSeconds, FormatSize(projected), FormatSize(sourceSize));
+                "Skipping conversion: source is {SourceKbps:F0} kbps and the target for this resolution is {TargetKbps} kbps.",
+                source.VideoBitRateKbps, targetKbps);
+            return reason;
+        }
 
-            return $"A trial encode projects about {FormatSize(projected)}, larger than the original's {FormatSize(sourceSize)}, "
-                 + "so it was left alone. The source is already efficiently encoded for its resolution.";
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException and not VideoConversionException)
+        var saving = VideoConversionPlanner.ProjectedSaving(sourceSize, projected);
+        if (saving < VideoConversionPlanner.MarginalSavingThreshold && !settings.ConvertMarginalSavings)
         {
-            logger.LogDebug(ex, "Conversion size probe failed for {Path}; converting anyway.", sourcePath);
-            return null;
+            return $"Converting would only save about {saving:P0} ({FormatSize(sourceSize)} to about "
+                 + $"{FormatSize(projected)}), so it was left alone. Re-run with marginal savings allowed to convert it anyway.";
         }
-        finally
-        {
-            try { if (File.Exists(samplePath)) File.Delete(samplePath); } catch { /* best effort */ }
-        }
+
+        return null;
     }
 
     private async Task<VideoConversionPlan> EncodeAsync(
@@ -437,12 +422,13 @@ public sealed class VideoConversionJobService(
         string sourcePath,
         string partialPath,
         VideoConversionSettings settings,
+        int targetKbps,
         List<string> notes,
         IJobUnit unit,
         CancellationToken ct)
     {
         var decodeArgs = config.FfmpegInputArgs;
-        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, sample: null, source.VideoBitRateKbps);
+        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, sample: null, targetKbps, settings.OutputFrameRate);
         var action = plan.CopiesVideo ? "Remuxing" : $"Encoding with {encoder}";
 
         var result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"{action}...", 0, EncodeShare, unit, ct, encoder);
@@ -459,7 +445,7 @@ public sealed class VideoConversionJobService(
             notes.Add($"{encoder} failed ({LastLine(result.StandardError)}), so it was encoded with {software} instead.");
             DeletePartial(partialPath);
 
-            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, sample: null, source.VideoBitRateKbps);
+            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, sample: null, targetKbps, settings.OutputFrameRate);
             result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"Encoding with {software}...", 0, EncodeShare, unit, ct, software);
             if (result.ExitCode == 0)
                 return plan;

@@ -65,6 +65,8 @@ describe("ConvertVideosDialog", () => {
       codec: "hevc",
       container: "mkv",
       effort: "qualitySoftware",
+      outputFrameRate: null,
+      convertMarginalSavings: false,
       replaceOriginal: true,
       discardIfLarger: true,
     });

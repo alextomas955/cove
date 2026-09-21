@@ -3,277 +3,281 @@ using Cove.Api.Services;
 namespace Cove.Tests;
 
 /// <summary>
-/// The point of converting a library to a denser codec is to get disk space back. Constant-quality
-/// encoding alone could not promise that: it targets an absolute quality with no knowledge of what the
-/// source spent, so on an already-compressed file it asked for more bits than the original used. These
-/// tests pin the pieces that make the promise hold - the ladder, the ceiling, and the trial encode.
+/// Conversion aims at the bitrate a given resolution and frame rate can actually make use of, rather
+/// than at an absolute quality number. That is what lets the decision be made before any encoding
+/// happens: a source already below its target has nothing to reclaim, and the output size of one that
+/// is above it is arithmetic. These tests pin the model against the measurements it was fitted to.
 /// </summary>
 public class VideoConversionSizingTests
 {
-    private static readonly VideoConversionEffort[] SoftwareRungs =
-    [
-        VideoConversionEffort.QualitySoftware,
-        VideoConversionEffort.HighSoftware,
-        VideoConversionEffort.BalancedSoftware,
-        VideoConversionEffort.SmallerSoftware,
-    ];
+    // Measured on video 1501 (3840x2160, 59.94fps, 624s): a 54828 kbps H.264 original re-encoded to
+    // HEVC at 16541 kbps was reported indistinguishable, and at 6797 kbps clearly worse.
+    private const int Uhd = 3840, UhdHeight = 2160;
+    private const double Fps60 = 59.94;
+    private const int MeasuredTransparentKbps = 16541;
+    private const int MeasuredWorseKbps = 6797;
 
-    private static readonly VideoConversionEffort[] AllRungs =
-    [
-        VideoConversionEffort.QualitySoftware,
-        VideoConversionEffort.HighSoftware,
-        VideoConversionEffort.BalancedSoftware,
-        VideoConversionEffort.SmallerSoftware,
-        VideoConversionEffort.QualityHardware,
-        VideoConversionEffort.SmallerHardware,
-    ];
+    private static VideoConversionSettings Settings(
+        VideoConversionEffort effort, double? fps = null, bool marginal = false) => new(
+            VideoConversionCodec.Hevc, VideoConversionContainer.Mp4, effort,
+            ReplaceOriginal: true, DiscardIfLarger: true, OutputFrameRate: fps, ConvertMarginalSavings: marginal);
 
-    private static VideoConversionSettings Settings(VideoConversionEffort effort) => new(
-        VideoConversionCodec.Hevc, VideoConversionContainer.Mp4, effort,
-        ReplaceOriginal: true, DiscardIfLarger: true);
-
-    private static ProbedMedia Source(double durationSeconds, double videoKbps = 0) => new(
-        durationSeconds,
-        [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, videoKbps)]);
+    // ---- the bitrate model ----
 
     /// <summary>
-    /// Measured against libx265 at the same number, hevc_nvenc produced 2.55x the bitrate at cq24 and
-    /// reached parity near cq31. Without the correction a rung would mean something quite different
-    /// depending on whether the machine had a usable hardware encoder.
+    /// The transparent target must sit near the level reported as indistinguishable, and well above the
+    /// one reported as clearly worse. Anywhere outside that band and the model is not describing what
+    /// was actually observed.
     /// </summary>
-    [Theory]
-    [InlineData("hevc_nvenc")]
-    [InlineData("hevc_qsv")]
-    [InlineData("hevc_vaapi")]
-    [InlineData("hevc_amf")]
-    public void HardwareEncodersAskForAHigherQualityNumberThanSoftware(string hardwareEncoder)
+    [Fact]
+    public void TransparentTargetMatchesTheMeasuredPoint()
     {
-        foreach (var rung in AllRungs)
-        {
-            var software = VideoConversionPlanner.QualityValue(VideoConversionCodec.Hevc, rung, "libx265");
-            var hardware = VideoConversionPlanner.QualityValue(VideoConversionCodec.Hevc, rung, hardwareEncoder);
-            Assert.Equal(software + VideoConversionPlanner.HardwareQualityOffset, hardware);
-        }
+        var target = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, Fps60);
+
+        Assert.InRange(target, (int)(MeasuredTransparentKbps * 0.8), (int)(MeasuredTransparentKbps * 1.1));
+        Assert.True(target > MeasuredWorseKbps * 1.5, $"target {target} is too close to the level reported as worse");
     }
 
-    /// <summary>The ladder must actually descend, or the dropdown's ordering is a lie.</summary>
+    /// <summary>
+    /// Bitrate must rise with pixel count but sub-linearly - a 4K frame does not need four times a
+    /// 1080p frame's bits, because larger frames hold proportionally more spatial redundancy.
+    /// </summary>
     [Fact]
-    public void QualityFallsMonotonicallyDownTheSoftwareRungs()
+    public void BitrateRisesWithResolutionButSubLinearly()
     {
-        var values = SoftwareRungs
-            .Select(rung => VideoConversionPlanner.QualityValue(VideoConversionCodec.Hevc, rung, "libx265"))
+        var hd = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, 1920, 1080, 30);
+        var uhd = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, 3840, 2160, 30);
+
+        Assert.True(uhd > hd);
+        Assert.True(uhd < hd * 4, "four times the pixels must not mean four times the bitrate");
+        Assert.True(uhd > hd * 2, "but it should still be meaningfully more");
+    }
+
+    /// <summary>
+    /// Every published ladder puts 60fps at roughly 1.5x its 30fps tier, not 2x, because consecutive
+    /// frames are more alike the faster they come.
+    /// </summary>
+    [Fact]
+    public void BitrateRisesWithFrameRateButSubLinearly()
+    {
+        var at30 = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, 30);
+        var at60 = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, 60);
+
+        Assert.InRange(at60 / (double)at30, 1.3, 1.7);
+    }
+
+    [Fact]
+    public void H264NeedsMoreBitsThanHevcAndAv1Fewer()
+    {
+        var hevc = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, 30);
+        var h264 = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.H264, Uhd, UhdHeight, 30);
+        var av1 = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Av1, Uhd, UhdHeight, 30);
+
+        Assert.True(h264 > hevc);
+        Assert.True(av1 < hevc);
+    }
+
+    [Fact]
+    public void UnknownDimensionsYieldNoTargetRatherThanAGuess()
+    {
+        Assert.Equal(0, VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, 0, 0, 30));
+        Assert.Equal(0, VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, 1920, 0, 30));
+    }
+
+    /// <summary>A file with no reported frame rate still gets a target, on a sane assumption.</summary>
+    [Fact]
+    public void MissingFrameRateFallsBackRatherThanCollapsing()
+    {
+        Assert.True(VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, 0) > 0);
+    }
+
+    // ---- the ladder ----
+
+    [Fact]
+    public void QualityRungsAimAtTheTransparentTargetAndSmallerRungsBelowIt()
+    {
+        var target = VideoBitrateTarget.TransparentKbps(VideoConversionCodec.Hevc, Uhd, UhdHeight, Fps60);
+
+        foreach (var rung in new[] { VideoConversionEffort.QualitySoftware, VideoConversionEffort.QualityHardware })
+            Assert.Equal(target, VideoBitrateTarget.ForEffort(VideoConversionCodec.Hevc, rung, Uhd, UhdHeight, Fps60));
+
+        foreach (var rung in new[] { VideoConversionEffort.SmallerSoftware, VideoConversionEffort.SmallerHardware })
+            Assert.True(VideoBitrateTarget.ForEffort(VideoConversionCodec.Hevc, rung, Uhd, UhdHeight, Fps60) < target);
+    }
+
+    /// <summary>
+    /// The calibration rungs exist to find the perceptual boundary by eye, so they must bracket it:
+    /// below the level reported as indistinguishable and spanning down towards the one reported as
+    /// clearly worse.
+    /// </summary>
+    [Fact]
+    public void CalibrationRungsBracketTheMeasuredBoundary()
+    {
+        var rungs = new[]
+        {
+            VideoConversionEffort.Test85Hardware,
+            VideoConversionEffort.Test70Hardware,
+            VideoConversionEffort.Test58Hardware,
+            VideoConversionEffort.Test48Hardware,
+        };
+
+        var values = rungs
+            .Select(rung => VideoBitrateTarget.ForEffort(VideoConversionCodec.Hevc, rung, Uhd, UhdHeight, Fps60))
             .ToList();
 
-        Assert.Equal(values.OrderBy(value => value), values);
-        Assert.Equal(values.Count, values.Distinct().Count());
+        Assert.Equal(values.OrderByDescending(value => value), values);
+        Assert.True(values[0] < MeasuredTransparentKbps, "the top rung should sit below the known-good level");
+        Assert.True(values[^1] <= MeasuredWorseKbps * 1.2, "the bottom rung should reach the known-bad level");
+    }
+
+    // ---- deciding before encoding ----
+
+    [Fact]
+    public void ProjectedSizeIsBitrateTimesDuration()
+    {
+        // 10 Mbps video plus 200 kbps audio for 600s ≈ 765 MB.
+        var bytes = VideoBitrateTarget.ProjectedBytes(10_000, 600, 200);
+        Assert.InRange(bytes, 760_000_000, 770_000_000);
+    }
+
+    [Fact]
+    public void NoProjectionWithoutABitrateOrDuration()
+    {
+        Assert.Equal(0, VideoBitrateTarget.ProjectedBytes(0, 600, 128));
+        Assert.Equal(0, VideoBitrateTarget.ProjectedBytes(5000, 0, 128));
     }
 
     /// <summary>
-    /// Presets measured as pointless are deliberately absent: on a 4K source libx265 "slower" cost 4x
-    /// "slow" for 0.3 VMAF, and every hevc_nvenc preset above p4 matched p4 within 0.2 VMAF and 1% of
-    /// its size while taking up to 2.4x as long.
+    /// The case that started this: a source already leaner than its resolution's target. Re-encoding it
+    /// cannot reclaim anything and can only lose quality, so it is refused without encoding.
     /// </summary>
     [Fact]
-    public void LadderNeverSelectsAPresetThatMeasuredAsWastedTime()
+    public void SourceAlreadyBelowItsTargetIsRefused()
     {
-        string[] wastedHardware = ["p5", "p6", "p7"];
-        foreach (var rung in AllRungs)
-        {
-            var profile = VideoConversionPlanner.Profile(rung);
-            Assert.NotEqual("slower", profile.SoftwarePreset);
-            Assert.NotEqual("veryslow", profile.SoftwarePreset);
-            Assert.DoesNotContain(profile.HardwarePreset, wastedHardware);
-        }
+        var reason = VideoConversionPlanner.NotWorthConverting(sourceBytes: 800_000_000, projectedBytes: 900_000_000);
+
+        Assert.NotNull(reason);
+        Assert.Contains("already", reason!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void HardwareRungsPickHardwareAndSoftwareRungsDoNot()
+    public void SourceComfortablyAboveItsTargetIsConverted()
     {
-        Assert.True(VideoConversionPlanner.PrefersHardware(VideoConversionEffort.QualityHardware));
-        Assert.True(VideoConversionPlanner.PrefersHardware(VideoConversionEffort.SmallerHardware));
-        foreach (var rung in SoftwareRungs)
-            Assert.False(VideoConversionPlanner.PrefersHardware(rung));
+        Assert.Null(VideoConversionPlanner.NotWorthConverting(sourceBytes: 4_000_000_000, projectedBytes: 1_200_000_000));
     }
 
-    // ---- the guarantee: a conversion can never grow a file ----
+    [Fact]
+    public void SavingIsTheFractionOfTheOriginalReclaimed()
+    {
+        Assert.Equal(0.70, VideoConversionPlanner.ProjectedSaving(1_000_000, 300_000), 3);
+        Assert.Equal(0d, VideoConversionPlanner.ProjectedSaving(0, 300_000));
+    }
 
     /// <summary>
-    /// The property the redesign exists for. Without a ceiling, converting an already-compressed source
-    /// at a quality-preserving setting produced a file larger than the original and threw it away.
+    /// Both real videos this was calibrated against must be judged correctly from metadata alone, and
+    /// the lean one that prompted the redesign must be refused.
     /// </summary>
     [Theory]
-    [InlineData(4350)]      // the 4K web download that started this
-    [InlineData(26147)]     // a wildly over-encoded 1080p source
-    [InlineData(800)]       // a small, already-lean file
-    public void EveryRungCapsBelowTheSourceBitrate(double sourceKbps)
+    // width, height, fps, source kbps, duration, should convert
+    [InlineData(3840, 2160, 25.0, 4350, 1410, false)]    // the lean 4K file: target exceeds source
+    [InlineData(3840, 2160, 29.97, 35794, 1933, true)]   // grossly over-encoded
+    [InlineData(3840, 2160, 59.94, 54828, 624, true)]    // video 1501
+    public void RealLibraryFilesAreJudgedCorrectlyFromMetadata(
+        int width, int height, double fps, int sourceKbps, double duration, bool shouldConvert)
     {
-        foreach (var rung in AllRungs)
+        var target = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.QualityHardware, width, height, fps);
+        var sourceBytes = (long)(sourceKbps * 1000d * duration / 8d);
+        var projected = VideoBitrateTarget.ProjectedBytes(target, duration, 128);
+
+        var refused = VideoConversionPlanner.NotWorthConverting(sourceBytes, projected) is not null;
+        Assert.Equal(shouldConvert, !refused);
+    }
+
+    // ---- frame rate ----
+
+    /// <summary>
+    /// Lowering the output frame rate lowers the bitrate target with it, because the target is derived
+    /// from the output's frame rate rather than the source's.
+    /// </summary>
+    [Fact]
+    public void LoweringOutputFrameRateLowersTheTarget()
+    {
+        var at60 = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.QualityHardware, Uhd, UhdHeight, Fps60);
+        var at30 = VideoBitrateTarget.ForEffort(
+            VideoConversionCodec.Hevc, VideoConversionEffort.QualityHardware, Uhd, UhdHeight, 30);
+
+        Assert.True(at30 < at60);
+    }
+
+    [Fact]
+    public void RequestedFrameRateReachesTheCommandLine()
+    {
+        var source = new ProbedMedia(600,
+            [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, 20_000, Uhd, UhdHeight, Fps60)]);
+
+        var plan = VideoConversionPlanner.Build(
+            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.QualityHardware, fps: 30),
+            "hevc_nvenc", null, sample: null, targetKbps: 9000, outputFrameRate: 30);
+
+        Assert.Contains("-r 30", plan.Arguments);
+        Assert.DoesNotContain("-fps_mode passthrough", plan.Arguments);
+    }
+
+    /// <summary>
+    /// Without a frame-rate change the source's timestamps must be preserved exactly, or markers and
+    /// generated sprites stop lining up with the video.
+    /// </summary>
+    [Fact]
+    public void KeepingTheSourceFrameRatePreservesTimestamps()
+    {
+        var source = new ProbedMedia(600,
+            [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, 20_000, Uhd, UhdHeight, Fps60)]);
+
+        var plan = VideoConversionPlanner.Build(
+            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.QualityHardware),
+            "hevc_nvenc", null, sample: null, targetKbps: 15000);
+
+        Assert.Contains("-fps_mode passthrough", plan.Arguments);
+        Assert.DoesNotContain(" -r ", plan.Arguments);
+    }
+
+    // ---- command line ----
+
+    [Fact]
+    public void CommandLineCarriesTheBitrateTargetAndItsCeiling()
+    {
+        var source = new ProbedMedia(600,
+            [new ProbedStream(0, "video", "h264", "yuv420p", 8, false, null, null, null, 20_000, Uhd, UhdHeight, Fps60)]);
+
+        var plan = VideoConversionPlanner.Build(
+            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.QualityHardware),
+            "hevc_nvenc", null, sample: null, targetKbps: 15000);
+
+        Assert.Contains("-b:v 15000k", plan.Arguments);
+        Assert.Contains("-maxrate 22500k", plan.Arguments);
+        Assert.Contains("-bufsize 30000k", plan.Arguments);
+    }
+
+    [Fact]
+    public void ProbedStreamReadsDimensionsAndFrameRate()
+    {
+        const string json = """
         {
-            var cap = VideoConversionPlanner.BitrateCapKbps(rung, sourceKbps);
-            Assert.NotNull(cap);
-            Assert.True(cap!.Value < sourceKbps, $"{rung} capped at {cap} against {sourceKbps} kbps");
+          "streams": [{
+            "index": 0, "codec_type": "video", "codec_name": "h264",
+            "width": 3840, "height": 2160,
+            "avg_frame_rate": "30000/1001", "bit_rate": "54828000"
+          }],
+          "format": { "duration": "624.0", "bit_rate": "55000000" }
         }
-    }
+        """;
 
-    [Fact]
-    public void CapsTightenAsTheLadderPrefersSmallerFiles()
-    {
-        const double source = 10_000;
-        var quality = VideoConversionPlanner.BitrateCapKbps(VideoConversionEffort.QualitySoftware, source)!.Value;
-        var balanced = VideoConversionPlanner.BitrateCapKbps(VideoConversionEffort.BalancedSoftware, source)!.Value;
-        var smaller = VideoConversionPlanner.BitrateCapKbps(VideoConversionEffort.SmallerSoftware, source)!.Value;
-
-        Assert.True(quality > balanced && balanced > smaller);
-    }
-
-    /// <summary>An unknown source bitrate yields no ceiling rather than a guessed one.</summary>
-    [Fact]
-    public void NoCapWhenTheSourceBitrateIsUnknown()
-    {
-        Assert.Null(VideoConversionPlanner.BitrateCapKbps(VideoConversionEffort.QualitySoftware, 0));
-        Assert.Null(VideoConversionPlanner.BitrateCapKbps(VideoConversionEffort.QualitySoftware, -1));
-    }
-
-    /// <summary>The ceiling has to reach the command line, or it is only a decision nobody applies.</summary>
-    [Fact]
-    public void CommandLineCarriesTheCeilingWhenTheSourceBitrateIsKnown()
-    {
-        var source = Source(1200, videoKbps: 4350);
-        var plan = VideoConversionPlanner.Build(
-            source, "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.BalancedSoftware),
-            "libx265", null, sample: null, sourceVideoBitrateKbps: source.VideoBitRateKbps);
-
-        var cap = VideoConversionPlanner.BitrateCapKbps(VideoConversionEffort.BalancedSoftware, 4350)!.Value;
-        Assert.Contains($"-maxrate {cap}k", plan.Arguments);
-        Assert.Contains($"-bufsize {cap * 2}k", plan.Arguments);
-    }
-
-    [Fact]
-    public void CommandLineOmitsTheCeilingWhenTheSourceBitrateIsUnknown()
-    {
-        var plan = VideoConversionPlanner.Build(
-            Source(1200), "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.BalancedSoftware), "libx265", null);
-
-        Assert.DoesNotContain("-maxrate", plan.Arguments);
-    }
-
-    /// <summary>
-    /// A per-stream rate is preferred; when the container does not record one, the container average
-    /// less the audio streams is used, which errs high and so only ever loosens the ceiling.
-    /// </summary>
-    [Fact]
-    public void VideoBitrateFallsBackToTheContainerAverageLessAudio()
-    {
-        Assert.Equal(4000, Source(100, videoKbps: 4000).VideoBitRateKbps);
-
-        var withoutStreamRate = new ProbedMedia(100,
-        [
-            new ProbedStream(0, "video", "h264", null, 8, false, null, null, null),
-            new ProbedStream(1, "audio", "aac", null, 0, false, null, null, null, 200),
-        ])
-        { OverallBitRateKbps = 4200 };
-
-        Assert.Equal(4000, withoutStreamRate.VideoBitRateKbps);
-    }
-
-    // ---- trial encode ----
-
-    [Fact]
-    public void ShortVideosSkipTheTrialBecauseItWouldCostAsMuchAsConverting()
-    {
-        Assert.Null(VideoConversionPlanner.ChooseSample(VideoConversionPlanner.SampleSeconds * 2));
-        Assert.Null(VideoConversionPlanner.ChooseSample(30));
-        Assert.Null(VideoConversionPlanner.ChooseSample(0));
-    }
-
-    [Fact]
-    public void LongVideosTakeTheirTrialSliceAwayFromTheStart()
-    {
-        var sample = VideoConversionPlanner.ChooseSample(1200);
-        Assert.NotNull(sample);
-        Assert.Equal(VideoConversionPlanner.SampleSeconds, sample!.DurationSeconds);
-        // Starting at zero would measure intros and title cards rather than the body of the video.
-        Assert.True(sample.StartSeconds > 0);
-        Assert.True(sample.StartSeconds + sample.DurationSeconds < 1200);
-    }
-
-    [Fact]
-    public void ProjectionScalesTheTrialToTheWholeFile()
-    {
-        // 10 MB for 60s of a 600s video projects to about 100 MB.
-        Assert.InRange(VideoConversionPlanner.ProjectFullSize(10_000_000, 60, 600), 99_000_000, 101_000_000);
-    }
-
-    [Fact]
-    public void ProjectionIsZeroWhenTheTrialHasNoLength()
-    {
-        Assert.Equal(0, VideoConversionPlanner.ProjectFullSize(10_000_000, 0, 600));
-    }
-
-    /// <summary>
-    /// A trial encode estimates; it does not measure. A file is only denied its real attempt when the
-    /// projection is clearly worse, never when it is borderline.
-    /// </summary>
-    [Fact]
-    public void OnlyClearlyLargerProjectionsAbandonTheConversion()
-    {
-        const long source = 1_000_000_000;
-
-        Assert.False(VideoConversionPlanner.ProjectsLarger((long)(source * 0.7), source));
-        Assert.False(VideoConversionPlanner.ProjectsLarger(source, source));
-        Assert.False(VideoConversionPlanner.ProjectsLarger((long)(source * 1.10), source));
-        Assert.True(VideoConversionPlanner.ProjectsLarger((long)(source * 1.5), source));
-        Assert.True(VideoConversionPlanner.ProjectsLarger((long)(source * 1.83), source));
-    }
-
-    [Fact]
-    public void MissingFiguresNeverAbandonTheConversion()
-    {
-        Assert.False(VideoConversionPlanner.ProjectsLarger(0, 1_000_000));
-        Assert.False(VideoConversionPlanner.ProjectsLarger(1_000_000, 0));
-    }
-
-    /// <summary>The trial must seek to its slice on the input side and bound its length.</summary>
-    [Fact]
-    public void TrialArgumentsSeekAndLimitLength()
-    {
-        var plan = VideoConversionPlanner.Build(
-            Source(1200), "/in.mp4", "/probe.mp4", Settings(VideoConversionEffort.BalancedSoftware),
-            "hevc_nvenc", decodeInputArgs: null, sample: new VideoConversionSample(300, 60));
-
-        var seekIndex = plan.Arguments.IndexOf("-ss 300", StringComparison.Ordinal);
-        var inputIndex = plan.Arguments.IndexOf("-i ", StringComparison.Ordinal);
-        Assert.True(seekIndex >= 0, "the trial must seek");
-        Assert.True(seekIndex < inputIndex, "-ss must precede -i so the skipped part is never decoded");
-        Assert.Contains("-t 60", plan.Arguments);
-    }
-
-    /// <summary>A real conversion carries no trial seek, or it would convert only part of the file.</summary>
-    [Fact]
-    public void FullConversionArgumentsCarryNoTrialWindow()
-    {
-        var plan = VideoConversionPlanner.Build(
-            Source(1200), "/in.mp4", "/out.mp4", Settings(VideoConversionEffort.BalancedSoftware), "hevc_nvenc", null);
-
-        Assert.DoesNotContain(" -ss ", plan.Arguments);
-        Assert.DoesNotContain(" -t ", plan.Arguments);
-    }
-
-    /// <summary>The trial must ask for exactly the encode the real conversion would, or it predicts nothing.</summary>
-    [Fact]
-    public void TrialUsesTheSameEncoderSettingsAsTheRealConversion()
-    {
-        var settings = Settings(VideoConversionEffort.SmallerSoftware);
-        var full = VideoConversionPlanner.Build(Source(1200), "/in.mp4", "/out.mp4", settings, "hevc_nvenc", null);
-        var trial = VideoConversionPlanner.Build(
-            Source(1200), "/in.mp4", "/probe.mp4", settings, "hevc_nvenc", null, new VideoConversionSample(300, 60));
-
-        var quality = VideoConversionPlanner
-            .QualityValue(VideoConversionCodec.Hevc, VideoConversionEffort.SmallerSoftware, "hevc_nvenc")
-            .ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-        Assert.Contains(quality, full.Arguments);
-        Assert.Contains(quality, trial.Arguments);
-        Assert.Equal(full.ExpectedVideoCodec, trial.ExpectedVideoCodec);
+        var probed = ProbedMedia.Parse(json);
+        Assert.NotNull(probed.Video);
+        Assert.Equal(3840, probed.Video!.Width);
+        Assert.Equal(2160, probed.Video.Height);
+        Assert.Equal(29.97, probed.Video.FrameRate, 2);
     }
 }

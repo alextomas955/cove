@@ -288,6 +288,52 @@ internal static class FfmpegHwAccel
     /// vocabulary. <paramref name="tenBit"/> keeps a 10-bit source 10-bit for HEVC/AV1; H.264 output is
     /// always 8-bit 4:2:0 because browsers and Safari's hardware decoder reject High 10.
     /// </summary>
+    /// <summary>
+    /// Encoder arguments that aim at <paramref name="targetKbps"/> rather than at a quality number.
+    ///
+    /// Every family here is driven in a capped-VBR mode: the target is what the encode averages, and
+    /// the ceiling (1.5x, with a 2x buffer) lets busy scenes spend more while keeping the file close to
+    /// the prediction the user was shown before starting. A pure constant-bitrate mode would hold the
+    /// size exactly but waste bits on easy scenes and starve hard ones.
+    /// </summary>
+    public static string ConversionBitrateArgs(string encoder, int targetKbps, VideoConversionEffort effort, bool tenBit)
+    {
+        var profile = VideoConversionPlanner.Profile(effort);
+        var preset = encoder.EndsWith("_nvenc", StringComparison.Ordinal) ? profile.HardwarePreset : profile.SoftwarePreset;
+        var max = (int)(targetKbps * 1.5);
+        var buf = targetKbps * 2;
+        var pix = tenBit && !encoder.StartsWith("h264", StringComparison.Ordinal) ? "yuv420p10le" : "yuv420p";
+        var hwPix = tenBit && !encoder.StartsWith("h264", StringComparison.Ordinal) ? "p010le" : "nv12";
+        var rate = $"-b:v {targetKbps}k -maxrate {max}k -bufsize {buf}k";
+
+        return encoder switch
+        {
+            "libx264" or "libx265" =>
+                $"-c:v {encoder} -preset {preset} {rate}"
+                + (encoder == "libx265" ? " -x265-params log-level=error" : string.Empty)
+                + $" -pix_fmt {pix}",
+            "libsvtav1" => $"-c:v libsvtav1 -preset {(preset == "slow" ? 5 : 7)} {rate} -pix_fmt {pix}",
+            _ when encoder.EndsWith("_nvenc", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -preset {preset} -tune hq -rc vbr {rate}"
+                + (tenBit && !encoder.StartsWith("h264", StringComparison.Ordinal)
+                    ? " -pix_fmt p010le -profile:v main10"
+                    : " -pix_fmt yuv420p"),
+            _ when encoder.EndsWith("_qsv", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -preset {preset} {rate} -pix_fmt {hwPix}",
+            _ when encoder.EndsWith("_amf", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -quality {(preset == "slow" ? "quality" : "balanced")} -rc vbr_peak {rate} -pix_fmt {hwPix}",
+            _ when encoder.EndsWith("_vaapi", StringComparison.Ordinal) =>
+                $"-c:v {encoder} -rc_mode VBR {rate}"
+                + (tenBit && encoder.StartsWith("hevc", StringComparison.Ordinal) ? " -profile:v main10" : string.Empty),
+            _ when encoder.EndsWith("_videotoolbox", StringComparison.Ordinal) =>
+                $"-c:v {encoder} {rate}"
+                + (tenBit && encoder.StartsWith("hevc", StringComparison.Ordinal)
+                    ? " -pix_fmt p010le -profile:v main10"
+                    : " -pix_fmt yuv420p"),
+            _ => throw new ArgumentOutOfRangeException(nameof(encoder), encoder, "Not an encoder Cove converts with."),
+        };
+    }
+
     public static string ConversionVideoEncodeArgs(string encoder, int quality, VideoConversionEffort effort, bool tenBit)
     {
         var profile = VideoConversionPlanner.Profile(effort);

@@ -13,11 +13,17 @@ public sealed class VideoConversionRequestDto
     /// <summary>"mp4" or "mkv".</summary>
     public string Container { get; set; } = "mp4";
     /// <summary>
-    /// One rung of the conversion ladder, from most quality to most speed:
-    /// "qualitySoftware", "highSoftware", "balancedSoftware", "smallerSoftware",
-    /// "qualityHardware", "smallerHardware".
+    /// One rung of the conversion ladder: "qualitySoftware", "qualityHardware",
+    /// "smallerSoftware", "smallerHardware", or a temporary calibration rung
+    /// ("test85Hardware", "test70Hardware", "test58Hardware", "test48Hardware").
     /// </summary>
-    public string Effort { get; set; } = "balancedSoftware";
+    public string Effort { get; set; } = "qualityHardware";
+
+    /// <summary>Re-encode at this frame rate instead of the source's. Null keeps the source's.</summary>
+    public double? OutputFrameRate { get; set; }
+
+    /// <summary>Convert even when the predicted saving is below the worthwhile threshold.</summary>
+    public bool ConvertMarginalSavings { get; set; }
     /// <summary>Verify each converted file, make it the video's primary file and delete the original from disk.</summary>
     public bool ReplaceOriginal { get; set; }
     /// <summary>Throw a re-encoded file away when it is not smaller than the original.</summary>
@@ -57,12 +63,17 @@ public sealed class VideoConversionController(
             return BadRequest(new
             {
                 error = "Unknown conversion option. Codec is h264, hevc, av1 or copy; container is mp4 or mkv; "
-                    + "effort is qualitySoftware, highSoftware, balancedSoftware, smallerSoftware, "
-                    + "qualityHardware or smallerHardware.",
+                    + "effort is qualitySoftware, qualityHardware, smallerSoftware, smallerHardware "
+                    + "or one of the temporary calibration rungs.",
             });
         }
 
-        var settings = new VideoConversionSettings(codec, container, effort, dto.ReplaceOriginal, dto.DiscardIfLarger);
+        if (dto.OutputFrameRate is { } fps && (fps < 1 || fps > 240))
+            return BadRequest(new { error = "Output frame rate must be between 1 and 240." });
+
+        var settings = new VideoConversionSettings(
+            codec, container, effort, dto.ReplaceOriginal, dto.DiscardIfLarger,
+            dto.OutputFrameRate, dto.ConvertMarginalSavings);
         return Accepted(conversionService.Start(principalAccessor.Current, dto.VideoIds, settings));
     }
 

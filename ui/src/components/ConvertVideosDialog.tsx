@@ -26,7 +26,9 @@ const STORAGE_KEY = "cove.convert-videos.options";
 const DEFAULT_SETTINGS: Settings = {
   codec: "hevc",
   container: "mp4",
-  effort: "balancedSoftware",
+  effort: "qualityHardware",
+  outputFrameRate: null,
+  convertMarginalSavings: false,
   replaceOriginal: false,
   discardIfLarger: true,
 };
@@ -38,34 +40,51 @@ const DEFAULT_SETTINGS: Settings = {
 const EFFORTS: ReadonlyArray<{ value: Settings["effort"]; label: string; hint: string }> = [
   {
     value: "qualitySoftware",
-    label: "Prefer highest quality (CPU)",
-    hint: "Best quality for the size, and by far the slowest. Uses the CPU, not the GPU.",
-  },
-  {
-    value: "highSoftware",
-    label: "Prefer quality (CPU)",
-    hint: "Close to the best quality at roughly half the time.",
-  },
-  {
-    value: "balancedSoftware",
-    label: "Balanced (CPU)",
-    hint: "A middle setting. Still noticeably better per megabyte than the GPU options.",
-  },
-  {
-    value: "smallerSoftware",
-    label: "Prefer smaller files (CPU)",
-    hint: "Leans on size over quality. Good for reclaiming the most space.",
+    label: "Highest quality (CPU)",
+    hint: "Targets the bitrate this resolution can actually make use of. Best quality per bit, and by far the slowest.",
   },
   {
     value: "qualityHardware",
-    label: "Prefer speed, better quality (GPU)",
-    hint: "Several times faster than any CPU option. Needs a supported GPU.",
+    label: "Highest quality (GPU)",
+    hint: "Same bitrate target, several times faster. Needs a supported GPU.",
+  },
+  {
+    value: "test85Hardware",
+    label: "Test: 85% of target (GPU)",
+    hint: "Temporary, for finding where quality loss becomes visible on your own footage.",
+  },
+  {
+    value: "test70Hardware",
+    label: "Test: 70% of target (GPU)",
+    hint: "Temporary calibration rung.",
+  },
+  {
+    value: "test58Hardware",
+    label: "Test: 58% of target (GPU)",
+    hint: "Temporary calibration rung.",
+  },
+  {
+    value: "test48Hardware",
+    label: "Test: 48% of target (GPU)",
+    hint: "Temporary calibration rung. Expected to be visibly worse.",
+  },
+  {
+    value: "smallerSoftware",
+    label: "Smaller files (CPU)",
+    hint: "Below the transparent target. Smaller, with some visible loss.",
   },
   {
     value: "smallerHardware",
-    label: "Prefer fastest speed (GPU)",
-    hint: "Fastest, and smaller files than the other GPU option. Needs a supported GPU.",
+    label: "Smaller files (GPU)",
+    hint: "Below the transparent target, on the GPU.",
   },
+];
+
+const FRAME_RATES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "", label: "Keep source frame rate" },
+  { value: "30", label: "30 fps" },
+  { value: "25", label: "25 fps" },
+  { value: "24", label: "24 fps" },
 ];
 
 const CODECS: ReadonlyArray<{ value: VideoConversionCodec; label: string; hint: string }> = [
@@ -232,6 +251,30 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
               ))}
             </select>
             <p className="text-xs text-muted">{EFFORTS.find((o) => o.value === settings.effort)?.hint}</p>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted" htmlFor="convert-fps">
+              Frame rate
+            </label>
+            <select
+              id="convert-fps"
+              value={settings.outputFrameRate == null ? "" : String(settings.outputFrameRate)}
+              disabled={!reencodes}
+              onChange={(event) =>
+                update("outputFrameRate", event.target.value === "" ? null : Number(event.target.value))
+              }
+              className={selectClass}
+            >
+              {FRAME_RATES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted">
+              Lowering the frame rate shrinks the file without touching per-frame detail, and lowers the
+              bitrate target with it. Motion becomes less smooth.
+            </p>
           </div>
         </div>
         {settings.container === "mp4" && (
