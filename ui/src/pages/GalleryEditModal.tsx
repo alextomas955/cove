@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { galleries } from "../api/client";
 import type { Gallery, GalleryUpdate } from "../api/types";
@@ -8,6 +8,10 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
+import { invalidateVideosForGalleryLinkChange } from "../utils/galleryVideoLinks";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { untouchedFieldUpdates } from "../utils/rebaseEditForm";
 
 interface Props {
   gallery: Gallery;
@@ -15,9 +19,8 @@ interface Props {
   onClose: () => void;
 }
 
-export function GalleryEditModal({ gallery, open, onClose }: Props) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState({
+function buildFormState(gallery: Gallery) {
+  return {
     title: gallery.title ?? "",
     code: gallery.code ?? "",
     date: gallery.date ?? "",
@@ -28,9 +31,55 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
     tagIds: gallery.tags.map((t) => t.id),
     performerIds: gallery.performers.map((p) => p.id),
     videoIds: gallery.videoIds,
-  });
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(gallery.customFields ?? {}) });
+    customFields: { ...(gallery.customFields ?? {}) } as Record<string, unknown>,
+  };
+}
+
+type GalleryForm = ReturnType<typeof buildFormState>;
+
+function buildUpdatePayload(form: GalleryForm): GalleryUpdate {
+  const clearFields = [!form.date && "date", form.studioId === undefined && "studioId"].filter(
+    (field): field is string => Boolean(field),
+  );
+  return {
+    title: form.title,
+    code: form.code,
+    date: form.date || undefined,
+    details: form.details,
+    photographer: form.photographer,
+    studioId: form.studioId,
+    urls: form.urls.map((url) => url.trim()).filter(Boolean),
+    tagIds: form.tagIds,
+    performerIds: form.performerIds,
+    videoIds: form.videoIds,
+    customFields: form.customFields,
+    clearFields,
+  };
+}
+
+export function GalleryEditModal({ gallery, open, onClose }: Props) {
+  const qc = useQueryClient();
+  // The gallery this edit started from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(gallery);
+  const [form, setForm] = useState(() => buildFormState(gallery));
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
+  // The detail page keeps this modal mounted while the gallery refetches, so start every edit from the
+  // latest gallery rather than the one first loaded.
+  useEffect(() => {
+    if (!open) return;
+    setBaseline(gallery);
+    setForm(buildFormState(gallery));
+    setCustomFieldsValid(true);
+  }, [gallery.id, open]);
+  // When the gallery refetches while the dialog is open, untouched fields follow it and the user's edits stay.
+  useEffect(() => {
+    if (!open || gallery === baseline) return;
+    setForm((current) => ({
+      ...current,
+      ...untouchedFieldUpdates(current, buildFormState(baseline), buildFormState(gallery)),
+    }));
+    setBaseline(gallery);
+  }, [gallery]);
   const tagProvenanceById = buildTagProvenanceById(gallery.tags, gallery.fieldProvenance);
   // Seed chip labels from the loaded gallery so selected chips don't each re-fetch their name by id.
   const tagSeedOptions = gallery.tags.map((tag) => ({ id: tag.id, label: tag.name }));
@@ -42,33 +91,23 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
 
   const mutation = useMutation({
     mutationFn: (data: GalleryUpdate) => galleries.update(gallery.id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["gallery", gallery.id] });
+    onSuccess: async (_updated, data) => {
+      // Links may have changed elsewhere since the edit started, so compare against both copies.
+      if (data.videoIds) {
+        invalidateVideosForGalleryLinkChange(qc, baseline.videoIds, data.videoIds);
+        invalidateVideosForGalleryLinkChange(qc, gallery.videoIds, data.videoIds);
+      }
       qc.invalidateQueries({ queryKey: ["gallery-videos", gallery.id] });
       qc.invalidateQueries({ queryKey: ["gallery-like-count", gallery.id] });
       qc.invalidateQueries({ queryKey: ["galleries"] });
+      // Close once the saved gallery is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(qc, ["gallery", gallery.id]);
       onClose();
     },
   });
 
   const save = () => {
-    const clearFields = [!form.date && "date", form.studioId === undefined && "studioId"].filter(
-      (field): field is string => Boolean(field),
-    );
-    mutation.mutate({
-      title: form.title,
-      code: form.code,
-      date: form.date || undefined,
-      details: form.details,
-      photographer: form.photographer,
-      studioId: form.studioId,
-      urls: form.urls.map((url) => url.trim()).filter(Boolean),
-      tagIds: form.tagIds,
-      performerIds: form.performerIds,
-      videoIds: form.videoIds,
-      customFields,
-      clearFields,
-    });
+    mutation.mutate(changedUpdateFields(buildUpdatePayload(buildFormState(baseline)), buildUpdatePayload(form)));
   };
 
   return (
@@ -143,8 +182,8 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
 
       <Field label="Custom Fields" fieldProvenance={gallery.fieldProvenance} fieldKey="customFields">
         <CustomFieldsEditor
-          value={customFields}
-          onChange={setCustomFields}
+          value={form.customFields}
+          onChange={(customFields) => setForm((current) => ({ ...current, customFields }))}
           onValidityChange={setCustomFieldsValid}
           entityType="gallery"
         />

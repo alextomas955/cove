@@ -8,6 +8,9 @@ import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../comp
 import { StringListEditor } from "../components/StringListEditor";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
   tag: TagDetail;
@@ -20,6 +23,79 @@ type PlayerBarMode = "default" | "always" | "never";
 function clampOptionalPercent(value: number | undefined) {
   if (value == null || !Number.isFinite(value)) return undefined;
   return Math.min(100, Math.max(0, value));
+}
+
+function tagFormValues(tag: TagDetail) {
+  return {
+    name: tag.name,
+    sortName: tag.sortName ?? "",
+    description: tag.description ?? "",
+    color: tag.color ?? "",
+    tagGroupId: tag.tagGroupId ?? undefined,
+    minOccurrenceSec: tag.minOccurrenceSec ?? undefined,
+    minOccurrencePercent: tag.minOccurrencePercent ?? undefined,
+    playerBarMode: readPlayerBarMode(tag.showAsSegment),
+    segmentColorOverride: tag.segmentColorOverride ?? "",
+    segmentLaneOverride: tag.segmentLaneOverride ?? undefined,
+    aliases: tag.aliases,
+    selectedParentIds: tag.parents.map((t) => t.id),
+    selectedChildIds: tag.children.map((t) => t.id),
+    remoteIds: (tag.remoteIds?.length ? tag.remoteIds : []) as RemoteIdValue[],
+    customFields: { ...(tag.customFields ?? {}) } as Record<string, unknown>,
+  };
+}
+
+type TagFormValues = ReturnType<typeof tagFormValues>;
+
+// Segment overrides are only editable while the tag always shows as a segment, but the server keeps (and
+// renders) them in every mode. Leave hidden ones as stored, and clear them when the user leaves "always".
+function withVisibleSegmentOverrides(values: TagFormValues, baseline: TagFormValues): TagFormValues {
+  if (values.playerBarMode === "always") return values;
+  if (baseline.playerBarMode === "always") {
+    return { ...values, segmentColorOverride: "", segmentLaneOverride: undefined };
+  }
+  return {
+    ...values,
+    segmentColorOverride: baseline.segmentColorOverride,
+    segmentLaneOverride: baseline.segmentLaneOverride,
+  };
+}
+
+function tagUpdatePayload(values: TagFormValues): TagUpdate {
+  const color = values.color.trim() || undefined;
+  const minOccurrencePercent = clampOptionalPercent(values.minOccurrencePercent);
+  const showAsSegment = values.playerBarMode === "default" ? undefined : values.playerBarMode === "always";
+  const segmentColorOverride = values.segmentColorOverride.trim() || undefined;
+  const segmentLaneOverride = values.segmentLaneOverride;
+  const clearFields = [
+    !values.sortName && "sortName",
+    !values.description && "description",
+    color === undefined && "color",
+    values.tagGroupId === undefined && "tagGroupId",
+    values.minOccurrenceSec === undefined && "minOccurrenceSec",
+    minOccurrencePercent === undefined && "minOccurrencePercent",
+    showAsSegment === undefined && "showAsSegment",
+    segmentColorOverride === undefined && "segmentColorOverride",
+    segmentLaneOverride === undefined && "segmentLaneOverride",
+  ].filter((field): field is string => Boolean(field));
+  return {
+    name: values.name,
+    sortName: values.sortName || undefined,
+    description: values.description || undefined,
+    color,
+    tagGroupId: values.tagGroupId,
+    minOccurrenceSec: values.minOccurrenceSec,
+    minOccurrencePercent,
+    showAsSegment,
+    segmentColorOverride,
+    segmentLaneOverride,
+    aliases: values.aliases.map((alias) => alias.trim()).filter(Boolean),
+    parentIds: values.selectedParentIds,
+    childIds: values.selectedChildIds,
+    remoteIds: normalizeRemoteIds(values.remoteIds),
+    customFields: values.customFields,
+    clearFields,
+  };
 }
 
 export function TagEditModal({ tag, open, onClose }: Props) {
@@ -54,18 +130,67 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   const parentTagProvenanceById = buildTagProvenanceById(tag.parents, tag.fieldProvenance, "parents");
   const childTagProvenanceById = buildTagProvenanceById(tag.children, tag.fieldProvenance, "children");
 
+  const currentValues: TagFormValues = {
+    name,
+    sortName,
+    description,
+    color,
+    tagGroupId,
+    minOccurrenceSec,
+    minOccurrencePercent,
+    playerBarMode,
+    segmentColorOverride,
+    segmentLaneOverride,
+    aliases,
+    selectedParentIds,
+    selectedChildIds,
+    remoteIds,
+    customFields,
+  };
+  const formSetters: FormFieldSetters<TagFormValues> = {
+    name: setName,
+    sortName: setSortName,
+    description: setDescription,
+    color: setColor,
+    tagGroupId: setTagGroupId,
+    minOccurrenceSec: setMinOccurrenceSec,
+    minOccurrencePercent: setMinOccurrencePercent,
+    playerBarMode: setPlayerBarMode,
+    segmentColorOverride: setSegmentColorOverride,
+    segmentLaneOverride: setSegmentLaneOverride,
+    aliases: setAliases,
+    selectedParentIds: setSelectedParentIds,
+    selectedChildIds: setSelectedChildIds,
+    remoteIds: setRemoteIds,
+    customFields: setCustomFields,
+  };
+  // When the tag refetches while the dialog is open, untouched fields follow it and the user's edits stay.
+  useEffect(() => {
+    if (!open || tag === baseline) return;
+    applyFormFields(untouchedFieldUpdates(currentValues, tagFormValues(baseline), tagFormValues(tag)), formSetters);
+    setBaseline(tag);
+  }, [tag]);
+
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: TagUpdate) => tags.update(tag.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tag", tag.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["tags"] });
+      // Close once the saved tag is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["tag", tag.id]);
       onClose();
     },
   });
 
+  // The tag the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(tag);
+
+  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
+  // reopening after Cancel discards them.
   useEffect(() => {
+    if (!open) return;
     mutation.reset();
+    setBaseline(tag);
     setName(tag.name);
     setSortName(tag.sortName ?? "");
     setDescription(tag.description ?? "");
@@ -81,7 +206,7 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     setSelectedChildIds(tag.children.map((t) => t.id));
     setRemoteIds(tag.remoteIds?.length ? tag.remoteIds : []);
     setCustomFields({ ...(tag.customFields ?? {}) });
-  }, [tag]);
+  }, [tag.id, open]);
 
   const handleClose = () => {
     mutation.reset();
@@ -89,28 +214,9 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const aliasList = aliases.map((alias) => alias.trim()).filter(Boolean);
-    const clearFields = [!sortName && "sortName", !description && "description"].filter((field): field is string =>
-      Boolean(field),
-    );
-    mutation.mutate({
-      name,
-      sortName: sortName || undefined,
-      description: description || undefined,
-      color: color.trim() || null,
-      tagGroupId: tagGroupId ?? null,
-      minOccurrenceSec: minOccurrenceSec ?? null,
-      minOccurrencePercent: clampOptionalPercent(minOccurrencePercent) ?? null,
-      showAsSegment: playerBarMode === "default" ? null : playerBarMode === "always",
-      segmentColorOverride: playerBarMode === "always" ? segmentColorOverride.trim() || null : null,
-      segmentLaneOverride: playerBarMode === "always" ? (segmentLaneOverride ?? null) : null,
-      aliases: aliasList,
-      parentIds: selectedParentIds,
-      childIds: selectedChildIds,
-      remoteIds: normalizeRemoteIds(remoteIds),
-      customFields,
-      clearFields,
-    });
+    const baselineValues = tagFormValues(baseline);
+    const current = tagUpdatePayload(withVisibleSegmentOverrides(currentValues, baselineValues));
+    mutation.mutate(changedUpdateFields(tagUpdatePayload(baselineValues), current));
   };
 
   return (

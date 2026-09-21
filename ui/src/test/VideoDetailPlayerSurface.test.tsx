@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
@@ -178,6 +178,7 @@ function renderVideoDetail(id = 14, initialSeekTo?: number) {
 
   return {
     ...result,
+    queryClient,
     onNavigate,
     rerenderVideoDetail: (videoId: number) => result.rerender(renderPage(videoId)),
   };
@@ -355,6 +356,167 @@ describe("VideoDetailPage media-player extension surface", () => {
 
     await waitFor(() => expect(mockVideos.update).toHaveBeenCalled());
     expect(screen.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("saves only the fields the user changed", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      date: "2026-07-01",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: ["https://example.com/video/14"],
+      remoteIds: [],
+      customFields: { mood: "calm" },
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    mockVideos.update.mockResolvedValue(video);
+
+    renderVideoDetail();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Renamed video" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { title: "Renamed video" }));
+  });
+
+  it("keeps unsaved edits and follows other changes when the video refetches", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+
+    const { queryClient } = renderVideoDetail();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved draft" } });
+    // For example after Mark organized or a finished background job refreshes the video.
+    await act(async () => {
+      queryClient.setQueryData(["video", 14], { ...video, organized: true, director: "Scraped director" });
+      // Query observers are notified on the next tick.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved draft");
+    // An untouched field shows the refetched value, and saving sends only what the user changed.
+    expect(screen.getByRole("textbox", { name: "Director" })).toHaveValue("Scraped director");
+    mockVideos.update.mockResolvedValue(video);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { title: "Unsaved draft" }));
+  });
+
+  it("fills the edit form from the next video when the page moves on", async () => {
+    mockVideos.get.mockImplementation(async (videoId: number) => ({
+      id: videoId,
+      title: `Queued video ${videoId}`,
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    }));
+
+    const { rerenderVideoDetail } = renderVideoDetail();
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved draft" } });
+
+    rerenderVideoDetail(15);
+
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Queued video 15"));
+  });
+
+  it("continues from the saved video after saving", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    // The server stores what was sent in its own form, as it does with lists in display order.
+    mockVideos.update.mockImplementation(async () => {
+      mockVideos.get.mockResolvedValue({ ...video, title: "Renamed video (normalized)" });
+      return { ...video, title: "Renamed video (normalized)" };
+    });
+
+    renderVideoDetail();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Renamed video" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockVideos.get).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Renamed video (normalized)"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The second save compares against the saved video, so nothing is resent.
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledTimes(2));
+    expect(mockVideos.update).toHaveBeenLastCalledWith(14, {});
+  });
+
+  it("refreshes a gallery the video was unlinked from", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [{ id: 3 }],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    mockVideos.update.mockResolvedValue(video);
+
+    const { queryClient } = renderVideoDetail();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove gallery" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { galleryIds: [] }));
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gallery", 3] }));
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gallery-videos", 3] });
   });
 
   it("carries the selected tab when opening the next video", async () => {
