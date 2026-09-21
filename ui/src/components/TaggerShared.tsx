@@ -188,6 +188,7 @@ export function TaggerToolbar({
   runAllLabel = "Search all",
   showRunAll = true,
   countLabel,
+  applyAll,
   settingsOpen,
   onToggleSettings,
 }: {
@@ -207,6 +208,14 @@ export function TaggerToolbar({
   runAllLabel?: string;
   showRunAll?: boolean;
   countLabel: string;
+  /** Bulk apply for rows that already have a match, alongside the bulk search. */
+  applyAll?: {
+    onApply: () => void;
+    onCancel: () => void;
+    busy: boolean;
+    /** How many rows would be applied; the button is disabled at zero. */
+    count: number;
+  };
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
 }) {
@@ -291,6 +300,33 @@ export function TaggerToolbar({
               </DismissibleMenu>
             ) : null}
           </div>
+        ))}
+
+      {applyAll &&
+        (applyAll.busy ? (
+          <button
+            type="button"
+            onClick={applyAll.onCancel}
+            className="flex items-center gap-1.5 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-500"
+          >
+            <X className="w-3.5 h-3.5" />
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={applyAll.onApply}
+            disabled={applyAll.count === 0}
+            title={
+              applyAll.count === 0
+                ? "No matched videos to apply"
+                : `Apply the selected match on ${applyAll.count} video${applyAll.count === 1 ? "" : "s"}`
+            }
+            className="flex items-center gap-1.5 rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Apply all{applyAll.count > 0 ? ` (${applyAll.count})` : ""}
+          </button>
         ))}
 
       {onToggleSettings && (

@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -946,6 +946,46 @@ export function VideoTagger({
     setBatchSearching(false);
   }, []);
 
+  // Bulk apply. Each row publishes its own apply here, so Apply all sends exactly the request the
+  // row's own Apply button would, honouring every per-row exclusion and field choice already made.
+  const applyHandlersRef = useRef(new Map<number, () => Promise<unknown>>());
+  const registerApply = useCallback((videoId: number, apply: (() => Promise<unknown>) | null) => {
+    if (apply) applyHandlersRef.current.set(videoId, apply);
+    else applyHandlersRef.current.delete(videoId);
+  }, []);
+  const [applyingAll, setApplyingAll] = useState(false);
+  const applyAbortRef = useRef<AbortController | null>(null);
+  // A video counts as matched once a search returned results it has not been saved from yet.
+  const applyAllTargets = videoList
+    .filter((video) => {
+      const videoState = searchStates[video.id];
+      return !videoState?.saved && !!videoState?.results && videoState.results.length > 0;
+    })
+    .map((video) => video.id);
+  const applyAll = useCallback(async () => {
+    setApplyingAll(true);
+    const controller = new AbortController();
+    applyAbortRef.current = controller;
+    await runWithConcurrency(
+      applyAllTargets,
+      async (videoId) => {
+        // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
+        const apply = applyHandlersRef.current.get(videoId);
+        if (!apply) return;
+        // One row's failure is reported on that row, so it must not abandon the rest of the batch.
+        await apply().catch(() => undefined);
+      },
+      CONCURRENCY_LIMIT,
+      controller.signal,
+    );
+    setApplyingAll(false);
+    applyAbortRef.current = null;
+  }, [applyAllTargets]);
+  const cancelApplyAll = useCallback(() => {
+    applyAbortRef.current?.abort();
+    setApplyingAll(false);
+  }, []);
+
   if (taggerSources.length === 0) {
     return (
       <div className="px-4 py-12 text-center">
@@ -995,6 +1035,16 @@ export function VideoTagger({
         runAllOptions={selectedSource?.kind === "metadata-server" ? VIDEO_METADATA_SEARCH_STRATEGIES : undefined}
         showRunAll={mode === "bulk"}
         countLabel={`${visibleVideos.length} video${visibleVideos.length !== 1 ? "s" : ""}`}
+        applyAll={
+          mode === "bulk"
+            ? {
+                onApply: () => void applyAll(),
+                onCancel: cancelApplyAll,
+                busy: applyingAll,
+                count: applyAllTargets.length,
+              }
+            : undefined
+        }
         settingsOpen={showConfig}
         onToggleSettings={() => setShowConfig((current) => !current)}
       />
@@ -1256,6 +1306,7 @@ export function VideoTagger({
             selecting={selecting}
             onSelect={onSelect ? withOrderedToggle(onSelect, visibleVideoIds) : undefined}
             detailMode={mode === "detail"}
+            onRegisterApply={registerApply}
           />
         ))}
       </div>
@@ -1285,6 +1336,12 @@ interface TaggerVideoRowProps {
   selecting?: boolean;
   onSelect?: (videoId: number, options?: MultiSelectToggleOptions) => void;
   detailMode?: boolean;
+  /**
+   * Publishes this row's apply action so the toolbar's Apply all can drive it. The row owns the
+   * request it would send, so bulk apply reuses that instead of rebuilding it from the outside.
+   * Called with null when the row has nothing to apply.
+   */
+  onRegisterApply?: (videoId: number, apply: (() => Promise<unknown>) | null) => void;
 }
 
 function TaggerVideoRow({
@@ -1307,6 +1364,7 @@ function TaggerVideoRow({
   selecting = false,
   onSelect,
   detailMode = false,
+  onRegisterApply,
 }: TaggerVideoRowProps) {
   const file = video.files.find((candidate) => candidate.id === video.primaryFileId);
   const [refreshBusyEndpoint, setRefreshBusyEndpoint] = useState<string | null>(null);
@@ -1481,6 +1539,17 @@ function TaggerVideoRow({
       await invalidateVideoMetadataQueries(queryClient, video.id);
     },
   });
+
+  // Keep the published apply pointed at the current mutation without re-registering on every render:
+  // the registration effect depends only on whether this row has something to apply.
+  const applyRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  applyRef.current = () => importMut.mutateAsync();
+  const canApply = Boolean(selectedResult) && !state?.saved;
+  useEffect(() => {
+    if (!onRegisterApply) return;
+    onRegisterApply(video.id, canApply ? () => applyRef.current() : null);
+    return () => onRegisterApply(video.id, null);
+  }, [onRegisterApply, video.id, canApply]);
 
   const submitEndpoint = source?.kind === "metadata-server" ? source.endpoint : undefined;
   const normalizedSubmitEndpoint = normalizeEndpoint(submitEndpoint);
@@ -2232,32 +2301,35 @@ function TaggerResultRow({
               />
             </div>
           )}
+          {/* Summary reads left to right; the actions that act on it are grouped at the right edge. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface/60 px-3 py-2">
-            {onSave && (
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                {summary?.changeCount
-                  ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
-                  : "Apply"}
-              </button>
-            )}
             {summary ? (
               <span className="hidden min-w-0 flex-1 truncate text-[11px] text-muted sm:inline">
                 {summary.changes.map((change) => change.text).join(" · ")}
               </span>
             ) : null}
-            <button
-              type="button"
-              aria-expanded={adjusting}
-              onClick={() => setAdjusting((current) => !current)}
-              className="ml-auto text-xs text-accent hover:underline"
-            >
-              {adjusting ? "Done adjusting" : "Adjust…"}
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                aria-expanded={adjusting}
+                onClick={() => setAdjusting((current) => !current)}
+                className="text-xs text-accent hover:underline"
+              >
+                {adjusting ? "Done adjusting" : "Adjust…"}
+              </button>
+              {onSave && (
+                <button
+                  onClick={onSave}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {summary?.changeCount
+                    ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+                    : "Apply"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -250,6 +250,80 @@ describe("VideoTagger", () => {
     );
   });
 
+  it("applies all only to the videos that have a match", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 456, title: "Second local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    // Only the first video matches; the second returns nothing and so must be left alone.
+    mocks.searchMetadataServer.mockImplementation((videoId: number) =>
+      Promise.resolve(
+        videoId === 123
+          ? [
+              {
+                id: "first-video-id",
+                endpoint: "https://first.example/graphql",
+                metadataServerName: "First provider",
+                title: "First provider result",
+                code: null,
+                details: null,
+                director: null,
+                date: null,
+                duration: 60,
+                urls: [],
+                images: [],
+                studioName: null,
+                studioCandidate: null,
+                performerNames: [],
+                performerCandidates: [],
+                tagNames: [],
+                tagCandidates: [],
+                fingerprints: [],
+                fingerprintAlgorithms: [],
+              },
+            ]
+          : [],
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
+
+    const applyAll = await screen.findByRole("button", { name: "Apply all (1)" });
+    await userEvent.click(applyAll);
+
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(123, expect.anything());
+  });
+
+  it("disables Apply all until something matches", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Apply all" })).toBeDisabled();
+  });
+
   it("saves and uses a default bulk match strategy", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const video = {
