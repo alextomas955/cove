@@ -346,8 +346,14 @@ internal sealed class ScanVideoProcessor(
                 if (codecType == "video" && !sawVideoStream)
                 {
                     sawVideoStream = true;
-                    if (stream.TryGetProperty("width", out var w)) videoFile.Width = w.GetInt32();
-                    if (stream.TryGetProperty("height", out var h)) videoFile.Height = h.GetInt32();
+                    // Written as a pair: one axis from a rotated probe and the other from a stale
+                    // one would describe no real picture.
+                    if (stream.TryGetProperty("width", out var w) && stream.TryGetProperty("height", out var h))
+                    {
+                        var (displayWidth, displayHeight) = FfprobeDisplayOrientation.Apply(stream, w.GetInt32(), h.GetInt32());
+                        videoFile.Width = displayWidth;
+                        videoFile.Height = displayHeight;
+                    }
                     if (stream.TryGetProperty("codec_name", out var cn)) videoFile.VideoCodec = cn.GetString() ?? "";
                     if (stream.TryGetProperty("r_frame_rate", out var rfr))
                     {
