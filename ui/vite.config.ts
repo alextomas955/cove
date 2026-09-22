@@ -6,6 +6,7 @@ import fs from "fs";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { extensionRuntimeModules, extensionRuntimeVersion } from "./scripts/extension-runtime-contract.ts";
+import { compileThemeBootScript, invalidateThemeBootScript } from "./scripts/theme-boot.ts";
 
 // Exposes the repo-root CHANGELOG.md to the app as `virtual:changelog-raw`.
 // Reading it via fs (instead of a cross-package import) keeps CHANGELOG.md as the
@@ -105,6 +106,35 @@ function extensionLucideBundlePlugin() {
   };
 }
 
+// Inlines the compiled theme boot script into <head>, so the cached theme is applied before the
+// first paint. Inline and classic on purpose: an external script costs a round trip, and a module
+// script is deferred and would run after the paint it exists to fix. The script is static per build
+// and eval-free, so a CSP hash can be computed from the emitted HTML if one is ever added.
+const THEME_BOOT_MARKER = "<!--cove-theme-boot-->";
+
+function themeBootInlinePlugin() {
+  return {
+    name: "cove-theme-boot-inline",
+    async transformIndexHtml(html: string) {
+      // Replaces a marker rather than injecting into <head>, because position matters: Vite appends
+      // the stylesheet <link> to head, and a classic script placed after a stylesheet does not run
+      // until that sheet has downloaded. On a slow connection that delayed the theme by the whole
+      // CSS download, which is the flash this script exists to prevent.
+      if (!html.includes(THEME_BOOT_MARKER)) {
+        throw new Error(`index.html is missing the ${THEME_BOOT_MARKER} placeholder`);
+      }
+      const code = await compileThemeBootScript();
+      return html.replace(THEME_BOOT_MARKER, () => `<script>${code}</script>`);
+    },
+    handleHotUpdate({ file, server }: { file: string; server: { ws: { send: (payload: unknown) => void } } }) {
+      if (!file.includes("/src/theme/")) return;
+      // The boot script only runs at parse time, so an edit needs a rebuild and a full reload.
+      invalidateThemeBootScript();
+      server.ws.send({ type: "full-reload" });
+    },
+  };
+}
+
 export default defineConfig(({ command }) => {
   const useDevRuntimeModules = command === "serve";
   const buildId = randomUUID();
@@ -122,6 +152,7 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       changelogPlugin(),
       extensionRuntimeImportMapPlugin(useDevRuntimeModules),
+      themeBootInlinePlugin(),
       extensionLucideBundlePlugin(),
     ],
     resolve: {

@@ -5,7 +5,6 @@ import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { createAppQueryClient } from "./queryClient";
 import { installZoomGuards } from "./zoomGuards";
-import "./index.css";
 
 installZoomGuards();
 

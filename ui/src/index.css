@@ -2,7 +2,8 @@
 
 @theme {
   /* Baked-in fallback that renders before/without runtime theme injection (e.g. troubleshooting
-     mode). Must stay in sync with FALLBACK_DEFAULT_THEME ("default") in ExtensionLoader.tsx. */
+     mode). FALLBACK_DEFAULT_THEME in src/theme/themeBoot.ts is the source of truth and index.html
+     repeats two of these inline; themeBootContract.test.ts pins the three together. */
   --color-background: #16181d;
   --color-surface: #1a1c23;
   --color-card: #1e2028;
@@ -20,6 +21,13 @@
 }
 
 /* Base */
+/* index.html gives <html> a literal background for the first paint, which stops <body>'s from
+   propagating to the canvas. It tracks --color-background, the colour the app's full-height
+   container paints, so the pre-paint and the overscroll area match what actually fills the screen. */
+html {
+  background-color: var(--color-background);
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
