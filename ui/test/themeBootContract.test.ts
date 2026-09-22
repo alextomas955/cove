@@ -38,6 +38,22 @@ describe("the canvas colour is spelled the same in all three places", () => {
     expect(indexCss).toContain(`--color-foreground: ${foreground};`);
   });
 
+  it("defines the base rules exactly once", () => {
+    // index.css shipped with tailwind imported twice, two @theme blocks and two competing `body`
+    // rules whose later copy silently won, so editing the first had no effect. That is what hid the
+    // canvas variable mix-up above; keep the base declarations single.
+    const once = (pattern: RegExp) => (indexCss.match(pattern) ?? []).length;
+    expect(once(/^@import "tailwindcss";$/gm)).toBe(1);
+    expect(once(/^@theme \{$/gm)).toBe(1);
+    expect(once(/^body \{$/gm)).toBe(1);
+  });
+
+  it("paints body with the same variable as html", () => {
+    // body sits under the app's container, so a different variable here shows only while the page is
+    // loading and in the overscroll area -- which is exactly where the wrong colour was visible.
+    expect(indexCss).toContain("body {\n  background-color: var(--color-background);");
+  });
+
   it("is what index.css paints html with", () => {
     // html must track the container's variable, or the overscroll area sits on a different colour.
     expect(indexCss).toContain("html {\n  background-color: var(--color-background);\n}");

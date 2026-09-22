@@ -18,6 +18,24 @@
   --color-overlay: rgba(0, 0, 0, 0.55);
   --color-nav: #111317;
   --color-nav-active: #4f8ff7;
+
+  /* Shell palette. Themes that do not override these fall back to the values here, so they are
+     deliberately not the same colours as the theme variables above. Used by the surface gradients
+     further down; the page canvas itself is --color-background, painted on html and body. */
+  --color-shell-bg: #202b33;
+  --color-shell-surface: #283540;
+  --color-shell-card: #30404d;
+  --color-shell-card-hover: #394b59;
+  --color-shell-border: #394b59;
+  --color-shell-input: rgba(16, 22, 26, 0.3);
+  --color-shell-text: #f5f8fa;
+  --color-shell-text-secondary: #bfccd6;
+  --color-shell-text-muted: #8a9ba8;
+  --color-shell-accent: #137cbd;
+  --color-shell-accent-hover: #48aff0;
+  --color-shell-overlay: rgba(0, 0, 0, 0.6);
+  --color-shell-nav: #1a2329;
+  --color-shell-nav-active: #137cbd;
 }
 
 /* Base */
@@ -1444,39 +1462,6 @@ html[data-style-animated-surfaceshimmer="off"] nav.bg-nav > div > .border-b {
 html[data-style-animated-buttonglow="off"] .bg-accent:hover {
   animation: none;
 }
-@import "tailwindcss";
-
-@theme {
-  /* Dark theme */
-  --color-shell-bg: #202b33;
-  --color-shell-surface: #283540;
-  --color-shell-card: #30404d;
-  --color-shell-card-hover: #394b59;
-  --color-shell-border: #394b59;
-  --color-shell-input: rgba(16, 22, 26, 0.3);
-  --color-shell-text: #f5f8fa;
-  --color-shell-text-secondary: #bfccd6;
-  --color-shell-text-muted: #8a9ba8;
-  --color-shell-accent: #137cbd;
-  --color-shell-accent-hover: #48aff0;
-  --color-shell-overlay: rgba(0, 0, 0, 0.6);
-  --color-shell-nav: #1a2329;
-  --color-shell-nav-active: #137cbd;
-}
-
-/* Base */
-body {
-  background-color: var(--color-shell-bg);
-  color: var(--color-shell-text);
-  font-family:
-    "Open Sans",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-}
-
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
