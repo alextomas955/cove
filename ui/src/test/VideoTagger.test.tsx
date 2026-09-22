@@ -42,6 +42,42 @@ vi.mock("../state/AppConfigContext", () => ({
   }),
 }));
 
+/**
+ * The Apply all summary, found by what it says rather than by a role any region could claim. A run
+ * with failures is an alert and a cancelled run with none is a status, so both are accepted here and
+ * the tests that care about the difference assert the role themselves.
+ */
+async function findApplyAllSummary(): Promise<HTMLElement> {
+  const text = await screen.findByText(/^(Cancelled\. )?Applied \d+/);
+  const container = text.closest("[role=alert],[role=status]");
+  if (!(container instanceof HTMLElement)) throw new Error("Apply all summary is not in a live region");
+  return container;
+}
+
+function matchFor(videoId: number) {
+  return {
+    id: `result-for-${videoId}`,
+    endpoint: "https://first.example/graphql",
+    metadataServerName: "First provider",
+    title: "First provider result",
+    code: null,
+    details: null,
+    director: null,
+    date: null,
+    duration: 60,
+    urls: [],
+    images: [],
+    studioName: null,
+    studioCandidate: null,
+    performerNames: [],
+    performerCandidates: [],
+    tagNames: [],
+    tagCandidates: [],
+    fingerprints: [],
+    fingerprintAlgorithms: [],
+  };
+}
+
 describe("VideoTagger", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -611,6 +647,242 @@ describe("VideoTagger", () => {
 
     await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
     expect(mocks.importFromMetadataServer).toHaveBeenCalledWith(123, expect.anything());
+  });
+
+  it("reports a failed save on the row it failed for, and saves the rest of the batch", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 456, title: "Second local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    mocks.searchMetadataServer.mockImplementation((videoId: number) => Promise.resolve([matchFor(videoId)]));
+    // The first video's import loses a race for a related entity the way a concurrent import does;
+    // the second must still save, and the failure must not vanish. The rejection takes the shape the
+    // API client actually throws, so the reason has to be unpacked from the body rather than dumped.
+    mocks.importFromMetadataServer.mockImplementation((videoId: number) =>
+      videoId === 123
+        ? Promise.reject(
+            new Error(
+              'API Error 409: {"code":"RELATED_ENTITY_NAME_CONFLICT","message":"A studio with name \\"Shared studio\\" already exists. Studio names must be unique.","entityType":"studio"}',
+            ),
+          )
+        : Promise.resolve({}),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (2)" }));
+
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledTimes(2));
+    // The batch says what it did overall, so a partial failure is not read as a clean run.
+    const summary = await findApplyAllSummary();
+    expect(summary).toHaveTextContent("Applied 1, failed 1.");
+    // The reason is the server's own sentence, not the raw response body.
+    expect(summary).not.toHaveTextContent("RELATED_ENTITY_NAME_CONFLICT");
+    // And it reaches the failing row itself, not only the summary.
+    const reasons = screen.getAllByText(
+      /A studio with name "Shared studio" already exists\. Studio names must be unique\./,
+    );
+    expect(reasons.some((element) => !summary.contains(element))).toBe(true);
+    // The batch carried on: the video that did not fail reports success.
+    expect(await screen.findByText("Saved successfully")).toBeTruthy();
+  });
+
+  it("narrows the batch summary to the failures still outstanding after a partial retry", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 301, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 302, title: "Second local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    mocks.searchMetadataServer.mockImplementation((videoId: number) => Promise.resolve([matchFor(videoId)]));
+    mocks.importFromMetadataServer.mockImplementation((videoId: number) =>
+      Promise.reject(new Error(`API Error 409: {"message":"Studio ${videoId} already exists."}`)),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(2));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (2)" }));
+
+    const summary = await findApplyAllSummary();
+    expect(summary).toHaveTextContent("Applied 0, failed 2.");
+    expect(summary).toHaveAttribute("role", "alert");
+
+    // Only the first row is retried successfully, so the summary must shed that row's count and its
+    // reason rather than keep describing the batch as it was when it ended.
+    mocks.importFromMetadataServer.mockImplementation((videoId: number) =>
+      videoId === 301
+        ? Promise.resolve({})
+        : Promise.reject(new Error(`API Error 409: {"message":"Studio ${videoId} already exists."}`)),
+    );
+    const rowApplyButtons = await screen.findAllByRole("button", { name: /^Apply \d+ changes?$/ });
+    await userEvent.click(rowApplyButtons[0]);
+
+    await waitFor(async () => expect(await findApplyAllSummary()).toHaveTextContent("Applied 1, failed 1."));
+    const narrowed = await findApplyAllSummary();
+    expect(narrowed).toHaveTextContent("Studio 302 already exists.");
+    expect(narrowed).not.toHaveTextContent("Studio 301 already exists.");
+  });
+
+  it("retires the batch summary once the rows that failed have been applied", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    mocks.searchMetadataServer.mockResolvedValue([matchFor(123)]);
+    mocks.importFromMetadataServer.mockRejectedValueOnce(new Error('API Error 409: {"message":"Boom."}'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledOnce());
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (1)" }));
+    expect(await findApplyAllSummary()).toHaveTextContent("Applied 0, failed 1.");
+
+    // Retrying the row on its own succeeds, which makes the summary describe a problem that is gone.
+    // Apply all is disabled once nothing is left to apply, so nothing else could clear it.
+    mocks.importFromMetadataServer.mockResolvedValue({});
+    await userEvent.click(await screen.findByRole("button", { name: /^Apply \d+ changes?$/ }));
+
+    await waitFor(() => expect(screen.queryByText(/^Applied \d+/)).toBeNull());
+  });
+
+  it("says a cancelled batch was cancelled and accounts for the rows it never started", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // More videos than the batch runs at once, so cancelling leaves some never started.
+    const videos = Array.from({ length: 8 }, (_, index) => ({
+      id: 100 + index,
+      title: `Local video ${index}`,
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    })) as any;
+    mocks.searchMetadataServer.mockImplementation((videoId: number) => Promise.resolve([matchFor(videoId)]));
+    // Hold every import open so the batch is still draining when Cancel is pressed.
+    let releaseImports: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseImports = resolve;
+    });
+    mocks.importFromMetadataServer.mockImplementation(() => gate.then(() => ({})));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(8));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (8)" }));
+    // Only the concurrency limit is in flight; the rest have not been started.
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledTimes(5));
+
+    await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+    releaseImports();
+
+    const summary = await findApplyAllSummary();
+    expect(summary).toHaveTextContent("Cancelled.");
+    // The three rows the cancellation stopped are named rather than dropped from the arithmetic.
+    expect(summary).toHaveTextContent("not attempted 3");
+    // Cancelling never interrupts an import already sent, so those five still count as applied.
+    expect(mocks.importFromMetadataServer).toHaveBeenCalledTimes(5);
+  });
+
+  it("caps the reasons a batch summary names when every row fails differently", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = Array.from({ length: 5 }, (_, index) => ({
+      id: 200 + index,
+      title: `Local video ${index}`,
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    })) as any;
+    mocks.searchMetadataServer.mockImplementation((videoId: number) => Promise.resolve([matchFor(videoId)]));
+    // A name conflict quotes the entity it collided with, so a batch can fail for as many reasons as rows.
+    mocks.importFromMetadataServer.mockImplementation((videoId: number) =>
+      Promise.reject(new Error(`API Error 409: {"message":"Studio ${videoId} already exists."}`)),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(5));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (5)" }));
+
+    const summary = await findApplyAllSummary();
+    expect(summary).toHaveTextContent("Applied 0, failed 5.");
+    expect(summary).toHaveTextContent("And 2 other reasons.");
+  });
+
+  it("lets the batch summary be dismissed", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    mocks.searchMetadataServer.mockResolvedValue([matchFor(123)]);
+    mocks.importFromMetadataServer.mockRejectedValue(new Error('API Error 409: {"message":"Boom."}'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledOnce());
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (1)" }));
+    expect(await findApplyAllSummary()).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss apply summary" }));
+    expect(screen.queryByText(/^Applied \d+/)).toBeNull();
+    // The row keeps its own reason: dismissing the summary is not dismissing the failure.
+    expect(screen.getByText(/Boom\./)).toBeTruthy();
+  });
+
+  it("says nothing about the batch when every save succeeds", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = [
+      { id: 123, title: "First local video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    mocks.searchMetadataServer.mockResolvedValue([matchFor(123)]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledOnce());
+    await userEvent.click(await screen.findByRole("button", { name: "Apply all (1)" }));
+
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    expect(await screen.findByText("Saved successfully")).toBeTruthy();
+    expect(screen.queryByText(/^Applied \d+/)).toBeNull();
   });
 
   it("keeps a dismissed video off the list and out of Apply all until it is restored", async () => {

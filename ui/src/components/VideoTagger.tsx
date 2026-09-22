@@ -14,6 +14,7 @@ import type {
   VideoCoverComparison,
 } from "../api/types";
 import { useAppConfig, useOptionalAppConfig } from "../state/AppConfigContext";
+import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { formatDuration, getResolutionLabel } from "./shared";
 import { createNestedRouteLinkProps } from "./cardNavigation";
 import {
@@ -198,6 +199,98 @@ interface VideoSearchState {
   // Hand edits made in the review beside the scrape, as the edit form would make them.
   tagEdits?: TaggerRelationshipEdits;
   performerEdits?: TaggerRelationshipEdits;
+}
+
+/** What one Apply all did, in enough detail that every row it covered is accounted for. */
+interface ApplyAllOutcome {
+  saved: number;
+  skipped: number;
+  /** Rows a cancellation stopped before they were started, and which are still unsaved. */
+  notAttempted: number;
+  reasons: string[];
+  failureCount: number;
+  cancelled: boolean;
+}
+
+/** Which rows one Apply all covered and how far it got, before any of them were resolved. */
+interface ApplyAllRun {
+  targetIds: number[];
+  /** Rows an import was actually sent for. */
+  startedIds: number[];
+  /** Rows whose result went away between the click and their turn, so nothing was sent for them. */
+  skippedIds: number[];
+  cancelled: boolean;
+}
+
+/**
+ * Reads a finished run against current row state, so the notice describes the situation now rather
+ * than when the batch ended. A row put right afterwards stops counting as a failure, and once
+ * nothing is left outstanding there is nothing to show.
+ */
+function summariseApplyAllRun(
+  run: ApplyAllRun | null,
+  states: Record<number, VideoSearchState | undefined>,
+): ApplyAllOutcome | null {
+  if (!run) return null;
+  const isSaved = (videoId: number) => states[videoId]?.saved === true;
+  const saved = run.startedIds.filter(isSaved).length;
+  // The row owns the reason; reading it back keeps one account of why an import failed.
+  const reasons = run.startedIds
+    .filter((videoId) => !isSaved(videoId))
+    .map((videoId) => states[videoId]?.error)
+    .filter((reason): reason is string => Boolean(reason));
+  const skipped = run.skippedIds.filter((videoId) => !isSaved(videoId)).length;
+  const notAttempted = run.targetIds.filter(
+    (videoId) => !run.startedIds.includes(videoId) && !run.skippedIds.includes(videoId) && !isSaved(videoId),
+  ).length;
+  if (reasons.length === 0 && skipped === 0 && notAttempted === 0) return null;
+  return { saved, skipped, notAttempted, reasons, failureCount: reasons.length, cancelled: run.cancelled };
+}
+
+/** How many distinct reasons the batch notice names before it summarises the rest. */
+const APPLY_ALL_REASON_LIMIT = 3;
+
+/**
+ * One sentence for what an Apply all did. Every row the batch covered lands in exactly one count, so
+ * the arithmetic always adds up to what the user asked for. Reasons are capped because a conflict
+ * names the entity it collided with, so a large batch can fail for as many distinct reasons as rows.
+ */
+function describeApplyAllOutcome(outcome: ApplyAllOutcome): string {
+  const parts = [`Applied ${outcome.saved}`];
+  if (outcome.failureCount > 0) parts.push(`failed ${outcome.failureCount}`);
+  if (outcome.skipped > 0) parts.push(`skipped ${outcome.skipped}`);
+  if (outcome.notAttempted > 0) parts.push(`not attempted ${outcome.notAttempted}`);
+  const counts = `${outcome.cancelled ? "Cancelled. " : ""}${parts.join(", ")}.`;
+
+  const distinct = [...new Set(outcome.reasons)];
+  if (distinct.length === 0) return counts;
+  const named = distinct.slice(0, APPLY_ALL_REASON_LIMIT).map(endWithStop).join(" ");
+  const remaining = distinct.length - APPLY_ALL_REASON_LIMIT;
+  return remaining > 0
+    ? `${counts} ${named} And ${remaining} other reason${remaining === 1 ? "" : "s"}.`
+    : `${counts} ${named}`;
+}
+
+/** Server messages are not guaranteed to be punctuated, and these are joined into a sentence. */
+function endWithStop(text: string): string {
+  return /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+}
+
+/**
+ * A tagger precondition that stopped a request being sent. These already read as an explanation, so
+ * they are shown as written; everything else is a transport or server failure, which the shared
+ * formatter words better than its raw message does.
+ */
+class TaggerPreconditionError extends Error {}
+
+/**
+ * Why an attempt failed, in the most specific wording available. Only this component's own
+ * preconditions bypass the shared formatter: routing timeouts, dropped connections and API errors
+ * through it is what keeps "API request timed out after 120000 ms" off the screen.
+ */
+function taggerFailureReason(err: unknown): string {
+  if (err instanceof TaggerPreconditionError && err.message.trim()) return err.message;
+  return getApiValidationFailureDetail(err);
 }
 
 type VideoFieldStrategy = "ignore" | "merge" | "overwrite";
@@ -932,7 +1025,7 @@ export function VideoTagger({
       } catch (err) {
         updateSearchState(video.id, {
           loading: false,
-          error: err instanceof Error ? err.message : "Search failed",
+          error: taggerFailureReason(err),
         });
       }
     },
@@ -953,7 +1046,7 @@ export function VideoTagger({
       });
       try {
         if (selectedSource?.kind !== "metadata-server")
-          throw new Error("Fingerprint search is only available for metadata-server sources.");
+          throw new TaggerPreconditionError("Fingerprint search is only available for metadata-server sources.");
         const results = (
           await videos.searchMetadataServer(video.id, undefined, selectedSource.endpoint || undefined, "fingerprint")
         ).map((match) => ({ ...match, sourceKind: "metadata-server" as const }));
@@ -965,7 +1058,7 @@ export function VideoTagger({
       } catch (err) {
         updateSearchState(video.id, {
           loading: false,
-          error: err instanceof Error ? err.message : "Search failed",
+          error: taggerFailureReason(err),
         });
       }
     },
@@ -996,7 +1089,7 @@ export function VideoTagger({
           error: results.length === 0 ? "No metadata-server entry found for this remote id." : undefined,
         });
       } catch (err) {
-        updateSearchState(video.id, { loading: false, error: err instanceof Error ? err.message : "Refresh failed" });
+        updateSearchState(video.id, { loading: false, error: taggerFailureReason(err) });
       }
     },
     [updateSearchState],
@@ -1060,29 +1153,53 @@ export function VideoTagger({
       return !videoState?.saved && !!videoState?.results && videoState.results.length > 0;
     })
     .map((video) => video.id);
+  // Which rows the last Apply all covered, and how far it got. Only the run is recorded: what became
+  // of each row is read back from that row's own state when the notice renders, so a row put right
+  // afterwards drops out of the notice by itself and the two can never disagree about why it failed.
+  const [applyAllRun, setApplyAllRun] = useState<ApplyAllRun | null>(null);
+  const dismissApplyAllRun = useCallback(() => setApplyAllRun(null), []);
   const applyAll = useCallback(async () => {
-    setApplyingAll(true);
+    // A batch already draining owns applyAbortRef, and a second one would null it out from under the
+    // first, leaving Cancel inert and firing a duplicate import for every row both batches share.
+    if (applyAbortRef.current) return;
     const controller = new AbortController();
     applyAbortRef.current = controller;
-    await runWithConcurrency(
-      applyAllTargets,
-      async (videoId) => {
-        // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
-        const apply = applyHandlersRef.current.get(videoId);
-        if (!apply) return;
-        // One row's failure is reported on that row, so it must not abandon the rest of the batch.
-        await apply().catch(() => undefined);
-      },
-      CONCURRENCY_LIMIT,
-      controller.signal,
-    );
-    setApplyingAll(false);
-    applyAbortRef.current = null;
+    setApplyingAll(true);
+    setApplyAllRun(null);
+    const targetIds = applyAllTargets;
+    const startedIds: number[] = [];
+    const skippedIds: number[] = [];
+    try {
+      await runWithConcurrency(
+        targetIds,
+        async (videoId) => {
+          // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
+          const apply = applyHandlersRef.current.get(videoId);
+          if (!apply) {
+            skippedIds.push(videoId);
+            return;
+          }
+          startedIds.push(videoId);
+          // The row records its own outcome, and one row's failure must not abandon the batch.
+          await apply().catch(() => undefined);
+        },
+        CONCURRENCY_LIMIT,
+        controller.signal,
+      );
+    } finally {
+      // Always hand the toolbar back, even if a worker threw: otherwise the guard above would refuse
+      // every later batch and leave the tagger stuck on Cancel with no way out.
+      setApplyingAll(false);
+      applyAbortRef.current = null;
+      // Cancelling stops rows being started but never interrupts an import already sent, so the rows
+      // that were never reached are recorded rather than dropped out of the arithmetic.
+      setApplyAllRun({ targetIds, startedIds, skippedIds, cancelled: controller.signal.aborted });
+    }
   }, [applyAllTargets]);
   const cancelApplyAll = useCallback(() => {
     applyAbortRef.current?.abort();
-    setApplyingAll(false);
   }, []);
+  const applyAllOutcome = summariseApplyAllRun(applyAllRun, searchStates);
 
   if (taggerSources.length === 0) {
     return (
@@ -1122,6 +1239,9 @@ export function VideoTagger({
           setSearchStates({});
           setQueryOverrides({});
           setScraperInputKinds({});
+          // The results the last batch acted on are gone, so its summary describes nothing that is
+          // still on screen; keeping it would resurrect failures from the previous source.
+          setApplyAllRun(null);
         }}
         showToggle={
           mode === "bulk"
@@ -1386,6 +1506,33 @@ export function VideoTagger({
         </TaggerSettingsPanel>
       )}
 
+      {/* Outcome of the last Apply all. A failure is an alert, because it is added to the page rather
+          than updated in place and a polite region is not reliably announced for that. A run the user
+          cancelled themselves is only a status: they know they cancelled it, and interrupting a screen
+          reader assertively to say so would be noise. */}
+      {applyAllOutcome && (
+        <div
+          role={applyAllOutcome.failureCount > 0 ? "alert" : "status"}
+          className={`flex items-start gap-2 border-b border-border px-4 py-2 text-xs ${
+            applyAllOutcome.failureCount > 0 ? "bg-red-500/5 text-red-400" : "bg-surface text-muted"
+          }`}
+        >
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">
+            {describeApplyAllOutcome(applyAllOutcome)}
+            {applyAllOutcome.failureCount > 0 && " The videos that failed keep their changes and can be applied again."}
+          </p>
+          <button
+            type="button"
+            onClick={dismissApplyAllRun}
+            aria-label="Dismiss apply summary"
+            className="shrink-0 rounded p-0.5 opacity-70 hover:bg-foreground/10 hover:opacity-100"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
       {/* Video list */}
       <div className="divide-y divide-border">
         {visibleVideos.map((video) => (
@@ -1560,7 +1707,7 @@ function TaggerVideoRow({
 
   const importMut = useMutation<Video | ScrapeAttempt, Error>({
     mutationFn: () => {
-      if (!selectedResult) throw new Error("No result selected");
+      if (!selectedResult) throw new TaggerPreconditionError("No result selected");
       const collectionModes = getVideoCollectionModes(selectedResult, state, taggerConfig);
       const tagActions = buildVideoRelationActionMap(
         selectedResult.tagNames,
@@ -1584,7 +1731,7 @@ function TaggerVideoRow({
           ? selectedResult.tagNames
           : selectedResult.tagNames.filter((name) => tagActions[relationKey(name)] === "exclude");
       if (selectedResult?.sourceKind === "scraper") {
-        if (!selectedResult.scrapeAttemptId) throw new Error("No scraper attempt selected");
+        if (!selectedResult.scrapeAttemptId) throw new TaggerPreconditionError("No scraper attempt selected");
         return scrapeAttempts.apply(
           selectedResult.scrapeAttemptId,
           buildScraperVideoApplyRequest(selectedResult, video, state, taggerConfig),
@@ -1650,13 +1797,33 @@ function TaggerVideoRow({
       };
       return videos.importFromMetadataServer(video.id, importReq);
     },
+    // The row and the Apply all summary both report this failure with the server's own wording, so
+    // the app-wide notice would be a third, vaguer account of the same thing.
+    meta: { suppressGlobalError: true },
+    // A retry starts from a clean slate, so a stale reason cannot sit beside a fresh attempt.
+    onMutate: () => onUpdateState({ error: undefined }),
+    // React Query routes anything thrown in here to onError, which would report an import that has
+    // already landed as a failure and invite the user to write it a second time. The whole body is
+    // guarded, not just the refresh: a 204 makes `result` undefined, and reading a warning off it
+    // would throw before the row was ever marked saved.
     onSuccess: async (result) => {
-      const importWarnings = "importWarnings" in result ? result.importWarnings : undefined;
-      onUpdateState({
-        saved: true,
-        warning: importWarnings && importWarnings.length > 0 ? importWarnings.join(" ") : undefined,
-      });
-      await invalidateVideoMetadataQueries(queryClient, video.id);
+      try {
+        const importWarnings =
+          result && typeof result === "object" && "importWarnings" in result ? result.importWarnings : undefined;
+        onUpdateState({
+          saved: true,
+          warning: importWarnings && importWarnings.length > 0 ? importWarnings.join(" ") : undefined,
+        });
+        await invalidateVideoMetadataQueries(queryClient, video.id);
+      } catch {
+        // The import itself succeeded, so the row stays saved and a stale list is the lesser problem.
+        onUpdateState({ saved: true });
+      }
+    },
+    // Apply all deliberately swallows a rejection so one row cannot abandon the batch, so the reason
+    // has to be recorded here: without this the row keeps its pending changes and looks untouched.
+    onError: (err) => {
+      onUpdateState({ error: taggerFailureReason(err) });
     },
   });
 
