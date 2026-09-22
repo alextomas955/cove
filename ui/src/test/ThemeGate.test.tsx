@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ loaded: false }));
@@ -16,10 +16,9 @@ async function renderGate() {
 }
 
 function paintBootedLook() {
-  const style = document.createElement("style");
-  style.id = "cove-theme-override";
-  style.setAttribute("data-cove-boot", "1");
-  document.head.appendChild(style);
+  // What the boot script stamps on <html> when it applies a snapshot; a theme can legitimately carry
+  // no colours, so ownership is the marker rather than the presence of a style element.
+  document.documentElement.setAttribute("data-cove-boot-theme", "1");
 }
 
 describe("ThemeGate", () => {
@@ -30,7 +29,7 @@ describe("ThemeGate", () => {
 
   afterEach(() => {
     cleanup();
-    document.getElementById("cove-theme-override")?.remove();
+    document.documentElement.removeAttribute("data-cove-boot-theme");
   });
 
   // First sign-in on a new browser: nothing cached, so the palette is genuinely unknown.
@@ -51,6 +50,21 @@ describe("ThemeGate", () => {
   it("does not wait when the boot script already painted the user's theme", async () => {
     paintBootedLook();
     await renderGate();
+
+    expect(screen.getByTestId("app")).toBeInTheDocument();
+  });
+
+  // The gate latches: `loaded` goes false again on every refetch, and re-closing would unmount the
+  // app below and lose player and queue state.
+  it("stays open once the theme has settled", async () => {
+    state.loaded = true;
+    await renderGate();
+    expect(screen.getByTestId("app")).toBeInTheDocument();
+
+    state.loaded = false;
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+    });
 
     expect(screen.getByTestId("app")).toBeInTheDocument();
   });

@@ -14,12 +14,18 @@ const THEME_SETTLE_TIMEOUT_MS = 2000;
 
 export function ThemeGate({ children }: { children: ReactNode }) {
   const { loaded } = useExtensions();
-  const [settleTimedOut, setSettleTimedOut] = useState(false);
-  const waiting = !loaded && !bootedLookAtStartup && !settleTimedOut;
+  // A latch, not a derived value: `loaded` goes false again whenever the loader refetches, and
+  // re-closing the gate would unmount the whole app below it and lose player and queue state.
+  const [opened, setOpened] = useState(() => bootedLookAtStartup);
+  const waiting = !opened && !loaded;
+
+  useEffect(() => {
+    if (loaded) setOpened(true);
+  }, [loaded]);
 
   useEffect(() => {
     if (!waiting) return;
-    const timer = window.setTimeout(() => setSettleTimedOut(true), THEME_SETTLE_TIMEOUT_MS);
+    const timer = window.setTimeout(() => setOpened(true), THEME_SETTLE_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [waiting]);
 

@@ -1,6 +1,7 @@
 // Outside src/ on purpose: it reads the repo from disk and compiles the boot bundle, like the build
 // scripts it exercises, which the app's tsconfig also excludes.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { compileThemeBootScript, themeBootMaxBytes } from "../scripts/theme-boot";
@@ -135,4 +136,30 @@ describe("the compiled boot script", () => {
 
     expect(paintedState()).toEqual(expected);
   });
+});
+
+describe("the emitted document", () => {
+  // The entire fix rests on the inline script running before the stylesheet: a classic script placed
+  // after a <link rel=stylesheet> does not execute until that sheet has downloaded, which on a slow
+  // connection delays the theme by the whole CSS download. Vite appends its asset tags to <head>, so
+  // the marker in index.html is what keeps the script ahead of them. Nothing else pins that, and a
+  // Vite upgrade that switched to prepending would undo the fix with every other test still green.
+  it("runs the boot script before the stylesheet it must not wait for", async () => {
+    const { build } = await import("vite");
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "cove-theme-boot-"));
+    try {
+      await build({ root: uiRoot, logLevel: "silent", build: { outDir, emptyOutDir: true, write: true } });
+      const html = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
+
+      const script = html.indexOf("cove-theme-boot");
+      const stylesheet = html.indexOf('rel="stylesheet"');
+      expect(script).toBeGreaterThan(-1);
+      expect(stylesheet).toBeGreaterThan(-1);
+      expect(script).toBeLessThan(stylesheet);
+      // Classic and parser-blocking: a module script is deferred and would run after the first paint.
+      expect(html).not.toMatch(/<script[^>]*type="module"[^>]*>\(function\(\)/);
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  }, 180_000);
 });

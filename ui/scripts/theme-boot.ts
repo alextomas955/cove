@@ -8,7 +8,7 @@ export const themeBootEntry = path.resolve(import.meta.dirname, "../src/theme/th
 // someone importing half of ExtensionLoader into themeBoot.ts.
 export const themeBootMaxBytes = 4096;
 
-let cached: string | null = null;
+let cached: Promise<string> | null = null;
 
 /**
  * Bundle `themeBoot.entry.ts` into a self-contained classic script.
@@ -17,9 +17,14 @@ let cached: string | null = null;
  * rolldown-based Vite `transformWithEsbuild` is unavailable and `transformWithOxc` cannot bundle.
  * Bundling is what lets themeBoot.ts stay a normal module ExtensionLoader can import.
  */
-export async function compileThemeBootScript(): Promise<string> {
-  if (cached !== null) return cached;
+export function compileThemeBootScript(): Promise<string> {
+  // Caches the promise, not the result: two concurrent transformIndexHtml calls would otherwise each
+  // start their own nested build.
+  cached ??= compile();
+  return cached;
+}
 
+async function compile(): Promise<string> {
   const result = await build({
     // Both load-bearing: otherwise the nested build reads this vite.config.ts and recurses.
     configFile: false,
@@ -48,7 +53,6 @@ export async function compileThemeBootScript(): Promise<string> {
     throw new Error(`theme boot script is ${size} bytes, over the ${themeBootMaxBytes} byte budget`);
   }
 
-  cached = code;
   return code;
 }
 

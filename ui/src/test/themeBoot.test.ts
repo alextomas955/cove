@@ -115,6 +115,26 @@ describe("theme boot snapshot", () => {
     });
   });
 
+  it("survives a theme id that is namespaced the way extensions namespace them", () => {
+    // Rejecting these silently turned the whole pre-paint off for that user, permanently.
+    expect(sanitizeThemeBootSnapshot(buildSnapshot({ themeId: "com.acme.dark" }))).not.toBeNull();
+  });
+
+  it("keeps modern colour syntax but rejects a comment opener", () => {
+    expect(
+      sanitizeThemeBootSnapshot(buildSnapshot({ vars: { "--color-background": "rgb(0 0 0 / 50%)" } })),
+    ).not.toBeNull();
+    // An unterminated comment swallows the rest of the block, canvas rule included.
+    expect(sanitizeThemeBootSnapshot(buildSnapshot({ vars: { "--color-background": "#16181d/*" } }))).toBeNull();
+    expect(sanitizeThemeBootSnapshot(buildSnapshot({ vars: { "--color-background": "*/ x" } }))).toBeNull();
+  });
+
+  it("rejects style ids the dataset cannot hold", () => {
+    // DOMStringMap throws on these, and the throw used to abort applying halfway.
+    expect(sanitizeThemeBootSnapshot(buildSnapshot({ styleOptions: { "glass-pro": { blur: "40" } } }))).toBeNull();
+    expect(sanitizeThemeBootSnapshot(buildSnapshot({ styleOptions: { glass: { "card blur": "40" } } }))).toBeNull();
+  });
+
   it("rejects the whole snapshot when only one variable is unsafe", () => {
     const snapshot = buildSnapshot({ vars: { "--color-background": "#c5cad4", "--color-foreground": "red}" } });
     // Applying the safe half would leave unreadable text on a themed background.
@@ -182,6 +202,37 @@ describe("bootTheme", () => {
     seed(buildSnapshot({ u: null }), "2");
     bootTheme();
     expect(document.documentElement).not.toHaveAttribute("data-theme");
+  });
+});
+
+describe("handover", () => {
+  afterEach(() => {
+    clearThemeBootArtifacts(document);
+    document.documentElement.removeAttribute("data-component-style");
+    document.documentElement.removeAttribute("data-layout");
+  });
+
+  it("leaves attributes alone once ExtensionLoader owns the theme", () => {
+    // The handover runs on its own dependencies and can fire after the theme effect has taken over.
+    // Stripping data-theme then would unmatch every themed selector with nothing left to restore it.
+    document.documentElement.setAttribute("data-theme", "react-owned");
+    document.documentElement.setAttribute("data-color-scheme", "light");
+
+    clearThemeBootArtifacts(document);
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "react-owned");
+    expect(document.documentElement).toHaveAttribute("data-color-scheme", "light");
+  });
+
+  it("withdraws its own attributes and style-option properties", () => {
+    applyThemeBootSnapshot(document, buildSnapshot({ styleOptions: { glass: { cardblur: "40" } } }));
+    expect(document.documentElement.style.getPropertyValue("--sv-card-blur")).toBe("40");
+
+    clearThemeBootArtifacts(document);
+
+    expect(document.documentElement).not.toHaveAttribute("data-theme");
+    expect(document.documentElement.dataset.styleGlassCardblur).toBeUndefined();
+    expect(document.documentElement.style.getPropertyValue("--sv-card-blur")).toBe("");
   });
 });
 

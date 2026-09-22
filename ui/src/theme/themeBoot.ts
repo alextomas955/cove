@@ -15,6 +15,9 @@ export const THEME_BOOT_VERSION = 1;
 // Inlined to keep this module import-free. Must match USER_KEY in ../auth/authStore.
 const AUTH_USER_STORAGE_KEY = "cove_user";
 
+// Marks the root attributes this module set, so they are only withdrawn while it still owns them.
+const BOOT_OWNED_ATTRIBUTE = "data-cove-boot-theme";
+
 /** Also mirrored by index.css's `@theme` block and index.html's inline style; themeBootContract.test.ts pins the three together. */
 export const FALLBACK_DEFAULT_THEME: ExtensionThemeDef = {
   id: "default",
@@ -77,10 +80,16 @@ export interface ThemeBootSnapshot {
 const MAX_VARS = 64;
 const MAX_VALUE_LENGTH = 120;
 const CSS_VAR_NAME = /^--[A-Za-z0-9_-]+$/;
-// Anything that could close the rule or the <style>, or start a new declaration or at-rule.
-const UNSAFE_CSS_VALUE = /[{}<>;@\\]/;
-// Spaces allowed: component and layout styles are space-separated sets.
-const SAFE_NAME = /^[A-Za-z0-9 _-]{1,64}$/;
+// Anything that could close the rule or the <style>, or start a new declaration or at-rule. A comment
+// opener counts: an unterminated /* swallows the rest of the block including the canvas rule. Bare
+// slashes stay legal because modern colour syntax uses them, as in rgb(0 0 0 / 50%).
+const UNSAFE_CSS_VALUE = /[{}<>;@\\]|\/\*|\*\//;
+// Spaces allowed: component and layout styles are space-separated sets. Dots and colons because
+// theme ids are author-chosen and extensions namespace them, as in com.acme.dark.
+const SAFE_NAME = /^[A-Za-z0-9 ._:@+-]{1,64}$/;
+// Style ids and option keys become dataset keys, and DOMStringMap throws on anything that is not a
+// valid JS property name, so they are held to a stricter set than the names above.
+const SAFE_DATASET_PART = /^[A-Za-z0-9_]{1,64}$/;
 const SAFE_OPTION_VALUE = /^[A-Za-z0-9 ._%-]{1,64}$/;
 // Same-origin absolute path only, so neither "//host" nor "https://host".
 const SAME_ORIGIN_PATH = /^\/[^/\\]/;
@@ -108,12 +117,12 @@ function safeCssVars(value: unknown): Record<string, string> | null {
 
 function safeStyleOptions(value: unknown): Record<string, Record<string, string>> | null {
   if (!isRecord(value)) return null;
-  const options: Record<string, Record<string, string>> = {};
+  const options: Record<string, Record<string, string>> = Object.create(null) as Record<string, Record<string, string>>;
   for (const [styleId, raw] of Object.entries(value)) {
-    if (!SAFE_NAME.test(styleId) || !isRecord(raw)) return null;
-    const parsed: Record<string, string> = {};
+    if (!SAFE_DATASET_PART.test(styleId) || !isRecord(raw)) return null;
+    const parsed: Record<string, string> = Object.create(null) as Record<string, string>;
     for (const [key, optionValue] of Object.entries(raw)) {
-      if (!SAFE_NAME.test(key)) return null;
+      if (!SAFE_DATASET_PART.test(key)) return null;
       if (typeof optionValue !== "string" || !SAFE_OPTION_VALUE.test(optionValue)) return null;
       parsed[key] = optionValue;
     }
@@ -208,6 +217,13 @@ export function readCachedUserId(): string | null {
 export function applyThemeBootSnapshot(doc: Document, snapshot: ThemeBootSnapshot): void {
   const root = doc.documentElement;
 
+  // Colours before attributes. The dataset writes below can still throw on a hostile snapshot, and
+  // getting the palette in first means such a snapshot degrades to a plain theme rather than to
+  // attributes with no colours behind them, which paints worse than not booting at all.
+  applyCanvas(doc, snapshot);
+
+  // Marks the attributes below as this module's, so the handover only withdraws its own work.
+  root.setAttribute(BOOT_OWNED_ATTRIBUTE, "1");
   root.setAttribute("data-theme", snapshot.themeId);
   if (snapshot.colorScheme === "light") root.setAttribute("data-color-scheme", "light");
   else root.removeAttribute("data-color-scheme");
@@ -223,7 +239,9 @@ export function applyThemeBootSnapshot(doc: Document, snapshot: ThemeBootSnapsho
       if (cssVar) root.style.setProperty(cssVar, value);
     }
   }
+}
 
+function applyCanvas(doc: Document, snapshot: ThemeBootSnapshot): void {
   const declarations = Object.entries(snapshot.vars).map(([name, value]) => `  ${name}: ${value};`);
   // Colours `html` directly as well as through the variables, so the literal fallback in index.html
   // is replaced before index.css exists. --color-background is what the app's full-height container
@@ -256,14 +274,25 @@ export function applyThemeBootSnapshot(doc: Document, snapshot: ThemeBootSnapsho
   }
 }
 
-/** Removes only what this module created; an override ExtensionLoader already installed is untouched. */
+/**
+ * Removes only what this module created. Elements ExtensionLoader installed carry no marker, and the
+ * root attributes are withdrawn only while this module still owns them -- once the theme effect has
+ * taken over, stripping them would leave every themed selector in index.css unmatched with nothing
+ * left to run and put them back.
+ */
 export function clearThemeBootArtifacts(doc: Document): void {
   try {
     for (const element of Array.from(doc.querySelectorAll("[data-cove-boot]"))) element.remove();
     const root = doc.documentElement;
+    if (!root.hasAttribute(BOOT_OWNED_ATTRIBUTE)) return;
+    root.removeAttribute(BOOT_OWNED_ATTRIBUTE);
     root.removeAttribute("data-theme");
     root.removeAttribute("data-color-scheme");
     root.removeAttribute("data-theme-bg-animation");
+    for (const key of Object.keys(root.dataset)) if (key.startsWith("style")) delete root.dataset[key];
+    for (const map of Object.values(STYLE_OPTION_CSS_VARS)) {
+      for (const cssVar of Object.values(map)) root.style.removeProperty(cssVar);
+    }
   } catch {
     /* ignore */
   }
@@ -272,7 +301,7 @@ export function clearThemeBootArtifacts(doc: Document): void {
 /** Whether the boot script painted a look, i.e. whether the theme is already known to this page. */
 export function hasBootedLook(doc: Document = document): boolean {
   try {
-    return doc.querySelector("[data-cove-boot]") !== null;
+    return doc.documentElement.hasAttribute(BOOT_OWNED_ATTRIBUTE);
   } catch {
     return false;
   }
