@@ -1,6 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionManifest } from "../api/types";
+import {
+  THEME_BOOT_STORAGE_KEY,
+  THEME_BOOT_VERSION,
+  applyThemeBootSnapshot,
+  type ThemeBootSnapshot,
+} from "../theme/themeBoot";
 import { ExtensionLoaderProvider, useExtensions } from "../extensions/ExtensionLoader";
 
 const THEME_STORAGE_KEY = "cove-active-theme";
@@ -62,7 +68,13 @@ function buildManifest(): ExtensionManifest {
     tabs: [],
     features: [],
     themes: [
-      { id: SELECTED_THEME_ID, name: "Cinema Dark" },
+      {
+        id: SELECTED_THEME_ID,
+        name: "Cinema Dark",
+        colorScheme: "light",
+        cssVariables: { "--color-background": "#c5cad4", "--color-foreground": "#111827" },
+        cssUrl: "/extensions/cinema/theme.css",
+      },
       { id: OTHER_THEME_ID, name: "Legacy" },
     ],
     componentStyles: [],
@@ -111,7 +123,9 @@ describe("ExtensionLoaderProvider theme persistence", () => {
     cleanup();
     vi.restoreAllMocks();
     document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-color-scheme");
     document.getElementById("cove-theme-override")?.remove();
+    document.getElementById("cove-theme-css")?.remove();
   });
 
   it("keeps the selected theme when the manifest request fails", async () => {
@@ -216,5 +230,137 @@ describe("ExtensionLoaderProvider theme persistence", () => {
     await waitFor(() => expect(screen.getByTestId("active-theme")).toHaveTextContent(OTHER_THEME_ID));
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe(OTHER_THEME_ID);
     expect(mocks.updateUiPreferences).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Both directions of the boot cache: what the loader writes, and when it withdraws what the inline
+// boot script already painted.
+describe("ExtensionLoaderProvider theme boot cache", () => {
+  function bootSnapshot(overrides: Partial<ThemeBootSnapshot> = {}): ThemeBootSnapshot {
+    return {
+      v: THEME_BOOT_VERSION,
+      u: "1",
+      themeId: SELECTED_THEME_ID,
+      colorScheme: "light",
+      bgAnimation: null,
+      vars: { "--color-background": "#c5cad4", "--color-foreground": "#111827" },
+      cssUrl: "/extensions/cinema/theme.css",
+      componentStyle: "default",
+      layoutStyle: "default",
+      styleOptions: {},
+      ...overrides,
+    };
+  }
+
+  const readSnapshot = () => JSON.parse(localStorage.getItem(THEME_BOOT_STORAGE_KEY) ?? "null");
+
+  beforeEach(() => {
+    mocks.getManifest.mockReset();
+    mocks.updateUiPreferences.mockReset();
+    mocks.troubleshootingModeEnabled = false;
+    mocks.user.id = "1";
+    localStorage.clear();
+    localStorage.setItem(THEME_STORAGE_KEY, SELECTED_THEME_ID);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    mocks.user.id = "1";
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-color-scheme");
+    document.getElementById("cove-theme-override")?.remove();
+    document.getElementById("cove-theme-css")?.remove();
+  });
+
+  it("caches the look it just painted", async () => {
+    mocks.getManifest.mockResolvedValue(buildManifest());
+
+    renderLoader();
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", SELECTED_THEME_ID));
+
+    await waitFor(() =>
+      expect(readSnapshot()).toMatchObject({
+        v: THEME_BOOT_VERSION,
+        u: "1",
+        themeId: SELECTED_THEME_ID,
+        colorScheme: "light",
+        vars: { "--color-background": "#c5cad4" },
+        cssUrl: "/extensions/cinema/theme.css",
+      }),
+    );
+  });
+
+  // Counterpart of "keeps the selected theme when the manifest contributes no themes": the selection
+  // survives, the cached appearance must not.
+  it("drops the cached look but keeps the selection when the theme is gone", async () => {
+    localStorage.setItem(THEME_BOOT_STORAGE_KEY, JSON.stringify(bootSnapshot()));
+    const manifest = buildManifest();
+    manifest.themes = [];
+    mocks.getManifest.mockResolvedValue(manifest);
+
+    renderLoader();
+    await waitFor(() => expect(screen.getByTestId("loaded")).toHaveTextContent("true"));
+
+    await waitFor(() => expect(localStorage.getItem(THEME_BOOT_STORAGE_KEY)).toBeNull());
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe(SELECTED_THEME_ID);
+  });
+
+  it("takes over the elements the boot script painted, leaving one override behind", async () => {
+    applyThemeBootSnapshot(document, bootSnapshot());
+    expect(document.querySelectorAll("[data-cove-boot]")).toHaveLength(2);
+    mocks.getManifest.mockResolvedValue(buildManifest());
+
+    renderLoader();
+    await waitFor(() => expect(screen.getByTestId("loaded")).toHaveTextContent("true"));
+
+    await waitFor(() => expect(document.querySelectorAll("#cove-theme-override")).toHaveLength(1));
+    expect(document.querySelectorAll("[data-cove-boot]")).toHaveLength(0);
+    expect(document.getElementById("cove-theme-override")).not.toHaveAttribute("data-cove-boot");
+  });
+
+  // A manifest that does not load says nothing about what the user chose.
+  it("leaves the booted look alone when the manifest request fails", async () => {
+    localStorage.setItem(THEME_BOOT_STORAGE_KEY, JSON.stringify(bootSnapshot()));
+    applyThemeBootSnapshot(document, bootSnapshot());
+    mocks.getManifest.mockRejectedValue(new Error("API Error 500: manifest unavailable"));
+
+    renderLoader();
+    await waitFor(() => expect(screen.getByTestId("loaded")).toHaveTextContent("true"));
+
+    expect(document.getElementById("cove-theme-override")).toHaveAttribute("data-cove-boot");
+    expect(document.documentElement).toHaveAttribute("data-color-scheme", "light");
+    expect(readSnapshot()).toMatchObject({ themeId: SELECTED_THEME_ID });
+  });
+
+  it("strips the booted look in troubleshooting mode", async () => {
+    localStorage.setItem(THEME_BOOT_STORAGE_KEY, JSON.stringify(bootSnapshot()));
+    applyThemeBootSnapshot(document, bootSnapshot());
+    mocks.troubleshootingModeEnabled = true;
+    mocks.getManifest.mockResolvedValue(buildManifest());
+
+    renderLoader();
+    await waitFor(() => expect(screen.getByTestId("loaded")).toHaveTextContent("true"));
+
+    expect(document.getElementById("cove-theme-override")).toBeNull();
+    expect(document.getElementById("cove-theme-css")).toBeNull();
+    expect(document.documentElement).not.toHaveAttribute("data-theme");
+    expect(localStorage.getItem(THEME_BOOT_STORAGE_KEY)).toBeNull();
+    // Troubleshooting mode withdraws the appearance, not the preference.
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe(SELECTED_THEME_ID);
+  });
+
+  // A shared browser: /me resolves to someone other than the snapshot's user.
+  it("strips a booted look belonging to another user before the manifest resolves", async () => {
+    localStorage.setItem(THEME_BOOT_STORAGE_KEY, JSON.stringify(bootSnapshot({ u: "1" })));
+    applyThemeBootSnapshot(document, bootSnapshot({ u: "1" }));
+    mocks.user.id = "2";
+    mocks.getManifest.mockReturnValue(new Promise(() => {}));
+
+    renderLoader();
+
+    await waitFor(() => expect(document.getElementById("cove-theme-override")).toBeNull());
+    expect(document.documentElement).not.toHaveAttribute("data-theme");
+    expect(localStorage.getItem(THEME_BOOT_STORAGE_KEY)).toBeNull();
   });
 });

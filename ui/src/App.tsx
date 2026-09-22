@@ -45,6 +45,7 @@ import { MutationFailureNotice } from "./components/MutationFailureNotice";
 import { StartupGate } from "./components/StartupGate";
 import { getApiValidationFailureDetail } from "./utils/requestFailure";
 import { ExtensionKeyboardActions } from "./extensions/ExtensionKeyboardActions";
+import { ThemeGate } from "./components/ThemeGate";
 
 function normalizeRoute(route: Route): Route {
   if (route.page === "logs") {
@@ -222,14 +223,16 @@ export default function App() {
           <AuthGate>
             <ExtensionLoaderProvider>
               <ExtensionLoadNotice />
-              <KeyboardShortcutProvider>
-                <AppFloatingUI />
-                <VideoQueueProvider>
-                  <AppKeyboardShortcuts navigate={navigate} />
-                  <ExtensionKeyboardActions route={route} />
-                  <AppShell route={route} navigate={navigate} />
-                </VideoQueueProvider>
-              </KeyboardShortcutProvider>
+              <ThemeGate>
+                <KeyboardShortcutProvider>
+                  <AppFloatingUI />
+                  <VideoQueueProvider>
+                    <AppKeyboardShortcuts navigate={navigate} />
+                    <ExtensionKeyboardActions route={route} />
+                    <AppShell route={route} navigate={navigate} />
+                  </VideoQueueProvider>
+                </KeyboardShortcutProvider>
+              </ThemeGate>
             </ExtensionLoaderProvider>
           </AuthGate>
         </StartupGate>

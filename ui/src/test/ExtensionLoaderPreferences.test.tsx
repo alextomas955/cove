@@ -1,6 +1,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExtensionLoaderProvider } from "../extensions/ExtensionLoader";
+import { THEME_BOOT_STORAGE_KEY } from "../theme/themeBoot";
 
 const mocks = vi.hoisted(() => ({
   user: {
@@ -108,5 +109,26 @@ describe("ExtensionLoaderProvider preference synchronization", () => {
     expect(setAttribute).not.toHaveBeenCalledWith("data-layout", "default");
     expect(removeAttribute).not.toHaveBeenCalledWith("data-component-style");
     expect(removeAttribute).not.toHaveBeenCalledWith("data-layout");
+  });
+});
+
+describe("ExtensionLoaderProvider boot cache", () => {
+  // Without these the next load pre-paints the right colours with the wrong component and layout
+  // styles, which is its own visible change.
+  it("caches the component and layout styles a theme brought with it", async () => {
+    render(
+      <ExtensionLoaderProvider>
+        <div>content</div>
+      </ExtensionLoaderProvider>,
+    );
+
+    await waitFor(() => {
+      const snapshot = JSON.parse(localStorage.getItem(THEME_BOOT_STORAGE_KEY) ?? "null");
+      expect(snapshot).toMatchObject({
+        themeId: "cinema-dark",
+        componentStyle: "floating",
+        layoutStyle: "detail-theater detail-tabs",
+      });
+    });
   });
 });
