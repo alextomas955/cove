@@ -2251,6 +2251,9 @@ public record BulkAudioUpdateDto
     public BulkUpdateMode TagMode { get; init; } = BulkUpdateMode.Add;
     public List<int>? PerformerIds { get; init; }
     public BulkUpdateMode PerformerMode { get; init; } = BulkUpdateMode.Add;
+    /// <inheritdoc cref="BulkVideoUpdateDto.CustomFields"/>
+    public Dictionary<string, object?>? CustomFields { get; init; }
+    public BulkUpdateMode CustomFieldMode { get; init; } = BulkUpdateMode.Add;
 }
 
 public record BulkTextDocumentUpdateDto
