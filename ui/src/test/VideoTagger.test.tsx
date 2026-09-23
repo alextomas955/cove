@@ -1082,7 +1082,7 @@ describe("VideoTagger", () => {
       123,
       "Local video",
       "https://first.example/graphql",
-      undefined,
+      "text",
     );
   });
 
@@ -1115,9 +1115,10 @@ describe("VideoTagger", () => {
       ),
     );
 
+    // Both of the row's search modes sit beside the query box rather than in the overflow menu, and
+    // neither takes the saved bulk strategy: one searches by text alone, the other by content alone.
     mocks.searchMetadataServer.mockClear();
-    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
-    await userEvent.click(screen.getByTitle("Search by fingerprint only"));
+    await userEvent.click(screen.getByRole("button", { name: "Identify by file content" }));
     await waitFor(() =>
       expect(mocks.searchMetadataServer).toHaveBeenCalledWith(
         123,
@@ -1126,6 +1127,22 @@ describe("VideoTagger", () => {
         "fingerprint",
       ),
     );
+
+    mocks.searchMetadataServer.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Search for this text" }));
+    await waitFor(() =>
+      expect(mocks.searchMetadataServer).toHaveBeenCalledWith(
+        123,
+        "Local video",
+        "https://first.example/graphql",
+        "text",
+      ),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.getByRole("button", { name: "Submit fingerprints" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit as draft" })).toBeInTheDocument();
+    expect(screen.queryByText("Search by fingerprint only")).not.toBeInTheDocument();
   });
 
   it("offers tags, performers and studio from a YAML scraper's object-shaped result", async () => {
@@ -1179,6 +1196,8 @@ describe("VideoTagger", () => {
 
     await screen.findByRole("option", { name: "Site Scraper (Scraper)" });
     await userEvent.selectOptions(screen.getByRole("combobox"), "scraper:pack/site:video");
+    // Only a metadata server can identify a file by its content.
+    expect(screen.queryByRole("button", { name: "Identify by file content" })).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("Video URL..."), "{Enter}");
 
     await waitFor(() => expect(mocks.createScrapeAttempt).toHaveBeenCalledOnce());

@@ -679,19 +679,26 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         var video = await videoRepo.GetByIdWithRelationsAsync(id, ct);
         if (video == null) return NotFound();
 
-        VideoMetadataSearchStrategy? parsedStrategy = strategy?.Trim().ToLowerInvariant() switch
+        if (!TryParseMetadataSearchStrategy(strategy, out var parsedStrategy))
+            return BadRequest(new { message = $"Unknown metadata search strategy '{strategy}'." });
+
+        return Ok(await metadataServerService.SearchVideosAsync(video, term, endpoint, parsedStrategy, ct));
+    }
+
+    // An absent strategy parses to null and leaves the service to infer one from whether a term was sent.
+    internal static bool TryParseMetadataSearchStrategy(string? value, out VideoMetadataSearchStrategy? strategy)
+    {
+        strategy = value?.Trim().ToLowerInvariant() switch
         {
             null or "" => null,
             "remote-id-and-fingerprint-text" => VideoMetadataSearchStrategy.RemoteIdAndFingerprintThenText,
             "remote-id-fingerprint" => VideoMetadataSearchStrategy.RemoteIdFingerprint,
             "remote-id" => VideoMetadataSearchStrategy.RemoteId,
             "fingerprint" => VideoMetadataSearchStrategy.Fingerprint,
+            "text" => VideoMetadataSearchStrategy.Text,
             _ => null,
         };
-        if (!string.IsNullOrWhiteSpace(strategy) && parsedStrategy == null)
-            return BadRequest(new { message = $"Unknown metadata search strategy '{strategy}'." });
-
-        return Ok(await metadataServerService.SearchVideosAsync(video, term, endpoint, parsedStrategy, ct));
+        return strategy != null || string.IsNullOrWhiteSpace(value);
     }
 
     // Fetch matches directly by this server's ids (e.g. a video's existing remote ids), so the tagger can

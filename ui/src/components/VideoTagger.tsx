@@ -1012,7 +1012,10 @@ export function VideoTagger({
         } else {
           const endpoint = source?.endpoint || undefined;
           if (!bulkStrategy && !query.trim()) throw new Error("Enter a title or name to search.");
-          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, bulkStrategy)).map(
+          // The row's query box searches by text alone whatever the bulk strategy, and says so in the request
+          // rather than leaving the server to infer it from a term arriving without a strategy.
+          const strategy = bulkStrategy ?? "text";
+          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, strategy)).map(
             (match) => ({ ...match, sourceKind: "metadata-server" as const }),
           );
         }
@@ -1704,6 +1707,7 @@ function TaggerVideoRow({
         ? "Fragment JSON..."
         : "Title or name..."
     : "Search query...";
+  const textSearchLabel = isScraperSource ? "Search" : "Search for this text";
 
   const importMut = useMutation<Video | ScrapeAttempt, Error>({
     mutationFn: () => {
@@ -1984,17 +1988,32 @@ function TaggerVideoRow({
               />
             )}
             <button
+              type="button"
               onClick={onSearch}
               disabled={state?.loading}
-              aria-label="Search"
+              aria-label={textSearchLabel}
+              title={textSearchLabel}
               // Stretch to the one-line input's height; beside the multi-line fragment box, stay compact at the top.
-              className={`flex shrink-0 items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60 ${
+              className={`flex shrink-0 items-center rounded bg-accent px-2 py-1 text-white hover:bg-accent-hover disabled:opacity-60 ${
                 isFragmentInput ? "h-fit" : ""
               }`}
             >
-              {state?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-              <span className="hidden sm:inline">Search</span>
+              {state?.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
             </button>
+            {source?.kind === "metadata-server" && (
+              // The row's second search mode, so it sits beside the first rather than in the menu. It never
+              // reads the query box, which is what keeps the two visibly independent.
+              <button
+                type="button"
+                onClick={onSearchFingerprints}
+                disabled={state?.loading}
+                aria-label="Identify by file content"
+                title="Identify by file content (fingerprints). Ignores the search text."
+                className="flex shrink-0 items-center rounded border border-border bg-surface px-1.5 text-muted hover:border-accent/40 hover:text-accent disabled:opacity-60"
+              >
+                <Fingerprint className="h-3.5 w-3.5" />
+              </button>
+            )}
             {onDismiss && (
               // Sits beside Search so a row can be cleared whether or not it found a match.
               <button
@@ -2010,7 +2029,8 @@ function TaggerVideoRow({
               </button>
             )}
             {source?.kind === "metadata-server" && (
-              // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
+              // The rare actions, the two submissions, live behind one menu so the row shows its query and its
+              // two search modes and nothing more.
               <DismissibleMenu className="relative shrink-0">
                 <summary
                   role="button"
@@ -2025,19 +2045,6 @@ function TaggerVideoRow({
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </summary>
                 <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded border border-border bg-card shadow-xl">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      onSearchFingerprints();
-                    }}
-                    disabled={state?.loading}
-                    title="Search by fingerprint only"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface disabled:opacity-60"
-                  >
-                    <Fingerprint className="h-3.5 w-3.5 text-muted" />
-                    Search by fingerprint only
-                  </button>
                   <button
                     type="button"
                     onClick={(event) => {
