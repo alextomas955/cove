@@ -275,4 +275,5 @@ packages/react-devtools-timeline/dist
 /gitignored/*
 **/artifacts/*
 .playwright-mcp/*
+.playwright-cli/
 gitignored-docs/
