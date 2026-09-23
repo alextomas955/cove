@@ -686,6 +686,7 @@ function GalleryVideosPanel({ galleryId, onNavigate }: { galleryId: number; onNa
     infinitePageSize,
     infiniteQuery,
     infiniteFilterKey,
+    settledListKey,
     fetchAllIds,
     loadMore,
   } = useDetailListQuery<Video>({
@@ -769,6 +770,7 @@ function GalleryVideosPanel({ galleryId, onNavigate }: { galleryId: number; onNa
       <ContextualVideoListView
         items={items}
         filter={filter}
+        taggerResetKey={settledListKey}
         totalCount={data.totalCount}
         queryPage={queryPage}
         displayMode={displayMode}

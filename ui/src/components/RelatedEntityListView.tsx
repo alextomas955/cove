@@ -157,6 +157,8 @@ export interface RelatedEntityListViewProps<TItem extends RelatedEntityItem> ext
   isSelectable?: (item: TItem) => boolean;
   onNavigate: (route: any) => void;
   onVideoQuickView?: (id: number) => void;
+  // Passed to the video tagger so its "hide unmatched" toggle resets when the page or filters change.
+  taggerResetKey?: string;
   onImageQuickView?: (id: number) => void;
   onImagePreview?: (image: Image, index: number) => void;
   onImageDetails?: (image: Image) => void;
@@ -182,6 +184,7 @@ export function RelatedEntityListView<TItem extends RelatedEntityItem>({
   hasNextPage,
   isFetchingNextPage,
   loadMore,
+  taggerResetKey,
   gap = 16,
   gapClassName = "gap-4",
 }: RelatedEntityListViewProps<TItem>) {
@@ -230,7 +233,7 @@ export function RelatedEntityListView<TItem extends RelatedEntityItem>({
   }, [feedVideoSound]);
 
   if (effectiveDisplayMode === "tagger") {
-    return renderRelatedTagger({ entityType, items, selectedIds, selecting, onToggle, onNavigate });
+    return renderRelatedTagger({ entityType, items, selectedIds, selecting, onToggle, onNavigate, taggerResetKey });
   }
 
   if (effectiveDisplayMode === "graph" && entityType === "tags") {
@@ -666,6 +669,7 @@ function renderRelatedTagger<TItem extends RelatedEntityItem>({
   selecting,
   onToggle,
   onNavigate,
+  taggerResetKey,
 }: {
   entityType: RelatedEntityType;
   items: TItem[];
@@ -673,6 +677,7 @@ function renderRelatedTagger<TItem extends RelatedEntityItem>({
   selecting: boolean;
   onToggle?: (id: number, options?: MultiSelectToggleOptions) => void;
   onNavigate: (route: any) => void;
+  taggerResetKey?: string;
 }) {
   switch (entityType) {
     case "videos":
@@ -683,6 +688,7 @@ function renderRelatedTagger<TItem extends RelatedEntityItem>({
           selecting={selecting}
           onSelect={onToggle}
           onNavigate={(videoId) => onNavigate({ page: "video", id: videoId })}
+          resetKey={taggerResetKey}
         />
       );
     case "performers":

@@ -91,6 +91,9 @@ interface VideoTaggerProps {
   selecting?: boolean;
   onSelect?: (videoId: number, options?: MultiSelectToggleOptions) => void;
   mode?: "bulk" | "detail";
+  // Identifies the list the videos came from (page, sort, search and filters); a new value is a new
+  // list, which starts again with unmatched videos shown.
+  resetKey?: string;
 }
 
 interface TaggerConfig {
@@ -790,6 +793,7 @@ export function VideoTagger({
   selecting = false,
   onSelect,
   mode = "bulk",
+  resetKey = "",
 }: VideoTaggerProps) {
   const { config } = useAppConfig();
   const metadataServers = config?.scraping?.metadataServers ?? [];
@@ -873,6 +877,14 @@ export function VideoTagger({
   // results, not a preference, and a stored "hide" would greet the next visit with an empty list before
   // anything has been searched.
   const [showUnmatched, setShowUnmatched] = useState(true);
+  // Reset during render rather than in an effect, so a new page never flashes as an empty list. The
+  // key, not the video ids, marks a new list: an apply that refetches the list and drops a video the
+  // filter now excludes must not undo the user's choice mid-pass.
+  const [showUnmatchedResetKey, setShowUnmatchedResetKey] = useState(resetKey);
+  if (showUnmatchedResetKey !== resetKey) {
+    setShowUnmatchedResetKey(resetKey);
+    setShowUnmatched(true);
+  }
   const [bulkStrategyDraft, setBulkStrategyDraft] = useState<VideoMetadataSearchStrategy>(
     taggerConfig.bulkMatchStrategy,
   );

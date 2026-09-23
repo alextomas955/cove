@@ -1057,6 +1057,35 @@ describe("VideoTagger", () => {
     expect(screen.getByRole("button", { name: "Hide Unmatched" })).toBeInTheDocument();
   });
 
+  it("shows unmatched videos again when the list's page or filters change", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const firstPage = [
+      { id: 123, title: "First page video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+      { id: 124, title: "Another first page video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    const secondPage = [
+      { id: 456, title: "Second page video", files: [], performers: [], tags: [], urls: [], remoteIds: [] },
+    ] as any;
+    const renderTagger = (videos: any[], resetKey: string) => (
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} resetKey={resetKey} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderTagger(firstPage, "page-1"));
+    await userEvent.click(screen.getByRole("button", { name: "Hide Unmatched" }));
+    expect(screen.queryByText("First page video")).not.toBeInTheDocument();
+
+    // The same list refetched keeps the toggle where the user left it, even when an apply made the
+    // filter drop a video and the ids changed.
+    rerender(renderTagger(firstPage.slice(1), "page-1"));
+    expect(screen.getByRole("button", { name: "Show Unmatched" })).toBeInTheDocument();
+
+    rerender(renderTagger(secondPage, "page-2"));
+    expect(screen.getByRole("button", { name: "Hide Unmatched" })).toBeInTheDocument();
+    expect(screen.getByText("Second page video")).toBeInTheDocument();
+  });
+
   it("disables Apply all until something matches", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const video = {
