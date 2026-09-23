@@ -24,7 +24,7 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.VideosRead)]
-public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null, VideoCoverComparisonService? coverComparisonService = null) : ControllerBase
+public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null, VideoCoverComparisonService? coverComparisonService = null, LibraryWriteSignal? libraryWriteSignal = null) : ControllerBase
 {
     // The candidate pass projects ids only, so this just bounds how much of the library one
     // extension-filtered query walks; it is not a page size.
@@ -259,6 +259,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         {
             return Ok(cachedResult);
         }
+        // Taken before the query runs, so a write that commits while it runs cannot leave its result cached.
+        var libraryWritten = libraryWriteSignal?.GetChangeToken();
 
         var findFilter = req.FindFilter ?? new FindFilter();
         var filter = req.ObjectFilter ?? new VideoFilter();
@@ -318,7 +320,15 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         var dtos = items.Select(video => MapListToDto(video, GetCustomFields(customFieldValues, video.Id), engagement.GetValueOrDefault(video.Id), HasUserScopedEngagement, effectiveTags)).ToList();
         var result = new PaginatedResponse<VideoDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage);
 
-        if (canCache) memoryCache.Set(cacheKey, result, TimeSpan.FromSeconds(1));
+        if (canCache)
+        {
+            // The cache only absorbs a burst of identical reads; a write committed through the context ends it,
+            // so a list refreshed after a save reflects the save. Raw SQL writes still wait out the second.
+            var entryOptions = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(1) };
+            if (libraryWritten != null)
+                entryOptions.AddExpirationToken(libraryWritten);
+            memoryCache.Set(cacheKey, result, entryOptions);
+        }
         return Ok(result);
     }
 
