@@ -30,6 +30,10 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
     // extension-filtered query walks; it is not a page size.
     private const int ExtensionFilterCandidateLimit = 50_000;
 
+    // A conflict that survives a fresh attempt is not a race the retry can settle; a few attempts cover a
+    // batch in which several related entities are contended in turn.
+    internal const int MetadataImportNameConflictAttempts = 3;
+
     private bool CanReadFiles => principalAccessor?.Current?.Has(Permissions.FilesRead) == true;
     private bool HasUserScopedEngagement => principalAccessor?.Current?.UserId != null;
     private static string GetVisibleBasename(string path, string basename) => string.IsNullOrWhiteSpace(basename) ? System.IO.Path.GetFileName(path) : basename;
@@ -729,16 +733,38 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         if (video == null) return NotFound();
         IReadOnlyList<string> importWarnings;
 
-        try
+        // Imports run concurrently (the tagger's Apply all sends several at once), and two that need the same
+        // missing studio, performer or tag both find it missing and both create it. The name constraints let
+        // only one commit; the other surfaces here as a name conflict, from its commit or from a lookup that
+        // saw the winner's row. Running the loser again from a clean slate finds the winner's entity and links
+        // it, which is what it would have done had it started a moment later. Each attempt fetches the remote
+        // again and repeats its downloads, which is the price of retrying only when a conflict occurs.
+        for (var attempt = 1; ; attempt++)
         {
-            var imported = await metadataServerService.MergeVideoWithWarningsAsync(video, dto.Endpoint, dto.VideoId, dto, ct);
-            if (!imported.Imported) return NotFound();
-            await db.SaveChangesAsync(ct);
-            importWarnings = imported.Warnings;
-        }
-        catch (EntityNameConflictException exception)
-        {
-            return Conflict(new { code = "RELATED_ENTITY_NAME_CONFLICT", message = exception.Message, exception.EntityType });
+            try
+            {
+                var imported = await metadataServerService.MergeVideoWithWarningsAsync(video, dto.Endpoint, dto.VideoId, dto, ct);
+                if (!imported.Imported) return NotFound();
+                await db.SaveChangesAsync(ct);
+                importWarnings = imported.Warnings;
+                break;
+            }
+            catch (Exception exception) when (exception is EntityNameConflictException or TagNameConflictException
+                && attempt < MetadataImportNameConflictAttempts)
+            {
+                db.ChangeTracker.Clear();
+                metadataServerService.ResetTrackedIdentityState();
+                video = await videoRepo.GetByIdWithRelationsAsync(id, ct);
+                if (video == null) return NotFound();
+            }
+            catch (EntityNameConflictException exception)
+            {
+                return Conflict(new { code = "RELATED_ENTITY_NAME_CONFLICT", message = exception.Message, exception.EntityType });
+            }
+            catch (TagNameConflictException exception)
+            {
+                return Conflict(new { code = "TAG_NAME_CONFLICT", message = exception.Message, exception.ConflictingName });
+            }
         }
         PublishVideoEvent(EventType.VideoUpdated, id);
         var updated = await videoRepo.GetByIdWithRelationsAsync(id, ct);
