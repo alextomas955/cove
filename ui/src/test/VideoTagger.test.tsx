@@ -277,12 +277,14 @@ describe("VideoTagger", () => {
       "First local video",
       "https://first.example/graphql",
       "fingerprint",
+      expect.any(AbortSignal),
     );
     expect(mocks.searchMetadataServer).toHaveBeenCalledWith(
       456,
       "Second local video",
       "https://first.example/graphql",
       "fingerprint",
+      expect.any(AbortSignal),
     );
   });
 
@@ -806,6 +808,84 @@ describe("VideoTagger", () => {
     expect(mocks.importFromMetadataServer).toHaveBeenCalledTimes(5);
   });
 
+  it("keeps a cancelled Search all in charge until it drains, so a second one cannot orphan it", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = Array.from({ length: 8 }, (_, index) => ({
+      id: 100 + index,
+      title: `Local video ${index}`,
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    })) as any;
+    // Hold every search open so the batch is still draining when Cancel is pressed.
+    let releaseSearches: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseSearches = resolve;
+    });
+    mocks.searchMetadataServer.mockImplementation(() => gate.then(() => []));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(5));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // The five searches already sent are still out, so the batch still owns the toolbar: there is no
+    // Search all to press that would start a second batch over the same rows.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search all" })).not.toBeInTheDocument();
+    // The searches already sent are told to stop, so the wait for them is as short as the server allows.
+    expect(mocks.searchMetadataServer.mock.calls.every((call) => (call[4] as AbortSignal).aborted)).toBe(true);
+
+    releaseSearches();
+    await screen.findByRole("button", { name: "Search all" });
+    // Cancelling stopped the three rows that had not started.
+    expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(5);
+  });
+
+  it("returns the rows a cancelled Search all abandoned to idle, without an error", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const videos = Array.from({ length: 8 }, (_, index) => ({
+      id: 100 + index,
+      title: `Local video ${index}`,
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    })) as any;
+    // Like fetch: an aborted request rejects straight away with an AbortError.
+    mocks.searchMetadataServer.mockImplementation(
+      (_id: number, _term: string, _endpoint: string, _strategy: string, signal: AbortSignal) =>
+        new Promise((_, reject) =>
+          signal.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError"))),
+        ),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={videos} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search all" }));
+    await waitFor(() => expect(mocks.searchMetadataServer).toHaveBeenCalledTimes(5));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await screen.findByRole("button", { name: "Search all" });
+    // No row reports a failure, whatever the formatter would have called an abort.
+    expect(document.querySelectorAll("p.text-red-400")).toHaveLength(0);
+    expect(screen.queryByText(/no (results|matches)/i)).not.toBeInTheDocument();
+    // Every row can be searched again.
+    for (const button of screen.getAllByRole("button", { name: "Search for this text" })) expect(button).toBeEnabled();
+  });
+
   it("caps the reasons a batch summary names when every row fails differently", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const videos = Array.from({ length: 5 }, (_, index) => ({
@@ -1025,6 +1105,7 @@ describe("VideoTagger", () => {
       "Local video",
       "https://first.example/graphql",
       "remote-id",
+      expect.any(AbortSignal),
     );
     expect(JSON.parse(localStorage.getItem("cove-tagger-config") ?? "{}").bulkMatchStrategy).toBe("remote-id");
   });
@@ -1083,6 +1164,7 @@ describe("VideoTagger", () => {
       "Local video",
       "https://first.example/graphql",
       "text",
+      undefined,
     );
   });
 
@@ -1112,6 +1194,7 @@ describe("VideoTagger", () => {
         "Local video",
         "https://first.example/graphql",
         "remote-id-fingerprint",
+        expect.any(AbortSignal),
       ),
     );
 
@@ -1136,6 +1219,7 @@ describe("VideoTagger", () => {
         "Local video",
         "https://first.example/graphql",
         "text",
+        undefined,
       ),
     );
 

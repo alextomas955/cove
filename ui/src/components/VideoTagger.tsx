@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -741,21 +741,46 @@ function relationshipEditFields(state: VideoSearchState | undefined) {
 
 const CONCURRENCY_LIMIT = 5;
 
+interface BatchLifecycle {
+  onStart: () => void;
+  /** Runs once every worker has drained, even if one threw, so the toolbar is always handed back. */
+  onFinish: (cancelled: boolean) => void;
+}
+
+/**
+ * Runs one batch at a time per `batch` ref, which holds the running batch's controller until its last
+ * worker drains. Cancelling only aborts that controller: a batch started while the cancelled one still
+ * drains would take the ref from it, leaving the first uncancellable and both working the same rows,
+ * so a start is refused outright while the ref is held.
+ */
 async function runWithConcurrency<T>(
+  batch: RefObject<AbortController | null>,
   items: T[],
-  fn: (item: T) => Promise<void>,
+  fn: (item: T, signal: AbortSignal) => Promise<void>,
   limit: number,
-  signal?: AbortSignal,
+  lifecycle: BatchLifecycle,
 ): Promise<void> {
-  let index = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (index < items.length) {
-      if (signal?.aborted) return;
-      const i = index++;
-      await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
+  if (batch.current) return;
+  const controller = new AbortController();
+  batch.current = controller;
+  lifecycle.onStart();
+  try {
+    let index = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (index < items.length) {
+        if (controller.signal.aborted) return;
+        const i = index++;
+        await fn(items[i], controller.signal);
+      }
+    });
+    // Settled rather than all, so one worker throwing cannot hand the toolbar back while the others still run.
+    const outcomes = await Promise.allSettled(workers);
+    const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+    if (failure) throw failure.reason;
+  } finally {
+    batch.current = null;
+    lifecycle.onFinish(controller.signal.aborted);
+  }
 }
 
 export function VideoTagger({
@@ -967,7 +992,7 @@ export function VideoTagger({
   );
 
   const searchVideo = useCallback(
-    async (video: Video, bulkStrategy?: VideoMetadataSearchStrategy) => {
+    async (video: Video, bulkStrategy?: VideoMetadataSearchStrategy, signal?: AbortSignal) => {
       const source = selectedSource;
       const query = getSourceQuery(video, source);
       updateSearchState(video.id, {
@@ -1015,7 +1040,7 @@ export function VideoTagger({
           // The row's query box searches by text alone whatever the bulk strategy, and says so in the request
           // rather than leaving the server to infer it from a term arriving without a strategy.
           const strategy = bulkStrategy ?? "text";
-          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, strategy)).map(
+          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, strategy, signal)).map(
             (match) => ({ ...match, sourceKind: "metadata-server" as const }),
           );
         }
@@ -1026,6 +1051,12 @@ export function VideoTagger({
           selectedIndex: results.length > 0 ? 0 : undefined,
         });
       } catch (err) {
+        // A cancelled batch abandons the searches it had sent; the row goes back to idle rather than failing.
+        // Only the abort itself is swallowed: a search that failed for its own reason still says why.
+        if (signal?.aborted && (err as { name?: unknown } | null)?.name === "AbortError") {
+          updateSearchState(video.id, { loading: false });
+          return;
+        }
         updateSearchState(video.id, {
           loading: false,
           error: taggerFailureReason(err),
@@ -1100,12 +1131,9 @@ export function VideoTagger({
 
   // Batch scrape all (concurrent)
   const [batchSearching, setBatchSearching] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const searchBatchRef = useRef<AbortController | null>(null);
   const searchAll = useCallback(
     async (strategyOverride?: string) => {
-      setBatchSearching(true);
-      const controller = new AbortController();
-      abortRef.current = controller;
       const toSearch = videoList.filter((s) => !searchStates[s.id]?.saved);
       const bulkStrategy =
         selectedSource?.kind === "metadata-server"
@@ -1114,20 +1142,19 @@ export function VideoTagger({
             : taggerConfig.bulkMatchStrategy
           : undefined;
       await runWithConcurrency(
+        searchBatchRef,
         toSearch,
-        (video) => searchVideo(video, bulkStrategy),
+        (video, signal) => searchVideo(video, bulkStrategy, signal),
         CONCURRENCY_LIMIT,
-        controller.signal,
+        { onStart: () => setBatchSearching(true), onFinish: () => setBatchSearching(false) },
       );
-      setBatchSearching(false);
-      abortRef.current = null;
     },
     [selectedSource, taggerConfig.bulkMatchStrategy, videoList, searchStates, searchVideo],
   );
 
+  // Stops rows being started; the toolbar stays busy until the searches already sent come back.
   const cancelBatchSearch = useCallback(() => {
-    abortRef.current?.abort();
-    setBatchSearching(false);
+    searchBatchRef.current?.abort();
   }, []);
 
   // Videos the user has taken off this pass, so a bad or unwanted match stops occupying the list and
@@ -1147,7 +1174,7 @@ export function VideoTagger({
     else applyHandlersRef.current.delete(videoId);
   }, []);
   const [applyingAll, setApplyingAll] = useState(false);
-  const applyAbortRef = useRef<AbortController | null>(null);
+  const applyBatchRef = useRef<AbortController | null>(null);
   // A video counts as matched once a search returned results it has not been saved from yet.
   const applyAllTargets = videoList
     .filter((video) => {
@@ -1162,45 +1189,40 @@ export function VideoTagger({
   const [applyAllRun, setApplyAllRun] = useState<ApplyAllRun | null>(null);
   const dismissApplyAllRun = useCallback(() => setApplyAllRun(null), []);
   const applyAll = useCallback(async () => {
-    // A batch already draining owns applyAbortRef, and a second one would null it out from under the
-    // first, leaving Cancel inert and firing a duplicate import for every row both batches share.
-    if (applyAbortRef.current) return;
-    const controller = new AbortController();
-    applyAbortRef.current = controller;
-    setApplyingAll(true);
-    setApplyAllRun(null);
     const targetIds = applyAllTargets;
     const startedIds: number[] = [];
     const skippedIds: number[] = [];
-    try {
-      await runWithConcurrency(
-        targetIds,
-        async (videoId) => {
-          // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
-          const apply = applyHandlersRef.current.get(videoId);
-          if (!apply) {
-            skippedIds.push(videoId);
-            return;
-          }
-          startedIds.push(videoId);
-          // The row records its own outcome, and one row's failure must not abandon the batch.
-          await apply().catch(() => undefined);
+    await runWithConcurrency(
+      applyBatchRef,
+      targetIds,
+      async (videoId) => {
+        // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
+        const apply = applyHandlersRef.current.get(videoId);
+        if (!apply) {
+          skippedIds.push(videoId);
+          return;
+        }
+        startedIds.push(videoId);
+        // The row records its own outcome, and one row's failure must not abandon the batch.
+        await apply().catch(() => undefined);
+      },
+      CONCURRENCY_LIMIT,
+      {
+        onStart: () => {
+          setApplyingAll(true);
+          setApplyAllRun(null);
         },
-        CONCURRENCY_LIMIT,
-        controller.signal,
-      );
-    } finally {
-      // Always hand the toolbar back, even if a worker threw: otherwise the guard above would refuse
-      // every later batch and leave the tagger stuck on Cancel with no way out.
-      setApplyingAll(false);
-      applyAbortRef.current = null;
-      // Cancelling stops rows being started but never interrupts an import already sent, so the rows
-      // that were never reached are recorded rather than dropped out of the arithmetic.
-      setApplyAllRun({ targetIds, startedIds, skippedIds, cancelled: controller.signal.aborted });
-    }
+        onFinish: (cancelled) => {
+          setApplyingAll(false);
+          // Cancelling stops rows being started but never interrupts an import already sent, so the rows
+          // that were never reached are recorded rather than dropped out of the arithmetic.
+          setApplyAllRun({ targetIds, startedIds, skippedIds, cancelled });
+        },
+      },
+    );
   }, [applyAllTargets]);
   const cancelApplyAll = useCallback(() => {
-    applyAbortRef.current?.abort();
+    applyBatchRef.current?.abort();
   }, []);
   const applyAllOutcome = summariseApplyAllRun(applyAllRun, searchStates);
 
