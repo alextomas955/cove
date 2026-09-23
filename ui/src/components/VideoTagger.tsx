@@ -1187,7 +1187,13 @@ export function VideoTagger({
   // of each row is read back from that row's own state when the notice renders, so a row put right
   // afterwards drops out of the notice by itself and the two can never disagree about why it failed.
   const [applyAllRun, setApplyAllRun] = useState<ApplyAllRun | null>(null);
-  const dismissApplyAllRun = useCallback(() => setApplyAllRun(null), []);
+  // The dismiss button leaves with the summary, so focus moves to the list the summary described rather
+  // than dropping to the page body, where a keyboard user would have to find their way back from the top.
+  const videoListRef = useRef<HTMLDivElement>(null);
+  const dismissApplyAllRun = useCallback(() => {
+    setApplyAllRun(null);
+    videoListRef.current?.focus();
+  }, []);
   const applyAll = useCallback(async () => {
     const targetIds = applyAllTargets;
     const startedIds: number[] = [];
@@ -1559,7 +1565,13 @@ export function VideoTagger({
       )}
 
       {/* Video list */}
-      <div className="divide-y divide-border">
+      <div
+        ref={videoListRef}
+        tabIndex={-1}
+        role="region"
+        aria-label="Videos"
+        className="divide-y divide-border focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
+      >
         {visibleVideos.map((video) => (
           <TaggerVideoRow
             key={video.id}

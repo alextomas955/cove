@@ -939,6 +939,8 @@ describe("VideoTagger", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Dismiss apply summary" }));
     expect(screen.queryByText(/^Applied \d+/)).toBeNull();
+    // The button that had focus is gone, so focus lands on the list rather than dropping to the page.
+    expect(screen.getByRole("region", { name: "Videos" })).toHaveFocus();
     // The row keeps its own reason: dismissing the summary is not dismissing the failure.
     expect(screen.getByText(/Boom\./)).toBeTruthy();
   });
