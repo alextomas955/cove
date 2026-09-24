@@ -66,7 +66,6 @@ const EFFORTS: ReadonlyArray<{ value: Settings["effort"]; label: string; hint: s
 // Only rates below the source are useful: converting up invents frames, costing size for nothing.
 const FRAME_RATE_CHOICES = [60, 30, 24] as const;
 
-
 const CODECS: ReadonlyArray<{ value: VideoConversionCodec; label: string; hint: string }> = [
   { value: "hevc", label: "HEVC (H.265)", hint: "About half the size of H.264 at the same quality." },
   { value: "h264", label: "H.264", hint: "Plays everywhere; larger files." },
@@ -99,7 +98,9 @@ function loadSettings(): Settings {
       typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 
     const frameRate =
-      typeof stored.outputFrameRate === "number" && Number.isFinite(stored.outputFrameRate) && stored.outputFrameRate > 0
+      typeof stored.outputFrameRate === "number" &&
+      Number.isFinite(stored.outputFrameRate) &&
+      stored.outputFrameRate > 0
         ? stored.outputFrameRate
         : null;
 
@@ -181,7 +182,15 @@ function EncoderHint({
 const selectClass =
   "w-full bg-input border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-accent disabled:opacity-50";
 
-export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOriginals, onStarted, title, maxSourceFrameRate }: Props) {
+export function ConvertVideosDialog({
+  open,
+  onClose,
+  videoIds,
+  canReplaceOriginals,
+  onStarted,
+  title,
+  maxSourceFrameRate,
+}: Props) {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [submitted, setSubmitted] = useState(false);
@@ -289,9 +298,7 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
               }
               className={selectClass}
             >
-              <option value="">
-                Keep source frame rate
-              </option>
+              <option value="">Keep source frame rate</option>
               {FRAME_RATE_CHOICES.filter((fps) => maxSourceFrameRate == null || fps < maxSourceFrameRate - 0.01).map(
                 (fps) => (
                   <option key={fps} value={String(fps)}>
@@ -301,8 +308,7 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
               )}
             </select>
             <p className="text-xs text-muted">
-              Lowering the frame rate shrinks the file without touching per-frame detail. Motion becomes less
-              smooth.
+              Lowering the frame rate shrinks the file without touching per-frame detail. Motion becomes less smooth.
             </p>
           </div>
         </div>
@@ -316,36 +322,36 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
         <div className="space-y-2 border-t border-border pt-4">
           {reencodes && (
             <>
-            <label className="flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                checked={settings.convertEvenIfLarger ?? false}
-                onChange={() => update("convertEvenIfLarger", !settings.convertEvenIfLarger)}
-                className="mt-0.5 h-4 w-4 rounded border-border accent-accent"
-              />
-              <span className="text-sm text-foreground">
-                Convert even when the result would be larger
-                <span className="block text-xs text-muted">
-                  A video already below the bitrate its resolution can use has no space to reclaim, so
-                  re-encoding it would only grow the file and lose quality.
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={settings.convertEvenIfLarger ?? false}
+                  onChange={() => update("convertEvenIfLarger", !settings.convertEvenIfLarger)}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-accent"
+                />
+                <span className="text-sm text-foreground">
+                  Convert even when the result would be larger
+                  <span className="block text-xs text-muted">
+                    A video already below the bitrate its resolution can use has no space to reclaim, so re-encoding it
+                    would only grow the file and lose quality.
+                  </span>
                 </span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                checked={settings.convertMarginalSavings ?? false}
-                onChange={() => update("convertMarginalSavings", !settings.convertMarginalSavings)}
-                className="mt-0.5 h-4 w-4 rounded border-border accent-accent"
-              />
-              <span className="text-sm text-foreground">
-                Convert even when it would save very little
-                <span className="block text-xs text-muted">
-                  Videos already close to the bitrate their resolution can use are skipped by default,
-                  since re-encoding them costs time and a little quality for almost no space.
+              </label>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={settings.convertMarginalSavings ?? false}
+                  onChange={() => update("convertMarginalSavings", !settings.convertMarginalSavings)}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-accent"
+                />
+                <span className="text-sm text-foreground">
+                  Convert even when it would save very little
+                  <span className="block text-xs text-muted">
+                    Videos already close to the bitrate their resolution can use are skipped by default, since
+                    re-encoding them costs time and a little quality for almost no space.
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
             </>
           )}
           {canReplaceOriginals && (
