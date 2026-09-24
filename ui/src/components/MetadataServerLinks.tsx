@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 
-type MetadataEntityType = "scenes" | "performers" | "studios" | "tags";
+type MetadataEntityType = "scenes" | "performers" | "studios" | "tags" | "drafts";
 
 interface RemoteId {
   endpoint: string;

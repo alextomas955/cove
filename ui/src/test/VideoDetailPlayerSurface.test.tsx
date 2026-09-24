@@ -4,25 +4,28 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
 
-const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, coverDialogMock } = vi.hoisted(() => ({
-  mockVideos: {
-    get: vi.fn(),
-    update: vi.fn(),
-    screenshotUrl: vi.fn((id: number) => `/video-${id}.jpg`),
-    streamUrl: vi.fn((id: number) => `/video-${id}.mp4`),
-  },
-  videoPlayerMock: vi.fn(),
-  videoQueueMock: {
-    queue: null as null | { videoIds: number[] },
-    currentId: null as number | null,
-    hasPrev: false,
-    hasNext: false,
-    goPrevious: vi.fn(),
-    goNext: vi.fn(),
-  },
-  visualAvailabilityMock: { available: false, loading: false },
-  coverDialogMock: vi.fn(),
-}));
+const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, coverDialogMock, appConfigMock } =
+  vi.hoisted(() => ({
+    appConfigMock: { config: { ui: {} } as { ui: Record<string, unknown>; scraping?: { metadataServers: unknown[] } } },
+    mockVideos: {
+      get: vi.fn(),
+      update: vi.fn(),
+      screenshotUrl: vi.fn((id: number) => `/video-${id}.jpg`),
+      streamUrl: vi.fn((id: number) => `/video-${id}.mp4`),
+      submitMetadataServerDraft: vi.fn(),
+    },
+    videoPlayerMock: vi.fn(),
+    videoQueueMock: {
+      queue: null as null | { videoIds: number[] },
+      currentId: null as number | null,
+      hasPrev: false,
+      hasNext: false,
+      goPrevious: vi.fn(),
+      goNext: vi.fn(),
+    },
+    visualAvailabilityMock: { available: false, loading: false },
+    coverDialogMock: vi.fn(),
+  }));
 
 vi.mock("../api/client", () => ({
   entityImages: { studioImageUrl: vi.fn() },
@@ -53,12 +56,14 @@ vi.mock("../components/CoverImageDialog", () => ({
 vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
   const MockMediaDetailLayout = ({
     media,
+    actions,
     tabs,
     activeTab,
     onTabChange,
     children,
   }: {
     media: ReactElement<{ children?: ReactNode }>;
+    actions?: ReactNode;
     tabs: { key: string; label: string }[];
     activeTab: string;
     onTabChange: (key: string) => void;
@@ -74,6 +79,7 @@ vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
             </button>
           ))}
         </div>
+        {actions}
         {mediaChildren[0]}
         {activeTab === "edit" || activeTab === "file-info" ? children : null}
       </>
@@ -95,8 +101,8 @@ vi.mock("../auth/AuthContext", () => ({
 }));
 
 vi.mock("../state/AppConfigContext", () => ({
-  useAppConfig: () => ({ config: { ui: {} } }),
-  useOptionalAppConfig: () => ({ config: { ui: {} } }),
+  useAppConfig: () => appConfigMock,
+  useOptionalAppConfig: () => appConfigMock,
 }));
 
 vi.mock("../components/ConfirmDialog", () => ({
@@ -121,6 +127,7 @@ vi.mock("../state/VideoQueueContext", () => ({
 vi.mock("../extensions/ExtensionLoader", () => ({
   useExtensions: () => ({
     getTabsForPage: () => [],
+    getActionsForContext: () => [],
     getExtensionRevision: () => 0,
     resolveComponent: () => undefined,
     getFeature: () => undefined,
@@ -212,6 +219,7 @@ describe("VideoDetailPage media-player extension surface", () => {
     visualAvailabilityMock.available = false;
     visualAvailabilityMock.loading = false;
     coverDialogMock.mockReset();
+    appConfigMock.config = { ui: {} };
   });
 
   it("does not offer removal for a generated-only video cover", async () => {
@@ -642,5 +650,54 @@ describe("VideoDetailPage media-player extension surface", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Could not load video");
     expect(screen.queryByTestId("video-detail-player")).not.toBeInTheDocument();
+  });
+
+  it("offers a draft submission to the configured metadata servers from the operations menu", async () => {
+    appConfigMock.config = {
+      ui: {},
+      scraping: { metadataServers: [{ name: "First provider", endpoint: "https://first.example/graphql" }] },
+    };
+    mockVideos.get.mockImplementation((id: number) =>
+      Promise.resolve({
+        id,
+        title: `Video ${id}`,
+        organized: false,
+        updatedAt: "2026-07-11T00:00:00Z",
+        files: [],
+        performers: [],
+        tags: [],
+        contextTagApplications: [],
+      }),
+    );
+
+    const { rerenderVideoDetail } = renderVideoDetail();
+    fireEvent.click(await screen.findByTitle("Operations"));
+    fireEvent.click(screen.getByRole("button", { name: "Submit Draft…" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Submit Draft" });
+    expect(dialog).toHaveTextContent("First provider");
+
+    // The dialog belongs to the video it was opened on; moving to the next one must not retarget it.
+    rerenderVideoDetail(15);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Submit Draft" })).not.toBeInTheDocument());
+  });
+
+  it("does not offer a draft submission when no metadata server is configured", async () => {
+    mockVideos.get.mockResolvedValue({
+      id: 14,
+      title: "Detail video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      contextTagApplications: [],
+    });
+
+    renderVideoDetail();
+    fireEvent.click(await screen.findByTitle("Operations"));
+
+    expect(screen.getByRole("button", { name: /Merge/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit Draft…" })).not.toBeInTheDocument();
   });
 });

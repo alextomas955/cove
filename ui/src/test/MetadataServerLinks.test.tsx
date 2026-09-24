@@ -13,6 +13,9 @@ describe("MetadataServerLinks", () => {
     expect(metadataServerEntityUrl("https://stashdb.org/graphql", "studios", "studio-1")).toBe(
       "https://stashdb.org/studios/studio-1",
     );
+    expect(metadataServerEntityUrl("https://stashdb.org/graphql", "drafts", "draft-1")).toBe(
+      "https://stashdb.org/drafts/draft-1",
+    );
   });
 
   it("strips endpoint query data and rejects unsafe or unsupported endpoints", () => {

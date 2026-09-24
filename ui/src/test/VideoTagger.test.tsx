@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   findMetadataServerByIds: vi.fn(),
   importFromMetadataServer: vi.fn(),
   searchMetadataServer: vi.fn(),
+  submitMetadataServerDraft: vi.fn(),
   listScrapers: vi.fn(),
   createScrapeAttempt: vi.fn(),
   resolveRelations: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("../api/client", () => ({
     findMetadataServerByIds: mocks.findMetadataServerByIds,
     importFromMetadataServer: mocks.importFromMetadataServer,
     searchMetadataServer: mocks.searchMetadataServer,
+    submitMetadataServerDraft: mocks.submitMetadataServerDraft,
   },
 }));
 
@@ -92,6 +94,7 @@ describe("VideoTagger", () => {
     mocks.findMetadataServerByIds.mockReset();
     mocks.importFromMetadataServer.mockReset();
     mocks.searchMetadataServer.mockReset();
+    mocks.submitMetadataServerDraft.mockReset();
     mocks.listScrapers.mockReset();
     mocks.createScrapeAttempt.mockReset();
     mocks.resolveRelations.mockReset();
@@ -1258,6 +1261,77 @@ describe("VideoTagger", () => {
     expect(screen.getByRole("button", { name: "Submit fingerprints" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Submit as draft" })).toBeInTheDocument();
     expect(screen.queryByText("Search by fingerprint only")).not.toBeInTheDocument();
+  });
+
+  it("closes the draft tab and shows the reason when the draft is rejected", async () => {
+    const tab = { closed: false, opener: {}, close: vi.fn(), location: { replace: vi.fn() }, document: {} };
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    mocks.submitMetadataServerDraft.mockRejectedValue(new Error("Draft rejected by server"));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <VideoTagger videos={[video]} />
+        </QueryClientProvider>,
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+      await userEvent.click(screen.getByRole("button", { name: "Submit as draft" }));
+
+      expect(await screen.findByText("Draft rejected by server")).toBeInTheDocument();
+      expect(tab.close).toHaveBeenCalledOnce();
+      expect(tab.location.replace).not.toHaveBeenCalled();
+      expect(screen.queryByRole("link", { name: "Open draft" })).not.toBeInTheDocument();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  it("opens a submitted draft in a new tab and links to it from the row", async () => {
+    const tab = { closed: false, opener: {}, close: vi.fn(), location: { replace: vi.fn() }, document: {} };
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    mocks.submitMetadataServerDraft.mockResolvedValue({ draftId: "draft-1" });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [],
+    } as any;
+
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <VideoTagger videos={[video]} />
+        </QueryClientProvider>,
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+      await userEvent.click(screen.getByRole("button", { name: "Submit as draft" }));
+
+      expect(openSpy).toHaveBeenCalledWith("", "_blank");
+      expect(await screen.findByRole("link", { name: "Open draft" })).toHaveAttribute(
+        "href",
+        "https://first.example/drafts/draft-1",
+      );
+      expect(mocks.submitMetadataServerDraft).toHaveBeenCalledWith(123, "https://first.example/graphql");
+      expect(tab.location.replace).toHaveBeenCalledWith("https://first.example/drafts/draft-1");
+    } finally {
+      openSpy.mockRestore();
+    }
   });
 
   it("offers tags, performers and studio from a YAML scraper's object-shaped result", async () => {
