@@ -1453,6 +1453,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
               opsMenuRef.current?.querySelector("button")?.focus();
             }}
             entityLabel="video"
+            submittedContent="current metadata and cover image"
             metadataServers={metadataServers}
             submit={(endpoint) => videos.submitMetadataServerDraft(id, endpoint)}
           />

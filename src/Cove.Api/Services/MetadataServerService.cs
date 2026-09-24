@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Numerics;
 using System.Text.Json;
@@ -229,6 +230,7 @@ query Me {
     private readonly ITagProvenanceService _tagProvenanceService;
     private readonly IFieldProvenanceService? _fieldProvenanceService;
     private readonly IEventBus? _eventBus;
+    private readonly IStreamService? _streamService;
     private readonly ILogger<MetadataServerService> _logger;
     private Dictionary<string, int[]>? _performerIdentityIndex;
     private Dictionary<string, int[]>? _studioIdentityIndex;
@@ -241,7 +243,7 @@ query Me {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public MetadataServerService(HttpClient httpClient, CoveConfiguration config, CoveContext db, IBlobService blobService, IVideoCoverService videoCoverService, ITagProvenanceService tagProvenanceService, ILogger<MetadataServerService> logger, IFieldProvenanceService? fieldProvenanceService = null, IEventBus? eventBus = null)
+    public MetadataServerService(HttpClient httpClient, CoveConfiguration config, CoveContext db, IBlobService blobService, IVideoCoverService videoCoverService, ITagProvenanceService tagProvenanceService, ILogger<MetadataServerService> logger, IFieldProvenanceService? fieldProvenanceService = null, IEventBus? eventBus = null, IStreamService? streamService = null)
     {
         _httpClient = httpClient;
         _config = config;
@@ -251,6 +253,7 @@ query Me {
         _tagProvenanceService = tagProvenanceService;
         _fieldProvenanceService = fieldProvenanceService;
         _eventBus = eventBus;
+        _streamService = streamService;
         _logger = logger;
     }
 
@@ -1640,7 +1643,8 @@ query Me {
             fingerprints,
         };
 
-        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct);
+        var cover = await TryReadVideoCoverAsync(video, ct);
+        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct, cover);
         return response.SubmitSceneDraft?.Id;
     }
 
@@ -2910,13 +2914,77 @@ query Me {
         return labels.Length <= 2 ? host : $"{labels[^2]}.{labels[^1]}";
     }
 
-    private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct)
+    /// <summary>
+    /// Reads the image Cove shows as the video's cover: its own cover, or the generated screenshot
+    /// otherwise. A draft is still worth submitting without one, so failures are logged and yield null.
+    /// </summary>
+    private async Task<MetadataServerUpload?> TryReadVideoCoverAsync(Video video, CancellationToken ct)
+    {
+        try
+        {
+            if (video.ImageBlobId != null)
+            {
+                var blob = await _blobService.GetBlobAsync(video.ImageBlobId, ct);
+                if (blob != null)
+                {
+                    await using var blobStream = blob.Value.Stream;
+                    var cover = await ReadUploadAsync(blobStream, blob.Value.ContentType, ct);
+                    if (cover != null)
+                        return cover;
+                }
+            }
+
+            if (_streamService == null)
+                return null;
+
+            var screenshot = await _streamService.GetVideoScreenshot(video.Id, null, ct);
+            if (screenshot == null)
+                return null;
+
+            await using var screenshotStream = screenshot.Value.stream;
+            return await ReadUploadAsync(screenshotStream, screenshot.Value.contentType, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not read the cover of video {VideoId}; submitting its draft without an image", video.Id);
+            return null;
+        }
+    }
+
+    private static async Task<MetadataServerUpload?> ReadUploadAsync(Stream stream, string contentType, CancellationToken ct)
+    {
+        var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+        // Hand over the stream's own buffer rather than a copy: a user-supplied cover can be large.
+        return buffer.Length == 0 ? null : new MetadataServerUpload(new ArraySegment<byte>(buffer.GetBuffer(), 0, (int)buffer.Length), contentType);
+    }
+
+    private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct, MetadataServerUpload? image = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, box.Endpoint);
         if (!string.IsNullOrWhiteSpace(box.ApiKey))
             request.Headers.TryAddWithoutValidation("ApiKey", box.ApiKey);
 
-        request.Content = JsonContent.Create(new MetadataServerGraphQlRequest(query, variables), options: _jsonOptions);
+        var graphQlRequest = new MetadataServerGraphQlRequest(query, variables);
+        if (image == null)
+        {
+            request.Content = JsonContent.Create(graphQlRequest, options: _jsonOptions);
+        }
+        else
+        {
+            // A GraphQL multipart request (https://github.com/jaydenseric/graphql-multipart-request-spec),
+            // as stash sends drafts: the file part fills the `image: Upload` field of the draft input.
+            var file = new ByteArrayContent(image.Data.Array!, image.Data.Offset, image.Data.Count);
+            file.Headers.ContentType = MediaTypeHeaderValue.TryParse(image.ContentType, out var imageType)
+                ? imageType
+                : new MediaTypeHeaderValue("application/octet-stream");
+            request.Content = new MultipartFormDataContent
+            {
+                { new StringContent(JsonSerializer.Serialize(graphQlRequest, _jsonOptions)), "operations" },
+                { new StringContent("""{"0":["variables.input.image"]}"""), "map" },
+                { file, "0", "draft" },
+            };
+        }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
@@ -3447,6 +3515,8 @@ query Me {
     }
 
     private sealed record MetadataServerGraphQlRequest(string Query, object? Variables);
+
+    private sealed record MetadataServerUpload(ArraySegment<byte> Data, string ContentType);
 
     private sealed record MetadataServerGraphQlResponse<T>
     {

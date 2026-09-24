@@ -7,12 +7,20 @@ interface Props {
   onClose: () => void;
   /** Lower-case singular noun for the entity being submitted, e.g. "video". */
   entityLabel: string;
+  /** What the draft carries, as it reads after "Send this video's". */
+  submittedContent?: string;
   metadataServers: Pick<MetadataServer, "endpoint" | "name">[];
   submit: (endpoint: string) => Promise<{ draftId: string | null }>;
 }
 
 /** Mount only while open: each mounting starts from the form rather than a previous submission's result. */
-export function MetadataServerDraftDialog({ onClose, entityLabel, metadataServers, submit }: Props) {
+export function MetadataServerDraftDialog({
+  onClose,
+  entityLabel,
+  submittedContent = "current metadata",
+  metadataServers,
+  submit,
+}: Props) {
   const [endpoint, setEndpoint] = useState(() => metadataServers[0]?.endpoint ?? "");
   const draft = useMetadataServerDraftSubmit(submit);
   const titleId = useId();
@@ -122,8 +130,8 @@ export function MetadataServerDraftDialog({ onClose, entityLabel, metadataServer
         ) : (
           <>
             <p className="mb-4 text-sm text-secondary">
-              Send this {entityLabel}&apos;s current metadata to a metadata server as a draft. The draft opens in a new
-              tab, where you can review and submit it.
+              Send this {entityLabel}&apos;s {submittedContent} to a metadata server as a draft. The draft opens in a
+              new tab, where you can review and submit it.
             </p>
             {metadataServers.length === 0 ? (
               <p className="mb-4 rounded border border-dashed border-border px-3 py-3 text-sm text-muted">

@@ -1946,6 +1946,119 @@ public sealed class MetadataServerServiceTests
         Assert.Equal("OSHASH", fingerprint.GetProperty("algorithm").GetString());
         Assert.Equal("0000000000001a2b", fingerprint.GetProperty("hash").GetString());
         Assert.Equal(121, fingerprint.GetProperty("duration").GetInt32());
+        // Without a cover there is nothing to upload, so the draft is an ordinary JSON request.
+        Assert.Null(request.MapJson);
+        Assert.Null(request.Upload);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_UploadsTheVideoCoverAsTheDraftImage()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Covered Video", ImageBlobId = "cover-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        byte[] cover = [0xFF, 0xD8, 0xFF, 0xE0, 0x01, 0x02];
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", cover, "image/jpeg"),
+            streamService: new ScreenshotStreamService([0x89, 0x50]));
+
+        var draftId = await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        Assert.Equal("draft-video-1", draftId);
+        var request = Assert.Single(handler.Requests);
+        Assert.Contains("mutation SubmitSceneDraft", request.Query);
+        Assert.Equal(ApiKey, request.ApiKey);
+        Assert.Equal("""{"0":["variables.input.image"]}""", request.MapJson);
+        var upload = Assert.IsType<GraphQlUploadSnapshot>(request.Upload);
+        Assert.Equal("0", upload.Name);
+        Assert.Equal("draft", upload.FileName);
+        Assert.Equal("image/jpeg", upload.ContentType);
+        Assert.Equal(cover, upload.Data);
+        using var variables = JsonDocument.Parse(request.VariablesJson);
+        var input = variables.RootElement.GetProperty("input");
+        Assert.Equal("Covered Video", input.GetProperty("title").GetString());
+        Assert.False(input.TryGetProperty("image", out _));
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_UploadsTheGeneratedScreenshotWhenTheVideoHasNoCover()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Screenshot Video" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        byte[] screenshot = [0x89, 0x50, 0x4E, 0x47];
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var screenshots = new ScreenshotStreamService(screenshot);
+        var service = CreateService(context, httpClient, streamService: screenshots);
+
+        await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        var upload = Assert.IsType<GraphQlUploadSnapshot>(Assert.Single(handler.Requests).Upload);
+        Assert.Equal(screenshot, upload.Data);
+        Assert.Equal("image/jpeg", upload.ContentType);
+        Assert.Equal([video.Id], screenshots.RequestedVideoIds);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_SendsPlainJsonWhenNeitherACoverNorAScreenshotExists()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Imageless Video", ImageBlobId = "missing-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var screenshots = new ScreenshotStreamService(null);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", [0xFF], "image/jpeg"),
+            streamService: screenshots);
+
+        await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        // The missing custom cover falls back to the screenshot, and without either the request stays JSON.
+        Assert.Equal([video.Id], screenshots.RequestedVideoIds);
+        var request = Assert.Single(handler.Requests);
+        Assert.Null(request.MapJson);
+        Assert.Null(request.Upload);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_SubmitsWithoutAnImageWhenTheCoverCannotBeRead()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Unreadable Cover", ImageBlobId = "cover-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", null, "image/jpeg"));
+
+        var draftId = await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        Assert.Equal("draft-video-1", draftId);
+        var request = Assert.Single(handler.Requests);
+        Assert.Null(request.MapJson);
+        Assert.Null(request.Upload);
     }
 
     [Fact]
@@ -1984,7 +2097,7 @@ public sealed class MetadataServerServiceTests
         Assert.Equal(121, fingerprint.GetProperty("duration").GetInt32());
     }
 
-    private static MetadataServerService CreateService(CoveContext context, HttpClient httpClient, IFieldProvenanceService? fieldProvenance = null, ITagProvenanceService? tagProvenance = null, CoveConfiguration? configuration = null, ILogger<MetadataServerService>? logger = null, IEventBus? eventBus = null)
+    private static MetadataServerService CreateService(CoveContext context, HttpClient httpClient, IFieldProvenanceService? fieldProvenance = null, ITagProvenanceService? tagProvenance = null, CoveConfiguration? configuration = null, ILogger<MetadataServerService>? logger = null, IEventBus? eventBus = null, IBlobService? blobService = null, IStreamService? streamService = null)
         => new(
             httpClient,
             configuration ?? new CoveConfiguration
@@ -2003,12 +2116,13 @@ public sealed class MetadataServerServiceTests
                 },
             },
             context,
-            new NullBlobService(),
+            blobService ?? new NullBlobService(),
             new NullVideoCoverService(),
             tagProvenance ?? new TagProvenanceService(context),
             logger ?? NullLogger<MetadataServerService>.Instance,
             fieldProvenance,
-            eventBus);
+            eventBus,
+            streamService);
 
     private static CoveContext CreateContext()
     {
@@ -2201,13 +2315,44 @@ public sealed class MetadataServerServiceTests
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var payload = await request.Content!.ReadAsStringAsync(cancellationToken);
+            string payload;
+            string? mapJson = null;
+            GraphQlUploadSnapshot? upload = null;
+            if (request.Content is MultipartFormDataContent multipart)
+            {
+                payload = string.Empty;
+                foreach (var part in multipart)
+                {
+                    var disposition = part.Headers.ContentDisposition!;
+                    switch (disposition.Name?.Trim('"'))
+                    {
+                        case "operations":
+                            payload = await part.ReadAsStringAsync(cancellationToken);
+                            break;
+                        case "map":
+                            mapJson = await part.ReadAsStringAsync(cancellationToken);
+                            break;
+                        default:
+                            upload = new GraphQlUploadSnapshot(
+                                disposition.Name!.Trim('"'),
+                                disposition.FileName?.Trim('"'),
+                                part.Headers.ContentType?.MediaType,
+                                await part.ReadAsByteArrayAsync(cancellationToken));
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                payload = await request.Content!.ReadAsStringAsync(cancellationToken);
+            }
+
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
             var query = GetProperty(root, "query").GetString() ?? string.Empty;
             var variables = GetProperty(root, "variables");
             var apiKey = request.Headers.TryGetValues("ApiKey", out var values) ? values.SingleOrDefault() : null;
-            var snapshot = new GraphQlRequestSnapshot(query, variables.GetRawText(), request.RequestUri, apiKey);
+            var snapshot = new GraphQlRequestSnapshot(query, variables.GetRawText(), request.RequestUri, apiKey, mapJson, upload);
             Requests.Add(snapshot);
 
             return new HttpResponseMessage(HttpStatusCode.OK)
@@ -2228,7 +2373,52 @@ public sealed class MetadataServerServiceTests
         }
     }
 
-    private sealed record GraphQlRequestSnapshot(string Query, string VariablesJson, Uri? RequestUri, string? ApiKey);
+    private sealed record GraphQlRequestSnapshot(
+        string Query,
+        string VariablesJson,
+        Uri? RequestUri,
+        string? ApiKey,
+        string? MapJson = null,
+        GraphQlUploadSnapshot? Upload = null);
+
+    private sealed record GraphQlUploadSnapshot(string Name, string? FileName, string? ContentType, byte[] Data);
+
+    /// <summary>Serves one cover blob, or throws when <paramref name="bytes"/> is null to model an unreadable store.</summary>
+    private sealed class CoverBlobService(string blobId, byte[]? bytes, string contentType) : IBlobService
+    {
+        public Task<string> StoreBlobAsync(Stream data, string contentType, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<(Stream Stream, string ContentType)?> GetBlobAsync(string requestedBlobId, CancellationToken ct = default)
+        {
+            if (bytes == null)
+                throw new IOException("The blob store is unavailable.");
+
+            return Task.FromResult<(Stream Stream, string ContentType)?>(
+                requestedBlobId == blobId ? (new MemoryStream(bytes), contentType) : null);
+        }
+
+        public Task DeleteBlobAsync(string requestedBlobId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class ScreenshotStreamService(byte[]? screenshot) : IStreamService
+    {
+        public List<int> RequestedVideoIds { get; } = [];
+
+        public Task<(Stream stream, string contentType, long? fileSize)?> GetVideoStream(int videoId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<(Stream stream, string contentType, bool useLongCache)?> GetVideoScreenshot(int videoId, double? seconds, CancellationToken ct = default)
+        {
+            RequestedVideoIds.Add(videoId);
+            return Task.FromResult<(Stream stream, string contentType, bool useLongCache)?>(
+                screenshot == null ? null : (new MemoryStream(screenshot), "image/jpeg", true));
+        }
+
+        public Task<(Stream stream, string contentType, bool useLongCache)?> GetSegmentAnimatedPreview(int videoId, double seconds, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
 
     private sealed class NullBlobService : IBlobService
     {

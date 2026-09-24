@@ -97,6 +97,32 @@ public sealed class VideoMetadataServerApiTests(
         draftFingerprints.Single().GetProperty("duration").GetInt32().Should().Be(durationSeconds);
     }
 
+    [Fact]
+    [CoversEndpoint("POST", "/api/videos/{id:int}/metadata-server/submit-draft")]
+    public async Task GivenVideoWithCover_WhenDraftIsSubmitted_ThenCoverIsUploadedAsDraftImage()
+    {
+        var owner = AsUser();
+        var suffix = Guid.NewGuid().ToString("N");
+        var metadataScene = AsMetadataService().CreateScene(
+            new MetadataServiceSceneBuilder()
+                .WithId($"remote-video-{suffix}")
+                .WithTitle($"Remote metadata video {suffix}")
+                .Build());
+        var video = await owner.CreateVideoAsync($"Covered video {suffix}", TestContext.Current.CancellationToken);
+        await owner.UploadVideoImageAsync(video, ApiTestImages.BluePixelPng(), cancellationToken: TestContext.Current.CancellationToken);
+        var cover = await owner.GetVideoImageAsync(video, cancellationToken: TestContext.Current.CancellationToken);
+
+        var draftId = await owner.SubmitVideoDraftToMetadataServiceAsync(video, metadataScene, TestContext.Current.CancellationToken);
+
+        var draftSubmission = AsMetadataService().SceneDraftSubmissions.Should().ContainSingle().Which;
+        draftSubmission.DraftId.Should().Be(draftId);
+        draftSubmission.Input.GetProperty("title").GetString().Should().Be(video.Title);
+        draftSubmission.Image.Should().NotBeNull();
+        var image = draftSubmission.Image!;
+        image.Data.Should().Equal(cover.Content);
+        image.ContentType.Should().Be(cover.MediaType);
+    }
+
     private static void AssertVideoMatch(
         MetadataServerVideoMatchDto match,
         MetadataServiceSceneHandle metadataScene,
