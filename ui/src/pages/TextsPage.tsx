@@ -131,9 +131,8 @@ export function TextsPage({ onNavigate }: Props) {
       ) : null}
       <ListPage
         title="Texts"
-        metadataByline={
-          <MediaAggregateMetadata fileSize={filteredAggregate?.fileSize} loading={filteredAggregateLoading} />
-        }
+        metadataByline={<MediaAggregateMetadata fileSize={filteredAggregate?.fileSize} loading={false} />}
+        summaryLoading={filteredAggregateLoading}
         pageKey="texts"
         filterMode="texts"
         filter={filter}
