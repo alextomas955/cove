@@ -381,7 +381,7 @@ export function DetailListToolbar({
               query={filter.q}
               onQueryChange={handleSearchChange}
               placeholder="Search…"
-              className="sm:max-w-[18rem]"
+              className="sm:w-[18rem]"
             />
           )}
 
