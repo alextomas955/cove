@@ -341,6 +341,8 @@ try
     builder.Services.AddScoped<ImageDeletionService>();
     builder.Services.AddScoped<EntityHostDependencyService>();
     builder.Services.AddSingleton(PhysicalFileAccessCoordinator.Shared);
+    builder.Services.AddSingleton<HardwareEncodeSessionGate>();
+    builder.Services.AddSingleton<VideoConversionJobService>();
     builder.Services.AddSingleton<PhysicalFileDeletionRecoverySignal>();
     builder.Services.AddScoped<PhysicalFileDeletionService>();
     builder.Services.AddScoped<BulkEntityDeletionService>();

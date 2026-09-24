@@ -1999,6 +1999,37 @@ export interface GenerateOptions {
   paths?: string[];
 }
 
+export type VideoConversionCodec = "h264" | "hevc" | "av1" | "copy";
+
+export interface VideoConversionOptions {
+  videoIds: number[];
+  codec: VideoConversionCodec;
+  container: "mp4" | "mkv";
+  /** One rung of the conversion ladder, ordered from most quality to most speed. */
+  effort: "highSoftware" | "highHardware" | "balancedSoftware" | "balancedHardware";
+  /** Re-encode at this frame rate instead of the source's. Omit to keep the source's. */
+  outputFrameRate?: number | null;
+  /** Convert even when the predicted saving is below the worthwhile threshold. */
+  convertMarginalSavings?: boolean;
+  /** Verify each converted file, make it primary and delete the original from disk. */
+  replaceOriginal: boolean;
+  /** Throw a re-encoded file away when it is not smaller than the original. */
+  convertEvenIfLarger?: boolean;
+}
+
+export interface VideoConversionEncoderInfo {
+  codec: Exclude<VideoConversionCodec, "copy">;
+  /** The ffmpeg encoder a conversion would use, or null when this ffmpeg cannot encode the codec. */
+  encoder: string | null;
+  hardware: boolean;
+}
+
+export const videoConversion = {
+  encoders: () => request<VideoConversionEncoderInfo[]>("/video-conversion/encoders"),
+  start: (opts: VideoConversionOptions) =>
+    request<{ jobId: string; itemCount: number }>("/video-conversion", { method: "POST", body: JSON.stringify(opts) }),
+};
+
 export interface LibraryFolder {
   name: string;
   path: string;

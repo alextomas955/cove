@@ -1,7 +1,7 @@
 import { VideoMergeEditor } from "./VideoMergeEditor";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, Edit, Loader2, Merge, Play, Search, Trash2 } from "lucide-react";
+import { Download, Edit, FileVideoCamera, Loader2, Merge, Play, Search, Trash2 } from "lucide-react";
 import type { BulkDeletionJobStart, BulkVideoUpdate, Video } from "../api/types";
 import { videos } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -29,6 +29,9 @@ const BatchDownloadOptionsDialog = lazy(() =>
 );
 const MergeDialog = lazy(() => import("./MergeDialog").then((module) => ({ default: module.MergeDialog })));
 const IdentifyDialog = lazy(() => import("./IdentifyDialog").then((module) => ({ default: module.IdentifyDialog })));
+const ConvertVideosDialog = lazy(() =>
+  import("./ConvertVideosDialog").then((module) => ({ default: module.ConvertVideosDialog })),
+);
 
 const actionClass = "flex items-center gap-1 px-2 py-0.5 rounded text-xs";
 
@@ -74,11 +77,14 @@ export function VideoSelectionActions({
   const canDeleteFiles = hasPermission("videos.delete.file");
   const canIdentify = hasPermission("library.identify") && canWrite;
   const canDownload = hasPermission("jobs.run") && canWrite;
+  const canConvert = hasPermission("jobs.run") && canWrite;
   const continuePlaylistDefault = config?.ui.continuePlaylistDefault ?? false;
 
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [showIdentify, setShowIdentify] = useState(false);
+  // The ids are captured when the dialog opens, because starting the job clears the selection.
+  const [convertIds, setConvertIds] = useState<number[] | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBatchDownloadOptions, setShowBatchDownloadOptions] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState<Video | null>(null);
@@ -206,6 +212,15 @@ export function VideoSelectionActions({
           Merge
         </button>
       )}
+      {canConvert && (
+        <button
+          onClick={() => setConvertIds([...selectedIds])}
+          className={`${actionClass} text-accent hover:text-accent-hover hover:bg-accent/10`}
+        >
+          <FileVideoCamera className="w-3 h-3" />
+          Convert
+        </button>
+      )}
       <button
         onClick={handlePlaySelected}
         className={`${actionClass} text-green-400 hover:text-green-300 hover:bg-green-900/20`}
@@ -311,6 +326,15 @@ export function VideoSelectionActions({
               onSelectNone();
             }}
             videoIds={[...selectedIds]}
+          />
+        ) : null}
+        {convertIds !== null ? (
+          <ConvertVideosDialog
+            open
+            videoIds={convertIds}
+            canReplaceOriginals={canDeleteFiles}
+            onStarted={onSelectNone}
+            onClose={() => setConvertIds(null)}
           />
         ) : null}
       </Suspense>

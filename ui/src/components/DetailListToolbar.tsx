@@ -364,166 +364,175 @@ export function DetailListToolbar({
 
   return (
     <>
-      <div className="mx-auto mb-2 flex w-full flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 text-sm shadow-sm shadow-black/20 sm:px-2.5 sm:py-2">
-        <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2 pr-2">
+      {/* From lg this mirrors ListPage's toolbar: the count section and an empty trailing section share
+          the spare width equally, so the controls sit centered instead of being pushed to the right edge.
+          Below lg the controls wrapper is display: contents and the row wraps as before. */}
+      <div className="mx-auto mb-2 flex w-full flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 text-sm shadow-sm shadow-black/20 sm:px-2.5 sm:py-2 lg:flex-nowrap">
+        <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2 pr-2 lg:mr-0 lg:min-w-[10rem] lg:flex-1 lg:basis-0">
           <span className="text-xs text-muted">
             {totalCount > 0 ? `${start}–${end} of ${totalCount.toLocaleString()}` : "0 items"}
           </span>
           {metadataByline}
         </div>
 
-        {showSearch && (
-          <ListSearchControl
-            query={filter.q}
-            onQueryChange={handleSearchChange}
-            placeholder="Search…"
-            className="sm:max-w-[18rem]"
-          />
-        )}
+        <div className="contents lg:flex lg:min-w-0 lg:flex-initial lg:flex-wrap lg:items-center lg:justify-center lg:gap-2">
+          {showSearch && (
+            <ListSearchControl
+              query={filter.q}
+              onQueryChange={handleSearchChange}
+              placeholder="Search…"
+              className="sm:max-w-[18rem]"
+            />
+          )}
 
-        {showSort && (
-          <div className={toolbarSegmentClass}>
-            <select
-              aria-label="Primary sort"
-              value={filter.sort ?? sortedSortOptions[0]?.value ?? ""}
-              onChange={(e) =>
-                onFilterChange(
-                  withSeededRandomSort(filter, {
-                    ...filter,
-                    ...filterPatchForSelectedSort(e.target.value, filter),
-                    page: 1,
-                  }),
-                )
-              }
-              className={`${toolbarSelectClass} min-w-[8.5rem] max-w-[10rem]`}
-            >
-              {sortedSortOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {filter.sort === "random" ? (
-              <button
-                type="button"
-                onClick={() => onFilterChange(reshuffleRandomSort(filter))}
-                className={toolbarIconButtonClass}
-                title="Shuffle"
-                aria-label="Shuffle"
-              >
-                <Shuffle className="w-3.5 h-3.5" />
-              </button>
-            ) : null}
-            {sortingByRelevance ? null : (
-              <button
-                type="button"
-                onClick={() =>
+          {showSort && (
+            <div className={toolbarSegmentClass}>
+              <select
+                aria-label="Primary sort"
+                value={filter.sort ?? sortedSortOptions[0]?.value ?? ""}
+                onChange={(e) =>
                   onFilterChange(
                     withSeededRandomSort(filter, {
                       ...filter,
-                      direction: filter.direction === "asc" ? "desc" : "asc",
+                      ...filterPatchForSelectedSort(e.target.value, filter),
                       page: 1,
                     }),
                   )
                 }
-                className={toolbarIconButtonClass}
-                title={filter.direction === "asc" ? "Ascending" : "Descending"}
+                className={`${toolbarSelectClass} min-w-[8.5rem] max-w-[10rem]`}
               >
-                {filter.direction === "desc" ? (
-                  <ArrowDown className="w-3.5 h-3.5" />
-                ) : (
-                  <ArrowUp className="w-3.5 h-3.5" />
-                )}
-              </button>
-            )}
-          </div>
-        )}
-
-        {criteriaDefinitions && onObjectFilterChange ? (
-          <FilterButton
-            activeCount={countActiveObjectFilters(criteriaDefinitions, activeObjectFilter)}
-            onClick={() => {
-              setFilterDialogPreselect(undefined);
-              setFilterDialogExpressionPath(undefined);
-              setFilterDialogInitialView("simple");
-              setFilterDialogOpenAtRoot(true);
-              setFilterDialogOpen(true);
-            }}
-          />
-        ) : null}
-
-        {filterMode ? (
-          <SavedFilterMenu
-            mode={filterMode}
-            defaultFilterKey={filterDefaultKey}
-            currentFilter={filter}
-            currentObjectFilter={activeObjectFilter}
-            currentUIOptions={{ displayMode, zoomLevel: effectiveZoomLevel }}
-            onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, { ...nextFilter, page: 1 }))}
-            onApplyObjectFilter={onObjectFilterChange}
-            onApplyUIOptions={(options) => {
-              const nextDisplayMode = typeof options.displayMode === "string" ? options.displayMode : undefined;
-              if (nextDisplayMode && displayModes.includes(nextDisplayMode as DetailListDisplayMode)) {
-                onDisplayModeChange?.(nextDisplayMode as DetailListDisplayMode);
-              }
-              const nextZoomLevel = parseEntityCardSizeLevel(inferredCardSizeEntityType, options.zoomLevel);
-              if (nextZoomLevel != null) handleZoomChange(nextZoomLevel);
-            }}
-          />
-        ) : null}
-
-        {displayMode && onDisplayModeChange ? (
-          <div className={`${toolbarSegmentClass} gap-0.5`}>
-            {DISPLAY_MODE_BUTTONS.filter((button) => displayModes.includes(button.mode)).map((button) => (
-              <button
-                key={button.mode}
-                type="button"
-                onClick={() => handleDisplayModeChange(button.mode)}
-                className={`${toolbarIconButtonClass} ${displayMode === button.mode ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                title={button.title}
-                aria-label={button.title}
-              >
-                {button.icon}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        <div className={toolbarSegmentClass}>
-          <PageSizeSelect
-            perPage={perPage}
-            allowInfinite={allowInfinitePageSize}
-            infinitePageSize={infinitePageSize}
-            infinitePageSizeOnly={infinitePageSizeOnly}
-            onChange={(nextPerPage) => onFilterChange({ ...filter, perPage: nextPerPage, page: 1 })}
-          />
-
-          {effectiveZoomLevel !== undefined &&
-            onZoomChange &&
-            (displayMode === "grid" || displayMode === "list" || displayMode == null) && (
-              <div className="hidden items-center gap-1 pl-1 md:flex">
-                <ZoomOut className="w-3 h-3 text-muted" />
-                <input
-                  type="range"
-                  min={0}
-                  max={maxZoomLevel}
-                  step={0.25}
-                  value={effectiveZoomLevel}
-                  onChange={(e) => handleZoomChange(Number(e.target.value))}
-                  style={
-                    { "--range-fill": `${(effectiveZoomLevel / Math.max(0.25, maxZoomLevel)) * 100}%` } as CSSProperties
+                {sortedSortOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {filter.sort === "random" ? (
+                <button
+                  type="button"
+                  onClick={() => onFilterChange(reshuffleRandomSort(filter))}
+                  className={toolbarIconButtonClass}
+                  title="Shuffle"
+                  aria-label="Shuffle"
+                >
+                  <Shuffle className="w-3.5 h-3.5" />
+                </button>
+              ) : null}
+              {sortingByRelevance ? null : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onFilterChange(
+                      withSeededRandomSort(filter, {
+                        ...filter,
+                        direction: filter.direction === "asc" ? "desc" : "asc",
+                        page: 1,
+                      }),
+                    )
                   }
-                  className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
-                  title={`Card size: ${getEntityCardMinWidthPx(inferredCardSizeEntityType, effectiveZoomLevel)}px`}
-                />
-                <ZoomIn className="w-3 h-3 text-muted" />
-              </div>
-            )}
-
-          {displayMode === "wall" && effectiveZoomLevel !== undefined && onZoomChange && (
-            <WallSizeControl sizeLevel={effectiveZoomLevel} onChange={handleZoomChange} />
+                  className={toolbarIconButtonClass}
+                  title={filter.direction === "asc" ? "Ascending" : "Descending"}
+                >
+                  {filter.direction === "desc" ? (
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
+            </div>
           )}
+
+          {criteriaDefinitions && onObjectFilterChange ? (
+            <FilterButton
+              activeCount={countActiveObjectFilters(criteriaDefinitions, activeObjectFilter)}
+              onClick={() => {
+                setFilterDialogPreselect(undefined);
+                setFilterDialogExpressionPath(undefined);
+                setFilterDialogInitialView("simple");
+                setFilterDialogOpenAtRoot(true);
+                setFilterDialogOpen(true);
+              }}
+            />
+          ) : null}
+
+          {filterMode ? (
+            <SavedFilterMenu
+              mode={filterMode}
+              defaultFilterKey={filterDefaultKey}
+              currentFilter={filter}
+              currentObjectFilter={activeObjectFilter}
+              currentUIOptions={{ displayMode, zoomLevel: effectiveZoomLevel }}
+              onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, { ...nextFilter, page: 1 }))}
+              onApplyObjectFilter={onObjectFilterChange}
+              onApplyUIOptions={(options) => {
+                const nextDisplayMode = typeof options.displayMode === "string" ? options.displayMode : undefined;
+                if (nextDisplayMode && displayModes.includes(nextDisplayMode as DetailListDisplayMode)) {
+                  onDisplayModeChange?.(nextDisplayMode as DetailListDisplayMode);
+                }
+                const nextZoomLevel = parseEntityCardSizeLevel(inferredCardSizeEntityType, options.zoomLevel);
+                if (nextZoomLevel != null) handleZoomChange(nextZoomLevel);
+              }}
+            />
+          ) : null}
+
+          {displayMode && onDisplayModeChange ? (
+            <div className={`${toolbarSegmentClass} gap-0.5`}>
+              {DISPLAY_MODE_BUTTONS.filter((button) => displayModes.includes(button.mode)).map((button) => (
+                <button
+                  key={button.mode}
+                  type="button"
+                  onClick={() => handleDisplayModeChange(button.mode)}
+                  className={`${toolbarIconButtonClass} ${displayMode === button.mode ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                  title={button.title}
+                  aria-label={button.title}
+                >
+                  {button.icon}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className={toolbarSegmentClass}>
+            <PageSizeSelect
+              perPage={perPage}
+              allowInfinite={allowInfinitePageSize}
+              infinitePageSize={infinitePageSize}
+              infinitePageSizeOnly={infinitePageSizeOnly}
+              onChange={(nextPerPage) => onFilterChange({ ...filter, perPage: nextPerPage, page: 1 })}
+            />
+
+            {effectiveZoomLevel !== undefined &&
+              onZoomChange &&
+              (displayMode === "grid" || displayMode === "list" || displayMode == null) && (
+                <div className="hidden items-center gap-1 pl-1 md:flex">
+                  <ZoomOut className="w-3 h-3 text-muted" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxZoomLevel}
+                    step={0.25}
+                    value={effectiveZoomLevel}
+                    onChange={(e) => handleZoomChange(Number(e.target.value))}
+                    style={
+                      {
+                        "--range-fill": `${(effectiveZoomLevel / Math.max(0.25, maxZoomLevel)) * 100}%`,
+                      } as CSSProperties
+                    }
+                    className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
+                    title={`Card size: ${getEntityCardMinWidthPx(inferredCardSizeEntityType, effectiveZoomLevel)}px`}
+                  />
+                  <ZoomIn className="w-3 h-3 text-muted" />
+                </div>
+              )}
+
+            {displayMode === "wall" && effectiveZoomLevel !== undefined && onZoomChange && (
+              <WallSizeControl sizeLevel={effectiveZoomLevel} onChange={handleZoomChange} />
+            )}
+          </div>
         </div>
+
+        <div aria-hidden="true" className="hidden lg:block lg:flex-1 lg:basis-0" />
       </div>
 
       {criteriaDefinitions && onObjectFilterChange && Object.keys(activeObjectFilter).length > 0 ? (

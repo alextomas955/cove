@@ -31,7 +31,8 @@ internal sealed class ScanVideoProcessor(
         bool forceMetadataProbe = false,
         ScanOperationOptions? scanOptions = null,
         MoveDetectionIndex? moveIndex = null,
-        string? videoProbeJson = null)
+        string? videoProbeJson = null,
+        bool titleFromFilename = true)
     {
         var stat = fileStat ?? ScanPath.GetFileStat(path);
         var dirPath = ScanPath.NormalizeStoredFolderPath(Path.GetDirectoryName(path) ?? path);
@@ -60,7 +61,7 @@ internal sealed class ScanVideoProcessor(
             targetVideo = await db.Videos.FirstOrDefaultAsync(s => s.Id == videoId.Value, ct)
                 ?? throw new InvalidOperationException($"Video {videoId.Value} was not found for downloaded media import");
 
-            if (string.IsNullOrWhiteSpace(targetVideo.Title))
+            if (titleFromFilename && string.IsNullOrWhiteSpace(targetVideo.Title))
                 targetVideo.Title = Path.GetFileNameWithoutExtension(path);
         }
 

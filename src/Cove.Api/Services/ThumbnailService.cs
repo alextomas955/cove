@@ -62,13 +62,17 @@ public class ThumbnailService(
     IBlobService blobService,
     ILogger<ThumbnailService> logger,
     VideoGeneratedAssetCoordinator? generatedAssetCoordinator = null,
-    FfmpegConcurrencyLimiter? ffmpegConcurrencyLimiter = null) : IThumbnailService, IVideoAssetGenerator
+    FfmpegConcurrencyLimiter? ffmpegConcurrencyLimiter = null,
+    HardwareEncodeSessionGate? hwEncodeSessionGate = null) : IThumbnailService, IVideoAssetGenerator
 {
     private readonly VideoGeneratedAssetCoordinator _generatedAssetCoordinator = generatedAssetCoordinator ?? new();
 
     // Shared with the rest of generation so one budget covers every decode in flight, not one per
     // service. Tests that build this type directly get a private limiter sized from their config.
     private readonly FfmpegConcurrencyLimiter ffmpegConcurrency = ffmpegConcurrencyLimiter ?? new FfmpegConcurrencyLimiter(config);
+
+    // Shared with library conversion so the two never overrun the GPU's encode-session limit together.
+    private readonly HardwareEncodeSessionGate _hwEncodeSessionGate = hwEncodeSessionGate ?? new(config);
     private string ThumbnailDir => Path.Combine(config.GeneratedPath, "screenshots");
     private string ImageThumbnailDir => Path.Combine(config.GeneratedPath, "thumbnails");
     private string PreviewDir => Path.Combine(config.GeneratedPath, "previews");
@@ -1432,30 +1436,6 @@ public class ThumbnailService(
     private const string HwDevicePlaceholder = "__COVE_HWDEV__";
     private const string HwUploadPlaceholder = "__COVE_HWUPLOAD__";
 
-    // Caps concurrent hardware-encode sessions. Consumer GeForce GPUs limit simultaneous NVENC encode
-    // sessions (historically 2-3, raised to 5 then 8 on recent drivers); spawning one per parallel
-    // generation task can overrun that, and ffmpeg then fails with
-    // "nvEncOpenEncodeSessionEx failed: 10 (NV_ENC_ERR_OUT_OF_MEMORY) / Too many concurrent sessions".
-    // The limit comes from config.HardwareEncodeSessionLimit (0 = a safe default of 2, the floor across
-    // consumer drivers); users on newer drivers (5-8) or pro cards can raise it. Software (libx264)
-    // encodes are not throttled. (This does NOT address NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY (21), a
-    // driver/NVENC library mismatch — the libx264 fallback below handles that instead.)
-    private SemaphoreSlim? _hwEncodeSessionGate;
-    private int _hwEncodeSessionGateCapacity;
-    private readonly object _hwEncodeSessionGateLock = new();
-    private SemaphoreSlim HwEncodeSessionGate()
-    {
-        var desired = config.HardwareEncodeSessionLimit > 0 ? config.HardwareEncodeSessionLimit : 2;
-        lock (_hwEncodeSessionGateLock)
-        {
-            // Recreate when the configured limit changes so a Settings change takes effect without a
-            // restart (mirrors GetFfmpegSemaphore). The old gate is GC'd once its waiters release.
-            if (_hwEncodeSessionGate != null && _hwEncodeSessionGateCapacity == desired) return _hwEncodeSessionGate;
-            _hwEncodeSessionGateCapacity = desired;
-            return _hwEncodeSessionGate = new SemaphoreSlim(desired);
-        }
-    }
-
     /// <summary>
     /// Filter-chain tail a preview encode needs for the chosen encoder. VAAPI consumes GPU surfaces,
     /// so frames must be converted and uploaded; every other encoder reads system memory and gets a
@@ -1471,6 +1451,7 @@ public class ThumbnailService(
     /// setting is denominated in decode inputs, not in processes.
     /// </param>
     private async Task RunPreviewEncodeAsync(string ffmpegPath, string argsTemplate, string outputPath, TimeSpan timeout, string softwarePreset, int inputCount, CancellationToken ct)
+
     {
         var encoder = GetH264Encoder();
 
@@ -1487,14 +1468,13 @@ public class ThumbnailService(
         {
             var hwArgs = Compose(encoder);
             bool ok;
-            var gate = HwEncodeSessionGate();
-            await gate.WaitAsync(ct);
-            try
+            // Two separate budgets: the GPU's encode-session limit (shared with library conversion)
+            // and Cove's decode-input budget. A preview needs one of each.
+            using (await _hwEncodeSessionGate.AcquireAsync(ct))
             {
                 await using var slots = await ffmpegConcurrency.AcquireAsync(inputCount, ct);
                 ok = await TryRunFfmpegAsync(ffmpegPath, hwArgs, timeout, ct);
             }
-            finally { gate.Release(); }
 
             if (ok || ct.IsCancellationRequested)
                 return;

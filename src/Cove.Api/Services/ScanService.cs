@@ -101,6 +101,28 @@ public class ScanService : IScanService
         return resolvedVideoId.Value;
     }
 
+    /// <summary>
+    /// Attaches a file Cove produced from one of a video's own files (a library conversion) to that video
+    /// and returns the new file's id. The caller holds the producer lease. Unlike a download import, it
+    /// leaves an untitled video untitled rather than naming it after the new file.
+    /// </summary>
+    internal async Task<int> ImportConvertedVideoFileWithinProducerLeaseAsync(string path, int videoId, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Converted video file not found", path);
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CoveContext>();
+        var (videoFile, _, _) = await _videoProcessor.ProcessAsync(db, path, videoId, ct, titleFromFilename: false);
+        await db.SaveChangesAsync(ct);
+
+        if (videoFile.VideoId != videoId)
+            throw new InvalidOperationException($"Converted video file {path} was not attached to video {videoId}");
+
+        _eventBus.Publish(new EntityEvent(EventType.VideoUpdated, "Video", videoId));
+        return videoFile.Id;
+    }
+
     public async Task<int> ImportDownloadedImageAsync(string path, int? imageId, CancellationToken ct = default)
     {
         using var pathLease = await _physicalFileCoordinator.AcquireReadAsync(ct);
