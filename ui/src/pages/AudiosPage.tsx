@@ -157,9 +157,10 @@ export function AudiosPage({ onNavigate }: Props) {
           <MediaAggregateMetadata
             duration={filteredAggregate?.duration}
             fileSize={filteredAggregate?.fileSize}
-            loading={filteredAggregateLoading}
+            loading={false}
           />
         }
+        summaryLoading={filteredAggregateLoading}
         pageKey="audios"
         filterMode="audios"
         filter={filter}
