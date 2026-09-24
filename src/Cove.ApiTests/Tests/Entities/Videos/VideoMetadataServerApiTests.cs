@@ -99,6 +99,65 @@ public sealed class VideoMetadataServerApiTests(
 
     [Fact]
     [CoversEndpoint("POST", "/api/videos/{id:int}/metadata-server/submit-draft")]
+    public async Task GivenLinkedEntitiesWithRemoteIds_WhenDraftIsSubmitted_ThenDraftCarriesTheirRemoteIdsForTheEndpoint()
+    {
+        var owner = AsUser();
+        var suffix = Guid.NewGuid().ToString("N");
+        var metadataScene = AsMetadataService().CreateScene(
+            new MetadataServiceSceneBuilder()
+                .WithId($"remote-video-{suffix}")
+                .WithTitle($"Remote metadata video {suffix}")
+                .Build());
+        var endpoint = metadataScene.Endpoint.AbsoluteUri;
+        const string otherEndpoint = "https://other-metadata.example/graphql";
+        var studio = await owner.CreateStudioAsync(
+            new StudioBuilder()
+                .WithName($"Draft studio {suffix}")
+                .WithRemoteId(otherEndpoint, $"other-studio-{suffix}")
+                .WithRemoteId(endpoint, $"remote-studio-{suffix}")
+                .Build(),
+            TestContext.Current.CancellationToken);
+        var linkedPerformer = await owner.CreatePerformerAsync(
+            new PerformerBuilder().WithName($"Draft performer {suffix}").WithRemoteId(endpoint, $"remote-performer-{suffix}").Build(),
+            TestContext.Current.CancellationToken);
+        var unlinkedPerformer = await owner.CreatePerformerAsync(
+            new PerformerBuilder().WithName($"Unlinked performer {suffix}").WithRemoteId(otherEndpoint, $"other-performer-{suffix}").Build(),
+            TestContext.Current.CancellationToken);
+        var tag = await owner.CreateTagAsync(
+            new TagBuilder().WithName($"Draft tag {suffix}").WithRemoteId(endpoint, $"remote-tag-{suffix}").Build(),
+            TestContext.Current.CancellationToken);
+        var video = await owner.CreateVideoAsync(
+            new VideoBuilder()
+                .WithTitle($"Linked video {suffix}")
+                .WithStudio(studio)
+                .WithPerformers([linkedPerformer, unlinkedPerformer])
+                .WithTags([tag])
+                .Build(),
+            TestContext.Current.CancellationToken);
+
+        await owner.SubmitVideoDraftToMetadataServiceAsync(video, metadataScene, TestContext.Current.CancellationToken);
+
+        // An entry without an ID reaches the server as unmatched data, leaving reviewers to find it by name.
+        var draftInput = AsMetadataService().SceneDraftSubmissions.Should().ContainSingle().Which.Input;
+        var submittedStudio = draftInput.GetProperty("studio");
+        submittedStudio.GetProperty("name").GetString().Should().Be(studio.Name);
+        submittedStudio.GetProperty("id").GetString().Should().Be($"remote-studio-{suffix}");
+        var submittedPerformers = draftInput.GetProperty("performers").EnumerateArray()
+            .ToDictionary(
+                performer => performer.GetProperty("name").GetString()!,
+                performer => performer.TryGetProperty("id", out var id) ? id.GetString() : null);
+        submittedPerformers.Should().BeEquivalentTo(new Dictionary<string, string?>
+        {
+            [linkedPerformer.Name] = $"remote-performer-{suffix}",
+            [unlinkedPerformer.Name] = null,
+        });
+        var submittedTag = draftInput.GetProperty("tags").EnumerateArray().Should().ContainSingle().Which;
+        submittedTag.GetProperty("name").GetString().Should().Be(tag.Name);
+        submittedTag.GetProperty("id").GetString().Should().Be($"remote-tag-{suffix}");
+    }
+
+    [Fact]
+    [CoversEndpoint("POST", "/api/videos/{id:int}/metadata-server/submit-draft")]
     public async Task GivenVideoWithCover_WhenDraftIsSubmitted_ThenCoverIsUploadedAsDraftImage()
     {
         var owner = AsUser();

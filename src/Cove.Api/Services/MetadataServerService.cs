@@ -1600,33 +1600,47 @@ query Me {
             })
             .ToList();
 
+        // The video's performers, tags and studio arrive without their own remote IDs loaded, so read
+        // them here. An entry sent with only a name shows up on the draft as unmatched data.
+        var performerIds = video.VideoPerformers.Where(sp => sp.Performer != null).Select(sp => sp.Performer!.Id).Distinct().ToList();
+        var performerRemoteIds = MatchRemoteIds(
+            await _db.Set<PerformerRemoteId>().AsNoTracking()
+                .Where(remote => performerIds.Contains(remote.PerformerId))
+                .OrderBy(remote => remote.Id)
+                .Select(remote => new RemoteIdLink(remote.PerformerId, remote.Endpoint, remote.RemoteId))
+                .ToListAsync(ct),
+            endpoint);
+        var tagIds = video.VideoTags.Where(st => st.Tag != null).Select(st => st.Tag!.Id).Distinct().ToList();
+        var tagRemoteIds = MatchRemoteIds(
+            await _db.Set<TagRemoteId>().AsNoTracking()
+                .Where(remote => tagIds.Contains(remote.TagId))
+                .OrderBy(remote => remote.Id)
+                .Select(remote => new RemoteIdLink(remote.TagId, remote.Endpoint, remote.RemoteId))
+                .ToListAsync(ct),
+            endpoint);
+        var studioRemoteIds = video.Studio == null
+            ? new Dictionary<int, string>()
+            : MatchRemoteIds(
+                await _db.Set<StudioRemoteId>().AsNoTracking()
+                    .Where(remote => remote.StudioId == video.Studio.Id)
+                    .OrderBy(remote => remote.Id)
+                    .Select(remote => new RemoteIdLink(remote.StudioId, remote.Endpoint, remote.RemoteId))
+                    .ToListAsync(ct),
+                endpoint);
+
         var performers = video.VideoPerformers
             .Where(sp => sp.Performer != null)
-            .Select(sp =>
-            {
-                var perfRemoteId = sp.Performer!.RemoteIds
-                    .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-                return new { name = sp.Performer.Name, id = perfRemoteId?.RemoteId };
-            })
+            .Select(sp => new { name = sp.Performer!.Name, id = performerRemoteIds.GetValueOrDefault(sp.Performer.Id) })
             .ToList();
 
         var tags = video.VideoTags
             .Where(st => st.Tag != null)
-            .Select(st =>
-            {
-                var tagRemoteId = st.Tag!.RemoteIds
-                    .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-                return new { name = st.Tag.Name, id = tagRemoteId?.RemoteId };
-            })
+            .Select(st => new { name = st.Tag!.Name, id = tagRemoteIds.GetValueOrDefault(st.Tag.Id) })
             .ToList();
 
-        object? studio = null;
-        if (video.Studio != null)
-        {
-            var studioRemoteId = video.Studio.RemoteIds
-                .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-            studio = new { name = video.Studio.Name, id = studioRemoteId?.RemoteId };
-        }
+        object? studio = video.Studio == null
+            ? null
+            : new { name = video.Studio.Name, id = studioRemoteIds.GetValueOrDefault(video.Studio.Id) };
 
         var input = new
         {
@@ -2915,6 +2929,17 @@ query Me {
     }
 
     /// <summary>
+    /// Maps each owner to its remote ID on <paramref name="endpoint"/>, preferring an exact endpoint match
+    /// over one that only shares the site, then the earliest link.
+    /// </summary>
+    private static Dictionary<int, string> MatchRemoteIds(IEnumerable<RemoteIdLink> links, string endpoint)
+        => links
+            .Where(link => EndpointsMatch(link.Endpoint, endpoint))
+            .OrderBy(link => string.Equals(NormalizeEndpoint(link.Endpoint), NormalizeEndpoint(endpoint), StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .GroupBy(link => link.OwnerId)
+            .ToDictionary(group => group.Key, group => group.First().RemoteId);
+
+    /// <summary>
     /// Reads the image Cove shows as the video's cover: its own cover, or the generated screenshot
     /// otherwise. A draft is still worth submitting without one, so failures are logged and yield null.
     /// </summary>
@@ -3517,6 +3542,8 @@ query Me {
     private sealed record MetadataServerGraphQlRequest(string Query, object? Variables);
 
     private sealed record MetadataServerUpload(ArraySegment<byte> Data, string ContentType);
+
+    private sealed record RemoteIdLink(int OwnerId, string Endpoint, string RemoteId);
 
     private sealed record MetadataServerGraphQlResponse<T>
     {
