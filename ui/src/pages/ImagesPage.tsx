@@ -351,9 +351,10 @@ export function ImagesPage({ onNavigate }: Props) {
         title="Images"
         metadataByline={
           !visualSearchActive ? (
-            <MediaAggregateMetadata fileSize={filteredAggregate?.fileSize} loading={filteredAggregateLoading} />
+            <MediaAggregateMetadata fileSize={filteredAggregate?.fileSize} loading={false} />
           ) : undefined
         }
+        summaryLoading={!visualSearchActive && filteredAggregateLoading}
         pageKey="images"
         filterMode="images"
         filter={filter}

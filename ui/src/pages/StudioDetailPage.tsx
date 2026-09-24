@@ -897,6 +897,7 @@ function StudioVideosPanel({
     infinitePageSize,
     infiniteQuery,
     infiniteFilterKey,
+    settledListKey,
     fetchAllIds,
     loadMore,
   } = useDetailListQuery<Video>({
@@ -983,6 +984,7 @@ function StudioVideosPanel({
       <ContextualVideoListView
         items={items}
         filter={filter}
+        taggerResetKey={settledListKey}
         totalCount={data.totalCount}
         queryPage={queryPage}
         displayMode={displayMode}

@@ -415,15 +415,23 @@ public class TagsController(
         if (dto.Description != null) tag.Description = dto.Description;
         if (clearFields.Contains("sortName")) tag.SortName = null;
         if (clearFields.Contains("description")) tag.Description = null;
-        tag.Color = NormalizeOptionalText(dto.Color);
-        tag.TagGroupId = NormalizeOptionalId(dto.TagGroupId);
+        // Omitted fields stay unchanged; clearFields removes a value.
+        if (dto.Color != null) tag.Color = NormalizeOptionalText(dto.Color);
+        if (dto.TagGroupId.HasValue) tag.TagGroupId = NormalizeOptionalId(dto.TagGroupId);
         if (dto.Favorite.HasValue) tag.Favorite = dto.Favorite.Value;
         if (dto.Organized.HasValue) tag.Organized = dto.Organized.Value;
-        tag.MinOccurrenceSec = NormalizeOptionalPositive(dto.MinOccurrenceSec);
-        tag.MinOccurrencePercent = NormalizeOptionalPercent(dto.MinOccurrencePercent);
-        tag.ShowAsSegment = dto.ShowAsSegment;
-        tag.SegmentColorOverride = NormalizeOptionalText(dto.SegmentColorOverride);
-        tag.SegmentLaneOverride = dto.SegmentLaneOverride;
+        if (dto.MinOccurrenceSec.HasValue) tag.MinOccurrenceSec = NormalizeOptionalPositive(dto.MinOccurrenceSec);
+        if (dto.MinOccurrencePercent.HasValue) tag.MinOccurrencePercent = NormalizeOptionalPercent(dto.MinOccurrencePercent);
+        if (dto.ShowAsSegment.HasValue) tag.ShowAsSegment = dto.ShowAsSegment;
+        if (dto.SegmentColorOverride != null) tag.SegmentColorOverride = NormalizeOptionalText(dto.SegmentColorOverride);
+        if (dto.SegmentLaneOverride.HasValue) tag.SegmentLaneOverride = dto.SegmentLaneOverride;
+        if (clearFields.Contains("color")) tag.Color = null;
+        if (clearFields.Contains("tagGroupId")) tag.TagGroupId = null;
+        if (clearFields.Contains("minOccurrenceSec")) tag.MinOccurrenceSec = null;
+        if (clearFields.Contains("minOccurrencePercent")) tag.MinOccurrencePercent = null;
+        if (clearFields.Contains("showAsSegment")) tag.ShowAsSegment = null;
+        if (clearFields.Contains("segmentColorOverride")) tag.SegmentColorOverride = null;
+        if (clearFields.Contains("segmentLaneOverride")) tag.SegmentLaneOverride = null;
 
         if (dto.Aliases != null)
         {

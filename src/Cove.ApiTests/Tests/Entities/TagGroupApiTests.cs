@@ -285,6 +285,47 @@ public sealed class TagGroupApiTests(
     }
 
     [Fact]
+    [CoversEndpoint("PUT", "/api/tags/{id:int}")]
+    public async Task GivenTagInTagGroup_WhenOnlyOrganizedIsUpdated_ThenTagGroupAndColorAreKept()
+    {
+        // Arrange
+        var group = await AsUser().CreateTagGroupAsync(new TagGroupCreateDto("Kept Group"), TestContext.Current.CancellationToken);
+        var tag = await AsUser().CreateTagAsync(new TagBuilder().WithName("Organized Tag").WithTagGroup(group).Build(), TestContext.Current.CancellationToken);
+        await AsUser().UpdateTagAsync(tag.Id, new TagUpdateDto(null, null, null, null, null, null, null, null, Color: "#123456"), TestContext.Current.CancellationToken);
+
+        // Act
+        var updated = await AsUser().UpdateTagAsync(
+            tag.Id,
+            new TagUpdateDto(null, null, null, null, null, null, null, null, Organized: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        updated.Organized.Should().BeTrue();
+        updated.TagGroupId.Should().Be(group.Id);
+        updated.Color.Should().Be("#123456");
+    }
+
+    [Fact]
+    [CoversEndpoint("PUT", "/api/tags/{id:int}")]
+    public async Task GivenTagInTagGroup_WhenTagGroupAndColorAreCleared_ThenTagHasNeither()
+    {
+        // Arrange
+        var group = await AsUser().CreateTagGroupAsync(new TagGroupCreateDto("Cleared Group"), TestContext.Current.CancellationToken);
+        var tag = await AsUser().CreateTagAsync(new TagBuilder().WithName("Cleared Tag").WithTagGroup(group).Build(), TestContext.Current.CancellationToken);
+        await AsUser().UpdateTagAsync(tag.Id, new TagUpdateDto(null, null, null, null, null, null, null, null, Color: "#123456"), TestContext.Current.CancellationToken);
+
+        // Act
+        var updated = await AsUser().UpdateTagAsync(
+            tag.Id,
+            new TagUpdateDto(null, null, null, null, null, null, null, null, ClearFields: ["tagGroupId", "color"]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        updated.TagGroupId.Should().BeNull();
+        updated.Color.Should().BeNull();
+    }
+
+    [Fact]
     [CoversEndpoint("DELETE", "/api/taggroups/{id:int}")]
     public async Task GivenTagGroupWithTag_WhenDeleted_ThenTagIsPreservedWithoutTagGroup()
     {

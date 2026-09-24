@@ -8,7 +8,7 @@ import {
   type ReviewItem,
   type TaggerReviewInput,
 } from "../components/VideoTaggerReview";
-import { defaultDiffSelection, summarizeDiff } from "../components/MetadataDiff";
+import { defaultDiffSelection, scalarStatus, summarizeDiff } from "../components/MetadataDiff";
 
 vi.mock("../api/client", () => ({ videos: { screenshotUrl: (id: number) => `/cover/${id}` } }));
 
@@ -414,5 +414,55 @@ describe("VideoTaggerReview selector mapping", () => {
       handlers,
     );
     expect(handlers.onRelationshipEditsChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("VideoTaggerReview cover comparison", () => {
+  const coverField = (review: ReturnType<typeof buildTaggerReview>) =>
+    review.fields.find((field) => field.key === "image")!;
+
+  it("keeps the cover a choice while the comparison has not answered", () => {
+    const review = buildTaggerReview(input());
+    expect(scalarStatus(coverField(review), review.source, review.target)).toBe("conflict");
+    expect(coverField(review).alwaysVisible).toBe(true);
+  });
+
+  it("reads the same cover as unchanged rather than as two differing URLs", () => {
+    const review = buildTaggerReview(input({ coverComparison: { verdict: "same" }, imageReplace: false }));
+    expect(scalarStatus(coverField(review), review.source, review.target)).toBe("identical");
+    expect(coverField(review).alwaysVisible).toBe(false);
+    expect(summarizeDiff(review.fields, review.source, review.target, review.selection).identical).toContain("Cover");
+    // Nothing is taken from the source on the strength of the verdict alone.
+    expect(review.selection.image).toBe("target");
+  });
+
+  it("keeps the cover a choice once the person has asked for the incoming one", () => {
+    // The verdict only lands after a download, so the choice can be made while both are still shown.
+    // Folding the row away then would claim "unchanged" about a write and leave no way back.
+    const review = buildTaggerReview(input({ coverComparison: { verdict: "same" }, imageReplace: true }));
+    expect(scalarStatus(coverField(review), review.source, review.target)).toBe("conflict");
+    expect(review.selection.image).toBe("source");
+  });
+
+  it("leaves the same cover at a higher resolution as a choice to offer", () => {
+    const review = buildTaggerReview(
+      input({
+        coverComparison: {
+          verdict: "upgrade",
+          distance: 2,
+          current: { width: 1280, height: 720, byteSize: 240_000 },
+          candidate: { width: 1920, height: 1080, byteSize: 520_000 },
+        },
+        imageReplace: false,
+      }),
+    );
+    expect(scalarStatus(coverField(review), review.source, review.target)).toBe("conflict");
+    // Suggested, never taken: the upgrade is still one deliberate click away.
+    expect(review.selection.image).toBe("target");
+  });
+
+  it("keeps two genuinely different covers a choice", () => {
+    const review = buildTaggerReview(input({ coverComparison: { verdict: "differs", distance: 27 } }));
+    expect(scalarStatus(coverField(review), review.source, review.target)).toBe("conflict");
   });
 });

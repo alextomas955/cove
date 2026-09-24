@@ -254,11 +254,76 @@ public class TagsControllerSegmentTests
             null,
             null,
             false,
-            null,
-            null), CancellationToken.None);
+            ClearFields: ["segmentColorOverride", "segmentLaneOverride"]), CancellationToken.None);
         var updateOk = Assert.IsType<OkObjectResult>(updateResult.Result);
         var updated = Assert.IsType<TagDetailDto>(updateOk.Value);
         Assert.False(updated.ShowAsSegment);
+        Assert.Null(updated.SegmentColorOverride);
+        Assert.Null(updated.SegmentLaneOverride);
+    }
+
+    [Fact]
+    public async Task Update_WithOnlyOrganized_KeepsDisplaySettings()
+    {
+        await using var context = CreateContext();
+        var group = new TagGroup { Name = "Group" };
+        context.TagGroups.Add(group);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var tag = CreateTagWithDisplaySettings(group.Id);
+        context.Tags.Add(tag);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var controller = new TagsController(null!, context, new CustomFieldService(context), null!);
+
+        var result = await controller.Update(
+            tag.Id,
+            new TagUpdateDto(null, null, null, null, null, null, null, null, Organized: true),
+            CancellationToken.None);
+
+        var updated = Assert.IsType<TagDetailDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(updated.Organized);
+        Assert.Equal("#aa3355", updated.Color);
+        Assert.Equal(group.Id, updated.TagGroupId);
+        Assert.Equal(12, updated.MinOccurrenceSec);
+        Assert.Equal(40, updated.MinOccurrencePercent);
+        Assert.True(updated.ShowAsSegment);
+        Assert.Equal("#44aaee", updated.SegmentColorOverride);
+        Assert.Equal(2, updated.SegmentLaneOverride);
+    }
+
+    [Fact]
+    public async Task Update_WithClearFields_ClearsDisplaySettings()
+    {
+        await using var context = CreateContext();
+        var group = new TagGroup { Name = "Group" };
+        context.TagGroups.Add(group);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var tag = CreateTagWithDisplaySettings(group.Id);
+        context.Tags.Add(tag);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var controller = new TagsController(null!, context, new CustomFieldService(context), null!);
+
+        var result = await controller.Update(
+            tag.Id,
+            new TagUpdateDto(
+                null, null, null, null, null, null, null, null,
+                ClearFields:
+                [
+                    "color",
+                    "tagGroupId",
+                    "minOccurrenceSec",
+                    "minOccurrencePercent",
+                    "showAsSegment",
+                    "segmentColorOverride",
+                    "segmentLaneOverride",
+                ]),
+            CancellationToken.None);
+
+        var updated = Assert.IsType<TagDetailDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Null(updated.Color);
+        Assert.Null(updated.TagGroupId);
+        Assert.Null(updated.MinOccurrenceSec);
+        Assert.Null(updated.MinOccurrencePercent);
+        Assert.Null(updated.ShowAsSegment);
         Assert.Null(updated.SegmentColorOverride);
         Assert.Null(updated.SegmentLaneOverride);
     }
@@ -386,6 +451,18 @@ public class TagsControllerSegmentTests
         Assert.NotNull(filtered);
         Assert.Equal(["Manual body"], filtered);
     }
+
+    private static Tag CreateTagWithDisplaySettings(int tagGroupId) => new()
+    {
+        Name = "Styled",
+        Color = "#aa3355",
+        TagGroupId = tagGroupId,
+        MinOccurrenceSec = 12,
+        MinOccurrencePercent = 40,
+        ShowAsSegment = true,
+        SegmentColorOverride = "#44aaee",
+        SegmentLaneOverride = 2,
+    };
 
     private static CoveContext CreateContext()
     {

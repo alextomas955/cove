@@ -1757,7 +1757,13 @@ public record MetadataServerEntityCandidateDto(
     bool ExistsLocally,
     int? LocalId,
     string? Disambiguation = null
-);
+)
+{
+    // Init property rather than a positional parameter: shipped extensions hold this record's constructor
+    // arity. Carries the remote gender as the metadata server spells it, so the tagger can filter its
+    // preview by the same performer genders the import filters by when it writes.
+    public string? Gender { get; init; }
+}
 
 public record MetadataServerVideoEntityOverrideDto
 {
@@ -1792,6 +1798,44 @@ public record MetadataServerVideoMatchDto(
 
 public record MetadataServerFingerprintDto(string Algorithm, string Hash, int? Duration);
 
+/// <summary>
+/// A tagger cover decision that pixels, not URLs, can answer: does the incoming cover show the same
+/// image the video already carries, and if so, is it worth taking for its resolution alone.
+/// </summary>
+public record VideoCoverComparisonRequestDto
+{
+    public string ImageUrl { get; init; } = string.Empty;
+}
+
+public record VideoCoverImageDto
+{
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int ByteSize { get; init; }
+}
+
+public record VideoCoverComparisonDto
+{
+    /// <summary>
+    /// <c>same</c>: the same image, with nothing to gain by taking it. <c>upgrade</c>: the same image at a
+    /// higher resolution, worth suggesting. <c>differs</c>: a genuine choice between two covers.
+    /// <c>unavailable</c>: one of the two could not be read, so the caller keeps its URL-based default.
+    /// </summary>
+    public string Verdict { get; init; } = VideoCoverComparisonVerdicts.Unavailable;
+    /// <summary>Hamming distance between the two perceptual hashes; null when one could not be computed.</summary>
+    public int? Distance { get; init; }
+    public VideoCoverImageDto? Current { get; init; }
+    public VideoCoverImageDto? Candidate { get; init; }
+}
+
+public static class VideoCoverComparisonVerdicts
+{
+    public const string Same = "same";
+    public const string Upgrade = "upgrade";
+    public const string Differs = "differs";
+    public const string Unavailable = "unavailable";
+}
+
 public record MetadataServerVideoImportRequestDto
 {
     public string Endpoint { get; init; } = string.Empty;
@@ -1814,6 +1858,9 @@ public record MetadataServerVideoImportRequestDto
     public List<MetadataServerVideoEntityOverrideDto>? PerformerOverrides { get; init; }
     public List<MetadataServerVideoEntityOverrideDto>? TagOverrides { get; init; }
     public Dictionary<string, string>? FieldStrategies { get; init; }
+    // The performer genders to keep, as the metadata server spells them (matched after stripping
+    // punctuation and casing, with "Unknown" standing for a performer whose gender it does not state).
+    // Null applies no filter; an empty list allows no gender at all.
     public List<string>? PerformerGenders { get; init; }
     public bool SkipSingleNamePerformers { get; init; }
     // Hand edits made in the review beside the import, as the video's edit form would make them: library
@@ -2204,6 +2251,9 @@ public record BulkAudioUpdateDto
     public BulkUpdateMode TagMode { get; init; } = BulkUpdateMode.Add;
     public List<int>? PerformerIds { get; init; }
     public BulkUpdateMode PerformerMode { get; init; } = BulkUpdateMode.Add;
+    /// <inheritdoc cref="BulkVideoUpdateDto.CustomFields"/>
+    public Dictionary<string, object?>? CustomFields { get; init; }
+    public BulkUpdateMode CustomFieldMode { get; init; } = BulkUpdateMode.Add;
 }
 
 public record BulkTextDocumentUpdateDto
@@ -2506,6 +2556,9 @@ public record IdentifyOptionsDto
     public bool SkipMultipleMatches { get; init; }
     public bool SkipSingleNamePerformers { get; init; } = true;
     public Dictionary<string, string>? FieldStrategies { get; init; }
+    // The performer genders to keep, as the metadata server spells them (matched after stripping
+    // punctuation and casing, with "Unknown" standing for a performer whose gender it does not state).
+    // Null applies no filter; an empty list allows no gender at all.
     public List<string>? PerformerGenders { get; init; }
 }
 

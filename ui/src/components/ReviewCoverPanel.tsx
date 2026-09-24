@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import type { DiffSide, ScalarStatus } from "./MetadataDiff";
 
 /**
@@ -21,6 +21,7 @@ export function ReviewCoverPanel({
   disabled = false,
   aspect = "video",
   subject = "Cover",
+  note,
 }: {
   status: ScalarStatus;
   chosen: DiffSide;
@@ -35,6 +36,11 @@ export function ReviewCoverPanel({
   disabled?: boolean;
   aspect?: "video" | "portrait";
   subject?: string;
+  /**
+   * Replaces the "both have a value" sentence under a conflict, for a choice the caller can say
+   * something more useful about — such as two covers that are the same picture at different sizes.
+   */
+  note?: string;
 }) {
   const name = `${useId()}-cover`;
   const index = Math.min(Math.max(activeIndex, 0), Math.max(candidates.length - 1, 0));
@@ -75,7 +81,7 @@ export function ReviewCoverPanel({
   if (status !== "conflict" && !incomingUrl && !currentUrl) return null;
   if (status !== "conflict") {
     const showsIncoming = chosen === "source" || !currentUrl;
-    const note =
+    const statusNote =
       status === "identical"
         ? `same ${subject.toLowerCase()}`
         : status === "filled"
@@ -95,7 +101,7 @@ export function ReviewCoverPanel({
         )}
         <span className="inline-flex items-center gap-1 text-[11px] text-secondary">
           <Check className="h-3 w-3 text-green-400" />
-          {subject} · {note}
+          {subject} · {statusNote}
         </span>
       </div>
     );
@@ -147,8 +153,8 @@ export function ReviewCoverPanel({
         {option("source", incoming, `Use ${incomingLabel}`)}
       </div>
       <span className="inline-flex items-center gap-1 px-1 text-[11px] text-secondary">
-        <AlertTriangle className="h-3 w-3 text-amber-400" />
-        {subject} · both have a value
+        {note ? <ArrowUpRight className="h-3 w-3 text-accent" /> : <AlertTriangle className="h-3 w-3 text-amber-400" />}
+        {subject} · {note ?? "both have a value"}
       </span>
     </div>
   );

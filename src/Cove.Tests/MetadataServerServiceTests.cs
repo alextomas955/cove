@@ -84,8 +84,580 @@ public sealed class MetadataServerServiceTests
         Assert.Equal(["Action"], match.TagNames);
         Assert.NotNull(match.StudioCandidate);
         Assert.True(match.StudioCandidate.ExistsLocally);
-        Assert.Contains(match.PerformerCandidates, candidate => candidate.Name == "Jane Doe" && candidate.ExistsLocally);
+        // The gender travels with the candidate so the tagger can filter its preview by the same
+        // performer genders the import filters by.
+        Assert.Contains(match.PerformerCandidates, candidate => candidate.Name == "Jane Doe" && candidate.ExistsLocally && candidate.Gender == "FEMALE");
         Assert.Contains(match.TagCandidates, candidate => candidate.Name == "Action" && candidate.ExistsLocally);
+    }
+
+    // The tagger mirrors these rules client-side to filter its preview, so they are a contract: an absent
+    // list filters nothing, a present one filters by normalized key, an unstated gender counts as
+    // "Unknown", and a present but empty list allows no performer at all.
+    [Theory]
+    [InlineData(null, "Jane Doe,John Roe,Tess Poe,Sam Roe")]
+    [InlineData("Female", "Jane Doe")]
+    [InlineData("Female;Male", "Jane Doe,John Roe")]
+    [InlineData("Transgender Female", "Tess Poe")]
+    [InlineData("Unknown", "Sam Roe")]
+    [InlineData("", "")]
+    public async Task MergeVideoWithWarningsAsync_AppliesThePerformerGenderFilter(string? genders, string expectedNames)
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = genders == null ? null : [.. genders.Split(';', StringSplitOptions.RemoveEmptyEntries)],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var applied = video.VideoPerformers
+            .Select(link => link.Performer?.Name)
+            .OfType<string>()
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        var expected = expectedNames.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(expected, applied);
+    }
+
+    // The tagger's preview drops a filtered performer and then sends the surviving ones as overrides, so
+    // the gender filter has to outrank an override that asks for one of the dropped performers by name.
+    [Theory]
+    [InlineData("existing")]
+    [InlineData("create")]
+    public async Task MergeVideoWithWarningsAsync_GenderFilterOutranksAPerformerOverride(string action)
+    {
+        await using var context = CreateContext();
+        var existing = new Performer { Name = "John Roe" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = ["Female"],
+                PerformerOverrides =
+                [
+                    new MetadataServerVideoEntityOverrideDto
+                    {
+                        RemoteId = "remote-performer-2",
+                        Name = "John Roe",
+                        Action = action,
+                        LocalId = action == "existing" ? existing.Id : null,
+                    },
+                ],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.DoesNotContain(video.VideoPerformers, link => link.Performer?.Name == "John Roe" || link.PerformerId == existing.Id);
+        Assert.Contains(video.VideoPerformers, link => link.Performer?.Name == "Jane Doe");
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsExistingPerformersWhenTheGenderFilterAdmitsNothing()
+    {
+        await using var context = CreateContext();
+        var current = new Performer { Name = "Already Linked" };
+        var video = new Video { Title = "Original Video" };
+        video.VideoPerformers.Add(new VideoPerformer { Performer = current });
+        context.AddRange(current, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("query FindVideoByID", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{MixedGenderRemoteVideoJson}}
+                """);
+        }));
+        var service = CreateService(context, httpClient);
+
+        // Overwrite would normally clear the video's performers before applying the remote list. With a
+        // filter that admits no gender, clearing them would delete what is there and put nothing back.
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                PerformerGenders = [],
+                FieldStrategies = new Dictionary<string, string> { ["performers"] = "overwrite" },
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var linked = Assert.Single(video.VideoPerformers);
+        Assert.Equal(current.Id, linked.PerformerId == 0 ? linked.Performer?.Id : linked.PerformerId);
+    }
+
+    // Tagging a video links performers; it never edits them. Only a performer this import creates is
+    // populated from the remote.
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_LeavesAnExistingPerformerUntouched()
+    {
+        await using var context = CreateContext();
+        // Matched by identity: same name and disambiguation as the remote, everything else its own.
+        var existing = new Performer
+        {
+            Name = "Jane Doe",
+            Gender = GenderEnum.NonBinary,
+            Country = "FI",
+        };
+        existing.RemoteIds.Add(new PerformerRemoteId { Endpoint = Endpoint, RemoteId = "another-remote-performer" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Contains(video.VideoPerformers, link => link.PerformerId == existing.Id || ReferenceEquals(link.Performer, existing));
+        // The remote fixture states a different gender, country and alias set; none of it lands.
+        Assert.Equal("Jane Doe", existing.Name);
+        Assert.Null(existing.Disambiguation);
+        Assert.Equal(GenderEnum.NonBinary, existing.Gender);
+        Assert.Equal("FI", existing.Country);
+        Assert.Empty(existing.Aliases);
+        // The link it already had for this endpoint is not repointed at the matched entry.
+        var remoteId = Assert.Single(existing.RemoteIds);
+        Assert.Equal("another-remote-performer", remoteId.RemoteId);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PopulatesAndLinksAPerformerItCreates()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var created = await context.Performers
+            .Include(performer => performer.RemoteIds)
+            .SingleAsync(performer => performer.Name == "Jane Doe", TestContext.Current.CancellationToken);
+        Assert.Equal(GenderEnum.Female, created.Gender);
+        Assert.Equal("US", created.Country);
+        Assert.Contains(created.RemoteIds, id => id.Endpoint == Endpoint && id.RemoteId == "remote-performer-1");
+    }
+
+    // Two local studios can legitimately share one remote id. The import used to take whichever row the
+    // database returned first and rename it to the remote name, which either renamed a studio nobody
+    // pointed at or, when the name was taken, failed the whole import with a name conflict.
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PrefersTheRemoteIdOwnerTheRemoteNames()
+    {
+        await using var context = CreateContext();
+        var namesake = new Studio { Name = "Other Studio" };
+        namesake.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        var named = new Studio { Name = "Fixture Studio" };
+        named.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(namesake, named, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Equal(named.Id, video.StudioId == 0 ? video.Studio?.Id : video.StudioId);
+        // The studio that was not chosen keeps its own name.
+        Assert.Equal("Other Studio", namesake.Name);
+    }
+
+    // Two concurrent imports needing the same missing studio both create it, and the name constraint lets
+    // only one commit. The loser used to fail its whole import; it should link the winner's studio instead.
+    [Fact]
+    public async Task ImportFromMetadataServer_LinksTheStudioAConcurrentImportCreatedFirst()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetTags = false },
+            rival => rival.Add(RivalStudio(withRemoteId: true)).Entity,
+            RivalCommits.OnSave(() => new EntityNameConflictException(NameConflictEntityTypes.Studio)));
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(run.Response.Result);
+        Assert.Equal(2, run.Attempts);
+        var studio = Assert.Single(await run.Verify.Studios.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(run.Rival.WinnerId, studio.Id);
+        Assert.Equal(studio.Id, run.Saved.StudioId);
+        Assert.Equal("Remote Video", run.Saved.Title);
+    }
+
+    // A rival that created the studio by name alone, without the remote id, is found only through the name
+    // identity index, which the failed attempt had already built without it. The retry must rebuild it or
+    // it misses the winner and creates the duplicate the constraint just refused.
+    [Fact]
+    public async Task ImportFromMetadataServer_RebuildsTheNameIndexBeforeRetrying()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetTags = false },
+            rival => rival.Add(RivalStudio(withRemoteId: false)).Entity,
+            RivalCommits.OnSave(() => new EntityNameConflictException(NameConflictEntityTypes.Studio)));
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(run.Response.Result);
+        Assert.Equal(2, run.Attempts);
+        var studio = Assert.Single(await run.Verify.Studios.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(run.Rival.WinnerId, studio.Id);
+        Assert.Equal(studio.Id, run.Saved.StudioId);
+    }
+
+    // Tags are shared between videos more than any other related entity, and tag writes are serialised,
+    // so the loser of this race is refused by the context's own name check when it saves, with its own
+    // exception. The rival commits after the import resolved its tags and before it saves.
+    [Fact]
+    public async Task ImportFromMetadataServer_LinksTheTagAConcurrentImportCommittedBeforeTheSave()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetStudio = false },
+            rival => rival.Add(new Tag { Name = "Action" }).Entity,
+            RivalCommits.OnTagProvenance);
+
+        await AssertLinkedToTheRivalTagAsync(run);
+    }
+
+    // The same race when the rival commits while the import is still resolving the tag: the import's own
+    // namespace check sees the winner and refuses to create a second tag of that name.
+    [Fact]
+    public async Task ImportFromMetadataServer_LinksTheTagAConcurrentImportCommittedDuringResolution()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetStudio = false },
+            rival => rival.Add(new Tag { Name = "Action" }).Entity,
+            RivalCommits.OnTagStaged);
+
+        await AssertLinkedToTheRivalTagAsync(run);
+    }
+
+    public static TheoryData<string, string> LastingConflicts => new()
+    {
+        { NameConflictEntityTypes.Studio, "RELATED_ENTITY_NAME_CONFLICT" },
+        { "tag", "TAG_NAME_CONFLICT" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LastingConflicts))]
+    public async Task ImportFromMetadataServer_ReportsANameConflictThatOutlastsItsRetries(string entityType, string expectedCode)
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto(),
+            rival => null,
+            RivalCommits.OnSave(
+                () => entityType == "tag"
+                    ? TagNameConflictException.ForConcurrentWrite()
+                    : new EntityNameConflictException(entityType),
+                persistent: true));
+
+        var conflict = Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(run.Response.Result);
+        Assert.Equal(expectedCode, conflict.Value!.GetType().GetProperty("code")!.GetValue(conflict.Value));
+        Assert.Equal(Cove.Api.Controllers.VideosController.MetadataImportNameConflictAttempts, run.Attempts);
+    }
+
+    private static Studio RivalStudio(bool withRemoteId)
+    {
+        var studio = new Studio { Name = "Fixture Studio" };
+        if (withRemoteId)
+            studio.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        return studio;
+    }
+
+    private static async Task AssertLinkedToTheRivalTagAsync(RivalImportRun run)
+    {
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(run.Response.Result);
+        Assert.Equal(2, run.Attempts);
+        var tag = Assert.Single(await run.Verify.Tags.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(run.Rival.WinnerId, tag.Id);
+        Assert.Contains(
+            await run.Verify.Set<VideoTag>().Where(link => link.VideoId == run.Saved.Id).ToListAsync(TestContext.Current.CancellationToken),
+            link => link.TagId == tag.Id);
+    }
+
+    /// <summary>When the rival entity commits, standing in for a concurrent import.</summary>
+    private sealed record RivalCommits(Func<Exception>? SaveConflict, bool Persistent, bool OnStagedTag, bool OnProvenance)
+    {
+        // At the loser's first save, which then fails the way the deferred name constraint fails at commit.
+        public static RivalCommits OnSave(Func<Exception> conflict, bool persistent = false) => new(conflict, persistent, false, false);
+
+        // When the import stages its new tag, before it checks the tag namespace.
+        public static RivalCommits OnTagStaged { get; } = new(null, false, true, false);
+
+        // When the import records tag provenance: after it resolved its tags, before it saves.
+        public static RivalCommits OnTagProvenance { get; } = new(null, false, false, true);
+    }
+
+    private sealed record RivalImportRun(
+        Microsoft.AspNetCore.Mvc.ActionResult<VideoDto> Response,
+        ConcurrentCreation Rival,
+        int Attempts,
+        CoveContext Verify,
+        Video Saved) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => Verify.DisposeAsync();
+    }
+
+    private static async Task<RivalImportRun> RunImportAgainstARivalAsync(
+        MetadataServerVideoImportRequestDto request,
+        Func<CoveContext, object?> createRival,
+        RivalCommits when)
+    {
+        var databaseName = $"metadata-import-race-{Guid.NewGuid():N}";
+        var rival = new ConcurrentCreation(databaseName, createRival, when.SaveConflict) { Persistent = when.Persistent };
+        await using var context = new CoveContext(new DbContextOptionsBuilder<CoveContext>()
+            .UseInMemoryDatabase(databaseName)
+            .AddInterceptors(rival)
+            .Options);
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        rival.Armed = true;
+        if (when.OnStagedTag)
+        {
+            context.ChangeTracker.Tracked += (_, tracked) =>
+            {
+                if (tracked.Entry.State == EntityState.Added && tracked.Entry.Entity is Tag)
+                    rival.CommitRivalOnce();
+            };
+        }
+        var tagProvenance = RivalOnTagProvenance.Wrap(new TagProvenanceService(context), when.OnProvenance ? rival.CommitRivalOnce : null);
+
+        var handler = new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """));
+        using var httpClient = new HttpClient(handler);
+        var principalAccessor = new Cove.Core.Auth.CurrentPrincipalAccessor();
+        using var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var controller = new Cove.Api.Controllers.VideosController(
+            new Cove.Data.Repositories.VideoRepository(context),
+            context,
+            CreateService(context, httpClient, tagProvenance: tagProvenance),
+            null!,
+            null!,
+            memoryCache,
+            null!,
+            null!,
+            new Cove.Data.Services.UserEngagementService(context, principalAccessor),
+            new CustomFieldService(context),
+            new EventBus(),
+            null,
+            principalAccessor);
+
+        var response = await controller.ImportFromMetadataServer(
+            video.Id,
+            request with { Endpoint = Endpoint, VideoId = "remote-video-1", SetCoverImage = false },
+            TestContext.Current.CancellationToken);
+
+        // Every attempt starts by fetching the remote video, so the fetches count the attempts.
+        var attempts = handler.Requests.Count(snapshot => snapshot.Query.Contains("findVideo", StringComparison.Ordinal));
+        var verify = new CoveContext(new DbContextOptionsBuilder<CoveContext>().UseInMemoryDatabase(databaseName).Options);
+        var saved = await verify.Videos.SingleAsync(item => item.Id == video.Id, TestContext.Current.CancellationToken);
+        return new RivalImportRun(response, rival, attempts, verify, saved);
+    }
+
+    // Commits the rival entity through its own context, as a concurrent import would, at the moment the test
+    // chose. It must never run inside the loser's SaveChanges when tags are involved: the context holds its
+    // process-wide tag namespace lock for the whole save, and the rival's save would wait on it forever.
+    private sealed class ConcurrentCreation(
+        string databaseName,
+        Func<CoveContext, object?> createRival,
+        Func<Exception>? saveConflict) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        private bool _rivalCommitted;
+        private int _conflicts;
+
+        public bool Armed { get; set; }
+        public bool Persistent { get; init; }
+        public int WinnerId { get; private set; }
+
+        public void CommitRivalOnce()
+        {
+            if (!Armed || _rivalCommitted)
+                return;
+            _rivalCommitted = true;
+            using var rival = new CoveContext(new DbContextOptionsBuilder<CoveContext>().UseInMemoryDatabase(databaseName).Options);
+            var winner = createRival(rival);
+            if (winner == null)
+                return;
+            rival.SaveChanges();
+            WinnerId = (int)rival.Entry(winner).Property("Id").CurrentValue!;
+        }
+
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (saveConflict == null || !Armed || (!Persistent && _conflicts > 0))
+                return ValueTask.FromResult(result);
+            CommitRivalOnce();
+            _conflicts++;
+            throw saveConflict();
+        }
+    }
+
+    // Passes every call through, running a hook before the first provenance record: the point where an
+    // import has resolved its tags and has not yet saved.
+    public class RivalOnTagProvenance : System.Reflection.DispatchProxy
+    {
+        private ITagProvenanceService _inner = null!;
+        private Action? _beforeRecord;
+
+        public static ITagProvenanceService Wrap(ITagProvenanceService inner, Action? beforeRecord)
+        {
+            var proxy = Create<ITagProvenanceService, RivalOnTagProvenance>();
+            var hooked = (RivalOnTagProvenance)(object)proxy;
+            hooked._inner = inner;
+            hooked._beforeRecord = beforeRecord;
+            return proxy;
+        }
+
+        protected override object? Invoke(System.Reflection.MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod!.Name == nameof(ITagProvenanceService.RecordAsync))
+                _beforeRecord?.Invoke();
+            try
+            {
+                return targetMethod.Invoke(_inner, args);
+            }
+            catch (System.Reflection.TargetInvocationException exception) when (exception.InnerException != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(exception.InnerException);
+                throw;
+            }
+        }
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_LeavesAnExistingStudioUntouched()
+    {
+        await using var context = CreateContext();
+        var linked = new Studio { Name = "Linked Studio" };
+        linked.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        // A second studio already answers to the remote's name: renaming the linked one would have
+        // failed the whole import on the unique-name rule.
+        var namesake = new Studio { Name = "Fixture Studio" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(linked, namesake, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Equal("Linked Studio", linked.Name);
+        Assert.Equal("Fixture Studio", namesake.Name);
+        Assert.Empty(linked.Aliases);
+        Assert.Equal(linked.Id, video.StudioId == 0 ? video.Studio?.Id : video.StudioId);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_LeavesAnExistingTagUntouched()
+    {
+        await using var context = CreateContext();
+        var existing = new Tag { Name = "Local Tag Name", Description = "Local description" };
+        existing.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        // The remote calls this tag "Action", with the alias "Activity" and its own description.
+        Assert.Equal("Local Tag Name", existing.Name);
+        Assert.Equal("Local description", existing.Description);
+        Assert.Empty(existing.Aliases);
+        Assert.Contains(video.VideoTags, link => link.TagId == existing.Id || ReferenceEquals(link.Tag, existing));
     }
 
     [Fact]
@@ -916,6 +1488,87 @@ public sealed class MetadataServerServiceTests
     }
 
     [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsAConflictingRelatedTagAliasSilentWhenTheRemoteIdMatched()
+    {
+        await using var context = CreateContext();
+        var owner = new Tag { Name = "Action" };
+        owner.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var aliasOwner = new Tag { Name = "Activity" };
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(owner, aliasOwner, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        // The remote id already resolved the right tag, so another tag owning the remote's alias is not
+        // the operator's problem: the alias is dropped without a warning and no other record changes.
+        Assert.Empty(result.Warnings);
+        Assert.Contains(video.VideoTags, link => link.TagId == owner.Id || ReferenceEquals(link.Tag, owner));
+        var savedOwner = await context.Tags.Include(tag => tag.Aliases).SingleAsync(tag => tag.Id == owner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Empty(savedOwner.Aliases);
+        var savedAliasOwner = await context.Tags.Include(tag => tag.Aliases).SingleAsync(tag => tag.Id == aliasOwner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Activity", savedAliasOwner.Name);
+        Assert.Empty(savedAliasOwner.Aliases);
+    }
+
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_PrefersThePersistedRemoteIdOwnerOverATagAddedByNameInTheSameSave()
+    {
+        await using var context = CreateContext();
+        var owner = new Tag { Name = "Local canonical" };
+        owner.RemoteIds.Add(new TagRemoteId { Endpoint = Endpoint, RemoteId = "remote-tag-1" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(owner, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // The earlier remote tag creates a tracked "Action" during this save. The later one carries the
+        // remote id the persisted tag already holds, so it must resolve to that tag and not to the
+        // freshly added namesake.
+        var conflictingTag = "{ \"id\": \"remote-tag-2\", \"name\": \"Action\", \"description\": null, \"aliases\": [] }";
+        var remoteTag = "{ \"id\": \"remote-tag-1\", \"name\": \"Action\", \"description\": \"Movement\", \"aliases\": [\"Activity\"] }";
+        var remoteVideoJson = RemoteVideoJson.Replace(remoteTag, $"{conflictingTag}, {remoteTag}", StringComparison.Ordinal);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{remoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        Assert.Empty(result.Warnings);
+        var savedOwner = await context.Tags
+            .Include(tag => tag.RemoteIds)
+            .SingleAsync(tag => tag.Id == owner.Id, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Local canonical", savedOwner.Name);
+        Assert.Contains(savedOwner.RemoteIds, id => id.RemoteId == "remote-tag-1");
+        Assert.Contains(video.VideoTags, link => link.TagId == owner.Id || ReferenceEquals(link.Tag, owner));
+        var namesake = await context.Tags
+            .Include(tag => tag.RemoteIds)
+            .SingleAsync(tag => tag.Name == "Action", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotEqual(owner.Id, namesake.Id);
+        Assert.Contains(namesake.RemoteIds, id => id.RemoteId == "remote-tag-2");
+    }
+
+    [Fact]
     public async Task MergeVideoWithWarningsAsync_LinksTheExistingOwnerWhenRemoteNameMatchesItsAlias()
     {
         await using var context = CreateContext();
@@ -1293,6 +1946,119 @@ public sealed class MetadataServerServiceTests
         Assert.Equal("OSHASH", fingerprint.GetProperty("algorithm").GetString());
         Assert.Equal("0000000000001a2b", fingerprint.GetProperty("hash").GetString());
         Assert.Equal(121, fingerprint.GetProperty("duration").GetInt32());
+        // Without a cover there is nothing to upload, so the draft is an ordinary JSON request.
+        Assert.Null(request.MapJson);
+        Assert.Null(request.Upload);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_UploadsTheVideoCoverAsTheDraftImage()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Covered Video", ImageBlobId = "cover-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        byte[] cover = [0xFF, 0xD8, 0xFF, 0xE0, 0x01, 0x02];
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", cover, "image/jpeg"),
+            streamService: new ScreenshotStreamService([0x89, 0x50]));
+
+        var draftId = await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        Assert.Equal("draft-video-1", draftId);
+        var request = Assert.Single(handler.Requests);
+        Assert.Contains("mutation SubmitSceneDraft", request.Query);
+        Assert.Equal(ApiKey, request.ApiKey);
+        Assert.Equal("""{"0":["variables.input.image"]}""", request.MapJson);
+        var upload = Assert.IsType<GraphQlUploadSnapshot>(request.Upload);
+        Assert.Equal("0", upload.Name);
+        Assert.Equal("draft", upload.FileName);
+        Assert.Equal("image/jpeg", upload.ContentType);
+        Assert.Equal(cover, upload.Data);
+        using var variables = JsonDocument.Parse(request.VariablesJson);
+        var input = variables.RootElement.GetProperty("input");
+        Assert.Equal("Covered Video", input.GetProperty("title").GetString());
+        Assert.False(input.TryGetProperty("image", out _));
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_UploadsTheGeneratedScreenshotWhenTheVideoHasNoCover()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Screenshot Video" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        byte[] screenshot = [0x89, 0x50, 0x4E, 0x47];
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var screenshots = new ScreenshotStreamService(screenshot);
+        var service = CreateService(context, httpClient, streamService: screenshots);
+
+        await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        var upload = Assert.IsType<GraphQlUploadSnapshot>(Assert.Single(handler.Requests).Upload);
+        Assert.Equal(screenshot, upload.Data);
+        Assert.Equal("image/jpeg", upload.ContentType);
+        Assert.Equal([video.Id], screenshots.RequestedVideoIds);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_SendsPlainJsonWhenNeitherACoverNorAScreenshotExists()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Imageless Video", ImageBlobId = "missing-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var screenshots = new ScreenshotStreamService(null);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", [0xFF], "image/jpeg"),
+            streamService: screenshots);
+
+        await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        // The missing custom cover falls back to the screenshot, and without either the request stays JSON.
+        Assert.Equal([video.Id], screenshots.RequestedVideoIds);
+        var request = Assert.Single(handler.Requests);
+        Assert.Null(request.MapJson);
+        Assert.Null(request.Upload);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_SubmitsWithoutAnImageWhenTheCoverCannotBeRead()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Unreadable Cover", ImageBlobId = "cover-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", null, "image/jpeg"));
+
+        var draftId = await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        Assert.Equal("draft-video-1", draftId);
+        var request = Assert.Single(handler.Requests);
+        Assert.Null(request.MapJson);
+        Assert.Null(request.Upload);
     }
 
     [Fact]
@@ -1331,7 +2097,7 @@ public sealed class MetadataServerServiceTests
         Assert.Equal(121, fingerprint.GetProperty("duration").GetInt32());
     }
 
-    private static MetadataServerService CreateService(CoveContext context, HttpClient httpClient, IFieldProvenanceService? fieldProvenance = null, ITagProvenanceService? tagProvenance = null, CoveConfiguration? configuration = null, ILogger<MetadataServerService>? logger = null, IEventBus? eventBus = null)
+    private static MetadataServerService CreateService(CoveContext context, HttpClient httpClient, IFieldProvenanceService? fieldProvenance = null, ITagProvenanceService? tagProvenance = null, CoveConfiguration? configuration = null, ILogger<MetadataServerService>? logger = null, IEventBus? eventBus = null, IBlobService? blobService = null, IStreamService? streamService = null)
         => new(
             httpClient,
             configuration ?? new CoveConfiguration
@@ -1350,12 +2116,13 @@ public sealed class MetadataServerServiceTests
                 },
             },
             context,
-            new NullBlobService(),
+            blobService ?? new NullBlobService(),
             new NullVideoCoverService(),
             tagProvenance ?? new TagProvenanceService(context),
             logger ?? NullLogger<MetadataServerService>.Instance,
             fieldProvenance,
-            eventBus);
+            eventBus,
+            streamService);
 
     private static CoveContext CreateContext()
     {
@@ -1397,6 +2164,31 @@ public sealed class MetadataServerServiceTests
              }
            }
            """;
+
+    // One performer per gender shape the filter has to tell apart: a plain one, one whose gender only
+    // matches after normalization, and one the server states no gender for.
+    private const string MixedGenderRemoteVideoJson = """
+        {
+          "id": "remote-video-1",
+          "title": "Remote Video",
+          "code": null,
+          "details": null,
+          "director": null,
+          "duration": 120,
+          "date": null,
+          "urls": [],
+          "images": [],
+          "studio": null,
+          "tags": [],
+          "performers": [
+            { "performer": { "id": "remote-performer-1", "name": "Jane Doe", "disambiguation": null, "aliases": [], "gender": "FEMALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-2", "name": "John Roe", "disambiguation": null, "aliases": [], "gender": "MALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-3", "name": "Tess Poe", "disambiguation": null, "aliases": [], "gender": "TRANSGENDER_FEMALE", "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } },
+            { "performer": { "id": "remote-performer-4", "name": "Sam Roe", "disambiguation": null, "aliases": [], "gender": null, "deleted": false, "merged_into_id": null, "urls": [], "images": [], "birth_date": null, "death_date": null, "ethnicity": null, "country": null, "eye_color": null, "hair_color": null, "height": null, "measurements": null, "breast_type": null, "career_start_year": null, "career_end_year": null, "tattoos": [], "piercings": [] } }
+          ],
+          "fingerprints": []
+        }
+        """;
 
     private const string RemoteVideoJson = """
         {
@@ -1523,13 +2315,44 @@ public sealed class MetadataServerServiceTests
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var payload = await request.Content!.ReadAsStringAsync(cancellationToken);
+            string payload;
+            string? mapJson = null;
+            GraphQlUploadSnapshot? upload = null;
+            if (request.Content is MultipartFormDataContent multipart)
+            {
+                payload = string.Empty;
+                foreach (var part in multipart)
+                {
+                    var disposition = part.Headers.ContentDisposition!;
+                    switch (disposition.Name?.Trim('"'))
+                    {
+                        case "operations":
+                            payload = await part.ReadAsStringAsync(cancellationToken);
+                            break;
+                        case "map":
+                            mapJson = await part.ReadAsStringAsync(cancellationToken);
+                            break;
+                        default:
+                            upload = new GraphQlUploadSnapshot(
+                                disposition.Name!.Trim('"'),
+                                disposition.FileName?.Trim('"'),
+                                part.Headers.ContentType?.MediaType,
+                                await part.ReadAsByteArrayAsync(cancellationToken));
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                payload = await request.Content!.ReadAsStringAsync(cancellationToken);
+            }
+
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
             var query = GetProperty(root, "query").GetString() ?? string.Empty;
             var variables = GetProperty(root, "variables");
             var apiKey = request.Headers.TryGetValues("ApiKey", out var values) ? values.SingleOrDefault() : null;
-            var snapshot = new GraphQlRequestSnapshot(query, variables.GetRawText(), request.RequestUri, apiKey);
+            var snapshot = new GraphQlRequestSnapshot(query, variables.GetRawText(), request.RequestUri, apiKey, mapJson, upload);
             Requests.Add(snapshot);
 
             return new HttpResponseMessage(HttpStatusCode.OK)
@@ -1550,7 +2373,52 @@ public sealed class MetadataServerServiceTests
         }
     }
 
-    private sealed record GraphQlRequestSnapshot(string Query, string VariablesJson, Uri? RequestUri, string? ApiKey);
+    private sealed record GraphQlRequestSnapshot(
+        string Query,
+        string VariablesJson,
+        Uri? RequestUri,
+        string? ApiKey,
+        string? MapJson = null,
+        GraphQlUploadSnapshot? Upload = null);
+
+    private sealed record GraphQlUploadSnapshot(string Name, string? FileName, string? ContentType, byte[] Data);
+
+    /// <summary>Serves one cover blob, or throws when <paramref name="bytes"/> is null to model an unreadable store.</summary>
+    private sealed class CoverBlobService(string blobId, byte[]? bytes, string contentType) : IBlobService
+    {
+        public Task<string> StoreBlobAsync(Stream data, string contentType, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<(Stream Stream, string ContentType)?> GetBlobAsync(string requestedBlobId, CancellationToken ct = default)
+        {
+            if (bytes == null)
+                throw new IOException("The blob store is unavailable.");
+
+            return Task.FromResult<(Stream Stream, string ContentType)?>(
+                requestedBlobId == blobId ? (new MemoryStream(bytes), contentType) : null);
+        }
+
+        public Task DeleteBlobAsync(string requestedBlobId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class ScreenshotStreamService(byte[]? screenshot) : IStreamService
+    {
+        public List<int> RequestedVideoIds { get; } = [];
+
+        public Task<(Stream stream, string contentType, long? fileSize)?> GetVideoStream(int videoId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<(Stream stream, string contentType, bool useLongCache)?> GetVideoScreenshot(int videoId, double? seconds, CancellationToken ct = default)
+        {
+            RequestedVideoIds.Add(videoId);
+            return Task.FromResult<(Stream stream, string contentType, bool useLongCache)?>(
+                screenshot == null ? null : (new MemoryStream(screenshot), "image/jpeg", true));
+        }
+
+        public Task<(Stream stream, string contentType, bool useLongCache)?> GetSegmentAnimatedPreview(int videoId, double seconds, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
 
     private sealed class NullBlobService : IBlobService
     {
@@ -1568,5 +2436,8 @@ public sealed class MetadataServerServiceTests
     {
         public Task<bool> TryApplyRemoteCoverAsync(Video video, string? imageUrl, CancellationToken ct = default)
             => Task.FromResult(true);
+
+        public Task<FetchedImage?> TryFetchImageAsync(string? imageUrl, CancellationToken ct = default)
+            => Task.FromResult<FetchedImage?>(null);
     }
 }

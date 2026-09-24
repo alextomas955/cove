@@ -164,9 +164,12 @@ internal sealed class ScanImageProcessor(
 
     private static void ApplyValidatedDimensions(ImageFile imageFile, int? width, int? height)
     {
-        if (width is > 0)
+        // Written as a pair: the validator may have transposed them for EXIF orientation, and taking
+        // one axis from a rotated read and the other from a stale one would describe no real picture.
+        if (width is > 0 && height is > 0)
+        {
             imageFile.Width = width.Value;
-        if (height is > 0)
             imageFile.Height = height.Value;
+        }
     }
 }

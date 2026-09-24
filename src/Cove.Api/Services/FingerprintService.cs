@@ -17,11 +17,21 @@ public interface IFingerprintService
 {
     Task<string?> ComputeMd5Async(string path, CancellationToken ct = default);
     Task<string?> ComputeImagePhashAsync(string path, CancellationToken ct = default);
+    /// <summary>Perceptual hash and intrinsic size of already-loaded image bytes, for comparing two covers.</summary>
+    ImageSignature? ComputeImageSignature(byte[] data);
     Task<string?> ComputeVideoPhashAsync(string path, double duration, CancellationToken ct = default);
     Task<string?> ComputeAudioPhashAsync(string path, CancellationToken ct = default);
     Task<string?> ComputeTextPhashAsync(string path, CancellationToken ct = default);
     string StartGenerateVideoPhashes();
     string StartGenerateImagePhashes();
+}
+
+/// <summary>Perceptual hash and intrinsic size of one decoded image.</summary>
+/// <param name="Phash">The 64-bit perception hash, as 16 lowercase hex characters.</param>
+/// <param name="ByteSize">Size of the encoded bytes the signature was computed from.</param>
+public sealed record ImageSignature(string Phash, int Width, int Height, int ByteSize)
+{
+    public long PixelCount => (long)Width * Height;
 }
 
 public class FingerprintService(
@@ -198,6 +208,29 @@ public class FingerprintService(
         }
 
         return value.ToString("x16", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// The perceptual hash and the intrinsic size of encoded image bytes. The size is read before
+    /// hashing, because hashing resizes the image in place.
+    /// </summary>
+    public ImageSignature? ComputeImageSignature(byte[] data)
+    {
+        if (data == null || data.Length == 0)
+            return null;
+
+        try
+        {
+            using var image = SixLabors.ImageSharp.Image.Load<Rgba32>(data);
+            var width = image.Width;
+            var height = image.Height;
+            return new ImageSignature(ComputePerceptionHash(image), width, height, data.Length);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to compute image signature for {ByteCount} bytes", data.Length);
+            return null;
+        }
     }
 
     public async Task<string?> ComputeImagePhashAsync(string path, CancellationToken ct = default)

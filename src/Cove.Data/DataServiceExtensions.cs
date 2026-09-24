@@ -25,6 +25,8 @@ public static class DataServiceExtensions
         services.AddSingleton<IBlobReferenceCoordinator, BlobReferenceCoordinator>();
         services.AddScoped<BlobReferenceTransactionCoordinator>();
         services.AddScoped<BlobReferenceSaveChangesInterceptor>();
+        services.AddSingleton<LibraryWriteSignal>();
+        services.AddSingleton<LibraryWriteSignalInterceptor>();
 
         services.AddSingleton(sp =>
         {
@@ -54,7 +56,9 @@ public static class DataServiceExtensions
                 npgsqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
             });
             options.ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, CoveModelCacheKeyFactory>();
-            options.AddInterceptors(sp.GetRequiredService<BlobReferenceSaveChangesInterceptor>());
+            options.AddInterceptors(
+                sp.GetRequiredService<BlobReferenceSaveChangesInterceptor>(),
+                sp.GetRequiredService<LibraryWriteSignalInterceptor>());
             // Loaded data extensions contribute their own entities/tables to the model at runtime
             // (CoveContext.OnModelCreating calls ext.ConfigureModel), but those are intentionally not
             // part of the core migration snapshot — extensions own their schema. Without this, EF's

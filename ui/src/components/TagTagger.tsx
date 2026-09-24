@@ -4,7 +4,7 @@ import { tags } from "../api/client";
 import type { MetadataServer, MetadataServerTagImportRequest, MetadataServerTagMatch, Tag } from "../api/types";
 import { useAppConfig } from "../state/AppConfigContext";
 import {
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
   TaggerToolbar,
@@ -35,7 +35,7 @@ interface TagTaggerProps {
 interface TaggerConfig {
   selectedEndpoint: string;
   showTagged: boolean;
-  blacklist: string[];
+  denylist: string[];
 }
 
 interface TagSearchState {
@@ -72,7 +72,7 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
   const [taggerConfig, setTaggerConfig] = useState<TaggerConfig>({
     selectedEndpoint: metadataServers[0]?.endpoint ?? "",
     showTagged: true,
-    blacklist: [...DEFAULT_TAGGER_BLACKLIST],
+    denylist: [...DEFAULT_TAGGER_DENYLIST],
   });
   const [searchStates, setSearchStates] = useState<Record<number, TagSearchState>>({});
   const [queryOverrides, setQueryOverrides] = useState<Record<number, string>>({});
@@ -86,7 +86,7 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
 
   const searchTag = useCallback(
     async (tag: Tag) => {
-      const query = queryOverrides[tag.id] ?? cleanTaggerQueryString(tag.name, taggerConfig.blacklist);
+      const query = queryOverrides[tag.id] ?? cleanTaggerQueryString(tag.name, taggerConfig.denylist);
       updateSearchState(tag.id, {
         loading: true,
         error: undefined,
@@ -102,7 +102,7 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
         updateSearchState(tag.id, { loading: false, error: err instanceof Error ? err.message : "Search failed" });
       }
     },
-    [queryOverrides, taggerConfig.blacklist, taggerConfig.selectedEndpoint, updateSearchState],
+    [queryOverrides, taggerConfig.denylist, taggerConfig.selectedEndpoint, updateSearchState],
   );
 
   const searchAll = useCallback(async () => {
@@ -168,8 +168,8 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
       />
       {showSettings && (
         <TaggerSettingsPanel
-          blacklist={taggerConfig.blacklist}
-          onBlacklistChange={(items) => setTaggerConfig((current) => ({ ...current, blacklist: items }))}
+          denylist={taggerConfig.denylist}
+          onDenylistChange={(items) => setTaggerConfig((current) => ({ ...current, denylist: items }))}
         />
       )}
 
@@ -179,7 +179,7 @@ export function TagTagger({ tags: tagList, selectedIds, selecting = false, onSel
             key={tag.id}
             tag={tag}
             state={searchStates[tag.id]}
-            query={queryOverrides[tag.id] ?? cleanTaggerQueryString(tag.name, taggerConfig.blacklist)}
+            query={queryOverrides[tag.id] ?? cleanTaggerQueryString(tag.name, taggerConfig.denylist)}
             onQueryChange={(query) => setQueryOverrides((prev) => ({ ...prev, [tag.id]: query }))}
             onSearch={() => searchTag(tag)}
             onUpdateState={(update) => updateSearchState(tag.id, update)}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeActivePalette,
   logFilterLevelOptions,
   isUnverifiedExtensionInstallSource,
   isValidQueryableJsonPointer,
@@ -177,5 +178,28 @@ describe("custom field draft snapshots", () => {
       expect.objectContaining({ path: "/score", filterable: true, sortable: true }),
     ]);
     expect(removeCustomFieldDefinitionSnapshot(filterableAndSortable, 0)).toEqual([]);
+  });
+});
+
+describe("describeActivePalette", () => {
+  const themes = [
+    { id: "default", name: "Default" },
+    { id: "cinema-dark", name: "Cinema Dark" },
+  ];
+
+  it("names the selected palette", () => {
+    expect(describeActivePalette("cinema-dark", themes)).toBe("Cinema Dark");
+  });
+
+  it("labels a selected palette the manifest does not currently offer as unavailable", () => {
+    expect(describeActivePalette("cinema-dark", [{ id: "default", name: "Default" }])).toBe(
+      "cinema-dark — unavailable",
+    );
+    expect(describeActivePalette("cinema-dark", [])).toBe("cinema-dark — unavailable");
+  });
+
+  it("does not mistake the built-in custom and empty selections for unavailable palettes", () => {
+    expect(describeActivePalette("custom", [])).toBe("Custom");
+    expect(describeActivePalette(null, themes)).toBe("Default");
   });
 });

@@ -4,6 +4,12 @@ import { metadata, system } from "../api/client";
 import type { MetadataServer, ScraperSummary } from "../api/types";
 import { useAppConfig } from "../state/AppConfigContext";
 import { Search, X, Loader2, Check, GripVertical, ChevronDown, ChevronUp, Info } from "lucide-react";
+import {
+  PERFORMER_GENDER_OPTIONS,
+  buildAllowedGenderKeys,
+  isGenderOptionChecked,
+  toggleGenderOption,
+} from "../utils/performerGenders";
 
 interface Props {
   open: boolean;
@@ -30,16 +36,6 @@ const METADATA_FIELD_OPTIONS: { key: string; label: string }[] = [
   { key: "studio", label: "Studio" },
   { key: "performers", label: "Performers" },
   { key: "tags", label: "Tags" },
-];
-
-const PERFORMER_GENDER_OPTIONS = [
-  "Female",
-  "Male",
-  "Transgender Female",
-  "Transgender Male",
-  "Intersex",
-  "Non-Binary",
-  "Unknown",
 ];
 
 function buildDefaultFieldStrategies(): Record<string, FieldStrategy> {
@@ -142,7 +138,9 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
         createPerformers,
         createStudios,
         fieldStrategies,
-        performerGenders,
+        // Omitted while every option is checked, so a gender outside this list is kept rather than
+        // filtered out by an allow-list that only knows the seven the dialog shows.
+        performerGenders: buildAllowedGenderKeys(performerGenders) ? performerGenders : undefined,
       });
     },
     onSuccess: () => {
@@ -168,9 +166,7 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
   };
 
   const togglePerformerGender = (gender: string) => {
-    setPerformerGenders((current) =>
-      current.includes(gender) ? current.filter((item) => item !== gender) : [...current, gender],
-    );
+    setPerformerGenders((current) => toggleGenderOption(current, gender, !isGenderOptionChecked(current, gender)));
   };
 
   if (!open) return null;
@@ -326,7 +322,7 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
                     <label key={gender} className="flex items-center gap-2 text-sm text-secondary">
                       <input
                         type="checkbox"
-                        checked={performerGenders.includes(gender)}
+                        checked={isGenderOptionChecked(performerGenders, gender)}
                         onChange={() => togglePerformerGender(gender)}
                         className="h-4 w-4 rounded border-border bg-card text-accent focus:ring-0"
                       />
@@ -334,6 +330,11 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
                     </label>
                   ))}
                 </div>
+                {buildAllowedGenderKeys(performerGenders)?.size === 0 && (
+                  <p className="mt-1 text-xs text-muted">
+                    With no gender checked, performers are left as they are — none are added, and none are removed.
+                  </p>
+                )}
 
                 <div className="border-t border-border my-2 pt-2">
                   <span className="text-xs font-medium text-muted uppercase tracking-wide">Entity Creation</span>

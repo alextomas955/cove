@@ -321,10 +321,7 @@ public sealed class Wave1TaggingSmokeTests
         var clearResponse = await client.PutAsJsonAsync($"/api/tags/{tag.Id}", new
         {
             name = "Wave Tag",
-            color = (string?)null,
-            tagGroupId = (int?)null,
-            minOccurrenceSec = (double?)null,
-            minOccurrencePercent = (double?)null,
+            clearFields = new[] { "color", "tagGroupId", "minOccurrenceSec", "minOccurrencePercent" },
         }, IntegrationHttpJson.Options, cancellationToken: TestContext.Current.CancellationToken);
         clearResponse.EnsureSuccessStatusCode();
         var cleared = await clearResponse.Content.ReadApiJsonAsync<TagDetailDto>(cancellationToken: TestContext.Current.CancellationToken);

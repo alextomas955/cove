@@ -241,6 +241,37 @@ describe("ListPage active filter chips", () => {
     expect(screen.getByText("collection content")).toBeInTheDocument();
   });
 
+  it("withholds loaded summary metadata while the count is still loading and reveals both together", () => {
+    const queryClient = new QueryClient();
+    const renderListPage = (loadState: { status: "success"; data: unknown } | { status: "pending" }) => (
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={loadState.status === "success" ? 81 : 0}
+            loadState={loadState}
+            metadataByline={<span>12h · 3 GB</span>}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderListPage({ status: "pending" }));
+
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByText("12h · 3 GB")).not.toBeInTheDocument();
+
+    rerender(renderListPage({ status: "success", data: {} }));
+
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    expect(screen.getByText("1-40 of 81")).toBeInTheDocument();
+    expect(screen.getByText("12h · 3 GB")).toBeInTheDocument();
+  });
+
   it("keeps the focused search control mounted while collection results become pending", () => {
     const queryClient = new QueryClient();
     const renderListPage = (loadState: { status: "success"; data: unknown } | { status: "pending" }) => (

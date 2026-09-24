@@ -274,8 +274,9 @@ public sealed class ScanFileValidator(
             if (!hasWidth || !hasHeight)
                 continue;
 
-            widthValue = hasWidth ? parsedWidth : null;
-            heightValue = hasHeight ? parsedHeight : null;
+            var (displayWidth, displayHeight) = FfprobeDisplayOrientation.Apply(stream, parsedWidth, parsedHeight);
+            widthValue = displayWidth;
+            heightValue = displayHeight;
             return true;
         }
 
@@ -320,7 +321,9 @@ public sealed class ScanFileValidator(
         var image = await SixLabors.ImageSharp.Image.IdentifyAsync(stream, ct);
         if (image == null || image.Width <= 0 || image.Height <= 0)
             throw new InvalidDataException("the image has invalid dimensions");
-        return (image.Width, image.Height);
+
+        // Identify ignores EXIF orientation; the thumbnail does not.
+        return ExifDisplayOrientation.Apply(image, image.Width, image.Height);
     }
 
     private static async Task ValidateSvgStreamAsync(FileStream stream, CancellationToken ct)

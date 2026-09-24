@@ -1335,6 +1335,7 @@ function PerformerVideosPanel({ performerId, onNavigate }: { performerId: number
     infinitePageSize,
     infiniteQuery,
     infiniteFilterKey,
+    settledListKey,
     fetchAllIds,
     loadMore,
   } = useDetailListQuery<Video>({
@@ -1425,6 +1426,7 @@ function PerformerVideosPanel({ performerId, onNavigate }: { performerId: number
       <ContextualVideoListView
         items={items}
         filter={filter}
+        taggerResetKey={settledListKey}
         totalCount={data.totalCount}
         queryPage={queryPage}
         displayMode={displayMode}

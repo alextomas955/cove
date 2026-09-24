@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Numerics;
 using System.Text.Json;
@@ -229,6 +230,7 @@ query Me {
     private readonly ITagProvenanceService _tagProvenanceService;
     private readonly IFieldProvenanceService? _fieldProvenanceService;
     private readonly IEventBus? _eventBus;
+    private readonly IStreamService? _streamService;
     private readonly ILogger<MetadataServerService> _logger;
     private Dictionary<string, int[]>? _performerIdentityIndex;
     private Dictionary<string, int[]>? _studioIdentityIndex;
@@ -241,7 +243,7 @@ query Me {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public MetadataServerService(HttpClient httpClient, CoveConfiguration config, CoveContext db, IBlobService blobService, IVideoCoverService videoCoverService, ITagProvenanceService tagProvenanceService, ILogger<MetadataServerService> logger, IFieldProvenanceService? fieldProvenanceService = null, IEventBus? eventBus = null)
+    public MetadataServerService(HttpClient httpClient, CoveConfiguration config, CoveContext db, IBlobService blobService, IVideoCoverService videoCoverService, ITagProvenanceService tagProvenanceService, ILogger<MetadataServerService> logger, IFieldProvenanceService? fieldProvenanceService = null, IEventBus? eventBus = null, IStreamService? streamService = null)
     {
         _httpClient = httpClient;
         _config = config;
@@ -251,6 +253,7 @@ query Me {
         _tagProvenanceService = tagProvenanceService;
         _fieldProvenanceService = fieldProvenanceService;
         _eventBus = eventBus;
+        _streamService = streamService;
         _logger = logger;
     }
 
@@ -1440,7 +1443,13 @@ query Me {
         }
 
         var performersStrategy = GetMetadataFieldStrategy(fieldStrategies, "performers", MetadataFieldStrategy.Merge);
-        if (setPerformers && performersStrategy != MetadataFieldStrategy.Ignore)
+        // A filter that admits no gender at all is a request to leave performers alone, so an overwrite
+        // does not clear the ones the video already has and put none back. A filter that admits some
+        // gender is a real instruction: overwriting with a remote cast it happens to empty still clears
+        // them, because "replace the performers with the female ones" is a request even when there are
+        // none.
+        var performerGenderFilterAdmitsNothing = allowedPerformerGenders is { Count: 0 };
+        if (setPerformers && performersStrategy != MetadataFieldStrategy.Ignore && !performerGenderFilterAdmitsNothing)
         {
             if (performersStrategy == MetadataFieldStrategy.Overwrite)
                 video.VideoPerformers.Clear();
@@ -1591,33 +1600,47 @@ query Me {
             })
             .ToList();
 
+        // The video's performers, tags and studio arrive without their own remote IDs loaded, so read
+        // them here. An entry sent with only a name shows up on the draft as unmatched data.
+        var performerIds = video.VideoPerformers.Where(sp => sp.Performer != null).Select(sp => sp.Performer!.Id).Distinct().ToList();
+        var performerRemoteIds = MatchRemoteIds(
+            await _db.Set<PerformerRemoteId>().AsNoTracking()
+                .Where(remote => performerIds.Contains(remote.PerformerId))
+                .OrderBy(remote => remote.Id)
+                .Select(remote => new RemoteIdLink(remote.PerformerId, remote.Endpoint, remote.RemoteId))
+                .ToListAsync(ct),
+            endpoint);
+        var tagIds = video.VideoTags.Where(st => st.Tag != null).Select(st => st.Tag!.Id).Distinct().ToList();
+        var tagRemoteIds = MatchRemoteIds(
+            await _db.Set<TagRemoteId>().AsNoTracking()
+                .Where(remote => tagIds.Contains(remote.TagId))
+                .OrderBy(remote => remote.Id)
+                .Select(remote => new RemoteIdLink(remote.TagId, remote.Endpoint, remote.RemoteId))
+                .ToListAsync(ct),
+            endpoint);
+        var studioRemoteIds = video.Studio == null
+            ? new Dictionary<int, string>()
+            : MatchRemoteIds(
+                await _db.Set<StudioRemoteId>().AsNoTracking()
+                    .Where(remote => remote.StudioId == video.Studio.Id)
+                    .OrderBy(remote => remote.Id)
+                    .Select(remote => new RemoteIdLink(remote.StudioId, remote.Endpoint, remote.RemoteId))
+                    .ToListAsync(ct),
+                endpoint);
+
         var performers = video.VideoPerformers
             .Where(sp => sp.Performer != null)
-            .Select(sp =>
-            {
-                var perfRemoteId = sp.Performer!.RemoteIds
-                    .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-                return new { name = sp.Performer.Name, id = perfRemoteId?.RemoteId };
-            })
+            .Select(sp => new { name = sp.Performer!.Name, id = performerRemoteIds.GetValueOrDefault(sp.Performer.Id) })
             .ToList();
 
         var tags = video.VideoTags
             .Where(st => st.Tag != null)
-            .Select(st =>
-            {
-                var tagRemoteId = st.Tag!.RemoteIds
-                    .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-                return new { name = st.Tag.Name, id = tagRemoteId?.RemoteId };
-            })
+            .Select(st => new { name = st.Tag!.Name, id = tagRemoteIds.GetValueOrDefault(st.Tag.Id) })
             .ToList();
 
-        object? studio = null;
-        if (video.Studio != null)
-        {
-            var studioRemoteId = video.Studio.RemoteIds
-                .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-            studio = new { name = video.Studio.Name, id = studioRemoteId?.RemoteId };
-        }
+        object? studio = video.Studio == null
+            ? null
+            : new { name = video.Studio.Name, id = studioRemoteIds.GetValueOrDefault(video.Studio.Id) };
 
         var input = new
         {
@@ -1634,7 +1657,8 @@ query Me {
             fingerprints,
         };
 
-        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct);
+        var cover = await TryReadVideoCoverAsync(video, ct);
+        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct, cover);
         return response.SubmitSceneDraft?.Id;
     }
 
@@ -2274,19 +2298,46 @@ query Me {
             return null;
         }
 
-        if (performer == null)
+        if (performer != null)
         {
-            performer = new Performer
-            {
-                Name = EntityNameRules.NormalizeCanonicalName(remote.Name),
-                Disambiguation = EntityNameRules.NormalizeDisambiguation(remote.Disambiguation),
-            };
-            _db.Performers.Add(performer);
+            // Tagging a video links a performer; it does not edit one. A performer the library already
+            // has keeps its name, disambiguation, gender, dates, aliases, urls and image exactly as they
+            // are, whatever the remote says about them. Only the endpoint link is added, and only when
+            // the performer has none for it, so an existing link to a different remote entry survives
+            // too. Editing a performer from a remote is what the performer tagger is for.
+            AddRemoteIdIfMissing(
+                performer.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new PerformerRemoteId { Endpoint = endpoint, RemoteId = value });
+            return performer;
         }
+
+        performer = new Performer
+        {
+            Name = EntityNameRules.NormalizeCanonicalName(remote.Name),
+            Disambiguation = EntityNameRules.NormalizeDisambiguation(remote.Disambiguation),
+        };
+        _db.Performers.Add(performer);
 
         ApplyRemotePerformer(performer, endpoint, remote);
         await DownloadPerformerImageAsync(performer, remote, MetadataFieldStrategy.Merge, ct);
         return performer;
+    }
+
+    // Links an entity to a remote entry without touching a link it already has for that endpoint: a
+    // second local record legitimately carrying the same remote id is not something an import repairs,
+    // and neither is a local record pointing at a different remote entry than this match does.
+    private static void AddRemoteIdIfMissing<TRemoteId>(
+        ICollection<TRemoteId> collection,
+        string endpoint,
+        string remoteId,
+        Func<TRemoteId, string> getEndpoint,
+        Func<string, TRemoteId> create)
+    {
+        if (!collection.Any(item => string.Equals(getEndpoint(item), endpoint, StringComparison.OrdinalIgnoreCase)))
+            collection.Add(create(remoteId));
     }
 
     private async Task<Studio?> FindOrCreateStudioAsync(MetadataServerRemoteStudio remote, string endpoint, CancellationToken ct, bool allowCreate = true)
@@ -2295,11 +2346,7 @@ query Me {
                 entity.Id <= 0
                 && _db.Entry(entity).State != EntityState.Deleted
                 && entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id))
-            ?? await _db.Studios
-            .Include(entity => entity.RemoteIds)
-            .Include(entity => entity.Aliases)
-            .Include(entity => entity.Urls)
-            .FirstOrDefaultAsync(entity => entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id), ct)
+            ?? await FindStudioByRemoteIdAsync(endpoint, remote.Id, remote.Name, ct)
             ?? await FindStudioByIdentityAsync(remote.Name, ct);
 
         if (studio == null && !allowCreate)
@@ -2307,11 +2354,23 @@ query Me {
             return null;
         }
 
-        if (studio == null)
+        if (studio != null)
         {
-            studio = new Studio { Name = EntityNameRules.NormalizeCanonicalName(remote.Name) };
-            _db.Studios.Add(studio);
+            // Tagging a video links a studio; it does not edit one. The studio keeps its name, aliases,
+            // urls, image and parent, and keeps the endpoint link it already has. Renaming it here used
+            // to fail the whole import when another studio held that name, and to quietly rename a
+            // studio nobody pointed at when none did.
+            AddRemoteIdIfMissing(
+                studio.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new StudioRemoteId { Endpoint = endpoint, RemoteId = value });
+            return studio;
         }
+
+        studio = new Studio { Name = EntityNameRules.NormalizeCanonicalName(remote.Name) };
+        _db.Studios.Add(studio);
 
         studio.Name = remote.Name.Trim();
         MergeAliases(studio, remote.Aliases);
@@ -2324,9 +2383,7 @@ query Me {
         // Resolve parent studio
         if (remote.Parent != null && studio.ParentId == null)
         {
-            var parent = await _db.Studios
-                .Include(s => s.RemoteIds)
-                .FirstOrDefaultAsync(s => s.RemoteIds.Any(id => id.Endpoint == endpoint && id.RemoteId == remote.Parent.Id), ct)
+            var parent = await FindStudioByRemoteIdAsync(endpoint, remote.Parent.Id, remote.Parent.Name, ct)
                 ?? await FindStudioByIdentityAsync(remote.Parent.Name, ct);
 
             if (parent == null)
@@ -2404,21 +2461,49 @@ query Me {
             .SingleAsync(entity => entity.Id == persisted[0], ct);
     }
 
-    private async Task<Studio?> FindStudioByIdentityAsync(string name, CancellationToken ct)
+    // More than one local studio can legitimately carry the same remote id: a network and one of its
+    // sites, or two records a metadata server considers the same entity. An unordered FirstOrDefault
+    // picked whichever row the database happened to return, so the same apply could resolve differently
+    // from one run to the next. Prefer the studio the remote actually names, then the lowest id.
+    private async Task<Studio?> FindStudioByRemoteIdAsync(string endpoint, string remoteId, string remoteName, CancellationToken ct)
     {
-        var identityKey = EntityNameRules.StudioIdentityKey(name);
-        _studioIdentityIndex ??= (await _db.Studios
+        var matches = await _db.Studios
+            .Include(entity => entity.RemoteIds)
+            .Include(entity => entity.Aliases)
+            .Include(entity => entity.Urls)
+            .Where(entity => entity.RemoteIds.Any(id => id.Endpoint == endpoint && id.RemoteId == remoteId))
+            .OrderBy(entity => entity.Id)
+            .ToListAsync(ct);
+
+        if (matches.Count <= 1)
+            return matches.FirstOrDefault();
+
+        var remoteKey = EntityNameRules.StudioIdentityKey(remoteName);
+        return matches.FirstOrDefault(entity =>
+                string.Equals(EntityNameRules.StudioIdentityKey(entity.Name), remoteKey, StringComparison.Ordinal))
+            ?? matches[0];
+    }
+
+    private async Task<Dictionary<string, int[]>> EnsureStudioIdentityIndexAsync(CancellationToken ct)
+    {
+        return _studioIdentityIndex ??= (await _db.Studios
                 .AsNoTracking()
                 .Select(entity => new { entity.Id, entity.Name })
                 .ToListAsync(ct))
             .GroupBy(entity => EntityNameRules.StudioIdentityKey(entity.Name), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(entity => entity.Id).Order().ToArray(), StringComparer.Ordinal);
+    }
+
+    private async Task<Studio?> FindStudioByIdentityAsync(string name, CancellationToken ct)
+    {
+        var identityKey = EntityNameRules.StudioIdentityKey(name);
+        var identityIndex = await EnsureStudioIdentityIndexAsync(ct);
 
         var trackedIds = _db.ChangeTracker.Entries<Studio>()
             .Where(entry => entry.Entity.Id > 0)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var persistedIds = _studioIdentityIndex.GetValueOrDefault(identityKey, [])
+        var persistedIds = identityIndex.GetValueOrDefault(identityKey, [])
             .Where(id => !trackedIds.Contains(id));
         var local = _db.ChangeTracker.Entries<Studio>()
             .Where(entry => entry.State != EntityState.Deleted
@@ -2454,7 +2539,8 @@ query Me {
         IEnumerable<string>? remoteAliases,
         CancellationToken ct,
         bool importCanonicalName = true,
-        bool allowRemoveRedundantAlias = true)
+        bool allowRemoveRedundantAlias = true,
+        bool reportNamespaceConflicts = true)
     {
         var proposedName = TagNameRules.NormalizeCanonicalName(remoteName);
         var proposedAliases = CleanStrings(remoteAliases)
@@ -2567,7 +2653,8 @@ query Me {
                         ? TagNameConflictException.ForExistingAlias(existingClaim.DisplayName, proposedName)
                         : TagNameConflictException.ForExistingTagName(existingClaim.DisplayName, proposedName);
                 }
-                warnings.Add($"Kept the local tag name because the remote name '{proposedName}' is already claimed by another tag.");
+                if (reportNamespaceConflicts)
+                    warnings.Add($"Kept the local tag name because the remote name '{proposedName}' is already claimed by another tag.");
             }
             else
             {
@@ -2586,7 +2673,8 @@ query Me {
                 continue;
             if (FindClaimByAnotherTag(alias) != null)
             {
-                warnings.Add($"Skipped remote alias '{alias}' because it is already claimed by another tag.");
+                if (reportNamespaceConflicts)
+                    warnings.Add($"Skipped remote alias '{alias}' because it is already claimed by another tag.");
                 continue;
             }
 
@@ -2605,6 +2693,13 @@ query Me {
             .FirstOrDefault(entity => entity.RemoteIds.Any(remoteId =>
                 string.Equals(remoteId.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(remoteId.RemoteId, remote.Id, StringComparison.Ordinal)));
+        // The remote id is the identity the remote actually asserts, so it decides the match before any
+        // name or alias lookup. A persisted tag already carrying this endpoint's id must win over a tag
+        // that merely shares the remote's name, including one added earlier in this same save.
+        tag ??= await _db.Tags
+            .Include(entity => entity.RemoteIds)
+            .Include(entity => entity.Aliases)
+            .FirstOrDefaultAsync(entity => entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id), ct);
         var matchedByRemoteId = tag != null;
         var remoteNameKey = TagNameKey(remote.Name);
         tag ??= _db.ChangeTracker.Entries<Tag>()
@@ -2613,16 +2708,26 @@ query Me {
             .FirstOrDefault(entity => TagNameKey(entity.Name) == remoteNameKey
                 || entity.Aliases.Any(alias => TagAliasKey(alias.Alias) == remoteNameKey));
         var matchedTrackedNamespace = tag != null && !matchedByRemoteId;
-        tag ??= await _db.Tags
-            .Include(entity => entity.RemoteIds)
-            .Include(entity => entity.Aliases)
-            .FirstOrDefaultAsync(entity => entity.RemoteIds.Any(remoteId => remoteId.Endpoint == endpoint && remoteId.RemoteId == remote.Id), ct);
-        matchedByRemoteId = tag != null && !matchedTrackedNamespace;
         tag ??= (await RelationNameResolver.ResolveTagsAsync(_db, [remote.Name], ct)).GetValueOrDefault(remote.Name.Trim());
 
         if (tag == null && !allowCreate)
         {
             return new ResolvedVideoTag(null, []);
+        }
+
+        // Tagging a video links a tag; it does not edit one. A tag the library already has keeps its
+        // name, aliases and description, and keeps the endpoint link it already has. Only a tag this
+        // import creates takes the remote's identity. (A tag added earlier in this same save is one of
+        // those, so it is still filled in here.)
+        if (tag is { Id: > 0 })
+        {
+            AddRemoteIdIfMissing(
+                tag.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
+            return new ResolvedVideoTag(tag, []);
         }
 
         if (tag == null)
@@ -2631,15 +2736,23 @@ query Me {
             _db.Tags.Add(tag);
         }
 
+        // Report namespace conflicts only when the match came from a name, where the collision is what
+        // kept the tag from taking the remote identity; a tag resolved by remote id is already the right
+        // tag, so another tag holding one of the remote's names changes nothing about this video.
         var identity = await ApplyRemoteTagIdentityAsync(
             tag,
             remote.Name,
             remote.Aliases,
             ct,
-            importCanonicalName: tag.Id == 0 || matchedByRemoteId);
+            importCanonicalName: true,
+            reportNamespaceConflicts: !matchedByRemoteId);
         tag.Description = Coalesce(tag.Description, remote.Description) ?? tag.Description;
-        if (!matchedTrackedNamespace || !tag.RemoteIds.Any(id => string.Equals(id.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase)))
-            UpsertRemoteId(tag.RemoteIds, endpoint, remote.Id, id => id.Endpoint, id => id.RemoteId, (id, value) => id.RemoteId = value, value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
+        AddRemoteIdIfMissing(
+            tag.RemoteIds,
+            endpoint,
+            remote.Id,
+            id => id.Endpoint,
+            value => new TagRemoteId { Endpoint = endpoint, RemoteId = value });
         return new ResolvedVideoTag(tag, identity.Warnings);
     }
 
@@ -2815,13 +2928,88 @@ query Me {
         return labels.Length <= 2 ? host : $"{labels[^2]}.{labels[^1]}";
     }
 
-    private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct)
+    /// <summary>
+    /// Maps each owner to its remote ID on <paramref name="endpoint"/>, preferring an exact endpoint match
+    /// over one that only shares the site, then the earliest link.
+    /// </summary>
+    private static Dictionary<int, string> MatchRemoteIds(IEnumerable<RemoteIdLink> links, string endpoint)
+        => links
+            .Where(link => EndpointsMatch(link.Endpoint, endpoint))
+            .OrderBy(link => string.Equals(NormalizeEndpoint(link.Endpoint), NormalizeEndpoint(endpoint), StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .GroupBy(link => link.OwnerId)
+            .ToDictionary(group => group.Key, group => group.First().RemoteId);
+
+    /// <summary>
+    /// Reads the image Cove shows as the video's cover: its own cover, or the generated screenshot
+    /// otherwise. A draft is still worth submitting without one, so failures are logged and yield null.
+    /// </summary>
+    private async Task<MetadataServerUpload?> TryReadVideoCoverAsync(Video video, CancellationToken ct)
+    {
+        try
+        {
+            if (video.ImageBlobId != null)
+            {
+                var blob = await _blobService.GetBlobAsync(video.ImageBlobId, ct);
+                if (blob != null)
+                {
+                    await using var blobStream = blob.Value.Stream;
+                    var cover = await ReadUploadAsync(blobStream, blob.Value.ContentType, ct);
+                    if (cover != null)
+                        return cover;
+                }
+            }
+
+            if (_streamService == null)
+                return null;
+
+            var screenshot = await _streamService.GetVideoScreenshot(video.Id, null, ct);
+            if (screenshot == null)
+                return null;
+
+            await using var screenshotStream = screenshot.Value.stream;
+            return await ReadUploadAsync(screenshotStream, screenshot.Value.contentType, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not read the cover of video {VideoId}; submitting its draft without an image", video.Id);
+            return null;
+        }
+    }
+
+    private static async Task<MetadataServerUpload?> ReadUploadAsync(Stream stream, string contentType, CancellationToken ct)
+    {
+        var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+        // Hand over the stream's own buffer rather than a copy: a user-supplied cover can be large.
+        return buffer.Length == 0 ? null : new MetadataServerUpload(new ArraySegment<byte>(buffer.GetBuffer(), 0, (int)buffer.Length), contentType);
+    }
+
+    private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct, MetadataServerUpload? image = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, box.Endpoint);
         if (!string.IsNullOrWhiteSpace(box.ApiKey))
             request.Headers.TryAddWithoutValidation("ApiKey", box.ApiKey);
 
-        request.Content = JsonContent.Create(new MetadataServerGraphQlRequest(query, variables), options: _jsonOptions);
+        var graphQlRequest = new MetadataServerGraphQlRequest(query, variables);
+        if (image == null)
+        {
+            request.Content = JsonContent.Create(graphQlRequest, options: _jsonOptions);
+        }
+        else
+        {
+            // A GraphQL multipart request (https://github.com/jaydenseric/graphql-multipart-request-spec),
+            // as stash sends drafts: the file part fills the `image: Upload` field of the draft input.
+            var file = new ByteArrayContent(image.Data.Array!, image.Data.Offset, image.Data.Count);
+            file.Headers.ContentType = MediaTypeHeaderValue.TryParse(image.ContentType, out var imageType)
+                ? imageType
+                : new MediaTypeHeaderValue("application/octet-stream");
+            request.Content = new MultipartFormDataContent
+            {
+                { new StringContent(JsonSerializer.Serialize(graphQlRequest, _jsonOptions)), "operations" },
+                { new StringContent("""{"0":["variables.input.image"]}"""), "map" },
+                { file, "0", "draft" },
+            };
+        }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
@@ -3029,7 +3217,10 @@ query Me {
                 name,
                 exists,
                 exists ? localId : null,
-                EntityNameRules.NormalizeDisambiguation(remotePerformer.Disambiguation)));
+                EntityNameRules.NormalizeDisambiguation(remotePerformer.Disambiguation))
+            {
+                Gender = remotePerformer.Gender,
+            });
         }
         return result;
     }
@@ -3260,9 +3451,11 @@ query Me {
         return nextValue;
     }
 
+    // An absent list means no gender filter. A list that is present but empty means the caller allowed no
+    // gender at all, so it must keep every performer out rather than read as "no filter" and let them all in.
     private static HashSet<string>? BuildAllowedPerformerGenderSet(IReadOnlyCollection<string>? values)
     {
-        if (values == null || values.Count == 0)
+        if (values == null)
             return null;
 
         return values
@@ -3347,6 +3540,10 @@ query Me {
     }
 
     private sealed record MetadataServerGraphQlRequest(string Query, object? Variables);
+
+    private sealed record MetadataServerUpload(ArraySegment<byte> Data, string ContentType);
+
+    private sealed record RemoteIdLink(int OwnerId, string Endpoint, string RemoteId);
 
     private sealed record MetadataServerGraphQlResponse<T>
     {

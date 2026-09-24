@@ -257,9 +257,8 @@ export function GalleriesPage({ onNavigate }: Props) {
         objectFilter={objectFilter}
         onObjectFilterChange={setObjectFilter}
         onNew={canWriteGallery ? () => setShowCreate(true) : undefined}
-        metadataByline={
-          <MediaAggregateMetadata fileSize={filteredAggregate?.fileSize} loading={filteredAggregateLoading} />
-        }
+        metadataByline={<MediaAggregateMetadata fileSize={filteredAggregate?.fileSize} loading={false} />}
+        summaryLoading={filteredAggregateLoading}
         wallColumnCount={wallColumnCount}
         onWallColumnCountChange={setWallColumnCount}
 

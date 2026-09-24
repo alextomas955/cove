@@ -1017,9 +1017,10 @@ export function SegmentsPage({ onNavigate }: Props) {
         metadataByline={
           <MediaAggregateMetadata
             duration={isRawView ? rawAggregateQuery.data?.duration : spansCountQuery.data?.duration}
-            loading={isRawView ? rawAggregateQuery.isLoading : spansCountQuery.isLoading}
+            loading={false}
           />
         }
+        summaryLoading={isRawView ? rawAggregateQuery.isLoading : spansCountQuery.isLoading}
         renderOperations={() => (
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-border bg-card/70 p-1 text-xs">

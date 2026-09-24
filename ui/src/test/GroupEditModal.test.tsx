@@ -90,4 +90,23 @@ describe("GroupEditModal", () => {
     await waitFor(() => expect(mockGroups.dynamicSources).toHaveBeenCalledOnce());
     expect(nameInput).toHaveValue("Unsaved draft name");
   });
+
+  it("sends only the fields the user changed", async () => {
+    mockGroups.dynamicSources.mockResolvedValue([{ key: "extension-source", displayName: "Extension source" }]);
+    mockGroups.update.mockResolvedValue(buildGroup());
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const group = { ...buildGroup(), tags: [{ id: 4, name: "Kept" }], urls: ["https://example.com/group"] } as Group;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <GroupEditModal group={group} open onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(mockGroups.dynamicSources).toHaveBeenCalledOnce());
+    fireEvent.change(screen.getByPlaceholderText("Group name"), { target: { value: "Renamed group" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockGroups.update).toHaveBeenCalledWith(12, { name: "Renamed group" }));
+  });
 });

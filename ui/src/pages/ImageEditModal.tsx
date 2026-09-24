@@ -11,6 +11,7 @@ import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
 import {
   PerformerContextTagEditor,
+  applyPerformerContextTagEdits,
   buildPerformerContextTagIds,
   syncPerformerContextTags,
 } from "../components/PerformerContextTags";
@@ -21,6 +22,8 @@ import {
   NoDownloaderFoundError,
   type UrlDownloadMode,
 } from "../utils/createFromUrlDownload";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { untouchedFieldUpdates } from "../utils/rebaseEditForm";
 import { useFileBackedCreatePreferences } from "../hooks/useFileBackedCreatePreferences";
 import { ImageSourceDownloadDialog } from "../components/ImageSourceDownloadDialog";
 
@@ -193,12 +196,24 @@ function ImageMetadataModal({
   renderMode = "modal",
 }: ImageMetadataModalProps) {
   const [form, setForm] = useState<ImageFormState>(() => cloneFormState(initialState));
+  // The state the form was last filled from; saving an edit sends only the fields changed since.
+  const [baselineState, setBaselineState] = useState<ImageFormState>(initialState);
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
+  // Callers rebuild initialState on every render, so refill only on open, an explicit reset or a different
+  // image; a refetch or a failed save keeps the user's edits.
   useEffect(() => {
     if (!open) return;
+    setBaselineState(initialState);
     setForm(cloneFormState(initialState));
     setCustomFieldsValid(true);
-  }, [initialState, open, resetSignal]);
+  }, [open, resetSignal, image?.id]);
+  // When the edited image refetches (after Mark organized, a scrape or a finished job), untouched fields
+  // follow it and the user's edits stay.
+  useEffect(() => {
+    if (!open || !image) return;
+    setForm((current) => ({ ...current, ...untouchedFieldUpdates(current, baselineState, initialState) }));
+    setBaselineState(initialState);
+  }, [image]);
   const showRating = Boolean(image);
   const tagProvenanceById = buildTagProvenanceById(image?.tags ?? [], image?.fieldProvenance);
   // Seed chip labels from the loaded image so selected chips don't each re-fetch their name by id.
@@ -209,7 +224,7 @@ function ImageMetadataModal({
     secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
   }));
 
-  const buildPayload = (): ImageCreate & { clearFields?: string[] } => {
+  const buildPayload = (form: ImageFormState): ImageCreate & { clearFields?: string[] } => {
     const urlList = form.urls.map((url) => url.trim()).filter(Boolean);
     // On edit, send raw (trimmed) strings including "" so cleared fields persist.
     // On create, omit empties to avoid sending empty noise.
@@ -246,7 +261,7 @@ function ImageMetadataModal({
   };
 
   const handleSave = () => {
-    const payload = buildPayload();
+    const payload = buildPayload(form);
     if (sourceMode === "file" && onCreateFromFile) {
       const trimmedPath = filePath.trim();
       if (trimmedPath) onCreateFromFile(trimmedPath, payload, form.contextTagIdsByPerformer, form.selectedPerformerIds);
@@ -267,13 +282,27 @@ function ImageMetadataModal({
       return;
     }
 
-    onSubmit(payload, form.contextTagIdsByPerformer, form.selectedPerformerIds);
+    if (!image) {
+      onSubmit(payload, form.contextTagIdsByPerformer, form.selectedPerformerIds);
+      return;
+    }
+    // Send and sync only the user's edits, so changes made elsewhere since the form was filled are kept.
+    const changes = changedUpdateFields(buildPayload(baselineState), payload);
+    onSubmit(
+      changes,
+      applyPerformerContextTagEdits(
+        buildPerformerContextTagIds(image.contextTagApplications),
+        baselineState.contextTagIdsByPerformer,
+        form.contextTagIdsByPerformer,
+      ),
+      changes.performerIds ?? image.performers.map((performer) => performer.id),
+    );
   };
 
   const handleCreateWithoutDownload = () => {
     const requestedUrl = url.trim();
     if (requestedUrl && onCreateWithoutDownload) {
-      const payload = buildPayload();
+      const payload = buildPayload(form);
       onCreateWithoutDownload(
         { ...payload, urls: mergeUrlLists(payload.urls, [requestedUrl]) },
         form.contextTagIdsByPerformer,
@@ -533,7 +562,9 @@ export function ImageEditPanel({ image, onSaved }: { image: Image; onSaved?: () 
       );
       return images.get(image.id);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Reopening Edit before the refetch lands must start from the saved image.
+      queryClient.setQueryData(["image", image.id], saved);
       queryClient.invalidateQueries({ queryKey: ["image", image.id] });
       queryClient.invalidateQueries({ queryKey: ["images"] });
       onSaved?.();
@@ -581,7 +612,9 @@ export function ImageEditModal({ image, open, onClose }: ImageEditProps) {
       );
       return images.get(image.id);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Reopening Edit before the refetch lands must start from the saved image.
+      queryClient.setQueryData(["image", image.id], saved);
       queryClient.invalidateQueries({ queryKey: ["image", image.id] });
       queryClient.invalidateQueries({ queryKey: ["images"] });
       onClose();

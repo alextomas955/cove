@@ -50,30 +50,42 @@ public static class RelatedFilterQuery
         CancellationToken ct = default)
     {
         if (criteria.Count < 2) return query;
-        var matchingIds = new List<IQueryable<int>>(criteria.Count);
+        var visiblePerformerIds = await VisiblePerformerIdsAsync(db, ct);
+        var matchingLinks = new List<IQueryable<AudioPerformer>>(criteria.Count);
         foreach (var criterion in criteria)
-            matchingIds.Add(await MatchingPerformerIdsAsync(db, criterion, ct));
+            matchingLinks.Add(await BuildMatchingAudioPerformerLinksAsync(db, criterion, visiblePerformerIds, ct));
+
         var audio = Expression.Parameter(typeof(Audio), "audio");
-        var predicate = BuildDistinctAudioPerformerPredicate(audio, matchingIds, 0, []);
+        var predicate = BuildDistinctAudioPerformerPredicate(audio, matchingLinks, 0, []);
         return query.Where(Expression.Lambda<Func<Audio, bool>>(predicate, audio));
     }
 
     private static Expression BuildDistinctAudioPerformerPredicate(
         ParameterExpression audio,
-        IReadOnlyList<IQueryable<int>> matchingIds,
+        IReadOnlyList<IQueryable<AudioPerformer>> matchingLinks,
         int index,
         IReadOnlyList<ParameterExpression> previousLinks)
     {
         var link = Expression.Parameter(typeof(AudioPerformer), $"link{index}");
+        var match = Expression.Parameter(typeof(AudioPerformer), $"match{index}");
         Expression condition = Expression.Call(
-            typeof(Queryable), nameof(Queryable.Contains), [typeof(int)],
-            matchingIds[index].Expression,
-            Expression.Property(link, nameof(AudioPerformer.PerformerId)));
+            typeof(Queryable),
+            nameof(Queryable.Any),
+            [typeof(AudioPerformer)],
+            matchingLinks[index].Expression,
+            Expression.Quote(Expression.Lambda<Func<AudioPerformer, bool>>(
+                Expression.AndAlso(
+                    Expression.Equal(Expression.Property(match, nameof(AudioPerformer.AudioId)), Expression.Property(audio, nameof(Audio.Id))),
+                    Expression.Equal(Expression.Property(match, nameof(AudioPerformer.PerformerId)), Expression.Property(link, nameof(AudioPerformer.PerformerId)))),
+                match)));
+
         foreach (var previous in previousLinks)
             condition = Expression.AndAlso(condition,
                 Expression.NotEqual(Expression.Property(link, nameof(AudioPerformer.PerformerId)), Expression.Property(previous, nameof(AudioPerformer.PerformerId))));
-        if (index + 1 < matchingIds.Count)
-            condition = Expression.AndAlso(condition, BuildDistinctAudioPerformerPredicate(audio, matchingIds, index + 1, [.. previousLinks, link]));
+
+        if (index + 1 < matchingLinks.Count)
+            condition = Expression.AndAlso(condition, BuildDistinctAudioPerformerPredicate(audio, matchingLinks, index + 1, [.. previousLinks, link]));
+
         return Expression.Call(typeof(Enumerable), nameof(Enumerable.Any), [typeof(AudioPerformer)],
             Expression.Property(audio, nameof(Audio.AudioPerformers)),
             Expression.Lambda<Func<AudioPerformer, bool>>(condition, link));
@@ -423,17 +435,189 @@ public static class RelatedFilterQuery
         CancellationToken ct = default)
     {
         if (criterion == null) return query;
-        var performerIds = await MatchingPerformerIdsAsync(db, criterion, ct);
         var visiblePerformerIds = await VisiblePerformerIdsAsync(db, ct);
-        return Mode(criterion) switch
+        var matchingLinks = await BuildMatchingAudioPerformerLinksAsync(db, criterion, visiblePerformerIds, ct);
+        return ApplyAudioPerformerLinkMatch(query, visiblePerformerIds, matchingLinks, Mode(criterion), UsesLegacyNone(criterion));
+    }
+
+    private static async Task<IQueryable<AudioPerformer>> BuildMatchingAudioPerformerLinksAsync(
+        CoveContext db,
+        RelatedFilterCriterion<PerformerFilter> criterion,
+        IQueryable<int> visiblePerformerIds,
+        CancellationToken ct)
+    {
+        var visibleLinks = db.Set<AudioPerformer>().Where(link => visiblePerformerIds.Contains(link.PerformerId));
+        var hasPerformerCondition = HasPerformerCondition(criterion);
+        var performerIds = hasPerformerCondition ? await MatchingPerformerIdsAsync(db, criterion, ct) : null;
+        var occurrenceCriterion = criterion.PerformerOccurrenceTagsCriterion;
+        ExpandedHierarchyCriterion? expandedOccurrenceTags = null;
+        if (HierarchicalCriterionExpander.RequiresExpansion(occurrenceCriterion))
+        {
+            expandedOccurrenceTags = await HierarchicalCriterionExpander.ExpandTagsAsync(db, occurrenceCriterion!, ct);
+            occurrenceCriterion = expandedOccurrenceTags.Criterion;
+        }
+
+        IQueryable<AudioPerformer> matchingLinks;
+        if (criterion.ConditionOperator == RelatedFilterConditionOperator.Or)
+        {
+            IQueryable<AudioPerformer>? union = null;
+            if (hasPerformerCondition)
+                union = visibleLinks.Where(link => performerIds!.Contains(link.PerformerId));
+            if (HasMultiIdCondition(criterion.PerformerIdsCriterion))
+                union = Union(union, ApplyAudioPerformerIdCriterion(visibleLinks, criterion.PerformerIdsCriterion!));
+            if (HasMultiIdCondition(occurrenceCriterion))
+                union = Union(union, ApplyAudioPerformerOccurrenceTagCriterion(
+                    db,
+                    visibleLinks,
+                    occurrenceCriterion!,
+                    expandedOccurrenceTags?.ValueGroups,
+                    expandedOccurrenceTags?.RequiredIdGroups));
+            matchingLinks = union ?? visibleLinks;
+        }
+        else
+        {
+            matchingLinks = visibleLinks;
+            if (hasPerformerCondition)
+                matchingLinks = matchingLinks.Where(link => performerIds!.Contains(link.PerformerId));
+            if (HasMultiIdCondition(criterion.PerformerIdsCriterion))
+                matchingLinks = ApplyAudioPerformerIdCriterion(matchingLinks, criterion.PerformerIdsCriterion!);
+            if (HasMultiIdCondition(occurrenceCriterion))
+                matchingLinks = ApplyAudioPerformerOccurrenceTagCriterion(
+                    db,
+                    matchingLinks,
+                    occurrenceCriterion!,
+                    expandedOccurrenceTags?.ValueGroups,
+                    expandedOccurrenceTags?.RequiredIdGroups);
+        }
+
+        return matchingLinks;
+    }
+
+    private static IQueryable<Audio> ApplyAudioPerformerLinkMatch(
+        IQueryable<Audio> query,
+        IQueryable<int> visiblePerformerIds,
+        IQueryable<AudioPerformer> matchingLinks,
+        RelatedFilterMode mode,
+        bool legacyNone)
+        => mode switch
         {
             RelatedFilterMode.Every => query.Where(audio => audio.AudioPerformers.Any(link => visiblePerformerIds.Contains(link.PerformerId))
-                && !audio.AudioPerformers.Any(link => visiblePerformerIds.Contains(link.PerformerId) && !performerIds.Contains(link.PerformerId))),
-            RelatedFilterMode.None when !UsesLegacyNone(criterion) => query.Where(audio => audio.AudioPerformers.Any(link => visiblePerformerIds.Contains(link.PerformerId))
-                && !audio.AudioPerformers.Any(link => performerIds.Contains(link.PerformerId))),
-            RelatedFilterMode.None => query.Where(audio => !audio.AudioPerformers.Any(link => performerIds.Contains(link.PerformerId))),
-            _ => query.Where(audio => audio.AudioPerformers.Any(link => performerIds.Contains(link.PerformerId))),
+                && !audio.AudioPerformers.Any(link => visiblePerformerIds.Contains(link.PerformerId)
+                    && !matchingLinks.Any(match => match.AudioId == link.AudioId && match.PerformerId == link.PerformerId))),
+            RelatedFilterMode.None when !legacyNone => query.Where(audio => audio.AudioPerformers.Any(link => visiblePerformerIds.Contains(link.PerformerId))
+                && !audio.AudioPerformers.Any(link => matchingLinks.Any(match => match.AudioId == link.AudioId && match.PerformerId == link.PerformerId))),
+            RelatedFilterMode.None => query.Where(audio => !audio.AudioPerformers.Any(link => matchingLinks.Any(match => match.AudioId == link.AudioId && match.PerformerId == link.PerformerId))),
+            _ => query.Where(audio => audio.AudioPerformers.Any(link => matchingLinks.Any(match => match.AudioId == link.AudioId && match.PerformerId == link.PerformerId))),
         };
+
+    private static IQueryable<AudioPerformer> ApplyAudioPerformerIdCriterion(
+        IQueryable<AudioPerformer> links,
+        MultiIdCriterion criterion)
+    {
+        var ids = criterion.Value.Where(id => id > 0).Distinct().ToArray();
+        if (criterion.Modifier == CriterionModifier.IsNull)
+            links = links.Where(_ => false);
+        else if (criterion.Modifier != CriterionModifier.NotNull && ids.Length > 0)
+        {
+            if (criterion.Modifier == CriterionModifier.Includes)
+                links = links.Where(link => ids.Contains(link.PerformerId));
+            else if (criterion.Modifier == CriterionModifier.IncludesAll)
+            {
+                foreach (var id in ids)
+                    links = links.Where(link => link.PerformerId == id);
+            }
+            else if (criterion.Modifier == CriterionModifier.Excludes)
+                links = links.Where(link => !ids.Contains(link.PerformerId));
+            else if (criterion.Modifier == CriterionModifier.ExcludesAll)
+            {
+                var matchingAll = links;
+                foreach (var id in ids)
+                    matchingAll = matchingAll.Where(link => link.PerformerId == id);
+                links = links.Where(link => !matchingAll.Any(match => match.AudioId == link.AudioId && match.PerformerId == link.PerformerId));
+            }
+        }
+
+        var excludedIds = criterion.Excludes?.Where(id => id > 0).Distinct().ToArray() ?? [];
+        if (excludedIds.Length > 0)
+            links = links.Where(link => !excludedIds.Contains(link.PerformerId));
+
+        foreach (var requiredId in criterion.RequiredIds?.Where(id => id > 0).Distinct() ?? [])
+            links = links.Where(link => link.PerformerId == requiredId);
+
+        return links;
+    }
+
+    private static IQueryable<AudioPerformer> ApplyAudioPerformerOccurrenceTagCriterion(
+        CoveContext db,
+        IQueryable<AudioPerformer> links,
+        MultiIdCriterion criterion,
+        IReadOnlyList<int[]>? valueGroups,
+        IReadOnlyList<int[]>? requiredIdGroups)
+    {
+        var applications = db.TagApplications.AsNoTracking()
+            .Where(application => application.HostType == AffinityHostType.Audio
+                && application.ContextType == "performer"
+                && application.ContextId != null);
+        var groups = valueGroups?.Where(group => group.Length > 0).ToArray()
+            ?? criterion.Value.Where(tagId => tagId > 0).Select(tagId => new[] { tagId }).ToArray();
+        var tagIds = groups.SelectMany(group => group).Distinct().ToArray();
+
+        if (criterion.Modifier == CriterionModifier.IsNull)
+            links = links.Where(link => !applications.Any(application =>
+                application.HostId == link.AudioId && application.ContextId == link.PerformerId));
+        else if (criterion.Modifier == CriterionModifier.NotNull)
+            links = links.Where(link => applications.Any(application =>
+                application.HostId == link.AudioId && application.ContextId == link.PerformerId));
+        else if (tagIds.Length > 0)
+        {
+            if (criterion.Modifier == CriterionModifier.Includes)
+                links = links.Where(link => applications.Any(application =>
+                    application.HostId == link.AudioId
+                    && application.ContextId == link.PerformerId
+                    && tagIds.Contains(application.TagId)));
+            else if (criterion.Modifier == CriterionModifier.IncludesAll)
+            {
+                foreach (var group in groups)
+                    links = links.Where(link => applications.Any(application =>
+                        application.HostId == link.AudioId
+                        && application.ContextId == link.PerformerId
+                        && group.Contains(application.TagId)));
+            }
+            else if (criterion.Modifier == CriterionModifier.Excludes)
+                links = links.Where(link => !applications.Any(application =>
+                    application.HostId == link.AudioId
+                    && application.ContextId == link.PerformerId
+                    && tagIds.Contains(application.TagId)));
+            else if (criterion.Modifier == CriterionModifier.ExcludesAll)
+            {
+                var matchingAll = links;
+                foreach (var group in groups)
+                    matchingAll = matchingAll.Where(link => applications.Any(application =>
+                        application.HostId == link.AudioId
+                        && application.ContextId == link.PerformerId
+                        && group.Contains(application.TagId)));
+                links = links.Where(link => !matchingAll.Any(match =>
+                    match.AudioId == link.AudioId && match.PerformerId == link.PerformerId));
+            }
+        }
+
+        var excludedTagIds = criterion.Excludes?.Where(tagId => tagId > 0).Distinct().ToArray() ?? [];
+        if (excludedTagIds.Length > 0)
+            links = links.Where(link => !applications.Any(application =>
+                application.HostId == link.AudioId
+                && application.ContextId == link.PerformerId
+                && excludedTagIds.Contains(application.TagId)));
+
+        var requiredGroups = requiredIdGroups is { Count: > 0 }
+            ? requiredIdGroups
+            : criterion.RequiredIds?.Where(tagId => tagId > 0).Distinct().Select(tagId => new[] { tagId }).ToArray() ?? [];
+        foreach (var group in requiredGroups)
+            links = links.Where(link => applications.Any(application =>
+                application.HostId == link.AudioId
+                && application.ContextId == link.PerformerId
+                && group.Contains(application.TagId)));
+
+        return links;
     }
 
     public static async Task<IQueryable<TextDocument>> ApplyToTextsAsync(
