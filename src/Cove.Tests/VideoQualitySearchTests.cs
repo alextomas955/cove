@@ -221,6 +221,11 @@ public class VideoQualitySearchTests
         Assert.Equal(46.1667, VideoQualitySearch.ParsePsnrHvs(json)!.Value, 4);
     }
 
+    /// <summary>The capability check runs ffmpeg; a path that cannot run must read as "cannot measure", not throw.</summary>
+    [Fact]
+    public void AnFfmpegThatCannotRunCannotMeasure()
+        => Assert.False(FfmpegHwAccel.HasQualityMeasurement(Path.Combine(Path.GetTempPath(), $"no-ffmpeg-{Guid.NewGuid():N}.exe")));
+
     [Fact]
     public void AMeasurementWithoutPsnrHvsFailsVisibly()
         => Assert.Throws<VideoConversionException>(() => VideoQualitySearch.ParsePsnrHvs("""{"frames":[{"metrics":{"vmaf":98}}]}"""));

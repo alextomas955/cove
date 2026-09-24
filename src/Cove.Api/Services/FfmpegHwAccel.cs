@@ -456,19 +456,46 @@ internal static class FfmpegHwAccel
     }
 
     /// <summary>
-    /// True when this ffmpeg build has the libvmaf filter, which conversion uses to score quality
-    /// samples (its PSNR-HVS feature). BtbN's GPL builds, which Cove's container images use, include it;
-    /// a build a user supplies may not, and conversion then refuses to run rather than guess.
+    /// True when this ffmpeg can score quality samples the way conversion does: libvmaf with its built-in
+    /// vmaf_v0.6.1 model and the psnr_hvs feature. BtbN's GPL builds, which Cove's container images use,
+    /// have all three; a build a user supplies may not, and conversion then refuses to run rather than
+    /// guess a setting.
+    ///
+    /// Decided by scoring one tiny frame with exactly those options, like an encoder's test encode.
+    /// Merely finding a libvmaf filter is not enough: a build without the built-in model or the feature
+    /// would pass that and then fail every video at its first sample, with a less useful message.
     /// </summary>
     public static bool HasQualityMeasurement(string ffmpegPath)
     {
-        var output = RunFfmpegInfoQuery(ffmpegPath, "-hide_banner -filters");
-        // Rows look like " .. libvmaf           VV->V      Calculate the VMAF between two video streams."
-        return output.Split('\n').Any(line =>
+        var startInfo = new System.Diagnostics.ProcessStartInfo
         {
-            var tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return tokens.Length >= 2 && tokens[1] == "libvmaf";
-        });
+            FileName = ffmpegPath,
+            Arguments = "-hide_banner -nostdin -v error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 "
+                + "-f lavfi -i testsrc2=size=64x64:rate=1:duration=1 "
+                + "-lavfi \"[0:v][1:v]libvmaf=model=version=vmaf_v0.6.1:feature=name=psnr_hvs\" -f null -",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        FfmpegProcessEnvironment.Apply(startInfo, ffmpegPath);
+        using var process = new System.Diagnostics.Process { StartInfo = startInfo };
+        try
+        {
+            process.Start();
+            process.StandardOutput.ReadToEnd();
+            process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(15000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+            return process.ExitCode == 0;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Returns the set of encoder NAMES available in this ffmpeg build.</summary>

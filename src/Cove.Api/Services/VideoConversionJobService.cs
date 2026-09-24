@@ -145,8 +145,9 @@ public sealed class VideoConversionJobService(
             if (!measurable)
             {
                 throw new InvalidOperationException(
-                    "This ffmpeg build has no libvmaf filter, which conversion uses to measure the quality of each "
-                    + "video before encoding it. Use an ffmpeg build that includes libvmaf, such as BtbN's GPL builds.");
+                    "This ffmpeg build cannot measure video quality, which conversion does for each video before "
+                    + "encoding it: it needs libvmaf with its built-in vmaf_v0.6.1 model and the psnr_hvs feature. "
+                    + "Use an ffmpeg build that includes them, such as BtbN's GPL builds.");
             }
         }
 
