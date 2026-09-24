@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Numerics;
 using System.Text.Json;
@@ -229,6 +230,7 @@ query Me {
     private readonly ITagProvenanceService _tagProvenanceService;
     private readonly IFieldProvenanceService? _fieldProvenanceService;
     private readonly IEventBus? _eventBus;
+    private readonly IStreamService? _streamService;
     private readonly ILogger<MetadataServerService> _logger;
     private Dictionary<string, int[]>? _performerIdentityIndex;
     private Dictionary<string, int[]>? _studioIdentityIndex;
@@ -241,7 +243,7 @@ query Me {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public MetadataServerService(HttpClient httpClient, CoveConfiguration config, CoveContext db, IBlobService blobService, IVideoCoverService videoCoverService, ITagProvenanceService tagProvenanceService, ILogger<MetadataServerService> logger, IFieldProvenanceService? fieldProvenanceService = null, IEventBus? eventBus = null)
+    public MetadataServerService(HttpClient httpClient, CoveConfiguration config, CoveContext db, IBlobService blobService, IVideoCoverService videoCoverService, ITagProvenanceService tagProvenanceService, ILogger<MetadataServerService> logger, IFieldProvenanceService? fieldProvenanceService = null, IEventBus? eventBus = null, IStreamService? streamService = null)
     {
         _httpClient = httpClient;
         _config = config;
@@ -251,6 +253,7 @@ query Me {
         _tagProvenanceService = tagProvenanceService;
         _fieldProvenanceService = fieldProvenanceService;
         _eventBus = eventBus;
+        _streamService = streamService;
         _logger = logger;
     }
 
@@ -1597,33 +1600,47 @@ query Me {
             })
             .ToList();
 
+        // The video's performers, tags and studio arrive without their own remote IDs loaded, so read
+        // them here. An entry sent with only a name shows up on the draft as unmatched data.
+        var performerIds = video.VideoPerformers.Where(sp => sp.Performer != null).Select(sp => sp.Performer!.Id).Distinct().ToList();
+        var performerRemoteIds = MatchRemoteIds(
+            await _db.Set<PerformerRemoteId>().AsNoTracking()
+                .Where(remote => performerIds.Contains(remote.PerformerId))
+                .OrderBy(remote => remote.Id)
+                .Select(remote => new RemoteIdLink(remote.PerformerId, remote.Endpoint, remote.RemoteId))
+                .ToListAsync(ct),
+            endpoint);
+        var tagIds = video.VideoTags.Where(st => st.Tag != null).Select(st => st.Tag!.Id).Distinct().ToList();
+        var tagRemoteIds = MatchRemoteIds(
+            await _db.Set<TagRemoteId>().AsNoTracking()
+                .Where(remote => tagIds.Contains(remote.TagId))
+                .OrderBy(remote => remote.Id)
+                .Select(remote => new RemoteIdLink(remote.TagId, remote.Endpoint, remote.RemoteId))
+                .ToListAsync(ct),
+            endpoint);
+        var studioRemoteIds = video.Studio == null
+            ? new Dictionary<int, string>()
+            : MatchRemoteIds(
+                await _db.Set<StudioRemoteId>().AsNoTracking()
+                    .Where(remote => remote.StudioId == video.Studio.Id)
+                    .OrderBy(remote => remote.Id)
+                    .Select(remote => new RemoteIdLink(remote.StudioId, remote.Endpoint, remote.RemoteId))
+                    .ToListAsync(ct),
+                endpoint);
+
         var performers = video.VideoPerformers
             .Where(sp => sp.Performer != null)
-            .Select(sp =>
-            {
-                var perfRemoteId = sp.Performer!.RemoteIds
-                    .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-                return new { name = sp.Performer.Name, id = perfRemoteId?.RemoteId };
-            })
+            .Select(sp => new { name = sp.Performer!.Name, id = performerRemoteIds.GetValueOrDefault(sp.Performer.Id) })
             .ToList();
 
         var tags = video.VideoTags
             .Where(st => st.Tag != null)
-            .Select(st =>
-            {
-                var tagRemoteId = st.Tag!.RemoteIds
-                    .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-                return new { name = st.Tag.Name, id = tagRemoteId?.RemoteId };
-            })
+            .Select(st => new { name = st.Tag!.Name, id = tagRemoteIds.GetValueOrDefault(st.Tag.Id) })
             .ToList();
 
-        object? studio = null;
-        if (video.Studio != null)
-        {
-            var studioRemoteId = video.Studio.RemoteIds
-                .FirstOrDefault(id => EndpointsMatch(id.Endpoint, endpoint));
-            studio = new { name = video.Studio.Name, id = studioRemoteId?.RemoteId };
-        }
+        object? studio = video.Studio == null
+            ? null
+            : new { name = video.Studio.Name, id = studioRemoteIds.GetValueOrDefault(video.Studio.Id) };
 
         var input = new
         {
@@ -1640,7 +1657,8 @@ query Me {
             fingerprints,
         };
 
-        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct);
+        var cover = await TryReadVideoCoverAsync(video, ct);
+        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct, cover);
         return response.SubmitSceneDraft?.Id;
     }
 
@@ -2910,13 +2928,88 @@ query Me {
         return labels.Length <= 2 ? host : $"{labels[^2]}.{labels[^1]}";
     }
 
-    private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct)
+    /// <summary>
+    /// Maps each owner to its remote ID on <paramref name="endpoint"/>, preferring an exact endpoint match
+    /// over one that only shares the site, then the earliest link.
+    /// </summary>
+    private static Dictionary<int, string> MatchRemoteIds(IEnumerable<RemoteIdLink> links, string endpoint)
+        => links
+            .Where(link => EndpointsMatch(link.Endpoint, endpoint))
+            .OrderBy(link => string.Equals(NormalizeEndpoint(link.Endpoint), NormalizeEndpoint(endpoint), StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .GroupBy(link => link.OwnerId)
+            .ToDictionary(group => group.Key, group => group.First().RemoteId);
+
+    /// <summary>
+    /// Reads the image Cove shows as the video's cover: its own cover, or the generated screenshot
+    /// otherwise. A draft is still worth submitting without one, so failures are logged and yield null.
+    /// </summary>
+    private async Task<MetadataServerUpload?> TryReadVideoCoverAsync(Video video, CancellationToken ct)
+    {
+        try
+        {
+            if (video.ImageBlobId != null)
+            {
+                var blob = await _blobService.GetBlobAsync(video.ImageBlobId, ct);
+                if (blob != null)
+                {
+                    await using var blobStream = blob.Value.Stream;
+                    var cover = await ReadUploadAsync(blobStream, blob.Value.ContentType, ct);
+                    if (cover != null)
+                        return cover;
+                }
+            }
+
+            if (_streamService == null)
+                return null;
+
+            var screenshot = await _streamService.GetVideoScreenshot(video.Id, null, ct);
+            if (screenshot == null)
+                return null;
+
+            await using var screenshotStream = screenshot.Value.stream;
+            return await ReadUploadAsync(screenshotStream, screenshot.Value.contentType, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not read the cover of video {VideoId}; submitting its draft without an image", video.Id);
+            return null;
+        }
+    }
+
+    private static async Task<MetadataServerUpload?> ReadUploadAsync(Stream stream, string contentType, CancellationToken ct)
+    {
+        var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+        // Hand over the stream's own buffer rather than a copy: a user-supplied cover can be large.
+        return buffer.Length == 0 ? null : new MetadataServerUpload(new ArraySegment<byte>(buffer.GetBuffer(), 0, (int)buffer.Length), contentType);
+    }
+
+    private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct, MetadataServerUpload? image = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, box.Endpoint);
         if (!string.IsNullOrWhiteSpace(box.ApiKey))
             request.Headers.TryAddWithoutValidation("ApiKey", box.ApiKey);
 
-        request.Content = JsonContent.Create(new MetadataServerGraphQlRequest(query, variables), options: _jsonOptions);
+        var graphQlRequest = new MetadataServerGraphQlRequest(query, variables);
+        if (image == null)
+        {
+            request.Content = JsonContent.Create(graphQlRequest, options: _jsonOptions);
+        }
+        else
+        {
+            // A GraphQL multipart request (https://github.com/jaydenseric/graphql-multipart-request-spec),
+            // as stash sends drafts: the file part fills the `image: Upload` field of the draft input.
+            var file = new ByteArrayContent(image.Data.Array!, image.Data.Offset, image.Data.Count);
+            file.Headers.ContentType = MediaTypeHeaderValue.TryParse(image.ContentType, out var imageType)
+                ? imageType
+                : new MediaTypeHeaderValue("application/octet-stream");
+            request.Content = new MultipartFormDataContent
+            {
+                { new StringContent(JsonSerializer.Serialize(graphQlRequest, _jsonOptions)), "operations" },
+                { new StringContent("""{"0":["variables.input.image"]}"""), "map" },
+                { file, "0", "draft" },
+            };
+        }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
@@ -3447,6 +3540,10 @@ query Me {
     }
 
     private sealed record MetadataServerGraphQlRequest(string Query, object? Variables);
+
+    private sealed record MetadataServerUpload(ArraySegment<byte> Data, string ContentType);
+
+    private sealed record RemoteIdLink(int OwnerId, string Endpoint, string RemoteId);
 
     private sealed record MetadataServerGraphQlResponse<T>
     {

@@ -56,6 +56,7 @@ import {
   Loader2,
   Scissors,
   AlertTriangle,
+  CloudUpload,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, Fragment, useMemo, lazy, Suspense } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -185,6 +186,9 @@ const DetailMergeDialog = lazy(() =>
 );
 const IdentifyDialog = lazy(() =>
   import("../components/IdentifyDialog").then((module) => ({ default: module.IdentifyDialog })),
+);
+const MetadataServerDraftDialog = lazy(() =>
+  import("../components/MetadataServerDraftDialog").then((module) => ({ default: module.MetadataServerDraftDialog })),
 );
 const VideoDownloadDialog = lazy(() =>
   import("../components/VideoDownloadDialog").then((module) => ({ default: module.VideoDownloadDialog })),
@@ -375,6 +379,9 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
   const [showQueuePanel, setShowQueuePanel] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [showIdentify, setShowIdentify] = useState(false);
+  const [showSubmitDraft, setShowSubmitDraft] = useState(false);
+  // A draft goes to an external server, so never let an open dialog carry over to the next video in the queue.
+  useEffect(() => setShowSubmitDraft(false), [id]);
   const [showScrapeDialog, setShowScrapeDialog] = useState(false);
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [alternateFileId, setAlternateFileId] = useState<number | null>(null);
@@ -410,6 +417,8 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
   const canGenerateVideo = canRunJobs && canWriteVideo;
   const canIdentifyVideo = canIdentify && canWriteVideo;
   const canDownloadVideo = canRunJobs && canWriteVideo;
+  const metadataServers = config?.scraping?.metadataServers ?? [];
+  const canSubmitDraft = canWriteVideo && metadataServers.length > 0;
   const seekRef = useRef<((time: number) => void) | null>(null);
   const trackedPageVisitVideoIdRef = useRef<number | null>(null);
   const opsMenuRef = useRef<HTMLDivElement>(null);
@@ -1047,6 +1056,17 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
               <Search className="h-3.5 w-3.5" /> Identify…
             </button>
           ) : null}
+          {canSubmitDraft ? (
+            <button
+              onClick={() => {
+                setShowSubmitDraft(true);
+                setShowOpsMenu(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface"
+            >
+              <CloudUpload className="h-3.5 w-3.5" /> Submit Draft…
+            </button>
+          ) : null}
           {canGenerateVideo || canWriteVideo ? <div className="my-1 border-t border-border" /> : null}
           <ExtensionEntityActions
             entityType="video"
@@ -1425,6 +1445,18 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
         ) : null}
         {showIdentify ? (
           <IdentifyDialog open={showIdentify} onClose={() => setShowIdentify(false)} videoIds={[id]} />
+        ) : null}
+        {showSubmitDraft ? (
+          <MetadataServerDraftDialog
+            onClose={() => {
+              setShowSubmitDraft(false);
+              opsMenuRef.current?.querySelector("button")?.focus();
+            }}
+            entityLabel="video"
+            submittedContent="current metadata and cover image"
+            metadataServers={metadataServers}
+            submit={(endpoint) => videos.submitMetadataServerDraft(id, endpoint)}
+          />
         ) : null}
       </Suspense>
       <ConfirmDialog

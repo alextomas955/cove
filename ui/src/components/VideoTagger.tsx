@@ -72,7 +72,9 @@ import {
   MoreHorizontal,
   ChevronDown,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
+import { useMetadataServerDraftSubmit } from "../hooks/useMetadataServerDraftSubmit";
 import { toggleOptionsFromEvent, withOrderedToggle, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
 import {
   PERFORMER_GENDER_OPTIONS,
@@ -1902,13 +1904,9 @@ function TaggerVideoRow({
     source?.kind === "metadata-server" && (hasRemoteIdForEndpoint || hasSavedMetadataServerMatchForEndpoint);
   const shouldHighlightFingerprintSubmit = canSubmitFingerprints;
 
-  const submitDraftMut = useMutation<{ draftId: string | null }, Error>({
-    meta: { suppressGlobalError: true },
-    mutationFn: () => {
-      if (!submitEndpoint) throw new Error("Select a metadata-server source first.");
-      return videos.submitMetadataServerDraft(video.id, submitEndpoint);
-    },
-  });
+  const submitDraftMut = useMetadataServerDraftSubmit((endpoint) =>
+    videos.submitMetadataServerDraft(video.id, endpoint),
+  );
 
   const submitFingerprintsMut = useMutation<void, Error>({
     meta: { suppressGlobalError: true },
@@ -2118,7 +2116,7 @@ function TaggerVideoRow({
                     type="button"
                     onClick={(event) => {
                       event.currentTarget.closest("details")?.removeAttribute("open");
-                      submitDraftMut.mutate();
+                      submitDraftMut.submitDraft(submitEndpoint);
                     }}
                     disabled={submitDraftMut.isPending}
                     title="Submit this video as a draft entry to the metadata server"
@@ -2157,7 +2155,22 @@ function TaggerVideoRow({
           {submitDraftMut.isSuccess && (
             <p className="w-full text-xs text-green-400">
               <Check className="w-3 h-3 inline mr-1" />
-              Video draft submitted{submitDraftMut.data.draftId ? ` (${submitDraftMut.data.draftId})` : ""}.
+              {submitDraftMut.data.draftUrl ? (
+                <>
+                  Video draft submitted.{" "}
+                  <a
+                    href={submitDraftMut.data.draftUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-accent hover:underline"
+                  >
+                    Open draft
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </>
+              ) : (
+                <>Video draft submitted{submitDraftMut.data.draftId ? ` (${submitDraftMut.data.draftId})` : ""}.</>
+              )}
             </p>
           )}
 
