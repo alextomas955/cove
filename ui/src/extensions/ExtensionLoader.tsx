@@ -47,6 +47,17 @@ import type {
   ExtensionListSortContribution,
   UserThemePreferences,
 } from "../api/types";
+import {
+  FALLBACK_DEFAULT_THEME,
+  STYLE_OPTION_CSS_VARS,
+  THEME_BOOT_VERSION,
+  clearThemeBootArtifacts,
+  clearThemeBootSnapshot,
+  readThemeBootSnapshot,
+  styleOptionDatasetKey,
+  writeThemeBootSnapshot,
+  type ThemeBootSnapshot,
+} from "../theme/themeBoot";
 import { ExtensionComponentRegistry, type ExtensionComponent } from "./ExtensionComponentRegistry";
 import { ExtensionComponentOverrideHost } from "./ExtensionComponentOverrideHost";
 import {
@@ -229,29 +240,6 @@ function normalizeListEntityType(entityType: string) {
 function compareOrdinal(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
-
-const FALLBACK_DEFAULT_THEME: ExtensionThemeDef = {
-  id: "default",
-  name: "Default",
-  description: "A clean, modern dark theme.",
-  colorScheme: "dark",
-  cssVariables: {
-    "--color-background": "#16181d",
-    "--color-nav": "#111317",
-    "--color-card": "#1e2028",
-    "--color-card-hover": "#252830",
-    "--color-surface": "#1a1c23",
-    "--color-border": "#2a2d38",
-    "--color-input": "rgba(0, 0, 0, 0.25)",
-    "--color-accent": "#4f8ff7",
-    "--color-accent-hover": "#6ea4ff",
-    "--color-foreground": "#e8eaf0",
-    "--color-secondary": "#9ea3b0",
-    "--color-muted": "#6b7085",
-    "--color-overlay": "rgba(0, 0, 0, 0.55)",
-    "--color-nav-active": "#4f8ff7",
-  },
-};
 
 function parseStyleSet(raw: string | null): Set<string> {
   if (!raw) return new Set(["default"]);
@@ -600,15 +588,17 @@ export function ExtensionLoaderProvider({
     setCustomThemeColorsState(nextTheme.customThemeColors ?? {});
   }, [hasServerBackedUiPreferences, userThemePreferences]);
 
-  useEffect(() => {
-    if (!loaded || !activeThemeId || activeThemeId === "custom" || activeThemeId === FALLBACK_DEFAULT_THEME.id) {
-      return;
-    }
-
-    if (!availableThemes.some((theme) => theme.id === activeThemeId)) {
-      setActiveTheme(FALLBACK_DEFAULT_THEME.id);
-    }
-  }, [activeThemeId, availableThemes, loaded, setActiveTheme]);
+  // A selected theme that is missing from `availableThemes` is deliberately NOT rewritten to the
+  // default here. A theme is absent for two reasons this side cannot tell apart — it was
+  // uninstalled, or it is transiently missing because the manifest request failed, troubleshooting
+  // mode withdrew every extension, a refresh superseded the initial load, or its bundle failed to
+  // import (see `withoutFailedContributions`) — and writing the fallback back to localStorage and
+  // the server turned every transient case into permanent loss of the user's choice.
+  //
+  // Nothing needs to replace it: the stored selection is kept, reapplied the moment the theme is
+  // offered again, and the UI already shows the default look meanwhile. `selectedTheme` resolves to
+  // null, and `data-theme` is not left stale — on a failed first load it was never set, and when a
+  // loaded manifest goes away (troubleshooting mode) the theme effect's own cleanup removes it.
 
   const applyManifest = useCallback(
     async (nextManifest: ExtensionManifest, requestGeneration: number) => {
@@ -770,6 +760,29 @@ export function ExtensionLoaderProvider({
     };
   }, [getExtensionRevision, manifest, register, registerSlot, resolveComponent, troubleshootingMode, user]);
 
+  // Withdraw the theme the inline boot script painted, where React must not simply replace it.
+  //
+  // Replacement is mostly free: the theme effect below removes #cove-theme-override and
+  // #cove-theme-css by id before applying, so whichever branch of it runs already takes them over.
+  // Only two cases never reach it -- troubleshooting mode, and a snapshot cached for another user.
+  //
+  // A failed manifest request is deliberately not one of them. It says nothing about what the user
+  // chose, so they keep the look they had rather than being repainted into the default theme; this
+  // is the runtime twin of keeping a theme that is missing from the manifest.
+  useEffect(() => {
+    if (troubleshootingMode) {
+      clearThemeBootArtifacts(document);
+      clearThemeBootSnapshot();
+      return;
+    }
+    // /me can resolve to a different account than the one cached when the page was parsed.
+    const snapshot = readThemeBootSnapshot();
+    if (snapshot && snapshot.u !== (user?.id ?? null)) {
+      clearThemeBootArtifacts(document);
+      clearThemeBootSnapshot();
+    }
+  }, [troubleshootingMode, user?.id]);
+
   // Apply active theme CSS variables and bundled component style
   useEffect(() => {
     if (!manifest || troubleshootingMode) return;
@@ -873,6 +886,51 @@ export function ExtensionLoaderProvider({
     troubleshootingMode,
   ]);
 
+  // Cache what was just painted, for the boot script to replay on the next load. Built from state,
+  // not read back off the DOM, so it does not depend on effect ordering. Nothing is cached before
+  // the manifest resolves, or the next load would pre-paint the default theme we are avoiding.
+  useEffect(() => {
+    if (!manifest || troubleshootingMode) return;
+
+    if (!activeThemeId) {
+      clearThemeBootSnapshot();
+      return;
+    }
+
+    const theme = activeThemeId === "custom" ? null : selectedTheme;
+    if (activeThemeId !== "custom" && !theme) {
+      // The selection stays: the theme may just be initialising, upgrading or disabled. Only the
+      // cached appearance goes, so the next load starts from the default, as this one does.
+      clearThemeBootSnapshot();
+      return;
+    }
+
+    const snapshot: ThemeBootSnapshot = {
+      v: THEME_BOOT_VERSION,
+      u: user?.id ?? null,
+      themeId: activeThemeId,
+      // The custom palette carries no colour scheme.
+      colorScheme: theme?.colorScheme ?? null,
+      bgAnimation: theme?.backgroundAnimation ?? null,
+      vars: (activeThemeId === "custom" ? customThemeColors : theme?.cssVariables) ?? {},
+      cssUrl: theme?.cssUrl ?? null,
+      componentStyle: [...activeComponentStyles].join(" "),
+      layoutStyle: activeLayoutStyle,
+      styleOptions: userThemePreferences?.styleOptions ?? readStoredStyleOptions(),
+    };
+    writeThemeBootSnapshot(snapshot);
+  }, [
+    activeComponentStyles,
+    activeLayoutStyle,
+    activeThemeId,
+    customThemeColors,
+    manifest,
+    selectedTheme,
+    troubleshootingMode,
+    user?.id,
+    userThemePreferences,
+  ]);
+
   // Apply component style data attribute (space-separated for composability)
   useEffect(() => {
     if (troubleshootingMode) {
@@ -896,18 +954,6 @@ export function ExtensionLoaderProvider({
     }
     try {
       const raw = userThemePreferences?.styleOptions ?? readStoredStyleOptions();
-      // CSS custom property mapping for range-type style configs
-      const cssVarMap: Record<string, Record<string, string>> = {
-        gradient: { animated: "--sv-anim-speed", background: "--sv-bg-intensity", cards: "--sv-card-gradient" },
-        glass: {
-          cardblur: "--sv-card-blur",
-          surfaceblur: "--sv-surface-blur",
-          opacity: "--sv-surface-opacity",
-          cardopacity: "--sv-card-opacity",
-          buttonopacity: "--sv-button-opacity",
-        },
-        animated: { hover: "--sv-hover-glow" },
-      };
       delete document.documentElement.dataset.styleGradientSpeed;
       delete document.documentElement.dataset.styleGradientCardstrength;
       delete document.documentElement.dataset.styleGradientBgstrength;
@@ -918,10 +964,8 @@ export function ExtensionLoaderProvider({
       }
       for (const [styleId, opts] of Object.entries(raw)) {
         for (const [key, val] of Object.entries(opts as Record<string, string>)) {
-          document.documentElement.dataset[
-            `style${styleId.charAt(0).toUpperCase()}${styleId.slice(1)}${key.charAt(0).toUpperCase()}${key.slice(1)}`
-          ] = val;
-          const cssVar = cssVarMap[styleId]?.[key];
+          document.documentElement.dataset[styleOptionDatasetKey(styleId, key)] = val;
+          const cssVar = STYLE_OPTION_CSS_VARS[styleId]?.[key];
           if (cssVar) {
             document.documentElement.style.setProperty(cssVar, val);
           }

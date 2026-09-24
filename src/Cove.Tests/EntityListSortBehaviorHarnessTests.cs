@@ -1153,7 +1153,7 @@ public class EntityListSortBehaviorHarnessTests
             "file_mod_time" => Order(fixture.Videos, video => video.MaxFileModTime, descending),
             "file_count" => Order(fixture.Videos, video => video.Files.Count, descending),
             "path" => descending ? Order(fixture.Videos, video => video.MaxPath, true) : Order(fixture.Videos, video => video.MinPath, false),
-            "resolution" => Order(fixture.Videos, video => video.MaxHeight, descending),
+            "resolution" => Order(fixture.Videos, video => video.MaxResolution, descending),
             "framerate" => Order(fixture.Videos, video => video.MaxFrameRate, descending),
             "bitrate" => Order(fixture.Videos, video => video.MaxBitRate, descending),
             "phash" => Order(fixture.Videos, video => VideoPhash(video, descending), descending),

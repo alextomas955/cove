@@ -587,7 +587,7 @@ function renderEntityTile(
   }
 }
 
-function resolveGroupFeedHost(item: GroupItem): GroupFeedHost | null {
+export function resolveGroupFeedHost(item: GroupItem): GroupFeedHost | null {
   const kind = String(item.kind).toLowerCase();
   const candidate = kind === "videorange" ? "video" : String(item.hostType || kind).toLowerCase();
   const resource = isEntityResource(candidate) ? candidate : null;

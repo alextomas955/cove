@@ -535,7 +535,7 @@ public class VideoRepository : IVideoRepository
                 compound.Append(video => desc ? video.MaxPath == null ? 1 : 0 : video.MinPath == null ? 1 : 0, false);
                 compound.Append(video => desc ? video.MaxPath : video.MinPath, desc);
             },
-            ["resolution"] = (compound, desc) => compound.Append(video => video.MaxHeight, desc),
+            ["resolution"] = (compound, desc) => compound.Append(video => video.MaxResolution, desc),
             ["framerate"] = (compound, desc) => compound.Append(video => video.MaxFrameRate, desc),
             ["bitrate"] = (compound, desc) => compound.Append(video => video.MaxBitRate, desc),
             ["tag_count"] = (compound, desc) => compound.Append(video => video.VideoTags.Count, desc),
@@ -616,7 +616,7 @@ public class VideoRepository : IVideoRepository
             "file_mod_time" => ApplyFileModTimeSort(query, desc),
             "file_count" => desc ? query.OrderByDescending(s => s.FileCount).ThenByDescending(s => s.Id) : query.OrderBy(s => s.FileCount).ThenBy(s => s.Id),
             "path" => ApplyPathSort(query, desc),
-            "resolution" => desc ? query.OrderByDescending(s => s.MaxHeight).ThenByDescending(s => s.Id) : query.OrderBy(s => s.MaxHeight).ThenBy(s => s.Id),
+            "resolution" => desc ? query.OrderByDescending(s => s.MaxResolution).ThenByDescending(s => s.Id) : query.OrderBy(s => s.MaxResolution).ThenBy(s => s.Id),
             "framerate" => desc ? query.OrderByDescending(s => s.MaxFrameRate).ThenByDescending(s => s.Id) : query.OrderBy(s => s.MaxFrameRate).ThenBy(s => s.Id),
             "bitrate" => ApplyBitrateSort(query, desc),
             "phash" => ApplyPhashSort(query, desc),

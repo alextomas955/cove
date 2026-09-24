@@ -451,6 +451,9 @@ export function ListPage({
     settledCount.totalCount > 0 &&
     page <= settledTotalPages;
   const shownTotalCount = reloading ? settledCount.totalCount : totalCount;
+  // The count and the byline summarise the same list, so reveal them together behind one loading label
+  // instead of letting whichever request settles first appear beside the other's indicator.
+  const summaryPending = (resolvedLoadState.status === "pending" && !reloading) || summaryLoading;
   // Keep the last successfully committed results on screen while that reload is pending, so a page
   // change swaps the old items for the new ones instead of collapsing to a spinner in between, which
   // also removed the scrollbar and shifted the layout. The children are rendered as a fragment, so
@@ -860,7 +863,7 @@ export function ListPage({
         <div className="list-page-title-group flex min-w-0 basis-full flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 lg:flex-1 lg:basis-0 lg:min-w-[12rem]">
           <h1 className="text-sm font-semibold text-foreground whitespace-nowrap">{title}</h1>
           <span className="text-xs text-muted hidden sm:inline">
-            {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
+            {summaryPending
               ? "Loading…"
               : resolvedLoadState.status === "error"
                 ? "Unavailable"
@@ -869,7 +872,7 @@ export function ListPage({
                   : "0 items"}
           </span>
           <span className="text-xs text-muted sm:hidden">
-            {(resolvedLoadState.status === "pending" && !reloading) || summaryLoading
+            {summaryPending
               ? "…"
               : resolvedLoadState.status === "error"
                 ? "—"
@@ -877,7 +880,7 @@ export function ListPage({
                   ? shownTotalCount.toLocaleString()
                   : "0"}
           </span>
-          {!summaryLoading && metadataByline}
+          {!summaryPending && metadataByline}
         </div>
 
         {/* Controls */}

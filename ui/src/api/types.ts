@@ -2777,6 +2777,8 @@ export interface MetadataServerEntityCandidate {
   existsLocally: boolean;
   localId?: number;
   disambiguation?: string;
+  // Performer candidates only: the remote gender as the metadata server spells it (e.g. TRANSGENDER_FEMALE).
+  gender?: string;
 }
 
 export interface MetadataServerVideoEntityOverride {
@@ -2815,6 +2817,26 @@ export interface MetadataServerFingerprint {
   duration?: number;
 }
 
+/**
+ * How a candidate cover compares with the one the video already carries, judged by perceptual hash
+ * rather than by URL. `same`: the same picture, nothing to gain. `upgrade`: the same picture, but
+ * larger. `differs`: a genuine choice. `unavailable`: one of the two could not be read.
+ */
+export type VideoCoverComparisonVerdict = "same" | "upgrade" | "differs" | "unavailable";
+
+export interface VideoCoverImage {
+  width: number;
+  height: number;
+  byteSize: number;
+}
+
+export interface VideoCoverComparison {
+  verdict: VideoCoverComparisonVerdict;
+  distance?: number | null;
+  current?: VideoCoverImage | null;
+  candidate?: VideoCoverImage | null;
+}
+
 export interface MetadataServerVideoImportRequest {
   endpoint: string;
   videoId: string;
@@ -2828,6 +2850,8 @@ export interface MetadataServerVideoImportRequest {
   onlyExistingPerformers?: boolean;
   onlyExistingStudio?: boolean;
   markOrganized?: boolean;
+  // Remote genders to keep, as the metadata server spells them. Omitted means no gender filter.
+  performerGenders?: string[];
   excludedTagNames?: string[];
   excludedPerformerNames?: string[];
   studioOverride?: MetadataServerVideoEntityOverride;

@@ -659,6 +659,51 @@ public class RepositorySortBehaviorTests
         Assert.Equal(videoAsc.Select(item => item.Title ?? string.Empty).Reverse().ToArray(), videoDesc.Select(item => item.Title ?? string.Empty).ToArray());
     }
 
+    [Theory]
+    [InlineData(Cove.Core.Enums.SortDirection.Desc, new[] { "1440p landscape", "1080p portrait", "1080p landscape" })]
+    [InlineData(Cove.Core.Enums.SortDirection.Asc, new[] { "1080p landscape", "1080p portrait", "1440p landscape" })]
+    public async Task VideoRepository_ResolutionSort_RanksOnTheLongEdgeRatherThanOrientation(
+        Cove.Core.Enums.SortDirection direction,
+        string[] expected)
+    {
+        // Cove stores display dimensions, so a rotated 1080p recording is held as 1080x1920. Sorting
+        // on height alone would rank it above a 1440p video purely because its axes are transposed,
+        // while its badge and every resolution filter still call it 1080p. Resolution has to mean one
+        // thing, so the sort reads the long edge like they do.
+        await using var context = CreateContext();
+        var folder = new Folder { Path = "Z:/cove" };
+        context.Videos.AddRange(
+            CreateVideoWithDimensions("1080p landscape", folder, "landscape.mp4", 1920, 1080),
+            CreateVideoWithDimensions("1080p portrait", folder, "portrait.mp4", 1080, 1920),
+            CreateVideoWithDimensions("1440p landscape", folder, "high.mp4", 2560, 1440));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var repository = new VideoRepository(context);
+        var (items, _) = await repository.FindAsync(
+            filter: null,
+            new FindFilter { Page = 1, PerPage = 20, Sort = "resolution", Direction = direction },
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, items.Select(video => video.Title).ToArray());
+    }
+
+    private static Video CreateVideoWithDimensions(string title, Folder folder, string basename, int width, int height)
+    {
+        var video = new Video { Title = title };
+        video.Files.Add(new VideoFile
+        {
+            Basename = basename,
+            ParentFolder = folder,
+            Path = $"{folder.Path}/{basename}",
+            Size = 1_000,
+            Duration = 10,
+            Width = width,
+            Height = height,
+            ModTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+        return video;
+    }
+
     private static Video CreateVideoWithTag(string title, Tag tag)
     {
         var video = new Video { Title = title };

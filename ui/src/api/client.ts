@@ -11,6 +11,7 @@ import type {
   MeResponse,
   GlobalSearchResponse,
   Video,
+  VideoCoverComparison,
   VideoCreate,
   VideoUpdate,
   VideoListEntry,
@@ -657,14 +658,21 @@ export const videos = {
   resetPlay: (id: number) => request<void>(`/videos/${id}/play/reset`, { method: "POST" }),
   resetActivity: (id: number) => request<void>(`/videos/${id}/activity/reset`, { method: "POST" }),
   getHistory: (id: number) => request<VideoHistory>(`/videos/${id}/history`),
-  searchMetadataServer: (id: number, term?: string, endpoint?: string, strategy?: string) =>
+  searchMetadataServer: (id: number, term?: string, endpoint?: string, strategy?: string, signal?: AbortSignal) =>
     request<MetadataServerVideoMatch[]>(
       `/videos/${id}/metadata-server/search${buildQuery(undefined, { term, endpoint, strategy })}`,
+      { signal },
     ),
   findMetadataServerByIds: (data: MetadataServerFindByIdsRequest) =>
     request<MetadataServerVideoMatch[]>("/videos/metadata-server/find-by-ids", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  compareCover: (id: number, imageUrl: string) =>
+    request<VideoCoverComparison>(`/videos/${id}/cover-comparison`, {
+      method: "POST",
+      body: JSON.stringify({ imageUrl }),
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
     }),
   importFromMetadataServer: (id: number, data: MetadataServerVideoImportRequest) =>
     request<Video>(`/videos/${id}/metadata-server/import`, {

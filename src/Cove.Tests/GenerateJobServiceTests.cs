@@ -554,6 +554,8 @@ public class GenerateJobServiceTests
         public Task<string?> ComputeImagePhashAsync(string path, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
+        public ImageSignature? ComputeImageSignature(byte[] data) => null;
+
         public Task<string?> ComputeVideoPhashAsync(string path, double duration, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 

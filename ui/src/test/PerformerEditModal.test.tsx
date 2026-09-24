@@ -83,25 +83,29 @@ describe("PerformerEditModal", () => {
 
   afterEach(() => resetMutationFailureForTests());
 
-  it.each(["TransgenderMale", "TransgenderFemale"])("preserves and submits the API gender %s", async (gender) => {
-    const performer = {
-      id: 1,
-      name: "Sample Performer",
-      gender,
-      urls: [],
-      aliases: [],
-      tags: [],
-      remoteIds: [],
-    } as unknown as Performer;
-    const { container } = renderModal(performer);
-    const select = [...container.querySelectorAll("select")].find((element) =>
-      [...element.options].some((option) => option.value === "NonBinary"),
-    )!;
-    expect(select.value).toBe(gender);
-    fireEvent.change(select, { target: { value: gender } });
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mocks.performersUpdate).toHaveBeenCalledWith(1, expect.objectContaining({ gender })));
-  });
+  it.each(["TransgenderMale", "TransgenderFemale"])(
+    "preserves the API gender %s without clearing it",
+    async (gender) => {
+      const performer = {
+        id: 1,
+        name: "Sample Performer",
+        gender,
+        urls: [],
+        aliases: [],
+        tags: [],
+        remoteIds: [],
+      } as unknown as Performer;
+      const { container } = renderModal(performer);
+      const select = [...container.querySelectorAll("select")].find((element) =>
+        [...element.options].some((option) => option.value === "NonBinary"),
+      )!;
+      expect(select.value).toBe(gender);
+      fireEvent.change(select, { target: { value: gender } });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      // An unchanged gender is omitted, which the API treats as unchanged; it must not be cleared.
+      await waitFor(() => expect(mocks.performersUpdate).toHaveBeenLastCalledWith(1, {}));
+    },
+  );
 
   it("shows a rename conflict inline without exposing the API wrapper or global notice", async () => {
     const detail = 'A performer with name "Existing performer" and no disambiguation already exists.';
@@ -198,32 +202,11 @@ describe("PerformerEditModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(mocks.performersUpdate).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          clearFields: [
-            "disambiguation",
-            "gender",
-            "birthdate",
-            "deathDate",
-            "ethnicity",
-            "country",
-            "eyeColor",
-            "hairColor",
-            "heightCm",
-            "weight",
-            "measurements",
-            "fakeTits",
-            "penisLength",
-            "circumcised",
-            "careerStart",
-            "careerEnd",
-            "tattoos",
-            "piercings",
-            "details",
-          ],
-        }),
-      ),
+      expect(mocks.performersUpdate).toHaveBeenCalledWith(1, {
+        birthdate: undefined,
+        heightCm: undefined,
+        clearFields: ["birthdate", "heightCm"],
+      }),
     );
   });
 
@@ -416,5 +399,32 @@ describe("PerformerEditModal", () => {
         expect.objectContaining({ aliases: ["New Alias", "Second Alias", "Third Alias"] }),
       ),
     );
+  });
+
+  it("discards cancelled edits and keeps open edits across refetches", () => {
+    const performer = {
+      id: 1,
+      name: "Sample Performer",
+      urls: [],
+      aliases: [],
+      tags: [],
+      remoteIds: [],
+    } as unknown as Performer;
+    const queryClient = createAppQueryClient();
+    const renderWith = (current: Performer, open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <PerformerEditModal performer={current} open={open} onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(renderWith(performer, true));
+    fireEvent.change(screen.getByDisplayValue("Sample Performer"), { target: { value: "Cancelled name" } });
+    rerender(renderWith(performer, false));
+    rerender(renderWith(performer, true));
+    expect(screen.getByDisplayValue("Sample Performer")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("Sample Performer"), { target: { value: "Draft name" } });
+    rerender(renderWith({ ...performer, favorite: true } as Performer, true));
+    expect(screen.getByDisplayValue("Draft name")).toBeInTheDocument();
   });
 });

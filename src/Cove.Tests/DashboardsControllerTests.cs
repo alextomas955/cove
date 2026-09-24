@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Cove.Api.Controllers;
+using Cove.Api.Services;
 using Cove.Core.Auth;
+using Cove.Core.Entities;
 using Cove.Core.Common;
 using Cove.Core.Entities.Auth;
 using Cove.Data;
@@ -37,6 +39,7 @@ public sealed class DashboardsControllerTests
     public async Task Update_requires_the_current_version_and_preserves_the_draft_on_conflict()
     {
         await using var scope = CreateScope();
+        await SeedContinueWatchingGroupAsync(scope);
         var controller = scope.ControllerFor(7);
         var dashboard = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
             (await controller.Bootstrap(new DashboardBootstrapRequest([]), default)).Result).Value);
@@ -69,9 +72,79 @@ public sealed class DashboardsControllerTests
         Assert.Empty(empty.Widgets);
 
         await using var defaultScope = CreateScope();
+        var group = await SeedContinueWatchingGroupAsync(defaultScope);
         var defaults = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
             (await defaultScope.ControllerFor(7).Bootstrap(new DashboardBootstrapRequest(null), default)).Result).Value);
         Assert.Equal(6, defaults.Widgets.Count);
+        var continueWatching = defaults.Widgets[0];
+        Assert.Equal("collection", continueWatching.WidgetKey);
+        Assert.Equal("Continue Watching", continueWatching.Label);
+        Assert.Equal("group", continueWatching.Configuration.GetProperty("source").GetString());
+        Assert.Equal(group.Id, continueWatching.Configuration.GetProperty("groupId").GetInt32());
+    }
+
+    [Fact]
+    public async Task Bootstrap_defaults_omit_Continue_Watching_when_the_built_in_group_is_missing()
+    {
+        // A database whose migrations are still pending has no built-in groups to reference.
+        await using var scope = CreateScope();
+        var defaults = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
+            (await scope.ControllerFor(7).Bootstrap(new DashboardBootstrapRequest(null), default)).Result).Value);
+
+        Assert.Equal(5, defaults.Widgets.Count);
+        Assert.DoesNotContain(defaults.Widgets, widget => widget.Label == "Continue Watching");
+    }
+
+    [Fact]
+    public async Task Continue_Watching_is_left_out_for_a_principal_that_cannot_read_groups()
+    {
+        await using var scope = CreateScope();
+        await SeedContinueWatchingGroupAsync(scope);
+        var restricted = scope.ControllerFor(7, Permissions.VideosRead);
+
+        var defaults = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
+            (await restricted.Bootstrap(new DashboardBootstrapRequest(null), default)).Result).Value);
+        Assert.Equal(5, defaults.Widgets.Count);
+        Assert.DoesNotContain(defaults.Widgets, widget => widget.Label == "Continue Watching");
+    }
+
+    [Fact]
+    public async Task Dashboards_saved_with_the_legacy_Continue_Watching_widget_are_read_as_the_group_widget()
+    {
+        await using var scope = CreateScope();
+        var group = await SeedContinueWatchingGroupAsync(scope);
+        var controller = scope.ControllerFor(7);
+        var legacy = Widget("continue", "cove.core", "continue-watching", "Continue Watching", new { });
+        var created = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
+            (await controller.Bootstrap(new DashboardBootstrapRequest([legacy]), default)).Result).Value);
+
+        var converted = Assert.Single(created.Widgets);
+        Assert.Equal("continue", converted.InstanceId);
+        Assert.Equal("collection", converted.WidgetKey);
+        Assert.Equal("Continue Watching", converted.Label);
+        Assert.Equal("group", converted.Configuration.GetProperty("source").GetString());
+        Assert.Equal(group.Id, converted.Configuration.GetProperty("groupId").GetInt32());
+
+        // The stored layout is untouched until the user saves; reads keep converting it.
+        var reread = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
+            (await controller.GetById(created.Id, default)).Result).Value);
+        Assert.Equal("collection", Assert.Single(reread.Widgets).WidgetKey);
+    }
+
+    [Fact]
+    public async Task A_legacy_Continue_Watching_widget_is_dropped_when_the_built_in_group_is_missing()
+    {
+        await using var scope = CreateScope();
+        var controller = scope.ControllerFor(7);
+        var created = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(
+            (await controller.Bootstrap(
+                new DashboardBootstrapRequest([
+                    Widget("continue", "cove.core", "continue-watching", "Continue Watching", new { }),
+                    Widget("videos", "cove.core", "collection", "Recent videos", new { source = "premade", mode = "videos" }),
+                ]),
+                default)).Result).Value);
+
+        Assert.Equal("videos", Assert.Single(created.Widgets).InstanceId);
     }
 
     [Fact]
@@ -177,6 +250,19 @@ public sealed class DashboardsControllerTests
         DashboardWidgetPresentation presentation = DashboardWidgetPresentation.Flow)
         => new(instanceId, owner, widgetKey, label, JsonSerializer.SerializeToElement(configuration), presentation);
 
+    private static async Task<Group> SeedContinueWatchingGroupAsync(TestScope scope)
+    {
+        var group = new Group
+        {
+            Name = "Continue Watching",
+            Kind = GroupKind.Dynamic,
+            QuerySourceKey = DynamicGroupResolver.ContinueWatchingSourceKey,
+        };
+        scope.Context.Groups.Add(group);
+        await scope.Context.SaveChangesAsync();
+        return group;
+    }
+
     private static TestScope CreateScope()
     {
         var options = new DbContextOptionsBuilder<CoveContext>()
@@ -189,13 +275,13 @@ public sealed class DashboardsControllerTests
     {
         public CoveContext Context { get; } = context;
 
-        public DashboardsController ControllerFor(int? userId)
-            => new(Context, new TestPrincipalAccessor(userId));
+        public DashboardsController ControllerFor(int? userId, params string[] permissions)
+            => new(Context, new TestPrincipalAccessor(userId, permissions.Length == 0 ? ["*"] : permissions));
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
     }
 
-    private sealed class TestPrincipalAccessor(int? userId) : ICurrentPrincipalAccessor
+    private sealed class TestPrincipalAccessor(int? userId, string[] permissions) : ICurrentPrincipalAccessor
     {
         public CovePrincipal? Current { get; private set; } = new()
         {
@@ -203,7 +289,7 @@ public sealed class DashboardsControllerTests
             Username = userId?.ToString() ?? "anonymous",
             Kind = userId is null ? PrincipalKind.Anonymous : PrincipalKind.User,
             Roles = new HashSet<string>(),
-            Permissions = new HashSet<string> { "*" },
+            Permissions = new HashSet<string>(permissions),
         };
 
         public void Set(CovePrincipal? principal) => Current = principal;

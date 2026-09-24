@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Cove.Api.Services;
 using Cove.Core.Auth;
 using Cove.Core.Common;
+using Cove.Core.Entities;
 using Cove.Core.Entities.Auth;
 using Cove.Data;
 using Cove.Plugins;
@@ -30,9 +32,9 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
 
         var existing = await UserDashboards(userId).OrderByDescending(item => item.IsDefault).ThenBy(item => item.Id).FirstOrDefaultAsync(ct);
         if (existing is not null)
-            return Ok(Map(existing));
+            return Ok(await MapAsync(existing, ct));
 
-        var widgets = request?.Widgets is { } supplied ? supplied : DefaultWidgets();
+        var widgets = request?.Widgets is { } supplied ? supplied : await DefaultWidgetsAsync(ct);
         if (ValidateWidgets(widgets) is { } widgetError)
             return BadRequest(new { message = widgetError });
 
@@ -50,9 +52,9 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
             existing = await UserDashboards(userId).AsNoTracking().OrderByDescending(item => item.IsDefault).ThenBy(item => item.Id).FirstOrDefaultAsync(ct);
             if (existing is null)
                 throw;
-            return Ok(Map(existing));
+            return Ok(await MapAsync(existing, ct));
         }
-        return Ok(Map(dashboard));
+        return Ok(await MapAsync(dashboard, ct));
     }
 
     [HttpGet]
@@ -76,7 +78,7 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
             return Unauthorized(new { code = "UNAUTHORIZED" });
 
         var dashboard = await UserDashboards(userId).FirstOrDefaultAsync(item => item.Id == id, ct);
-        return dashboard is null ? NotFound() : Ok(Map(dashboard));
+        return dashboard is null ? NotFound() : Ok(await MapAsync(dashboard, ct));
     }
 
     [HttpPost]
@@ -115,7 +117,7 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
                 return Conflict(new { message = "A dashboard with that name already exists." });
             }
         }
-        return CreatedAtAction(nameof(GetById), new { id = dashboard.Id }, Map(dashboard));
+        return CreatedAtAction(nameof(GetById), new { id = dashboard.Id }, await MapAsync(dashboard, ct));
     }
 
     [HttpPut("{id:int}")]
@@ -128,7 +130,7 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
         if (dashboard is null)
             return NotFound();
         if (dashboard.Version != request.ExpectedVersion)
-            return VersionConflict(dashboard);
+            return await VersionConflictAsync(dashboard, ct);
         if (NormalizeName(request.Name) is not { } name)
             return BadRequest(new { message = $"Dashboard name is required and cannot exceed {MaxDashboardNameLength} characters." });
         if (await NameExists(userId, name, dashboard.Id, ct))
@@ -148,13 +150,13 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
         {
             db.Entry(dashboard).State = EntityState.Detached;
             var current = await UserDashboards(userId).AsNoTracking().FirstOrDefaultAsync(item => item.Id == id, ct);
-            return current is null ? NotFound() : VersionConflict(current);
+            return current is null ? NotFound() : await VersionConflictAsync(current, ct);
         }
         catch (DbUpdateException)
         {
             return Conflict(new { message = "A dashboard with that name already exists." });
         }
-        return Ok(Map(dashboard));
+        return Ok(await MapAsync(dashboard, ct));
     }
 
     [HttpPost("{id:int}/duplicate")]
@@ -171,7 +173,7 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
         if (await NameExists(userId, name, exceptId: null, ct))
             return Conflict(new { message = "A dashboard with that name already exists." });
 
-        var widgets = DeserializeWidgets(source.WidgetsJson)
+        var widgets = (await ConvertLegacyWidgetsAsync(DeserializeWidgets(source.WidgetsJson), ct))
             .Select(widget => widget with { InstanceId = Guid.NewGuid().ToString("N") })
             .ToList();
         var duplicate = CreateEntity(userId, name, isDefault: false, widgets);
@@ -184,7 +186,7 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
         {
             return Conflict(new { message = "A dashboard with that name already exists." });
         }
-        return CreatedAtAction(nameof(GetById), new { id = duplicate.Id }, Map(duplicate));
+        return CreatedAtAction(nameof(GetById), new { id = duplicate.Id }, await MapAsync(duplicate, ct));
     }
 
     [HttpPut("{id:int}/default")]
@@ -208,7 +210,7 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
                 dashboard.IsDefault = true;
                 await db.SaveChangesAsync(operationCt);
             }
-            return Ok(Map(dashboard));
+            return Ok(await MapAsync(dashboard, operationCt));
         },
         verifySucceeded: verifyCt => UserDashboards(userId).AsNoTracking()
             .AnyAsync(item => item.Id == id && item.IsDefault, verifyCt),
@@ -366,18 +368,81 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
         return options;
     }
 
-    private static DashboardDto Map(Dashboard dashboard)
-        => new(dashboard.Id, dashboard.Name, dashboard.IsDefault, dashboard.Version, dashboard.CreatedAt, dashboard.UpdatedAt, DeserializeWidgets(dashboard.WidgetsJson));
+    private async Task<DashboardDto> MapAsync(Dashboard dashboard, CancellationToken ct)
+        => new(dashboard.Id, dashboard.Name, dashboard.IsDefault, dashboard.Version, dashboard.CreatedAt, dashboard.UpdatedAt,
+            await ConvertLegacyWidgetsAsync(DeserializeWidgets(dashboard.WidgetsJson), ct));
+
+    private static bool IsLegacyContinueWatchingWidget(DashboardWidgetDto widget)
+        => widget.Owner == "cove.core" && widget.WidgetKey == "continue-watching";
+
+    /// <summary>
+    /// Dashboards saved before Continue Watching became a dynamic group widget used a dedicated
+    /// widget key. Present those as the group they always meant, so clients only ever see a group
+    /// reference; the user's next save persists the converted form. The row is dropped when the
+    /// group is missing, which is what an unreadable group renders as.
+    /// </summary>
+    private async Task<IReadOnlyList<DashboardWidgetDto>> ConvertLegacyWidgetsAsync(
+        IReadOnlyList<DashboardWidgetDto> widgets,
+        CancellationToken ct)
+    {
+        if (!widgets.Any(IsLegacyContinueWatchingWidget))
+            return widgets;
+
+        var group = await ContinueWatchingGroupAsync(ct);
+        var converted = new List<DashboardWidgetDto>(widgets.Count);
+        foreach (var widget in widgets)
+        {
+            if (!IsLegacyContinueWatchingWidget(widget))
+                converted.Add(widget);
+            else if (group is not null)
+                converted.Add(widget with
+                {
+                    WidgetKey = "collection",
+                    Configuration = JsonSerializer.SerializeToElement(new { source = "group", groupId = group.Id }, CoveJson.Default),
+                });
+        }
+        return converted;
+    }
 
     private static DashboardSummaryDto MapSummary(Dashboard dashboard)
         => new(dashboard.Id, dashboard.Name, dashboard.IsDefault, dashboard.Version, dashboard.CreatedAt, dashboard.UpdatedAt);
 
-    private static ConflictObjectResult VersionConflict(Dashboard dashboard)
-        => new(new DashboardVersionConflictDto("DASHBOARD_VERSION_CONFLICT", Map(dashboard)));
+    private async Task<ConflictObjectResult> VersionConflictAsync(Dashboard dashboard, CancellationToken ct)
+        => new(new DashboardVersionConflictDto("DASHBOARD_VERSION_CONFLICT", await MapAsync(dashboard, ct)));
 
-    private static IReadOnlyList<DashboardWidgetDto> DefaultWidgets() =>
+    /// <summary>
+    /// The built-in Continue Watching group, or null when this principal cannot read groups or the
+    /// database's migrations are still pending. Startup seeds the built-in groups before admitting
+    /// requests, so it is normally present; callers leave the row out rather than referencing a
+    /// group that will not load.
+    /// </summary>
+    private Task<ContinueWatchingGroup?> ContinueWatchingGroupAsync(CancellationToken ct)
+    {
+        // A principal that cannot read groups would only get a widget it can never load.
+        if (principals.Current?.Has(Permissions.GroupsRead) != true)
+            return Task.FromResult<ContinueWatchingGroup?>(null);
+
+        return db.Groups.AsNoTracking()
+            .Where(group => group.Kind == GroupKind.Dynamic && group.QuerySourceKey == DynamicGroupResolver.ContinueWatchingSourceKey)
+            .Select(group => new ContinueWatchingGroup(group.Id, group.Name))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<IReadOnlyList<DashboardWidgetDto>> DefaultWidgetsAsync(CancellationToken ct)
+    {
+        var continueWatching = await ContinueWatchingGroupAsync(ct);
+        if (continueWatching is null)
+            return DefaultCollectionWidgets();
+
+        return
+        [
+            CoreWidget("collection", continueWatching.Name, new { source = "group", groupId = continueWatching.Id }),
+            .. DefaultCollectionWidgets(),
+        ];
+    }
+
+    private static IReadOnlyList<DashboardWidgetDto> DefaultCollectionWidgets() =>
     [
-        CoreWidget("continue-watching", "Continue Watching", new { }),
         CoreWidget("collection", "Recently Released Videos", new { source = "premade", mode = "videos", sortBy = "date", direction = "desc", header = "Recently Released Videos" }),
         CoreWidget("collection", "Recently Added Studios", new { source = "premade", mode = "studios", sortBy = "created_at", direction = "desc", header = "Recently Added Studios" }),
         CoreWidget("collection", "Recently Released Groups", new { source = "premade", mode = "groups", sortBy = "date", direction = "desc", header = "Recently Released Groups" }),
@@ -387,6 +452,8 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
 
     private static DashboardWidgetDto CoreWidget(string key, string label, object configuration)
         => new(Guid.NewGuid().ToString("N"), "cove.core", key, label, JsonSerializer.SerializeToElement(configuration, CoveJson.Default));
+
+    private sealed record ContinueWatchingGroup(int Id, string Name);
 }
 
 public sealed record DashboardWidgetDto(

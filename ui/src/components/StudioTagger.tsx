@@ -20,7 +20,7 @@ import {
   type StudioReviewInput,
 } from "./StudioTaggerReview";
 import {
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
   TaggerToolbar,
@@ -40,7 +40,7 @@ interface StudioTaggerProps {
 interface TaggerConfig {
   selectedEndpoint: string;
   showTagged: boolean;
-  blacklist: string[];
+  denylist: string[];
 }
 
 interface StudioSearchState {
@@ -167,7 +167,7 @@ export function StudioTagger({
   const [taggerConfig, setTaggerConfig] = useState<TaggerConfig>({
     selectedEndpoint: metadataServers[0]?.endpoint ?? "",
     showTagged: true,
-    blacklist: [...DEFAULT_TAGGER_BLACKLIST],
+    denylist: [...DEFAULT_TAGGER_DENYLIST],
   });
 
   const [searchStates, setSearchStates] = useState<Record<number, StudioSearchState>>({});
@@ -180,7 +180,7 @@ export function StudioTagger({
 
   const searchStudio = useCallback(
     async (studio: Studio) => {
-      const query = queryOverrides[studio.id] ?? cleanTaggerQueryString(studio.name, taggerConfig.blacklist);
+      const query = queryOverrides[studio.id] ?? cleanTaggerQueryString(studio.name, taggerConfig.denylist);
       updateSearchState(studio.id, { loading: true, error: undefined, results: undefined, saved: false });
       try {
         const endpoint = taggerConfig.selectedEndpoint || undefined;
@@ -197,7 +197,7 @@ export function StudioTagger({
         });
       }
     },
-    [queryOverrides, taggerConfig.blacklist, taggerConfig.selectedEndpoint, updateSearchState],
+    [queryOverrides, taggerConfig.denylist, taggerConfig.selectedEndpoint, updateSearchState],
   );
 
   const [batchSearching, setBatchSearching] = useState(false);
@@ -266,8 +266,8 @@ export function StudioTagger({
       />
       {showSettings && (
         <TaggerSettingsPanel
-          blacklist={taggerConfig.blacklist}
-          onBlacklistChange={(items) => setTaggerConfig((current) => ({ ...current, blacklist: items }))}
+          denylist={taggerConfig.denylist}
+          onDenylistChange={(items) => setTaggerConfig((current) => ({ ...current, denylist: items }))}
         />
       )}
 
@@ -283,7 +283,7 @@ export function StudioTagger({
             key={studio.id}
             studio={studio}
             state={searchStates[studio.id]}
-            query={queryOverrides[studio.id] ?? cleanTaggerQueryString(studio.name, taggerConfig.blacklist)}
+            query={queryOverrides[studio.id] ?? cleanTaggerQueryString(studio.name, taggerConfig.denylist)}
             onQueryChange={(q) => setQueryOverrides((prev) => ({ ...prev, [studio.id]: q }))}
             onSearch={() => searchStudio(studio)}
             onUpdateState={(update) => updateSearchState(studio.id, update)}

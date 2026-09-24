@@ -39,6 +39,7 @@ export function useDetailListQuery<TItem extends { id: string | number }>({
     infinitePageSize: listData.infinitePageSize,
     infiniteQuery: listData.infiniteQuery,
     infiniteFilterKey: listData.infiniteFilterKey,
+    settledListKey: listData.settledListKey,
     loadMore: listData.loadMore,
     infiniteScroll: listData.infiniteScroll,
     fetchAllIds: listData.fetchAllIds,

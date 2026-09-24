@@ -1,28 +1,31 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
 
-const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, coverDialogMock } = vi.hoisted(() => ({
-  mockVideos: {
-    get: vi.fn(),
-    update: vi.fn(),
-    screenshotUrl: vi.fn((id: number) => `/video-${id}.jpg`),
-    streamUrl: vi.fn((id: number) => `/video-${id}.mp4`),
-  },
-  videoPlayerMock: vi.fn(),
-  videoQueueMock: {
-    queue: null as null | { videoIds: number[] },
-    currentId: null as number | null,
-    hasPrev: false,
-    hasNext: false,
-    goPrevious: vi.fn(),
-    goNext: vi.fn(),
-  },
-  visualAvailabilityMock: { available: false, loading: false },
-  coverDialogMock: vi.fn(),
-}));
+const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, coverDialogMock, appConfigMock } =
+  vi.hoisted(() => ({
+    appConfigMock: { config: { ui: {} } as { ui: Record<string, unknown>; scraping?: { metadataServers: unknown[] } } },
+    mockVideos: {
+      get: vi.fn(),
+      update: vi.fn(),
+      screenshotUrl: vi.fn((id: number) => `/video-${id}.jpg`),
+      streamUrl: vi.fn((id: number) => `/video-${id}.mp4`),
+      submitMetadataServerDraft: vi.fn(),
+    },
+    videoPlayerMock: vi.fn(),
+    videoQueueMock: {
+      queue: null as null | { videoIds: number[] },
+      currentId: null as number | null,
+      hasPrev: false,
+      hasNext: false,
+      goPrevious: vi.fn(),
+      goNext: vi.fn(),
+    },
+    visualAvailabilityMock: { available: false, loading: false },
+    coverDialogMock: vi.fn(),
+  }));
 
 vi.mock("../api/client", () => ({
   entityImages: { studioImageUrl: vi.fn() },
@@ -53,12 +56,14 @@ vi.mock("../components/CoverImageDialog", () => ({
 vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
   const MockMediaDetailLayout = ({
     media,
+    actions,
     tabs,
     activeTab,
     onTabChange,
     children,
   }: {
     media: ReactElement<{ children?: ReactNode }>;
+    actions?: ReactNode;
     tabs: { key: string; label: string }[];
     activeTab: string;
     onTabChange: (key: string) => void;
@@ -74,6 +79,7 @@ vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
             </button>
           ))}
         </div>
+        {actions}
         {mediaChildren[0]}
         {activeTab === "edit" || activeTab === "file-info" ? children : null}
       </>
@@ -95,8 +101,8 @@ vi.mock("../auth/AuthContext", () => ({
 }));
 
 vi.mock("../state/AppConfigContext", () => ({
-  useAppConfig: () => ({ config: { ui: {} } }),
-  useOptionalAppConfig: () => ({ config: { ui: {} } }),
+  useAppConfig: () => appConfigMock,
+  useOptionalAppConfig: () => appConfigMock,
 }));
 
 vi.mock("../components/ConfirmDialog", () => ({
@@ -121,6 +127,7 @@ vi.mock("../state/VideoQueueContext", () => ({
 vi.mock("../extensions/ExtensionLoader", () => ({
   useExtensions: () => ({
     getTabsForPage: () => [],
+    getActionsForContext: () => [],
     getExtensionRevision: () => 0,
     resolveComponent: () => undefined,
     getFeature: () => undefined,
@@ -178,6 +185,7 @@ function renderVideoDetail(id = 14, initialSeekTo?: number) {
 
   return {
     ...result,
+    queryClient,
     onNavigate,
     rerenderVideoDetail: (videoId: number) => result.rerender(renderPage(videoId)),
   };
@@ -211,6 +219,7 @@ describe("VideoDetailPage media-player extension surface", () => {
     visualAvailabilityMock.available = false;
     visualAvailabilityMock.loading = false;
     coverDialogMock.mockReset();
+    appConfigMock.config = { ui: {} };
   });
 
   it("does not offer removal for a generated-only video cover", async () => {
@@ -357,6 +366,167 @@ describe("VideoDetailPage media-player extension surface", () => {
     expect(screen.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("saves only the fields the user changed", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      date: "2026-07-01",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: ["https://example.com/video/14"],
+      remoteIds: [],
+      customFields: { mood: "calm" },
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    mockVideos.update.mockResolvedValue(video);
+
+    renderVideoDetail();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Renamed video" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { title: "Renamed video" }));
+  });
+
+  it("keeps unsaved edits and follows other changes when the video refetches", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+
+    const { queryClient } = renderVideoDetail();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved draft" } });
+    // For example after Mark organized or a finished background job refreshes the video.
+    await act(async () => {
+      queryClient.setQueryData(["video", 14], { ...video, organized: true, director: "Scraped director" });
+      // Query observers are notified on the next tick.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved draft");
+    // An untouched field shows the refetched value, and saving sends only what the user changed.
+    expect(screen.getByRole("textbox", { name: "Director" })).toHaveValue("Scraped director");
+    mockVideos.update.mockResolvedValue(video);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { title: "Unsaved draft" }));
+  });
+
+  it("fills the edit form from the next video when the page moves on", async () => {
+    mockVideos.get.mockImplementation(async (videoId: number) => ({
+      id: videoId,
+      title: `Queued video ${videoId}`,
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    }));
+
+    const { rerenderVideoDetail } = renderVideoDetail();
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved draft" } });
+
+    rerenderVideoDetail(15);
+
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Queued video 15"));
+  });
+
+  it("continues from the saved video after saving", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    // The server stores what was sent in its own form, as it does with lists in display order.
+    mockVideos.update.mockImplementation(async () => {
+      mockVideos.get.mockResolvedValue({ ...video, title: "Renamed video (normalized)" });
+      return { ...video, title: "Renamed video (normalized)" };
+    });
+
+    renderVideoDetail();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Renamed video" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockVideos.get).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Renamed video (normalized)"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The second save compares against the saved video, so nothing is resent.
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledTimes(2));
+    expect(mockVideos.update).toHaveBeenLastCalledWith(14, {});
+  });
+
+  it("refreshes a gallery the video was unlinked from", async () => {
+    const video = {
+      id: 14,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [{ id: 3 }],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    mockVideos.update.mockResolvedValue(video);
+
+    const { queryClient } = renderVideoDetail();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove gallery" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { galleryIds: [] }));
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gallery", 3] }));
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gallery-videos", 3] });
+  });
+
   it("carries the selected tab when opening the next video", async () => {
     mockVideos.get.mockResolvedValue({
       id: 14,
@@ -480,5 +650,54 @@ describe("VideoDetailPage media-player extension surface", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Could not load video");
     expect(screen.queryByTestId("video-detail-player")).not.toBeInTheDocument();
+  });
+
+  it("offers a draft submission to the configured metadata servers from the operations menu", async () => {
+    appConfigMock.config = {
+      ui: {},
+      scraping: { metadataServers: [{ name: "First provider", endpoint: "https://first.example/graphql" }] },
+    };
+    mockVideos.get.mockImplementation((id: number) =>
+      Promise.resolve({
+        id,
+        title: `Video ${id}`,
+        organized: false,
+        updatedAt: "2026-07-11T00:00:00Z",
+        files: [],
+        performers: [],
+        tags: [],
+        contextTagApplications: [],
+      }),
+    );
+
+    const { rerenderVideoDetail } = renderVideoDetail();
+    fireEvent.click(await screen.findByTitle("Operations"));
+    fireEvent.click(screen.getByRole("button", { name: "Submit Draft…" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Submit Draft" });
+    expect(dialog).toHaveTextContent("First provider");
+
+    // The dialog belongs to the video it was opened on; moving to the next one must not retarget it.
+    rerenderVideoDetail(15);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Submit Draft" })).not.toBeInTheDocument());
+  });
+
+  it("does not offer a draft submission when no metadata server is configured", async () => {
+    mockVideos.get.mockResolvedValue({
+      id: 14,
+      title: "Detail video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [],
+      performers: [],
+      tags: [],
+      contextTagApplications: [],
+    });
+
+    renderVideoDetail();
+    fireEvent.click(await screen.findByTitle("Operations"));
+
+    expect(screen.getByRole("button", { name: /Merge/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit Draft…" })).not.toBeInTheDocument();
   });
 });

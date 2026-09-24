@@ -7,6 +7,7 @@ import {
   tags,
   galleries,
   groups,
+  images,
   audios,
   texts,
   faces,
@@ -25,6 +26,7 @@ import type {
   Tag,
   Gallery,
   Group,
+  GroupItem,
   SavedFilter,
   FindFilter,
   Dashboard,
@@ -68,6 +70,8 @@ import { VideoCoverImage } from "../components/VideoCoverImage";
 import { SortableList } from "../components/SortableList";
 import { useExtensions } from "../extensions/ExtensionLoader";
 import { useAuth } from "../auth/AuthContext";
+import { canReadEntity } from "../auth/visibility";
+import { resolveGroupFeedHost } from "../components/GroupItemFeed";
 import { canAccessExtensionContribution } from "../extensions/extension-permissions";
 import { ExtensionErrorBoundary } from "../components/ExtensionErrorBoundary";
 import { emitLocationChange, registerNavigationBlocker } from "../router/location";
@@ -116,11 +120,33 @@ interface SavedFilterRow {
   savedFilterId: number;
 }
 
-interface ContinueWatchingRowConfig {
-  type: "continueWatching";
+interface GroupRow {
+  type: "group";
+  groupId: number;
 }
 
-type FrontPageContent = CustomFilter | SavedFilterRow | ContinueWatchingRowConfig;
+type FrontPageContent = CustomFilter | SavedFilterRow | GroupRow;
+
+const CONTINUE_WATCHING_SOURCE_KEY = "continue-watching";
+
+// Built-in dynamic groups are installation-wide singletons seeded before the API accepts requests,
+// so their id can be resolved once and then referenced like any other group.
+async function resolveBuiltInGroup(sourceKey: string): Promise<Group | null> {
+  try {
+    const matches = await groups.findFiltered({
+      findFilter: { page: 1, perPage: 1 },
+      // Users can create their own groups on a built-in source; only the system group is meant here.
+      objectFilter: {
+        querySourceKeyCriterion: { value: sourceKey, modifier: "EQUALS" },
+        isBuiltInCriterion: { value: true },
+      },
+    });
+    return matches.items[0] ?? null;
+  } catch {
+    // A principal that cannot read groups gets no row, as it would see nothing in the group anyway.
+    return null;
+  }
+}
 
 const DEFAULT_SORT_BY_MODE: Record<FilterMode, string> = {
   videos: "date",
@@ -166,8 +192,7 @@ function parseJsonObject<T extends object>(json: string | undefined): T | undefi
 
 // ─── Default content (matches standard defaults) ───────────────────────
 
-const DEFAULT_CONTENT: FrontPageContent[] = [
-  { type: "continueWatching" },
+const DEFAULT_COLLECTION_CONTENT: FrontPageContent[] = [
   { type: "custom", mode: "videos", sortBy: "date", direction: "desc", header: "Recently Released Videos" },
   { type: "custom", mode: "studios", sortBy: "created_at", direction: "desc", header: "Recently Added Studios" },
   { type: "custom", mode: "groups", sortBy: "date", direction: "desc", header: "Recently Released Groups" },
@@ -194,20 +219,41 @@ const STORAGE_KEY = "cove-front-page-content";
 const CONTINUE_WATCHING_MIGRATION_KEY = "cove-front-page-continue-watching-migrated";
 const FLOW_PRESENTATION: DashboardWidgetPresentation = "flow";
 
-function loadContent(): FrontPageContent[] {
+// True when the stored layout needs the Continue Watching group id to be converted, so the lookup
+// is only paid for by layouts that predate the dynamic group widget.
+function storedContentNeedsContinueWatching(): boolean {
+  try {
+    const stored = readAuthenticatedUserHomePageContent() ?? localStorage.getItem(STORAGE_KEY);
+    if (!stored) return true;
+    if (localStorage.getItem(CONTINUE_WATCHING_MIGRATION_KEY) !== "true") return true;
+    return (JSON.parse(stored) as Array<{ type?: string }>).some((item) => item.type === "continueWatching");
+  } catch {
+    // An unreadable layout falls back to the defaults, which include the row.
+    return true;
+  }
+}
+
+function loadContent(continueWatchingGroupId: number | null): FrontPageContent[] {
+  const continueWatchingRow: GroupRow[] =
+    continueWatchingGroupId === null ? [] : [{ type: "group", groupId: continueWatchingGroupId }];
   try {
     // Prefer the user's account-stored layout (follows them across browsers); fall back to the
     // browser-local value for signed-out use and as a one-time migration source.
     const stored = readAuthenticatedUserHomePageContent() ?? localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      const content = JSON.parse(stored) as FrontPageContent[];
+      // Legacy layouts stored Continue Watching as its own row type; it is now a dynamic group row.
+      // The group is dropped when it cannot be resolved, which is what an unreadable group renders.
+      const parsed = JSON.parse(stored) as Array<FrontPageContent | { type: "continueWatching" }>;
+      const content = parsed.flatMap<FrontPageContent>((item) =>
+        item.type === "continueWatching" ? continueWatchingRow : [item],
+      );
       // Migrate layouts saved before Continue Watching became a customizable row: it used to be
       // hardcoded at the top, so preserve that behavior by inserting it once.
       const migrated = localStorage.getItem(CONTINUE_WATCHING_MIGRATION_KEY) === "true";
       if (!migrated) {
         localStorage.setItem(CONTINUE_WATCHING_MIGRATION_KEY, "true");
-        if (!content.some((item) => item.type === "continueWatching")) {
-          return [{ type: "continueWatching" }, ...content];
+        if (!content.some((item) => item.type === "group" && item.groupId === continueWatchingGroupId)) {
+          return [...continueWatchingRow, ...content];
         }
       }
       return content;
@@ -215,7 +261,7 @@ function loadContent(): FrontPageContent[] {
   } catch {
     /* ignore */
   }
-  return DEFAULT_CONTENT;
+  return [...continueWatchingRow, ...DEFAULT_COLLECTION_CONTENT];
 }
 
 function createInstanceId() {
@@ -268,30 +314,34 @@ function cloneJsonConfiguration(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
 }
 
-function contentToWidget(content: FrontPageContent, savedFilterName?: string): DashboardWidget {
-  if (content.type === "continueWatching") {
-    return {
-      instanceId: createInstanceId(),
-      owner: "cove.core",
-      widgetKey: "continue-watching",
-      label: "Continue Watching",
-      configuration: {},
-      presentation: FLOW_PRESENTATION,
-    };
-  }
+// Widget labels are capped by the dashboard API; keep the entity id visible when a long name is cut.
+function entityWidgetLabel(name: string | undefined, id: number, fallbackPrefix: string) {
+  const normalizedName = name?.trim();
+  if (!normalizedName) return `${fallbackPrefix} #${id}`;
+  const identifyingSuffix = `… #${id}`;
+  return normalizedName.length > 200
+    ? `${normalizedName.slice(0, 200 - identifyingSuffix.length).trimEnd()}${identifyingSuffix}`
+    : normalizedName;
+}
+
+function contentToWidget(content: FrontPageContent, sourceName?: string): DashboardWidget {
   if (content.type === "saved") {
-    const normalizedSavedFilterName = savedFilterName?.trim();
-    const identifyingSuffix = `… #${content.savedFilterId}`;
-    const widgetLabel =
-      normalizedSavedFilterName && normalizedSavedFilterName.length > 200
-        ? `${normalizedSavedFilterName.slice(0, 200 - identifyingSuffix.length).trimEnd()}${identifyingSuffix}`
-        : normalizedSavedFilterName;
     return {
       instanceId: createInstanceId(),
       owner: "cove.core",
       widgetKey: "collection",
-      label: widgetLabel || `Saved filter #${content.savedFilterId}`,
+      label: entityWidgetLabel(sourceName, content.savedFilterId, "Saved filter"),
       configuration: { source: "saved", savedFilterId: content.savedFilterId },
+      presentation: FLOW_PRESENTATION,
+    };
+  }
+  if (content.type === "group") {
+    return {
+      instanceId: createInstanceId(),
+      owner: "cove.core",
+      widgetKey: "collection",
+      label: entityWidgetLabel(sourceName, content.groupId, "Group"),
+      configuration: { source: "group", groupId: content.groupId },
       presentation: FLOW_PRESENTATION,
     };
   }
@@ -313,12 +363,14 @@ function contentToWidget(content: FrontPageContent, savedFilterName?: string): D
 
 function widgetToContent(widget: DashboardWidget): FrontPageContent | null {
   if (widget.owner !== "cove.core") return null;
-  if (widget.widgetKey === "continue-watching") return { type: "continueWatching" };
   if (widget.widgetKey !== "collection" || !widget.configuration || typeof widget.configuration !== "object")
     return null;
   const config = widget.configuration as Record<string, unknown>;
   if (config.source === "saved" && typeof config.savedFilterId === "number") {
     return { type: "saved", savedFilterId: config.savedFilterId };
+  }
+  if (config.source === "group" && typeof config.groupId === "number") {
+    return { type: "group", groupId: config.groupId };
   }
   const mode = normalizeFilterMode(typeof config.mode === "string" ? config.mode : undefined);
   if (!mode || typeof config.sortBy !== "string" || (config.direction !== "asc" && config.direction !== "desc"))
@@ -344,13 +396,28 @@ export function HomePage({ onNavigate, dashboardId }: Props) {
   const { user } = useAuth();
   const [editingDashboard, setEditingDashboard] = useState<{ id: number; selectName: boolean } | null>(null);
   const principalKey = user ? `${user.kind}:${user.id}` : "anonymous";
-  const legacyWidgets = useMemo(() => loadContent().map((content) => contentToWidget(content)), [principalKey]);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard-page", principalKey, dashboardId ?? "default"],
     queryFn: async () => {
+      const buildLegacyWidgets = async () => {
+        const continueWatching = storedContentNeedsContinueWatching()
+          ? await resolveBuiltInGroup(CONTINUE_WATCHING_SOURCE_KEY)
+          : null;
+        return loadContent(continueWatching?.id ?? null).map((content) =>
+          contentToWidget(
+            content,
+            content.type === "group" && content.groupId === continueWatching?.id ? continueWatching.name : undefined,
+          ),
+        );
+      };
       try {
-        await dashboards.bootstrap(legacyWidgets);
-        const list = await dashboards.list();
+        // Only a first-time bootstrap needs the locally stored layout, so the group lookup it
+        // depends on is skipped once the account has a dashboard.
+        let list = await dashboards.list();
+        if (list.length === 0) {
+          await dashboards.bootstrap(await buildLegacyWidgets());
+          list = await dashboards.list();
+        }
         const requested =
           dashboardId == null
             ? (list.find((item) => item.isDefault) ?? list[0])
@@ -374,7 +441,7 @@ export function HomePage({ onNavigate, dashboardId }: Props) {
           version: 1,
           createdAt: "",
           updatedAt: "",
-          widgets: legacyWidgets,
+          widgets: await buildLegacyWidgets(),
         };
         return { list: [standard], dashboard: standard, missingRequested: dashboardId != null, readOnly: true };
       }
@@ -630,18 +697,14 @@ function DashboardWidgetHost({
   if (content) {
     return (
       <div style={{ containerType: "inline-size" }}>
-        {content.type === "continueWatching" ? (
-          <ContinueWatchingRow principalKey={principalKey} onNavigate={onNavigate} />
-        ) : (
-          <RecommendationRow
-            principalKey={principalKey}
-            content={content}
-            savedFilterLabel={widget.label}
-            onNavigate={onNavigate}
-            onRemove={onRemove}
-            editing={editing}
-          />
-        )}
+        <RecommendationRow
+          principalKey={principalKey}
+          content={content}
+          widgetLabel={widget.label}
+          onNavigate={onNavigate}
+          onRemove={onRemove}
+          editing={editing}
+        />
       </div>
     );
   }
@@ -735,7 +798,15 @@ function WidgetLoadError({ label, error, onRetry }: { label: string; error: unkn
   );
 }
 
-function MissingSavedFilterWidget({ label, onRemove }: { label: string; onRemove?: () => Promise<void> }) {
+function MissingSourceWidget({
+  label,
+  reason,
+  onRemove,
+}: {
+  label: string;
+  reason: string;
+  onRemove?: () => Promise<void>;
+}) {
   const [removing, setRemoving] = useState(false);
   const [removeFailed, setRemoveFailed] = useState(false);
 
@@ -758,7 +829,7 @@ function MissingSavedFilterWidget({ label, onRemove }: { label: string; onRemove
     >
       <div>
         <p className="font-medium text-foreground">{label} is unavailable</p>
-        <p className="text-xs text-muted">The saved filter was deleted.</p>
+        <p className="text-xs text-muted">{reason}</p>
         {removeFailed ? <p className="mt-1 text-xs text-red-300">The widget could not be removed. Try again.</p> : null}
       </div>
       {onRemove ? (
@@ -820,6 +891,11 @@ function DashboardEditor({
   const { data: allSavedFilters } = useQuery({
     queryKey: ["saved-filters-all", "dashboard", user ? `${user.kind}:${user.id}` : "anonymous"],
     queryFn: () => savedFilters.list(),
+  });
+  const { data: dynamicGroups } = useQuery({
+    queryKey: ["dynamic-groups-all", "dashboard", principalKey],
+    queryFn: () => groups.find({ page: 1, perPage: 1000, sort: "name", direction: "asc" }, { kind: "dynamic" }),
+    enabled: showCatalog,
   });
   const definitions = (manifest?.dashboardWidgets ?? []).filter((definition) =>
     canAccessExtensionContribution(definition, hasPermission),
@@ -1198,6 +1274,7 @@ function DashboardEditor({
         <WidgetCatalog
           currentWidgets={draft.widgets}
           savedFilters={allSavedFilters ?? []}
+          dynamicGroups={dynamicGroups?.items ?? []}
           extensionDefinitions={definitions}
           disabled={busy}
           onAdd={addWidget}
@@ -1232,7 +1309,7 @@ function DashboardEditor({
 
 function canDuplicateWidget(widget: DashboardWidget, definitions: ExtensionDashboardWidgetContribution[]) {
   if (getWidgetPresentation(widget) === "canvas") return false;
-  if (widget.owner === "cove.core") return widget.widgetKey !== "continue-watching";
+  if (widget.owner === "cove.core") return true;
   const definition = definitions.find((item) => item.extensionId === widget.owner && item.id === widget.widgetKey);
   return definition !== undefined && definition.allowMultiple !== false;
 }
@@ -1357,6 +1434,7 @@ function useDashboardDialog<T extends HTMLElement>(onClose: () => void) {
 function WidgetCatalog({
   currentWidgets,
   savedFilters: filters,
+  dynamicGroups,
   extensionDefinitions,
   disabled,
   onAdd,
@@ -1364,6 +1442,7 @@ function WidgetCatalog({
 }: {
   currentWidgets: DashboardWidget[];
   savedFilters: SavedFilter[];
+  dynamicGroups: Group[];
   extensionDefinitions: ExtensionDashboardWidgetContribution[];
   disabled: boolean;
   onAdd: (widget: DashboardWidget) => void;
@@ -1381,17 +1460,6 @@ function WidgetCatalog({
     !normalizedSearch || `${label} ${description}`.toLocaleLowerCase().includes(normalizedSearch);
   const flowConflictDescription = "Remove the Canvas widget before adding Flow content.";
   const builtInItems = [
-    ...(!currentWidgets.some((widget) => widget.owner === "cove.core" && widget.widgetKey === "continue-watching")
-      ? [
-          {
-            key: "continue-watching",
-            label: "Continue Watching",
-            description: hasCanvasWidget ? flowConflictDescription : "Resume unfinished media.",
-            disabled: disabled || hasCanvasWidget,
-            onClick: () => onAdd(contentToWidget({ type: "continueWatching" })),
-          },
-        ]
-      : []),
     ...PREMADE_FILTERS.map((filter) => ({
       key: `${filter.mode}:${filter.sortBy}:${filter.header}`,
       label: filter.header,
@@ -1407,6 +1475,15 @@ function WidgetCatalog({
       description: hasCanvasWidget ? flowConflictDescription : `Saved filter · ${filter.mode}`,
       disabled: disabled || hasCanvasWidget,
       onClick: () => onAdd(contentToWidget({ type: "saved", savedFilterId: filter.id }, filter.name)),
+    }))
+    .filter((item) => matchesSearch(item.label, item.description));
+  const dynamicGroupItems = dynamicGroups
+    .map((group) => ({
+      key: `group:${group.id}`,
+      label: group.name,
+      description: hasCanvasWidget ? flowConflictDescription : "Dynamic group",
+      disabled: disabled || hasCanvasWidget,
+      onClick: () => onAdd(contentToWidget({ type: "group", groupId: group.id }, group.name)),
     }))
     .filter((item) => matchesSearch(item.label, item.description));
   const extensionItems = extensionDefinitions
@@ -1447,7 +1524,8 @@ function WidgetCatalog({
       };
     })
     .filter((item) => matchesSearch(item.label, item.description));
-  const hasMatches = builtInItems.length + savedFilterItems.length + extensionItems.length > 0;
+  const hasMatches =
+    builtInItems.length + savedFilterItems.length + dynamicGroupItems.length + extensionItems.length > 0;
   const onCatalogKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const items = Array.from(
@@ -1505,6 +1583,9 @@ function WidgetCatalog({
         ) : null}
         {savedFilterItems.length ? (
           <CatalogSection title="Saved Filters" items={savedFilterItems} onItemKeyDown={onCatalogKeyDown} />
+        ) : null}
+        {dynamicGroupItems.length ? (
+          <CatalogSection title="Dynamic Groups" items={dynamicGroupItems} onItemKeyDown={onCatalogKeyDown} />
         ) : null}
         {extensionItems.length ? (
           <CatalogSection title="Extensions" items={extensionItems} onItemKeyDown={onCatalogKeyDown} />
@@ -1706,87 +1787,24 @@ function WidgetConfigurationDialog({
   );
 }
 
-function ContinueWatchingRow({ principalKey, onNavigate }: { principalKey: string; onNavigate: (r: any) => void }) {
-  const groupQuery = useQuery({
-    queryKey: ["front-page-continue-watching-group", principalKey],
-    queryFn: () => groups.find({ page: 1, perPage: 100, sort: "name", direction: "asc" }),
-  });
-  const groupData = groupQuery.data;
-  const continueGroup = groupData?.items.find((group) => group.querySourceKey === "continue-watching");
-  const itemQuery = useQuery({
-    queryKey: ["front-page-continue-watching", principalKey, continueGroup?.id],
-    queryFn: () => groups.items.page(continueGroup!.id, { page: 1, perPage: 12 }),
-    enabled: !!continueGroup,
-  });
-  if (groupQuery.isError)
-    return (
-      <WidgetLoadError
-        label="Continue Watching"
-        error={groupQuery.error}
-        onRetry={() => {
-          void groupQuery.refetch();
-        }}
-      />
-    );
-  if (itemQuery.isError)
-    return (
-      <WidgetLoadError
-        label="Continue Watching"
-        error={itemQuery.error}
-        onRetry={() => {
-          void itemQuery.refetch();
-        }}
-      />
-    );
-  const { data: itemPage, isLoading } = itemQuery;
-  const playableItems = itemPage?.items ?? [];
-  if (!isLoading && playableItems.length === 0) return null;
-
-  return (
-    <RecommendationRowShell
-      header="Continue Watching"
-      viewAllPage="group"
-      viewAllId={continueGroup!.id}
-      onNavigate={onNavigate}
-      loading={isLoading}
-      count={playableItems.length}
-    >
-      {playableItems.map((item) => (
-        <ContinueWatchingCard key={`${item.groupId}-${item.id}`} item={item} onNavigate={onNavigate} />
-      ))}
-    </RecommendationRowShell>
-  );
-}
-
-function ContinueWatchingCard({
+function GroupItemRecommendationCard({
   item,
+  badge,
   onNavigate,
 }: {
-  item: {
-    hostType?: string;
-    hostId?: number;
-    videoId?: number | null;
-    videoTitle?: string;
-    title?: string;
-    startSec?: number;
-  };
+  item: GroupItem;
+  badge?: string;
   onNavigate: (r: any) => void;
 }) {
-  const hostType = item.hostType ?? "video";
-  const hostId = item.hostId ?? item.videoId ?? 0;
-  const videoId = item.videoId ?? (hostType === "video" ? hostId : 0);
-  const title = item.title || item.videoTitle || "Untitled";
-  const route =
-    hostType === "audio"
-      ? { page: "audio", id: hostId }
-      : hostType === "segment"
-        ? { page: "segment", id: hostId }
-        : // Only pass an explicit seekTo when we actually have a position (segments carry startSec).
-          // Continue-watching video items have no startSec, so omit it and let VideoDetailPage resume
-          // from the engagement resumeTime — passing seekTo: 0 would force playback back to the start.
-          item.startSec && item.startSec > 0
-          ? { page: "video", id: videoId, seekTo: item.startSec }
-          : { page: "video", id: videoId };
+  // The route deliberately omits seekTo when the item has no position: continue-watching videos
+  // resume from the engagement resumeTime, and seekTo: 0 would force playback back to the start.
+  const host = resolveGroupFeedHost(item);
+  if (!host) return null;
+  const hostType = host.resource;
+  const route = host.route;
+  const videoId = item.videoId ?? (hostType === "video" ? host.id : 0);
+  const imageId = hostType === "image" ? host.id : 0;
+  const title = item.title || item.videoTitle || item.imageTitle || item.childGroupName || "Untitled";
   const linkProps = createRouteLinkProps<HTMLAnchorElement>(route, () => onNavigate(route));
   return (
     <a
@@ -1803,12 +1821,27 @@ function ContinueWatchingCard({
             fallbackClassName="video-recommendation-cover-fallback"
             loading="lazy"
           />
+        ) : imageId > 0 ? (
+          <img
+            src={images.thumbnailUrl(imageId, 480)}
+            alt={title}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-accent">
-            {hostType === "audio" ? <Headphones className="h-10 w-10" /> : <Layers className="h-10 w-10" />}
+            {hostType === "audio" ? (
+              <Headphones className="h-10 w-10" />
+            ) : hostType === "text" ? (
+              <FileText className="h-10 w-10" />
+            ) : (
+              <Layers className="h-10 w-10" />
+            )}
           </div>
         )}
-        <div className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">Resume</div>
+        {badge ? (
+          <div className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">{badge}</div>
+        ) : null}
       </div>
       <div className="px-2 py-1.5">
         <p className="truncate text-sm font-medium text-foreground">{title}</p>
@@ -1822,27 +1855,36 @@ function ContinueWatchingCard({
 function RecommendationRow({
   principalKey,
   content,
-  savedFilterLabel,
+  widgetLabel,
   onNavigate,
   onRemove,
   editing = false,
 }: {
   principalKey: string;
   content: FrontPageContent;
-  savedFilterLabel?: string;
+  widgetLabel?: string;
   onNavigate: (r: any) => void;
   onRemove?: () => Promise<void>;
   editing?: boolean;
 }) {
-  if (content.type === "continueWatching") {
-    return <ContinueWatchingRow principalKey={principalKey} onNavigate={onNavigate} />;
-  }
   if (content.type === "saved") {
     return (
       <SavedFilterRecommendationRow
         principalKey={principalKey}
         savedFilterId={content.savedFilterId}
-        fallbackLabel={savedFilterLabel}
+        fallbackLabel={widgetLabel}
+        onNavigate={onNavigate}
+        onRemove={onRemove}
+        editing={editing}
+      />
+    );
+  }
+  if (content.type === "group") {
+    return (
+      <GroupRecommendationRow
+        principalKey={principalKey}
+        source={content}
+        fallbackLabel={widgetLabel}
         onNavigate={onNavigate}
         onRemove={onRemove}
         editing={editing}
@@ -2113,7 +2155,7 @@ function SavedFilterRecommendationRow({
     engagementHostType ? items.map((item: any) => item.id) : [],
   );
   if (isApiNotFoundError(filterQuery.error)) {
-    return <MissingSavedFilterWidget label={errorLabel} onRemove={onRemove} />;
+    return <MissingSourceWidget label={errorLabel} reason="The saved filter was deleted." onRemove={onRemove} />;
   }
   if (filterQuery.isError)
     return (
@@ -2172,6 +2214,101 @@ function SavedFilterRecommendationRow({
           item={item}
           engagement={engagementById.get(item.id)}
           mode={mode!}
+          onNavigate={onNavigate}
+        />
+      ))}
+    </RecommendationRowShell>
+  );
+}
+
+// ─── Group Row ──────────────────────────────────────────────────────────────
+
+function GroupRecommendationRow({
+  principalKey,
+  source,
+  fallbackLabel,
+  onNavigate,
+  onRemove,
+  editing = false,
+}: {
+  principalKey: string;
+  source: GroupRow;
+  fallbackLabel?: string;
+  onNavigate: (r: any) => void;
+  onRemove?: () => Promise<void>;
+  editing?: boolean;
+}) {
+  const { hasPermission } = useAuth();
+  const errorLabel = fallbackLabel?.trim() || `Group #${source.groupId}`;
+  const groupQuery = useQuery({
+    queryKey: ["front-page-group", principalKey, source.groupId],
+    queryFn: () => groups.get(source.groupId),
+  });
+  const groupId = groupQuery.data?.id;
+  const itemQuery = useQuery({
+    queryKey: ["front-page-group-items", principalKey, groupId],
+    queryFn: () => groups.items.page(groupId!, { page: 1, perPage: 25 }),
+    enabled: groupId !== undefined,
+  });
+  if (isApiNotFoundError(groupQuery.error)) {
+    return (
+      <MissingSourceWidget
+        label={errorLabel}
+        reason="The group was deleted or is not visible to you."
+        onRemove={onRemove}
+      />
+    );
+  }
+  if (groupQuery.isError)
+    return (
+      <WidgetLoadError
+        label={errorLabel}
+        error={groupQuery.error}
+        onRetry={() => {
+          void groupQuery.refetch();
+        }}
+      />
+    );
+  const group = groupQuery.data;
+  if (itemQuery.isError)
+    return (
+      <WidgetLoadError
+        label={group?.name ?? errorLabel}
+        error={itemQuery.error}
+        onRetry={() => {
+          void itemQuery.refetch();
+        }}
+      />
+    );
+  if (!group) return null;
+  const items = (itemQuery.data?.items ?? []).filter((item) => {
+    const host = resolveGroupFeedHost(item);
+    return !!host && canReadEntity(host.resource, hasPermission);
+  });
+  if (itemQuery.isSuccess && items.length === 0) {
+    if (!editing) return null;
+    return (
+      <div className="px-1 py-2">
+        <h2 className="text-base font-semibold text-foreground">{group.name}</h2>
+        <p className="mt-2 text-sm text-muted">This group has no items.</p>
+      </div>
+    );
+  }
+
+  return (
+    <RecommendationRowShell
+      header={group.name}
+      viewAllPage="group"
+      viewAllId={groupId}
+      onNavigate={onNavigate}
+      loading={itemQuery.isLoading}
+      count={items.length}
+    >
+      {items.map((item) => (
+        <GroupItemRecommendationCard
+          key={`${item.kind}:${item.id}:${item.orderIndex}`}
+          item={item}
+          badge={group.querySourceKey === CONTINUE_WATCHING_SOURCE_KEY ? "Resume" : undefined}
           onNavigate={onNavigate}
         />
       ))}

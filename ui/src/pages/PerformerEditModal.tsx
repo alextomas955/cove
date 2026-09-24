@@ -10,9 +10,12 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../components/RemoteIdsEditor";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 import { SelectedTagChips, type SelectableTag } from "../components/TagSelector";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 import { CountrySelect } from "../components/Country";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
   performer: Performer;
@@ -39,6 +42,92 @@ type TagAutocompleteValue = { kind: "tag"; tag: SelectedTagOption } | { kind: "c
 
 function buildSelectedTagLookup(tags: Performer["tags"]): Record<number, SelectedTagOption> {
   return Object.fromEntries(tags.map((tag) => [tag.id, tag])) as Record<number, SelectedTagOption>;
+}
+
+function performerFormValues(performer: Performer) {
+  return {
+    name: performer.name,
+    disambiguation: performer.disambiguation || "",
+    gender: performer.gender || "",
+    birthdate: performer.birthdate || "",
+    ethnicity: performer.ethnicity || "",
+    country: performer.country || "",
+    eyeColor: performer.eyeColor || "",
+    hairColor: performer.hairColor || "",
+    measurements: performer.measurements || "",
+    tattoos: performer.tattoos || "",
+    piercings: performer.piercings || "",
+    details: performer.details || "",
+    deathDate: performer.deathDate || "",
+    fakeTits: performer.fakeTits || "",
+    circumcised: performer.circumcised || "",
+    careerStart: performer.careerStart || "",
+    careerEnd: performer.careerEnd || "",
+    heightCm: performer.heightCm ?? undefined,
+    weight: performer.weight ?? undefined,
+    penisLength: performer.penisLength ?? undefined,
+    rating: undefined as number | undefined,
+    urls: performer.urls.length > 0 ? performer.urls : [""],
+    aliases: performer.aliases.length > 0 ? performer.aliases : [""],
+    selectedTagIds: performer.tags.map((t) => t.id),
+    customFields: { ...(performer.customFields ?? {}) } as Record<string, unknown>,
+    remoteIds: performer.remoteIds.map((remoteId) => ({ ...remoteId })) as RemoteIdValue[],
+  };
+}
+
+type PerformerFormValues = ReturnType<typeof performerFormValues>;
+
+function performerUpdatePayload(values: PerformerFormValues): PerformerUpdate {
+  const clearFields = [
+    !values.disambiguation && "disambiguation",
+    !values.gender && "gender",
+    !values.birthdate && "birthdate",
+    !values.deathDate && "deathDate",
+    !values.ethnicity && "ethnicity",
+    !values.country && "country",
+    !values.eyeColor && "eyeColor",
+    !values.hairColor && "hairColor",
+    values.heightCm === undefined && "heightCm",
+    values.weight === undefined && "weight",
+    !values.measurements && "measurements",
+    !values.fakeTits && "fakeTits",
+    values.penisLength === undefined && "penisLength",
+    !values.circumcised && "circumcised",
+    !values.careerStart && "careerStart",
+    !values.careerEnd && "careerEnd",
+    !values.tattoos && "tattoos",
+    !values.piercings && "piercings",
+    !values.details && "details",
+  ].filter((field): field is string => Boolean(field));
+  return {
+    name: values.name,
+    disambiguation: values.disambiguation || undefined,
+    gender: values.gender || undefined,
+    birthdate: values.birthdate || undefined,
+    ethnicity: values.ethnicity || undefined,
+    country: values.country || undefined,
+    eyeColor: values.eyeColor || undefined,
+    hairColor: values.hairColor || undefined,
+    heightCm: values.heightCm,
+    weight: values.weight,
+    measurements: values.measurements || undefined,
+    tattoos: values.tattoos || undefined,
+    piercings: values.piercings || undefined,
+    deathDate: values.deathDate || undefined,
+    fakeTits: values.fakeTits || undefined,
+    penisLength: values.penisLength,
+    circumcised: values.circumcised || undefined,
+    careerStart: values.careerStart || undefined,
+    careerEnd: values.careerEnd || undefined,
+    rating: values.rating,
+    details: values.details || undefined,
+    urls: values.urls.map((url) => url.trim()).filter(Boolean),
+    aliases: values.aliases.map((alias) => alias.trim()).filter(Boolean),
+    tagIds: values.selectedTagIds,
+    customFields: values.customFields,
+    remoteIds: normalizeRemoteIds(values.remoteIds),
+    clearFields,
+  };
 }
 
 export function PerformerEditModal({ performer, open, onClose }: Props) {
@@ -89,7 +178,14 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     placeholderData: (previousData) => previousData,
   });
 
+  // The performer the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(performer);
+
+  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
+  // reopening after Cancel discards them.
   useEffect(() => {
+    if (!open) return;
+    setBaseline(performer);
     setName(performer.name);
     setDisambiguation(performer.disambiguation || "");
     setGender(performer.gender || "");
@@ -118,15 +214,86 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     setTagSearch("");
     setCustomFields({ ...(performer.customFields ?? {}) });
     setRemoteIds(performer.remoteIds.map((remoteId) => ({ ...remoteId })));
+  }, [performer.id, open]);
+
+  const currentValues: PerformerFormValues = {
+    name,
+    disambiguation,
+    gender,
+    birthdate,
+    ethnicity,
+    country,
+    eyeColor,
+    hairColor,
+    measurements,
+    tattoos,
+    piercings,
+    details,
+    deathDate,
+    fakeTits,
+    circumcised,
+    careerStart,
+    careerEnd,
+    heightCm,
+    weight,
+    penisLength,
+    rating,
+    urls,
+    aliases,
+    selectedTagIds,
+    customFields,
+    remoteIds,
+  };
+  const formSetters: FormFieldSetters<PerformerFormValues> = {
+    name: setName,
+    disambiguation: setDisambiguation,
+    gender: setGender,
+    birthdate: setBirthdate,
+    ethnicity: setEthnicity,
+    country: setCountry,
+    eyeColor: setEyeColor,
+    hairColor: setHairColor,
+    measurements: setMeasurements,
+    tattoos: setTattoos,
+    piercings: setPiercings,
+    details: setDetails,
+    deathDate: setDeathDate,
+    fakeTits: setFakeTits,
+    circumcised: setCircumcised,
+    careerStart: setCareerStart,
+    careerEnd: setCareerEnd,
+    heightCm: setHeightCm,
+    weight: setWeight,
+    penisLength: setPenisLength,
+    rating: setRating,
+    urls: setUrls,
+    aliases: setAliases,
+    customFields: setCustomFields,
+    remoteIds: setRemoteIds,
+    selectedTagIds: (tagIds) => {
+      setSelectedTagIds(tagIds);
+      setSelectedTagsById((current) => ({ ...current, ...buildSelectedTagLookup(performer.tags) }));
+    },
+  };
+  // When the performer refetches while the dialog is open, untouched fields follow it and the user's edits
+  // stay.
+  useEffect(() => {
+    if (!open || performer === baseline) return;
+    applyFormFields(
+      untouchedFieldUpdates(currentValues, performerFormValues(baseline), performerFormValues(performer)),
+      formSetters,
+    );
+    setBaseline(performer);
   }, [performer]);
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: PerformerUpdate) => performers.update(performer.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performer", performer.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["performers"] });
       queryClient.invalidateQueries({ queryKey: ["performer-country-options"] });
+      // Close once the saved performer is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["performer", performer.id]);
       onClose();
     },
   });
@@ -136,58 +303,9 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
   };
 
   const handleSave = () => {
-    const urlList = urls.map((url) => url.trim()).filter(Boolean);
-    const aliasList = aliases.map((alias) => alias.trim()).filter(Boolean);
-    const clearFields = [
-      !disambiguation && "disambiguation",
-      !gender && "gender",
-      !birthdate && "birthdate",
-      !deathDate && "deathDate",
-      !ethnicity && "ethnicity",
-      !country && "country",
-      !eyeColor && "eyeColor",
-      !hairColor && "hairColor",
-      heightCm === undefined && "heightCm",
-      weight === undefined && "weight",
-      !measurements && "measurements",
-      !fakeTits && "fakeTits",
-      penisLength === undefined && "penisLength",
-      !circumcised && "circumcised",
-      !careerStart && "careerStart",
-      !careerEnd && "careerEnd",
-      !tattoos && "tattoos",
-      !piercings && "piercings",
-      !details && "details",
-    ].filter((field): field is string => Boolean(field));
-    mutation.mutate({
-      name,
-      disambiguation: disambiguation || undefined,
-      gender: gender || undefined,
-      birthdate: birthdate || undefined,
-      ethnicity: ethnicity || undefined,
-      country: country || undefined,
-      eyeColor: eyeColor || undefined,
-      hairColor: hairColor || undefined,
-      heightCm,
-      weight,
-      measurements: measurements || undefined,
-      tattoos: tattoos || undefined,
-      piercings: piercings || undefined,
-      deathDate: deathDate || undefined,
-      fakeTits: fakeTits || undefined,
-      penisLength,
-      circumcised: circumcised || undefined,
-      careerStart: careerStart || undefined,
-      careerEnd: careerEnd || undefined,
-      rating,
-      details: details || undefined,
-      urls: urlList,
-      aliases: aliasList,
-      tagIds: selectedTagIds,
-      customFields,
-      remoteIds: normalizeRemoteIds(remoteIds),
-      clearFields,
-    });
+    mutation.mutate(
+      changedUpdateFields(performerUpdatePayload(performerFormValues(baseline)), performerUpdatePayload(currentValues)),
+    );
   };
 
   const filteredTags = tagResults?.items.filter((tag) => !selectedTagIds.includes(tag.id)) ?? [];

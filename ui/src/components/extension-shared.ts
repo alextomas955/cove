@@ -55,6 +55,7 @@ export {
   VideoCard,
   VideoTile,
   ImageTile,
+  AudioTile,
   TagTile,
 } from "./EntityCards";
 export { EntityReferenceSelector, EntityReferenceMultiSelector, EntityReferenceValue } from "./EntityReferenceSelector";
@@ -63,6 +64,7 @@ export type { EntityReferenceOption, EntityReferenceType } from "./EntityReferen
 // ─── Players / Viewers ────────────────────────────────────────────────────
 export { VideoPlayer } from "./VideoPlayer";
 export type { VideoPlayerPlaybackControls, VideoPlayerSeek } from "./VideoPlayer";
+export { AudioPlayer } from "./AudioPlayer";
 export { APP_FLOATING_UI_SLOT } from "./AppFloatingUI";
 export { MEDIA_PLAYER_ACTIONS_SLOT, MEDIA_PLAYER_OVERLAY_SLOT } from "./MediaPlayerExtension";
 export type {
@@ -86,7 +88,7 @@ export type { DisplayMode, ListPageProps } from "./ListPage";
 export { RelatedEntityListView, getRelatedEntityDisplayModes } from "./RelatedEntityListView";
 export { FilterDialog } from "./FilterDialog";
 export { FilterButton } from "./FilterButton";
-export { PERFORMER_CRITERIA, TAG_CRITERIA, VIDEO_CRITERIA } from "./filterCriteriaCatalogs";
+export { AUDIO_CRITERIA, PERFORMER_CRITERIA, TAG_CRITERIA, VIDEO_CRITERIA } from "./filterCriteriaCatalogs";
 export type { CriterionDefinition, FilterDialogCustomSection } from "./filterCriteriaTypes";
 export { BulkEditDialog, VIDEO_BULK_FIELDS, PERFORMER_BULK_FIELDS } from "./BulkEditDialog";
 // The complete set of bulk actions for a video multi-selection (download / edit / identify / merge / play /
@@ -103,6 +105,7 @@ export { Pager } from "./Pager";
 // renders its own results layout needs this for infinite page size to work at all.
 export { InfiniteScrollSentinel } from "./InfiniteScrollSentinel";
 export { VIDEO_SORT_OPTIONS } from "./videoSortOptions";
+export { AUDIO_SORT_OPTIONS } from "./audioSortOptions";
 export { TAG_SORT_OPTIONS } from "./tagSortOptions";
 export { GroupItemFeed } from "./GroupItemFeed";
 export type { GroupItemFeedProps } from "./GroupItemFeed";

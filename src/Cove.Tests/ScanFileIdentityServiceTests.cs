@@ -306,6 +306,7 @@ public sealed class ScanFileIdentityServiceTests
             return Task.FromResult(md5);
         }
         public Task<string?> ComputeImagePhashAsync(string path, CancellationToken ct = default) => Task.FromResult<string?>(null);
+        public ImageSignature? ComputeImageSignature(byte[] data) => null;
         public Task<string?> ComputeVideoPhashAsync(string path, double duration, CancellationToken ct = default) => Task.FromResult<string?>(null);
         public Task<string?> ComputeAudioPhashAsync(string path, CancellationToken ct = default) => Task.FromResult<string?>(null);
         public Task<string?> ComputeTextPhashAsync(string path, CancellationToken ct = default) => Task.FromResult<string?>(null);

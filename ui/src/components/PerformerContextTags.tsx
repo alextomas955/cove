@@ -67,6 +67,33 @@ export function buildPerformerContextTagIds(applications: TagApplication[] | und
   return result;
 }
 
+/**
+ * The performer context tags an edit should leave on the server: the current ones with the user's changes
+ * (the form against the state it was filled from) applied, so context tags changed elsewhere since are kept.
+ */
+export function applyPerformerContextTagEdits(
+  current: Record<number, number[]>,
+  baseline: Record<number, number[]>,
+  edited: Record<number, number[]>,
+): Record<number, number[]> {
+  const pairs = (byPerformer: Record<number, number[]>) =>
+    new Set(
+      Object.entries(byPerformer).flatMap(([performerId, tagIds]) => tagIds.map((tagId) => `${performerId}:${tagId}`)),
+    );
+  const baselinePairs = pairs(baseline);
+  const editedPairs = pairs(edited);
+  const result = pairs(current);
+  for (const pair of editedPairs) if (!baselinePairs.has(pair)) result.add(pair);
+  for (const pair of baselinePairs) if (!editedPairs.has(pair)) result.delete(pair);
+
+  const byPerformer: Record<number, number[]> = {};
+  for (const pair of result) {
+    const [performerId, tagId] = pair.split(":").map(Number);
+    byPerformer[performerId] = [...(byPerformer[performerId] ?? []), tagId];
+  }
+  return byPerformer;
+}
+
 export async function syncPerformerContextTags(
   hostType: PerformerContextHostType,
   hostId: number,

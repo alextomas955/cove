@@ -26,7 +26,7 @@ import {
   CompactCollectionDecision,
   CompactListValue,
   CompactScalarDecision,
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   TaggerSettingsPanel,
   TaggerToolbar,
   cleanTaggerQueryString,
@@ -128,22 +128,22 @@ interface ScraperApplyPlan {
 const CONCURRENCY_LIMIT = 5;
 const SCRAPER_TAGGER_QUERY_STORAGE_KEY = "cove.scraperEntityTaggerQuerySettings";
 
-function loadScraperBlacklist(): string[] {
-  if (typeof window === "undefined") return [...DEFAULT_TAGGER_BLACKLIST];
+function loadScraperDenylist(): string[] {
+  if (typeof window === "undefined") return [...DEFAULT_TAGGER_DENYLIST];
   try {
     const raw = window.localStorage.getItem(SCRAPER_TAGGER_QUERY_STORAGE_KEY);
-    if (!raw) return [...DEFAULT_TAGGER_BLACKLIST];
-    const parsed = JSON.parse(raw) as { blacklist?: string[] };
-    return Array.isArray(parsed.blacklist) ? parsed.blacklist : [...DEFAULT_TAGGER_BLACKLIST];
+    if (!raw) return [...DEFAULT_TAGGER_DENYLIST];
+    const parsed = JSON.parse(raw) as { denylist?: string[] };
+    return Array.isArray(parsed.denylist) ? parsed.denylist : [...DEFAULT_TAGGER_DENYLIST];
   } catch {
-    return [...DEFAULT_TAGGER_BLACKLIST];
+    return [...DEFAULT_TAGGER_DENYLIST];
   }
 }
 
-function saveScraperBlacklist(blacklist: string[]) {
+function saveScraperDenylist(denylist: string[]) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(SCRAPER_TAGGER_QUERY_STORAGE_KEY, JSON.stringify({ blacklist }));
+    window.localStorage.setItem(SCRAPER_TAGGER_QUERY_STORAGE_KEY, JSON.stringify({ denylist }));
   } catch {
     // Ignore localStorage failures.
   }
@@ -462,7 +462,7 @@ export function ScraperEntityTagger<T extends ScraperEntityItem>({
   const [batchSearching, setBatchSearching] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [preferences, setPreferences] = useState<ScrapeApplyPreferences>(() => loadScrapeApplyPreferences());
-  const [blacklist, setBlacklist] = useState<string[]>(() => loadScraperBlacklist());
+  const [denylist, setDenylist] = useState<string[]>(() => loadScraperDenylist());
   const abortRef = useRef<AbortController | null>(null);
   const batchItems = useMemo(
     () => (selectedIds && selectedIds.size > 0 ? items.filter((item) => selectedIds.has(item.id)) : items),
@@ -477,9 +477,9 @@ export function ScraperEntityTagger<T extends ScraperEntityItem>({
     });
   }, []);
 
-  const updateBlacklist = useCallback((items: string[]) => {
-    setBlacklist(items);
-    saveScraperBlacklist(items);
+  const updateDenylist = useCallback((items: string[]) => {
+    setDenylist(items);
+    saveScraperDenylist(items);
   }, []);
 
   const updateSearchState = useCallback((id: number, update: Partial<SearchState>) => {
@@ -490,11 +490,11 @@ export function ScraperEntityTagger<T extends ScraperEntityItem>({
     (item: T) => {
       if (queryOverrides[item.id] !== undefined) return queryOverrides[item.id];
       if (selectedScraper?.supportedScrapes.some((kind) => kind.toLowerCase() === "url")) {
-        return pickBestSourceUrl(item.urls, selectedScraper) ?? cleanTaggerQueryString(getTitle(item), blacklist);
+        return pickBestSourceUrl(item.urls, selectedScraper) ?? cleanTaggerQueryString(getTitle(item), denylist);
       }
-      return cleanTaggerQueryString(getTitle(item), blacklist);
+      return cleanTaggerQueryString(getTitle(item), denylist);
     },
-    [blacklist, getTitle, queryOverrides, selectedScraper],
+    [denylist, getTitle, queryOverrides, selectedScraper],
   );
 
   const searchItem = useCallback(
@@ -574,7 +574,7 @@ export function ScraperEntityTagger<T extends ScraperEntityItem>({
         onToggleSettings={() => setShowSettings((current) => !current)}
       />
       {showSettings && (
-        <TaggerSettingsPanel blacklist={blacklist} onBlacklistChange={updateBlacklist}>
+        <TaggerSettingsPanel denylist={denylist} onDenylistChange={updateDenylist}>
           <label className="flex items-center gap-2 text-xs text-foreground">
             <input
               type="checkbox"

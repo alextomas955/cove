@@ -16,6 +16,7 @@ import { ListPage, type DisplayMode } from "../components/ListPage";
 import { EntityCardGrid } from "../components/EntityCardGrid";
 import { useListUrlState } from "../hooks/useListUrlState";
 import { usePaginatedInfiniteQuery } from "../hooks/usePaginatedInfiniteQuery";
+import { useSettledListKey } from "../hooks/useSettledListKey";
 import { useVisualSimilarityApi } from "../hooks/useVisualSimilarityApi";
 import { VideoTagger } from "../components/VideoTagger";
 import {
@@ -548,6 +549,7 @@ export function VideosPage({ onNavigate }: Props) {
     isLoading,
     error: pageError,
     refetch: refetchPage,
+    isPlaceholderData: pageIsPlaceholder,
   } = useQuery({
     queryKey: ["videos", filter, backendObjectFilter, filterExpression, searchMode],
     queryFn: () => {
@@ -575,6 +577,7 @@ export function VideosPage({ onNavigate }: Props) {
     isLoading: unifiedLoading,
     error: unifiedError,
     refetch: refetchUnified,
+    isPlaceholderData: unifiedIsPlaceholder,
   } = useQuery({
     queryKey: ["videos", "with-compilations", filter, compilationQueryExtra],
     queryFn: () =>
@@ -712,6 +715,15 @@ export function VideosPage({ onNavigate }: Props) {
     preserveOnItemsChange: infinitePageSize,
     resetKey: selectionResetKey,
   });
+  // Unlike the selection key this includes the page, so turning the page shows unmatched videos again.
+  const taggerResetKey = useSettledListKey(
+    [filter, backendObjectFilter, filterExpression, searchMode],
+    infinitePageSize
+      ? infiniteVideosQuery.isPlaceholderData
+      : canShowCompilationGroups
+        ? unifiedIsPlaceholder
+        : pageIsPlaceholder,
+  );
   const selecting = selectedIds.size > 0;
   const selectedIdList = useMemo(() => [...selectedIds].map(Number).sort((left, right) => left - right), [selectedIds]);
   const { data: selectedAggregate, isLoading: selectedAggregateLoading } = useQuery({
@@ -1222,6 +1234,7 @@ export function VideosPage({ onNavigate }: Props) {
             selectedIds={selectedIds}
             selecting={selecting}
             onSelect={toggle}
+            resetKey={taggerResetKey}
           />
         )}
         {listEntries.length === 0 && (

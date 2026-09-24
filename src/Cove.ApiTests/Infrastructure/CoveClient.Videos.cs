@@ -467,6 +467,27 @@ public sealed partial class CoveClient
                     .ToArray(),
             },
             cancellationToken);
+
+    public Task<VideoCoverComparisonDto> CompareVideoCoverAsync(
+        VideoDto video,
+        string imageUrl,
+        CancellationToken cancellationToken = default)
+        => SendAsync<VideoCoverComparisonDto>(
+            HttpMethod.Post,
+            $"/api/videos/{video.Id}/cover-comparison",
+            new VideoCoverComparisonRequestDto { ImageUrl = imageUrl },
+            cancellationToken);
+
+    public Task<VideoCoverComparisonDto> CompareMissingVideoCoverAsync(
+        int videoId,
+        string imageUrl,
+        CancellationToken cancellationToken = default)
+        => SendAsync<VideoCoverComparisonDto>(
+            HttpMethod.Post,
+            $"/api/videos/{videoId}/cover-comparison",
+            new VideoCoverComparisonRequestDto { ImageUrl = imageUrl },
+            cancellationToken);
 }
 
 public sealed record VideoGenerationResult(bool Success);
+

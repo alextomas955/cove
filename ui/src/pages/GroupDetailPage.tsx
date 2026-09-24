@@ -2746,6 +2746,7 @@ function GroupVideosPanel({
     infinitePageSize,
     infiniteQuery,
     infiniteFilterKey,
+    settledListKey,
     fetchAllIds,
     loadMore,
   } = useDetailListQuery<Video>({
@@ -2973,6 +2974,7 @@ function GroupVideosPanel({
       <ContextualVideoListView
         items={items}
         filter={filter}
+        taggerResetKey={settledListKey}
         totalCount={groupVideos.totalCount}
         queryPage={queryPage}
         displayMode={displayMode}

@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -11,8 +11,10 @@ import type {
   ScrapeAttempt,
   ScraperSummary,
   ScrapeCollectionItemSelection,
+  VideoCoverComparison,
 } from "../api/types";
 import { useAppConfig, useOptionalAppConfig } from "../state/AppConfigContext";
+import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { formatDuration, getResolutionLabel } from "./shared";
 import { createNestedRouteLinkProps } from "./cardNavigation";
 import {
@@ -43,7 +45,7 @@ import {
   type TaggerReviewInput,
 } from "./VideoTaggerReview";
 import {
-  DEFAULT_TAGGER_BLACKLIST,
+  DEFAULT_TAGGER_DENYLIST,
   RemoteRefreshButtons,
   TaggerSettingsPanel,
   TaggerToolbar,
@@ -70,8 +72,17 @@ import {
   MoreHorizontal,
   ChevronDown,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
+import { useMetadataServerDraftSubmit } from "../hooks/useMetadataServerDraftSubmit";
 import { toggleOptionsFromEvent, withOrderedToggle, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
+import {
+  PERFORMER_GENDER_OPTIONS,
+  buildAllowedGenderKeys,
+  isGenderOptionChecked,
+  isPerformerGenderAllowed,
+  toggleGenderOption,
+} from "../utils/performerGenders";
 import { VideoPreviewThumbnail } from "./VideoPreviewThumbnail";
 import type { EntityMediaFit } from "./EntityMedia";
 
@@ -82,11 +93,13 @@ interface VideoTaggerProps {
   selecting?: boolean;
   onSelect?: (videoId: number, options?: MultiSelectToggleOptions) => void;
   mode?: "bulk" | "detail";
+  // Identifies the list the videos came from (page, sort, search and filters); a new value is a new
+  // list, which starts again with unmatched videos shown.
+  resetKey?: string;
 }
 
 interface TaggerConfig {
   selectedEndpoint: string;
-  showUnmatched: boolean;
   setCoverImage: boolean;
   setTags: boolean;
   setPerformers: boolean;
@@ -98,11 +111,57 @@ interface TaggerConfig {
   bulkMatchStrategy: VideoMetadataSearchStrategy;
   queryMode: TaggerQueryMode;
   defaultScraperInputKind: InputKind | "auto";
-  blacklist: string[];
-  createParentStudios: boolean;
-  createParentTags: boolean;
-  showMales: boolean;
+  denylist: string[];
   performerGenders: string[];
+  // Stamped on every save so a one-time upgrade of the stored settings runs once and never undoes a
+  // choice the user made afterwards.
+  configVersion: number;
+}
+
+const TAGGER_CONFIG_VERSION = 2;
+
+// Drops the performers whose gender the settings exclude, from both the candidates and the plain name
+// list the collection modes and summaries read, so nothing downstream can reintroduce them.
+function filterMatchPerformersByGender<T extends MetadataServerVideoMatch>(match: T, allowed: Set<string> | null): T {
+  if (allowed == null) return match;
+  // A match with no candidates falls back to bare names, which state no gender; the "Unknown" rule
+  // decides all of them together, exactly as it would for the candidates the fallback stands in for.
+  if (match.performerCandidates.length === 0) {
+    return isPerformerGenderAllowed(undefined, allowed) ? match : { ...match, performerNames: [] };
+  }
+  const kept = match.performerCandidates.filter((candidate) => isPerformerGenderAllowed(candidate.gender, allowed));
+  if (kept.length === match.performerCandidates.length) return match;
+  // A name is dropped only when a surviving candidate no longer claims it, so two performers sharing a
+  // name cannot take each other's entry off the list. A name no candidate claims at all states no
+  // gender, so the "Unknown" rule decides it, the same rule the candidate-less match above uses.
+  const nameKey = (name: string) => name.trim().toLowerCase();
+  const keptNames = new Set(kept.map((candidate) => nameKey(candidate.name)));
+  const claimedNames = new Set(match.performerCandidates.map((candidate) => nameKey(candidate.name)));
+  const keepUnclaimed = isPerformerGenderAllowed(undefined, allowed);
+  return {
+    ...match,
+    performerCandidates: kept,
+    performerNames: match.performerNames.filter((name) =>
+      claimedNames.has(nameKey(name)) ? keptNames.has(nameKey(name)) : keepUnclaimed,
+    ),
+  };
+}
+
+// The gender list predates the "Unknown" option, and the setting did nothing at all back then, so no
+// saved config records a choice about it. Add it once, on the upgrade, rather than reading its absence
+// as a decision to hide every performer whose gender the metadata server does not state. The gate is a
+// floor, not an equality: a later version bump must not run this migration a second time.
+const PERFORMER_GENDERS_MIGRATION_VERSION = 2;
+
+function upgradeSavedPerformerGenders(saved: Partial<TaggerConfig>) {
+  const genders = saved.performerGenders;
+  if (!genders) return [...PERFORMER_GENDER_OPTIONS];
+  if ((saved.configVersion ?? 0) >= PERFORMER_GENDERS_MIGRATION_VERSION) return genders;
+  // Every gender unchecked was as inert as every gender checked while the setting did nothing, and the
+  // user saw every performer either way; adding "Unknown" to an empty list would invent a filter that
+  // hides all of them but the gender-less ones.
+  if (genders.length === 0) return [...PERFORMER_GENDER_OPTIONS];
+  return isGenderOptionChecked(genders, "Unknown") ? genders : [...genders, "Unknown"];
 }
 
 type VideoMetadataSearchStrategy =
@@ -145,6 +204,98 @@ interface VideoSearchState {
   // Hand edits made in the review beside the scrape, as the edit form would make them.
   tagEdits?: TaggerRelationshipEdits;
   performerEdits?: TaggerRelationshipEdits;
+}
+
+/** What one Apply all did, in enough detail that every row it covered is accounted for. */
+interface ApplyAllOutcome {
+  saved: number;
+  skipped: number;
+  /** Rows a cancellation stopped before they were started, and which are still unsaved. */
+  notAttempted: number;
+  reasons: string[];
+  failureCount: number;
+  cancelled: boolean;
+}
+
+/** Which rows one Apply all covered and how far it got, before any of them were resolved. */
+interface ApplyAllRun {
+  targetIds: number[];
+  /** Rows an import was actually sent for. */
+  startedIds: number[];
+  /** Rows whose result went away between the click and their turn, so nothing was sent for them. */
+  skippedIds: number[];
+  cancelled: boolean;
+}
+
+/**
+ * Reads a finished run against current row state, so the notice describes the situation now rather
+ * than when the batch ended. A row put right afterwards stops counting as a failure, and once
+ * nothing is left outstanding there is nothing to show.
+ */
+function summariseApplyAllRun(
+  run: ApplyAllRun | null,
+  states: Record<number, VideoSearchState | undefined>,
+): ApplyAllOutcome | null {
+  if (!run) return null;
+  const isSaved = (videoId: number) => states[videoId]?.saved === true;
+  const saved = run.startedIds.filter(isSaved).length;
+  // The row owns the reason; reading it back keeps one account of why an import failed.
+  const reasons = run.startedIds
+    .filter((videoId) => !isSaved(videoId))
+    .map((videoId) => states[videoId]?.error)
+    .filter((reason): reason is string => Boolean(reason));
+  const skipped = run.skippedIds.filter((videoId) => !isSaved(videoId)).length;
+  const notAttempted = run.targetIds.filter(
+    (videoId) => !run.startedIds.includes(videoId) && !run.skippedIds.includes(videoId) && !isSaved(videoId),
+  ).length;
+  if (reasons.length === 0 && skipped === 0 && notAttempted === 0) return null;
+  return { saved, skipped, notAttempted, reasons, failureCount: reasons.length, cancelled: run.cancelled };
+}
+
+/** How many distinct reasons the batch notice names before it summarises the rest. */
+const APPLY_ALL_REASON_LIMIT = 3;
+
+/**
+ * One sentence for what an Apply all did. Every row the batch covered lands in exactly one count, so
+ * the arithmetic always adds up to what the user asked for. Reasons are capped because a conflict
+ * names the entity it collided with, so a large batch can fail for as many distinct reasons as rows.
+ */
+function describeApplyAllOutcome(outcome: ApplyAllOutcome): string {
+  const parts = [`Applied ${outcome.saved}`];
+  if (outcome.failureCount > 0) parts.push(`failed ${outcome.failureCount}`);
+  if (outcome.skipped > 0) parts.push(`skipped ${outcome.skipped}`);
+  if (outcome.notAttempted > 0) parts.push(`not attempted ${outcome.notAttempted}`);
+  const counts = `${outcome.cancelled ? "Cancelled. " : ""}${parts.join(", ")}.`;
+
+  const distinct = [...new Set(outcome.reasons)];
+  if (distinct.length === 0) return counts;
+  const named = distinct.slice(0, APPLY_ALL_REASON_LIMIT).map(endWithStop).join(" ");
+  const remaining = distinct.length - APPLY_ALL_REASON_LIMIT;
+  return remaining > 0
+    ? `${counts} ${named} And ${remaining} other reason${remaining === 1 ? "" : "s"}.`
+    : `${counts} ${named}`;
+}
+
+/** Server messages are not guaranteed to be punctuated, and these are joined into a sentence. */
+function endWithStop(text: string): string {
+  return /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+}
+
+/**
+ * A tagger precondition that stopped a request being sent. These already read as an explanation, so
+ * they are shown as written; everything else is a transport or server failure, which the shared
+ * formatter words better than its raw message does.
+ */
+class TaggerPreconditionError extends Error {}
+
+/**
+ * Why an attempt failed, in the most specific wording available. Only this component's own
+ * preconditions bypass the shared formatter: routing timeouts, dropped connections and API errors
+ * through it is what keeps "API request timed out after 120000 ms" off the screen.
+ */
+function taggerFailureReason(err: unknown): string {
+  if (err instanceof TaggerPreconditionError && err.message.trim()) return err.message;
+  return getApiValidationFailureDetail(err);
 }
 
 type VideoFieldStrategy = "ignore" | "merge" | "overwrite";
@@ -409,6 +560,34 @@ function getVideoImageReplace(
   );
 }
 
+/**
+ * How the selected result's cover compares with the one the video already carries. Only the server
+ * can answer it: it alone reads both images' pixels and their real sizes, where the browser sees two
+ * unrelated URLs and a delivery-resized copy of its own cover.
+ *
+ * Asked only for a cover the person actually set; an auto-generated frame is replaceable anyway, and
+ * will not resemble a studio's artwork.
+ */
+function useCoverComparison(video: Video, imageUrl?: string | null): VideoCoverComparison | undefined {
+  const enabled = !!imageUrl && !!video.imagePath;
+  const { data } = useQuery({
+    queryKey: ["video-cover-comparison", video.id, imageUrl],
+    queryFn: () => videos.compareCover(video.id, imageUrl ?? ""),
+    enabled,
+    // The comparison downloads the candidate cover, so it is kept for as long as the visit lasts.
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+  return enabled ? data : undefined;
+}
+
+/** The suggestion an "upgrade" verdict is worth making, as the cover panel's sentence. */
+function coverComparisonNote(comparison?: VideoCoverComparison) {
+  if (comparison?.verdict !== "upgrade" || !comparison.current || !comparison.candidate) return undefined;
+  const size = (image: { width: number; height: number }) => `${image.width}×${image.height}`;
+  return `same cover, larger here (${size(comparison.candidate)} vs ${size(comparison.current)})`;
+}
+
 function buildDefaultVideoCollectionModes(
   result: UnifiedVideoMatch,
   state: VideoSearchState | undefined,
@@ -528,7 +707,9 @@ function buildScraperVideoApplyRequest(
     createMissingPerformers: !taggerConfig.onlyExistingPerformers,
     createMissingStudio: !taggerConfig.onlyExistingStudio,
     markOrganized: taggerConfig.markOrganized,
-    hydratePerformers: taggerConfig.createParentTags,
+    // The tagger always fills in a created performer's details from the scrape; it used to read this off
+    // an unrelated, invisible "create parent tags" flag that nothing else consulted.
+    hydratePerformers: true,
     selectedCandidateIndex: result.selectedCandidateIndex,
     tagSelections:
       result.tagNames.length > 0
@@ -565,21 +746,46 @@ function relationshipEditFields(state: VideoSearchState | undefined) {
 
 const CONCURRENCY_LIMIT = 5;
 
+interface BatchLifecycle {
+  onStart: () => void;
+  /** Runs once every worker has drained, even if one threw, so the toolbar is always handed back. */
+  onFinish: (cancelled: boolean) => void;
+}
+
+/**
+ * Runs one batch at a time per `batch` ref, which holds the running batch's controller until its last
+ * worker drains. Cancelling only aborts that controller: a batch started while the cancelled one still
+ * drains would take the ref from it, leaving the first uncancellable and both working the same rows,
+ * so a start is refused outright while the ref is held.
+ */
 async function runWithConcurrency<T>(
+  batch: RefObject<AbortController | null>,
   items: T[],
-  fn: (item: T) => Promise<void>,
+  fn: (item: T, signal: AbortSignal) => Promise<void>,
   limit: number,
-  signal?: AbortSignal,
+  lifecycle: BatchLifecycle,
 ): Promise<void> {
-  let index = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (index < items.length) {
-      if (signal?.aborted) return;
-      const i = index++;
-      await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
+  if (batch.current) return;
+  const controller = new AbortController();
+  batch.current = controller;
+  lifecycle.onStart();
+  try {
+    let index = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (index < items.length) {
+        if (controller.signal.aborted) return;
+        const i = index++;
+        await fn(items[i], controller.signal);
+      }
+    });
+    // Settled rather than all, so one worker throwing cannot hand the toolbar back while the others still run.
+    const outcomes = await Promise.allSettled(workers);
+    const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+    if (failure) throw failure.reason;
+  } finally {
+    batch.current = null;
+    lifecycle.onFinish(controller.signal.aborted);
+  }
 }
 
 export function VideoTagger({
@@ -589,6 +795,7 @@ export function VideoTagger({
   selecting = false,
   onSelect,
   mode = "bulk",
+  resetKey = "",
 }: VideoTaggerProps) {
   const { config } = useAppConfig();
   const metadataServers = config?.scraping?.metadataServers ?? [];
@@ -614,7 +821,6 @@ export function VideoTagger({
 
   const DEFAULT_TAGGER_CONFIG: TaggerConfig = {
     selectedEndpoint: metadataServers[0] ? sourceValue("metadata-server", metadataServers[0].endpoint) : "",
-    showUnmatched: true,
     setCoverImage: true,
     setTags: true,
     setPerformers: true,
@@ -626,11 +832,9 @@ export function VideoTagger({
     bulkMatchStrategy: "remote-id-and-fingerprint-text",
     queryMode: "auto",
     defaultScraperInputKind: "auto",
-    blacklist: [...DEFAULT_TAGGER_BLACKLIST],
-    createParentStudios: true,
-    createParentTags: true,
-    showMales: true,
-    performerGenders: ["Female", "Male", "Transgender Female", "Transgender Male", "Intersex", "Non-Binary"],
+    denylist: [...DEFAULT_TAGGER_DENYLIST],
+    performerGenders: [...PERFORMER_GENDER_OPTIONS],
+    configVersion: TAGGER_CONFIG_VERSION,
   };
 
   const [taggerConfig, _setTaggerConfig] = useState<TaggerConfig>(() => {
@@ -645,8 +849,12 @@ export function VideoTagger({
           bulkMatchStrategy: isVideoMetadataSearchStrategy(parsed.bulkMatchStrategy)
             ? parsed.bulkMatchStrategy
             : DEFAULT_TAGGER_CONFIG.bulkMatchStrategy,
-          blacklist: parsed.blacklist ?? DEFAULT_TAGGER_CONFIG.blacklist,
-          performerGenders: parsed.performerGenders ?? DEFAULT_TAGGER_CONFIG.performerGenders,
+          denylist: parsed.denylist ?? DEFAULT_TAGGER_CONFIG.denylist,
+          // Upgraded in memory; the stamp reaches storage on the next settings change. A visit that
+          // changes nothing replays the upgrade next time, which is harmless because it is idempotent —
+          // a later migration has to stay idempotent too, or write the stamp back on load itself.
+          performerGenders: upgradeSavedPerformerGenders(parsed),
+          configVersion: TAGGER_CONFIG_VERSION,
         };
       }
     } catch {
@@ -667,6 +875,18 @@ export function VideoTagger({
     });
   }, []);
   const [showConfig, setShowConfig] = useState(false);
+  // Deliberately outside the persisted config: hiding unmatched is a way to work through one pass of
+  // results, not a preference, and a stored "hide" would greet the next visit with an empty list before
+  // anything has been searched.
+  const [showUnmatched, setShowUnmatched] = useState(true);
+  // Reset during render rather than in an effect, so a new page never flashes as an empty list. The
+  // key, not the video ids, marks a new list: an apply that refetches the list and drops a video the
+  // filter now excludes must not undo the user's choice mid-pass.
+  const [showUnmatchedResetKey, setShowUnmatchedResetKey] = useState(resetKey);
+  if (showUnmatchedResetKey !== resetKey) {
+    setShowUnmatchedResetKey(resetKey);
+    setShowUnmatched(true);
+  }
   const [bulkStrategyDraft, setBulkStrategyDraft] = useState<VideoMetadataSearchStrategy>(
     taggerConfig.bulkMatchStrategy,
   );
@@ -699,30 +919,30 @@ export function VideoTagger({
         ]
           .filter((s) => s !== "")
           .join(" ");
-        str = cleanTaggerQueryString(str, taggerConfig.blacklist);
+        str = cleanTaggerQueryString(str, taggerConfig.denylist);
         return str;
       }
 
       // filename/dir/path modes: derive from file path
       if (mode === "filename" && file?.basename) {
-        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.denylist);
       }
       if (mode === "dir" && file?.path) {
         const parts = file.path.replace(/\\/g, "/").split("/");
-        return parts.length > 1 ? cleanTaggerQueryString(parts[parts.length - 2], taggerConfig.blacklist) : "";
+        return parts.length > 1 ? cleanTaggerQueryString(parts[parts.length - 2], taggerConfig.denylist) : "";
       }
       if (mode === "path" && file?.path) {
-        return cleanTaggerQueryString(file.path, taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.path, taggerConfig.denylist);
       }
 
-      // auto mode: try title first, then filename — always apply blacklist
-      if (video.title) return cleanTaggerQueryString(video.title, taggerConfig.blacklist);
+      // auto mode: try title first, then filename — always apply denylist
+      if (video.title) return cleanTaggerQueryString(video.title, taggerConfig.denylist);
       if (file?.basename) {
-        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.blacklist);
+        return cleanTaggerQueryString(file.basename.replace(/\.\w{2,4}$/, ""), taggerConfig.denylist);
       }
       return "";
     },
-    [queryOverrides, taggerConfig.queryMode, taggerConfig.blacklist],
+    [queryOverrides, taggerConfig.queryMode, taggerConfig.denylist],
   );
 
   const getScraperInputKind = useCallback(
@@ -786,7 +1006,7 @@ export function VideoTagger({
   );
 
   const searchVideo = useCallback(
-    async (video: Video, bulkStrategy?: VideoMetadataSearchStrategy) => {
+    async (video: Video, bulkStrategy?: VideoMetadataSearchStrategy, signal?: AbortSignal) => {
       const source = selectedSource;
       const query = getSourceQuery(video, source);
       updateSearchState(video.id, {
@@ -831,7 +1051,10 @@ export function VideoTagger({
         } else {
           const endpoint = source?.endpoint || undefined;
           if (!bulkStrategy && !query.trim()) throw new Error("Enter a title or name to search.");
-          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, bulkStrategy)).map(
+          // The row's query box searches by text alone whatever the bulk strategy, and says so in the request
+          // rather than leaving the server to infer it from a term arriving without a strategy.
+          const strategy = bulkStrategy ?? "text";
+          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, strategy, signal)).map(
             (match) => ({ ...match, sourceKind: "metadata-server" as const }),
           );
         }
@@ -842,9 +1065,15 @@ export function VideoTagger({
           selectedIndex: results.length > 0 ? 0 : undefined,
         });
       } catch (err) {
+        // A cancelled batch abandons the searches it had sent; the row goes back to idle rather than failing.
+        // Only the abort itself is swallowed: a search that failed for its own reason still says why.
+        if (signal?.aborted && (err as { name?: unknown } | null)?.name === "AbortError") {
+          updateSearchState(video.id, { loading: false });
+          return;
+        }
         updateSearchState(video.id, {
           loading: false,
-          error: err instanceof Error ? err.message : "Search failed",
+          error: taggerFailureReason(err),
         });
       }
     },
@@ -865,7 +1094,7 @@ export function VideoTagger({
       });
       try {
         if (selectedSource?.kind !== "metadata-server")
-          throw new Error("Fingerprint search is only available for metadata-server sources.");
+          throw new TaggerPreconditionError("Fingerprint search is only available for metadata-server sources.");
         const results = (
           await videos.searchMetadataServer(video.id, undefined, selectedSource.endpoint || undefined, "fingerprint")
         ).map((match) => ({ ...match, sourceKind: "metadata-server" as const }));
@@ -877,7 +1106,7 @@ export function VideoTagger({
       } catch (err) {
         updateSearchState(video.id, {
           loading: false,
-          error: err instanceof Error ? err.message : "Search failed",
+          error: taggerFailureReason(err),
         });
       }
     },
@@ -908,7 +1137,7 @@ export function VideoTagger({
           error: results.length === 0 ? "No metadata-server entry found for this remote id." : undefined,
         });
       } catch (err) {
-        updateSearchState(video.id, { loading: false, error: err instanceof Error ? err.message : "Refresh failed" });
+        updateSearchState(video.id, { loading: false, error: taggerFailureReason(err) });
       }
     },
     [updateSearchState],
@@ -916,12 +1145,9 @@ export function VideoTagger({
 
   // Batch scrape all (concurrent)
   const [batchSearching, setBatchSearching] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const searchBatchRef = useRef<AbortController | null>(null);
   const searchAll = useCallback(
     async (strategyOverride?: string) => {
-      setBatchSearching(true);
-      const controller = new AbortController();
-      abortRef.current = controller;
       const toSearch = videoList.filter((s) => !searchStates[s.id]?.saved);
       const bulkStrategy =
         selectedSource?.kind === "metadata-server"
@@ -930,21 +1156,95 @@ export function VideoTagger({
             : taggerConfig.bulkMatchStrategy
           : undefined;
       await runWithConcurrency(
+        searchBatchRef,
         toSearch,
-        (video) => searchVideo(video, bulkStrategy),
+        (video, signal) => searchVideo(video, bulkStrategy, signal),
         CONCURRENCY_LIMIT,
-        controller.signal,
+        { onStart: () => setBatchSearching(true), onFinish: () => setBatchSearching(false) },
       );
-      setBatchSearching(false);
-      abortRef.current = null;
     },
     [selectedSource, taggerConfig.bulkMatchStrategy, videoList, searchStates, searchVideo],
   );
 
+  // Stops rows being started; the toolbar stays busy until the searches already sent come back.
   const cancelBatchSearch = useCallback(() => {
-    abortRef.current?.abort();
-    setBatchSearching(false);
+    searchBatchRef.current?.abort();
   }, []);
+
+  // Videos the user has taken off this pass, so a bad or unwanted match stops occupying the list and
+  // stays out of Apply all. Deliberately component state and nothing more: a dismissal lasts for this
+  // visit to the tagger and the video is back on the next load.
+  const [dismissedIds, setDismissedIds] = useState<ReadonlySet<number>>(() => new Set());
+  const dismissVideo = useCallback((videoId: number) => {
+    setDismissedIds((current) => new Set(current).add(videoId));
+  }, []);
+  const restoreDismissed = useCallback(() => setDismissedIds(new Set()), []);
+
+  // Bulk apply. Each row publishes its own apply here, so Apply all sends exactly the request the
+  // row's own Apply button would, honouring every per-row exclusion and field choice already made.
+  const applyHandlersRef = useRef(new Map<number, () => Promise<unknown>>());
+  const registerApply = useCallback((videoId: number, apply: (() => Promise<unknown>) | null) => {
+    if (apply) applyHandlersRef.current.set(videoId, apply);
+    else applyHandlersRef.current.delete(videoId);
+  }, []);
+  const [applyingAll, setApplyingAll] = useState(false);
+  const applyBatchRef = useRef<AbortController | null>(null);
+  // A video counts as matched once a search returned results it has not been saved from yet.
+  const applyAllTargets = videoList
+    .filter((video) => {
+      if (dismissedIds.has(video.id)) return false;
+      const videoState = searchStates[video.id];
+      return !videoState?.saved && !!videoState?.results && videoState.results.length > 0;
+    })
+    .map((video) => video.id);
+  // Which rows the last Apply all covered, and how far it got. Only the run is recorded: what became
+  // of each row is read back from that row's own state when the notice renders, so a row put right
+  // afterwards drops out of the notice by itself and the two can never disagree about why it failed.
+  const [applyAllRun, setApplyAllRun] = useState<ApplyAllRun | null>(null);
+  // The dismiss button leaves with the summary, so focus moves to the list the summary described rather
+  // than dropping to the page body, where a keyboard user would have to find their way back from the top.
+  const videoListRef = useRef<HTMLDivElement>(null);
+  const dismissApplyAllRun = useCallback(() => {
+    setApplyAllRun(null);
+    videoListRef.current?.focus();
+  }, []);
+  const applyAll = useCallback(async () => {
+    const targetIds = applyAllTargets;
+    const startedIds: number[] = [];
+    const skippedIds: number[] = [];
+    await runWithConcurrency(
+      applyBatchRef,
+      targetIds,
+      async (videoId) => {
+        // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
+        const apply = applyHandlersRef.current.get(videoId);
+        if (!apply) {
+          skippedIds.push(videoId);
+          return;
+        }
+        startedIds.push(videoId);
+        // The row records its own outcome, and one row's failure must not abandon the batch.
+        await apply().catch(() => undefined);
+      },
+      CONCURRENCY_LIMIT,
+      {
+        onStart: () => {
+          setApplyingAll(true);
+          setApplyAllRun(null);
+        },
+        onFinish: (cancelled) => {
+          setApplyingAll(false);
+          // Cancelling stops rows being started but never interrupts an import already sent, so the rows
+          // that were never reached are recorded rather than dropped out of the arithmetic.
+          setApplyAllRun({ targetIds, startedIds, skippedIds, cancelled });
+        },
+      },
+    );
+  }, [applyAllTargets]);
+  const cancelApplyAll = useCallback(() => {
+    applyBatchRef.current?.abort();
+  }, []);
+  const applyAllOutcome = summariseApplyAllRun(applyAllRun, searchStates);
 
   if (taggerSources.length === 0) {
     return (
@@ -956,16 +1256,23 @@ export function VideoTagger({
     );
   }
 
-  // Detail mode was opened for this specific video, so always show it (the bulk "hide matched"
-  // convenience filter would otherwise leave the dialog empty).
-  const visibleVideos =
-    mode === "detail" || taggerConfig.showUnmatched
+  // Detail mode was opened for this specific video, so always show it (the bulk "hide unmatched"
+  // convenience filter would otherwise leave the dialog empty). Hiding unmatched keeps only videos
+  // that actually have a match right now: one that has not been searched at all is unmatched too.
+  const matchingList =
+    mode === "detail" || showUnmatched
       ? videoList
       : videoList.filter((s) => {
           const state = searchStates[s.id];
-          return !state || !state.results || state.results.length > 0;
+          return !!state?.results && state.results.length > 0;
         });
+  // Detail mode is about one video the user opened deliberately, so a stale dismissal must not empty it.
+  const visibleVideos =
+    mode === "detail" || dismissedIds.size === 0
+      ? matchingList
+      : matchingList.filter((video) => !dismissedIds.has(video.id));
   const visibleVideoIds = visibleVideos.map((video) => video.id);
+  const dismissedVisibleCount = matchingList.length - visibleVideos.length;
 
   return (
     <div className="space-y-0">
@@ -977,12 +1284,15 @@ export function VideoTagger({
           setSearchStates({});
           setQueryOverrides({});
           setScraperInputKinds({});
+          // The results the last batch acted on are gone, so its summary describes nothing that is
+          // still on screen; keeping it would resurrect failures from the previous source.
+          setApplyAllRun(null);
         }}
         showToggle={
           mode === "bulk"
             ? {
-                value: taggerConfig.showUnmatched,
-                onChange: (value) => setTaggerConfig((c) => ({ ...c, showUnmatched: value })),
+                value: showUnmatched,
+                onChange: setShowUnmatched,
                 enabledLabel: "Hide Unmatched",
                 disabledLabel: "Show Unmatched",
               }
@@ -994,14 +1304,25 @@ export function VideoTagger({
         runAllOptions={selectedSource?.kind === "metadata-server" ? VIDEO_METADATA_SEARCH_STRATEGIES : undefined}
         showRunAll={mode === "bulk"}
         countLabel={`${visibleVideos.length} video${visibleVideos.length !== 1 ? "s" : ""}`}
+        dismissed={mode === "bulk" ? { count: dismissedVisibleCount, onRestore: restoreDismissed } : undefined}
+        applyAll={
+          mode === "bulk"
+            ? {
+                onApply: () => void applyAll(),
+                onCancel: cancelApplyAll,
+                busy: applyingAll,
+                count: applyAllTargets.length,
+              }
+            : undefined
+        }
         settingsOpen={showConfig}
         onToggleSettings={() => setShowConfig((current) => !current)}
       />
 
       {showConfig && (
         <TaggerSettingsPanel
-          blacklist={taggerConfig.blacklist}
-          onBlacklistChange={(items) => setTaggerConfig((c) => ({ ...c, blacklist: items }))}
+          denylist={taggerConfig.denylist}
+          onDenylistChange={(items) => setTaggerConfig((c) => ({ ...c, denylist: items }))}
         >
           {selectedSource?.kind === "metadata-server" && mode === "bulk" && (
             <div>
@@ -1041,17 +1362,15 @@ export function VideoTagger({
           <div>
             <p className="text-xs text-muted mb-1.5">Performer genders</p>
             <div className="space-y-1">
-              {["Female", "Male", "Transgender Female", "Transgender Male", "Intersex", "Non-Binary"].map((g) => (
+              {PERFORMER_GENDER_OPTIONS.map((g) => (
                 <label key={g} className="flex items-center gap-2 text-xs text-foreground">
                   <input
                     type="checkbox"
-                    checked={taggerConfig.performerGenders.includes(g)}
+                    checked={isGenderOptionChecked(taggerConfig.performerGenders, g)}
                     onChange={(e) =>
                       setTaggerConfig((c) => ({
                         ...c,
-                        performerGenders: e.target.checked
-                          ? [...c.performerGenders, g]
-                          : c.performerGenders.filter((x) => x !== g),
+                        performerGenders: toggleGenderOption(c.performerGenders, g, e.target.checked),
                       }))
                     }
                     className="rounded border-border"
@@ -1061,7 +1380,8 @@ export function VideoTagger({
               ))}
             </div>
             <p className="text-[10px] text-muted mt-1">
-              Performers with these genders will be shown when tagging videos.
+              Performers with these genders will be shown when tagging videos. Only a metadata server states a
+              performer's gender, so scraper results are unaffected.
             </p>
           </div>
 
@@ -1231,8 +1551,41 @@ export function VideoTagger({
         </TaggerSettingsPanel>
       )}
 
+      {/* Outcome of the last Apply all. A failure is an alert, because it is added to the page rather
+          than updated in place and a polite region is not reliably announced for that. A run the user
+          cancelled themselves is only a status: they know they cancelled it, and interrupting a screen
+          reader assertively to say so would be noise. */}
+      {applyAllOutcome && (
+        <div
+          role={applyAllOutcome.failureCount > 0 ? "alert" : "status"}
+          className={`flex items-start gap-2 border-b border-border px-4 py-2 text-xs ${
+            applyAllOutcome.failureCount > 0 ? "bg-red-500/5 text-red-400" : "bg-surface text-muted"
+          }`}
+        >
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">
+            {describeApplyAllOutcome(applyAllOutcome)}
+            {applyAllOutcome.failureCount > 0 && " The videos that failed keep their changes and can be applied again."}
+          </p>
+          <button
+            type="button"
+            onClick={dismissApplyAllRun}
+            aria-label="Dismiss apply summary"
+            className="shrink-0 rounded p-0.5 opacity-70 hover:bg-foreground/10 hover:opacity-100"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
       {/* Video list */}
-      <div className="divide-y divide-border">
+      <div
+        ref={videoListRef}
+        tabIndex={-1}
+        role="region"
+        aria-label="Videos"
+        className="divide-y divide-border focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
+      >
         {visibleVideos.map((video) => (
           <TaggerVideoRow
             key={video.id}
@@ -1255,6 +1608,8 @@ export function VideoTagger({
             selecting={selecting}
             onSelect={onSelect ? withOrderedToggle(onSelect, visibleVideoIds) : undefined}
             detailMode={mode === "detail"}
+            onRegisterApply={registerApply}
+            onDismiss={mode === "bulk" ? () => dismissVideo(video.id) : undefined}
           />
         ))}
       </div>
@@ -1284,6 +1639,14 @@ interface TaggerVideoRowProps {
   selecting?: boolean;
   onSelect?: (videoId: number, options?: MultiSelectToggleOptions) => void;
   detailMode?: boolean;
+  /**
+   * Publishes this row's apply action so the toolbar's Apply all can drive it. The row owns the
+   * request it would send, so bulk apply reuses that instead of rebuilding it from the outside.
+   * Called with null when the row has nothing to apply.
+   */
+  onRegisterApply?: (videoId: number, apply: (() => Promise<unknown>) | null) => void;
+  /** Takes this row off the list for the rest of the visit. Absent when dismissing does not apply. */
+  onDismiss?: () => void;
 }
 
 function TaggerVideoRow({
@@ -1306,6 +1669,8 @@ function TaggerVideoRow({
   selecting = false,
   onSelect,
   detailMode = false,
+  onRegisterApply,
+  onDismiss,
 }: TaggerVideoRowProps) {
   const file = video.files.find((candidate) => candidate.id === video.primaryFileId);
   const [refreshBusyEndpoint, setRefreshBusyEndpoint] = useState<string | null>(null);
@@ -1348,12 +1713,19 @@ function TaggerVideoRow({
   );
   const tagMatchInfo = useMemo(() => buildMatchInfo(resolvedRelations?.tags), [resolvedRelations]);
   const performerMatchInfo = useMemo(() => buildMatchInfo(resolvedRelations?.performers), [resolvedRelations]);
+  const allowedGenderKeys = useMemo(
+    () => buildAllowedGenderKeys(taggerConfig.performerGenders),
+    [taggerConfig.performerGenders],
+  );
   const enrichedResults = useMemo(() => {
     const results = state?.results;
     if (!results) return results;
     return results.map((r) =>
       r.sourceKind !== "scraper"
-        ? r
+        ? // Only a metadata server states a performer's gender, so only its matches can be filtered by
+          // one. Dropping the excluded performers here keeps the preview, its counts and the apply
+          // request agreed on one list, and re-runs when the setting changes without a new search.
+          filterMatchPerformersByGender(r, allowedGenderKeys)
         : {
             ...r,
             tagCandidates: r.tagCandidates.map((c) => ({
@@ -1366,8 +1738,9 @@ function TaggerVideoRow({
             })),
           },
     );
-  }, [state?.results, existingTagKeys, existingPerformerKeys]);
+  }, [state?.results, existingTagKeys, existingPerformerKeys, allowedGenderKeys]);
   const selectedResult = enrichedResults?.[state?.selectedIndex ?? 0];
+  const coverComparison = useCoverComparison(video, selectedResult?.imageUrl);
   const videoLinkProps = createNestedRouteLinkProps<HTMLAnchorElement>({ page: "video", id: video.id }, () =>
     onNavigate?.(video.id),
   );
@@ -1382,10 +1755,11 @@ function TaggerVideoRow({
         ? "Fragment JSON..."
         : "Title or name..."
     : "Search query...";
+  const textSearchLabel = isScraperSource ? "Search" : "Search for this text";
 
   const importMut = useMutation<Video | ScrapeAttempt, Error>({
     mutationFn: () => {
-      if (!selectedResult) throw new Error("No result selected");
+      if (!selectedResult) throw new TaggerPreconditionError("No result selected");
       const collectionModes = getVideoCollectionModes(selectedResult, state, taggerConfig);
       const tagActions = buildVideoRelationActionMap(
         selectedResult.tagNames,
@@ -1409,7 +1783,7 @@ function TaggerVideoRow({
           ? selectedResult.tagNames
           : selectedResult.tagNames.filter((name) => tagActions[relationKey(name)] === "exclude");
       if (selectedResult?.sourceKind === "scraper") {
-        if (!selectedResult.scrapeAttemptId) throw new Error("No scraper attempt selected");
+        if (!selectedResult.scrapeAttemptId) throw new TaggerPreconditionError("No scraper attempt selected");
         return scrapeAttempts.apply(
           selectedResult.scrapeAttemptId,
           buildScraperVideoApplyRequest(selectedResult, video, state, taggerConfig),
@@ -1462,6 +1836,10 @@ function TaggerVideoRow({
         onlyExistingPerformers: taggerConfig.onlyExistingPerformers,
         onlyExistingStudio: taggerConfig.onlyExistingStudio,
         markOrganized: taggerConfig.markOrganized,
+        // The preview already dropped the excluded genders; send the same selection the filter above
+        // used, so a performer it hides can never be written by the parts of the import the overrides
+        // do not cover. Omitted, and only omitted, when nothing is filtered.
+        performerGenders: allowedGenderKeys ? taggerConfig.performerGenders : undefined,
         excludedTagNames: excludedTags.length > 0 ? excludedTags : undefined,
         performerOverrides: performerOverrides.length > 0 ? performerOverrides : undefined,
         tagOverrides,
@@ -1471,15 +1849,46 @@ function TaggerVideoRow({
       };
       return videos.importFromMetadataServer(video.id, importReq);
     },
+    // The row and the Apply all summary both report this failure with the server's own wording, so
+    // the app-wide notice would be a third, vaguer account of the same thing.
+    meta: { suppressGlobalError: true },
+    // A retry starts from a clean slate, so a stale reason cannot sit beside a fresh attempt.
+    onMutate: () => onUpdateState({ error: undefined }),
+    // React Query routes anything thrown in here to onError, which would report an import that has
+    // already landed as a failure and invite the user to write it a second time. The whole body is
+    // guarded, not just the refresh: a 204 makes `result` undefined, and reading a warning off it
+    // would throw before the row was ever marked saved.
     onSuccess: async (result) => {
-      const importWarnings = "importWarnings" in result ? result.importWarnings : undefined;
-      onUpdateState({
-        saved: true,
-        warning: importWarnings && importWarnings.length > 0 ? importWarnings.join(" ") : undefined,
-      });
-      await invalidateVideoMetadataQueries(queryClient, video.id);
+      try {
+        const importWarnings =
+          result && typeof result === "object" && "importWarnings" in result ? result.importWarnings : undefined;
+        onUpdateState({
+          saved: true,
+          warning: importWarnings && importWarnings.length > 0 ? importWarnings.join(" ") : undefined,
+        });
+        await invalidateVideoMetadataQueries(queryClient, video.id);
+      } catch {
+        // The import itself succeeded, so the row stays saved and a stale list is the lesser problem.
+        onUpdateState({ saved: true });
+      }
+    },
+    // Apply all deliberately swallows a rejection so one row cannot abandon the batch, so the reason
+    // has to be recorded here: without this the row keeps its pending changes and looks untouched.
+    onError: (err) => {
+      onUpdateState({ error: taggerFailureReason(err) });
     },
   });
+
+  // Keep the published apply pointed at the current mutation without re-registering on every render:
+  // the registration effect depends only on whether this row has something to apply.
+  const applyRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  applyRef.current = () => importMut.mutateAsync();
+  const canApply = Boolean(selectedResult) && !state?.saved;
+  useEffect(() => {
+    if (!onRegisterApply) return;
+    onRegisterApply(video.id, canApply ? () => applyRef.current() : null);
+    return () => onRegisterApply(video.id, null);
+  }, [onRegisterApply, video.id, canApply]);
 
   const submitEndpoint = source?.kind === "metadata-server" ? source.endpoint : undefined;
   const normalizedSubmitEndpoint = normalizeEndpoint(submitEndpoint);
@@ -1495,13 +1904,9 @@ function TaggerVideoRow({
     source?.kind === "metadata-server" && (hasRemoteIdForEndpoint || hasSavedMetadataServerMatchForEndpoint);
   const shouldHighlightFingerprintSubmit = canSubmitFingerprints;
 
-  const submitDraftMut = useMutation<{ draftId: string | null }, Error>({
-    meta: { suppressGlobalError: true },
-    mutationFn: () => {
-      if (!submitEndpoint) throw new Error("Select a metadata-server source first.");
-      return videos.submitMetadataServerDraft(video.id, submitEndpoint);
-    },
-  });
+  const submitDraftMut = useMetadataServerDraftSubmit((endpoint) =>
+    videos.submitMetadataServerDraft(video.id, endpoint),
+  );
 
   const submitFingerprintsMut = useMutation<void, Error>({
     meta: { suppressGlobalError: true },
@@ -1627,19 +2032,49 @@ function TaggerVideoRow({
               />
             )}
             <button
+              type="button"
               onClick={onSearch}
               disabled={state?.loading}
-              aria-label="Search"
+              aria-label={textSearchLabel}
+              title={textSearchLabel}
               // Stretch to the one-line input's height; beside the multi-line fragment box, stay compact at the top.
-              className={`flex shrink-0 items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60 ${
+              className={`flex shrink-0 items-center rounded bg-accent px-2 py-1 text-white hover:bg-accent-hover disabled:opacity-60 ${
                 isFragmentInput ? "h-fit" : ""
               }`}
             >
-              {state?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-              <span className="hidden sm:inline">Search</span>
+              {state?.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
             </button>
             {source?.kind === "metadata-server" && (
-              // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
+              // The row's second search mode, so it sits beside the first rather than in the menu. It never
+              // reads the query box, which is what keeps the two visibly independent.
+              <button
+                type="button"
+                onClick={onSearchFingerprints}
+                disabled={state?.loading}
+                aria-label="Identify by file content"
+                title="Identify by file content (fingerprints). Ignores the search text."
+                className="flex shrink-0 items-center rounded border border-border bg-surface px-1.5 text-muted hover:border-accent/40 hover:text-accent disabled:opacity-60"
+              >
+                <Fingerprint className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onDismiss && (
+              // Sits beside Search so a row can be cleared whether or not it found a match.
+              <button
+                type="button"
+                onClick={onDismiss}
+                aria-label="Dismiss video"
+                title="Dismiss video from this search session. It will be included in future search sessions."
+                className={`flex shrink-0 items-center rounded border border-border bg-surface px-1.5 text-muted hover:border-red-500/40 hover:text-red-400 ${
+                  isFragmentInput ? "h-fit py-1" : ""
+                }`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {source?.kind === "metadata-server" && (
+              // The rare actions, the two submissions, live behind one menu so the row shows its query and its
+              // two search modes and nothing more.
               <DismissibleMenu className="relative shrink-0">
                 <summary
                   role="button"
@@ -1654,19 +2089,6 @@ function TaggerVideoRow({
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </summary>
                 <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded border border-border bg-card shadow-xl">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      onSearchFingerprints();
-                    }}
-                    disabled={state?.loading}
-                    title="Search by fingerprint only"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface disabled:opacity-60"
-                  >
-                    <Fingerprint className="h-3.5 w-3.5 text-muted" />
-                    Search by fingerprint only
-                  </button>
                   <button
                     type="button"
                     onClick={(event) => {
@@ -1694,7 +2116,7 @@ function TaggerVideoRow({
                     type="button"
                     onClick={(event) => {
                       event.currentTarget.closest("details")?.removeAttribute("open");
-                      submitDraftMut.mutate();
+                      submitDraftMut.submitDraft(submitEndpoint);
                     }}
                     disabled={submitDraftMut.isPending}
                     title="Submit this video as a draft entry to the metadata server"
@@ -1733,7 +2155,22 @@ function TaggerVideoRow({
           {submitDraftMut.isSuccess && (
             <p className="w-full text-xs text-green-400">
               <Check className="w-3 h-3 inline mr-1" />
-              Video draft submitted{submitDraftMut.data.draftId ? ` (${submitDraftMut.data.draftId})` : ""}.
+              {submitDraftMut.data.draftUrl ? (
+                <>
+                  Video draft submitted.{" "}
+                  <a
+                    href={submitDraftMut.data.draftUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-accent hover:underline"
+                  >
+                    Open draft
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </>
+              ) : (
+                <>Video draft submitted{submitDraftMut.data.draftId ? ` (${submitDraftMut.data.draftId})` : ""}.</>
+              )}
             </p>
           )}
 
@@ -1846,6 +2283,7 @@ function TaggerVideoRow({
                 onUpdateState(key === "tags" ? { tagEdits: edits } : { performerEdits: edits })
               }
               taggerConfig={taggerConfig}
+              coverComparison={coverComparison}
             />
           )}
 
@@ -1898,6 +2336,8 @@ interface TaggerResultsProps {
   performerEdits?: TaggerRelationshipEdits;
   onRelationshipEditsChange: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
+  /** Pixel verdict on the selected result's cover; absent until it has been asked for and answered. */
+  coverComparison?: VideoCoverComparison;
 }
 
 function TaggerResults({
@@ -1928,6 +2368,7 @@ function TaggerResults({
   performerEdits,
   onRelationshipEditsChange,
   taggerConfig,
+  coverComparison,
 }: TaggerResultsProps) {
   const current = results[selectedIndex] ? selectedIndex : 0;
   const row = (result: UnifiedVideoMatch, i: number) => (
@@ -1961,6 +2402,7 @@ function TaggerResults({
       performerEdits={performerEdits}
       onRelationshipEditsChange={i === current ? onRelationshipEditsChange : undefined}
       taggerConfig={taggerConfig}
+      coverComparison={i === current ? coverComparison : undefined}
     />
   );
   const others = results.map((result, i) => ({ result, i })).filter(({ i }) => i !== current);
@@ -2010,6 +2452,7 @@ function TaggerResultRow({
   performerEdits,
   onRelationshipEditsChange,
   taggerConfig,
+  coverComparison,
 }: {
   video: Video;
   result: MetadataServerVideoMatch;
@@ -2039,6 +2482,7 @@ function TaggerResultRow({
   performerEdits?: TaggerRelationshipEdits;
   onRelationshipEditsChange?: (key: TaggerRelationshipKey, edits: TaggerRelationshipEdits) => void;
   taggerConfig: TaggerConfig;
+  coverComparison?: VideoCoverComparison;
 }) {
   const metadataServers = useOptionalAppConfig()?.config?.scraping?.metadataServers;
   // Accept-all is the common case, so the review opens as a list of facts; the full side-by-side
@@ -2080,6 +2524,7 @@ function TaggerResultRow({
     metadataServers,
     fieldStrategies,
     imageReplace: (fieldStrategies.image ?? defaultVideoImageStrategy(video, taggerConfig)) === "overwrite",
+    coverComparison,
     collectionModes,
     showStudio: taggerConfig.setStudio,
     showTags: taggerConfig.setTags,
@@ -2186,7 +2631,12 @@ function TaggerResultRow({
           <img src={result.imageUrl} alt="" className="h-9 w-16 shrink-0 rounded object-cover" loading="lazy" />
         )}
         {isSelected && review ? (
-          <CoverPanel review={review} onChange={handleSelectionChange} disabled={saving} />
+          <CoverPanel
+            review={review}
+            onChange={handleSelectionChange}
+            disabled={saving}
+            coverComparison={coverComparison}
+          />
         ) : null}
         <div className="min-w-0 flex-1 self-start">
           <p
@@ -2222,7 +2672,12 @@ function TaggerResultRow({
           ) : (
             <div className="py-1">
               <MetadataDiffSummary
-                fields={review.fields.filter((field) => field.key !== "image")}
+                // The cover has its own panel, so it is not a row here — except when it is unchanged,
+                // where it belongs among the unchanged labels the footer is already counting it in.
+                fields={review.fields.filter(
+                  (field) => field.key !== "image" || scalarStatus(field, review.source, review.target) === "identical",
+                )}
+
                 source={review.source}
                 target={review.target}
                 value={review.selection}
@@ -2231,32 +2686,35 @@ function TaggerResultRow({
               />
             </div>
           )}
+          {/* Summary reads left to right; the actions that act on it are grouped at the right edge. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface/60 px-3 py-2">
-            {onSave && (
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                {summary?.changeCount
-                  ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
-                  : "Apply"}
-              </button>
-            )}
             {summary ? (
               <span className="hidden min-w-0 flex-1 truncate text-[11px] text-muted sm:inline">
                 {summary.changes.map((change) => change.text).join(" · ")}
               </span>
             ) : null}
-            <button
-              type="button"
-              aria-expanded={adjusting}
-              onClick={() => setAdjusting((current) => !current)}
-              className="ml-auto text-xs text-accent hover:underline"
-            >
-              {adjusting ? "Done adjusting" : "Adjust…"}
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                aria-expanded={adjusting}
+                onClick={() => setAdjusting((current) => !current)}
+                className="text-xs text-accent hover:underline"
+              >
+                {adjusting ? "Done adjusting" : "Adjust…"}
+              </button>
+              {onSave && (
+                <button
+                  onClick={onSave}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 rounded px-4 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {summary?.changeCount
+                    ? `Apply ${summary.changeCount} ${summary.changeCount === 1 ? "change" : "changes"}`
+                    : "Apply"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2269,16 +2727,19 @@ function CoverPanel({
   review,
   onChange,
   disabled,
+  coverComparison,
 }: {
   review: ReturnType<typeof buildTaggerReview>;
   onChange: (next: DiffSelection) => void;
   disabled?: boolean;
+  coverComparison?: VideoCoverComparison;
 }) {
   const field = review.fields.find((entry) => entry.key === "image");
   if (!field) return null;
   return (
     <ReviewCoverPanel
       status={scalarStatus(field, review.source, review.target)}
+      note={coverComparisonNote(coverComparison)}
       chosen={review.selection.image === "source" ? "source" : "target"}
       currentUrl={review.target.values.image ? String(review.target.values.image) : null}
       candidates={[String(review.source.values.image ?? "")]}

@@ -13,11 +13,59 @@ import {
   FILTER_DYNAMIC_SOURCE_KEY,
   defaultDynamicGroupFilterQueryJson,
 } from "../components/DynamicGroupFilterEditor";
+import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 
 interface Props {
   group: Group;
   open: boolean;
   onClose: () => void;
+}
+
+function groupFormValues(group: Group) {
+  return {
+    name: group.name,
+    aliases: splitAliases(group.aliases),
+    director: group.director ?? "",
+    date: group.date ?? "",
+    studioId: group.studioId ?? undefined,
+    description: group.description ?? "",
+    urls: group.urls.length > 0 ? group.urls : [""],
+    selectedTagIds: group.tags.map((t) => t.id),
+    customFields: { ...(group.customFields ?? {}) } as Record<string, unknown>,
+    kind: (group.kind ?? "static") as "static" | "dynamic",
+    querySourceKey: group.querySourceKey ?? FILTER_DYNAMIC_SOURCE_KEY,
+    queryJson: group.queryJson ?? defaultDynamicGroupFilterQueryJson(),
+    showInVideoLists: group.showInVideoLists ?? false,
+  };
+}
+
+function groupUpdatePayload(values: ReturnType<typeof groupFormValues>): GroupUpdate {
+  const joinedAliases = joinAliases(values.aliases);
+  const clearFields = [
+    !joinedAliases && "aliases",
+    !values.director && "director",
+    !values.date && "date",
+    values.studioId === undefined && "studioId",
+    !values.description && "description",
+  ].filter((field): field is string => Boolean(field));
+  return {
+    name: values.name,
+    aliases: joinedAliases || undefined,
+    director: values.director || undefined,
+    date: values.date || undefined,
+    studioId: values.studioId,
+    description: values.description || undefined,
+    urls: values.urls.map((url) => url.trim()).filter(Boolean),
+    tagIds: values.selectedTagIds,
+    customFields: values.customFields,
+    kind: values.kind,
+    querySourceKey: values.kind === "dynamic" ? values.querySourceKey : undefined,
+    queryJson:
+      values.kind === "dynamic" && values.querySourceKey === FILTER_DYNAMIC_SOURCE_KEY ? values.queryJson : undefined,
+    showInVideoLists: values.showInVideoLists,
+    clearFields,
+  };
 }
 
 export function GroupEditModal({ group, open, onClose }: Props) {
@@ -51,8 +99,12 @@ export function GroupEditModal({ group, open, onClose }: Props) {
     enabled: open,
   });
 
+  // The group the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(group);
+
   useEffect(() => {
     if (!open) return;
+    setBaseline(group);
     setName(group.name);
     setAliases(splitAliases(group.aliases));
     setDirector(group.director ?? "");
@@ -100,8 +152,7 @@ export function GroupEditModal({ group, open, onClose }: Props) {
 
       return updated;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["group", group.id] });
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       queryClient.invalidateQueries({ queryKey: ["group-containinggroups", group.id] });
       const changedParentIds = new Set([
@@ -111,36 +162,29 @@ export function GroupEditModal({ group, open, onClose }: Props) {
       for (const parentId of changedParentIds) {
         queryClient.invalidateQueries({ queryKey: ["group-subgroups", parentId] });
       }
+      // Close once the saved group is loaded, so reopening the dialog starts from it.
+      await refreshSavedEntity(queryClient, ["group", group.id]);
       onClose();
     },
   });
 
   const handleSave = () => {
-    const urlList = urls.map((url) => url.trim()).filter(Boolean);
-    const joinedAliases = joinAliases(aliases);
-    const clearFields = [
-      !joinedAliases && "aliases",
-      !director && "director",
-      !date && "date",
-      studioId === undefined && "studioId",
-      !description && "description",
-    ].filter((field): field is string => Boolean(field));
-    mutation.mutate({
+    const current = groupUpdatePayload({
       name,
-      aliases: joinedAliases || undefined,
-      director: director || undefined,
-      date: date || undefined,
+      aliases,
+      director,
+      date,
       studioId,
-      description: description || undefined,
-      urls: urlList,
-      tagIds: selectedTagIds,
+      description,
+      urls,
+      selectedTagIds,
       customFields,
       kind,
-      querySourceKey: kind === "dynamic" ? querySourceKey : undefined,
-      queryJson: kind === "dynamic" && querySourceKey === FILTER_DYNAMIC_SOURCE_KEY ? queryJson : undefined,
+      querySourceKey,
+      queryJson,
       showInVideoLists,
-      clearFields,
     });
+    mutation.mutate(changedUpdateFields(groupUpdatePayload(groupFormValues(baseline)), current));
   };
 
   return (

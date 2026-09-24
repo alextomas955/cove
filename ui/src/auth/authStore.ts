@@ -2,6 +2,7 @@
 // Tokens are also exposed via getters used by the API client.
 
 import type { AuthUserKind, UserUiPreferences } from "../api/types";
+import { THEME_BOOT_STORAGE_KEY } from "../theme/themeBoot";
 
 const ACCESS_KEY = "cove_access_token";
 const REFRESH_KEY = "cove_refresh_token";
@@ -149,6 +150,9 @@ export const authStore = {
       localStorage.removeItem(ACCESS_RECEIVED_AT_KEY);
       localStorage.removeItem(REFRESH_KEY);
       localStorage.removeItem(USER_KEY);
+      // The cached look is per user, so it goes with the user. The theme *selection* keys stay:
+      // those are browser-level preferences that deliberately survive signing out.
+      localStorage.removeItem(THEME_BOOT_STORAGE_KEY);
       sessionStorage.removeItem(SHARE_TOKEN_KEY);
       sessionStorage.removeItem(SHARE_PASSWORD_KEY);
     } catch {

@@ -326,6 +326,7 @@ try
         provider.GetRequiredService<ExtensionIdentityLinkService>());
     builder.Services.AddSingleton<ScraperService>();
     builder.Services.AddSingleton<IVideoCoverService, VideoCoverService>();
+    builder.Services.AddScoped<VideoCoverComparisonService>();
     builder.Services.AddScoped<IVideoMetadataApplyService, VideoMetadataApplyService>();
     builder.Services.AddScoped<IGroupMetadataApplyService, GroupMetadataApplyService>();
     builder.Services.AddScoped<PerformerScrapeService>();
@@ -917,15 +918,20 @@ try
                 await db.Database.EnsureCreatedAsync();
             }
 
+            if (schemaCurrent)
+            {
+                // Dashboards reference the built-in dynamic groups by id, so the groups must exist
+                // before any request can bootstrap one. Admit DB-backed requests only afterwards.
+                await scope.ServiceProvider
+                    .GetRequiredService<DynamicGroupResolver>()
+                    .EnsureBuiltInGroupsAsync(CancellationToken.None);
+            }
+
             // Schema is now present (freshly migrated or already current); allow DB-backed requests through.
             schemaInitToken.Dispose();
 
             if (schemaCurrent)
             {
-                await scope.ServiceProvider
-                    .GetRequiredService<DynamicGroupResolver>()
-                    .EnsureBuiltInGroupsAsync(CancellationToken.None);
-
                 // Pre-warm: compile EF Core query cache, prime connection pool, JIT hot paths
                 _ = await db.Videos.CountAsync();
                 _ = await db.Videos.AsNoTracking()

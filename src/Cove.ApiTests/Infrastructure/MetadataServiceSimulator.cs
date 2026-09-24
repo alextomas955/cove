@@ -226,10 +226,33 @@ public sealed class MetadataServiceSimulator : IAsyncDisposable
             return;
         }
 
-        var request = await JsonSerializer.DeserializeAsync<GraphQlRequest>(
-            context.Request.Body,
-            ApiJson.Options,
-            context.RequestAborted);
+        GraphQlRequest? request;
+        MetadataServiceUpload? image = null;
+        if (context.Request.HasFormContentType)
+        {
+            // A GraphQL multipart request, which Cove sends when a draft carries an image. Like the real
+            // server, only a file part (one with a filename) mapped onto the draft input counts as the upload.
+            var form = await context.Request.ReadFormAsync(context.RequestAborted);
+            request = JsonSerializer.Deserialize<GraphQlRequest>(form["operations"].ToString(), ApiJson.Options);
+            var file = form.Files.GetFile("0");
+            if (form["map"].ToString() != """{"0":["variables.input.image"]}""" || file is null)
+            {
+                await WriteGraphQlErrorAsync(context, "The simulator requires the upload map to place file 0 at variables.input.image.");
+                return;
+            }
+
+            using var imageBytes = new MemoryStream();
+            await file.CopyToAsync(imageBytes, context.RequestAborted);
+            image = new MetadataServiceUpload(file.FileName, file.ContentType, imageBytes.ToArray());
+        }
+        else
+        {
+            request = await JsonSerializer.DeserializeAsync<GraphQlRequest>(
+                context.Request.Body,
+                ApiJson.Options,
+                context.RequestAborted);
+        }
+
         if (request is null)
         {
             await WriteGraphQlErrorAsync(context, "The simulator requires a GraphQL request.");
@@ -332,7 +355,7 @@ public sealed class MetadataServiceSimulator : IAsyncDisposable
         if (request.Query.Contains("mutation SubmitSceneDraft", StringComparison.Ordinal)
             && request.Query.Contains("submitSceneDraft(input: $input)", StringComparison.Ordinal))
         {
-            await HandleSceneDraftSubmissionAsync(context, request, submissions);
+            await HandleSceneDraftSubmissionAsync(context, request, image, submissions);
             return;
         }
 
@@ -430,6 +453,7 @@ public sealed class MetadataServiceSimulator : IAsyncDisposable
     private static async Task HandleSceneDraftSubmissionAsync(
         HttpContext context,
         GraphQlRequest request,
+        MetadataServiceUpload? image,
         MetadataServiceSubmissionLog submissions)
     {
         if (!request.Variables.TryGetProperty("input", out var input)
@@ -439,7 +463,7 @@ public sealed class MetadataServiceSimulator : IAsyncDisposable
             return;
         }
 
-        var submission = submissions.RecordSceneDraft(input);
+        var submission = submissions.RecordSceneDraft(input, image);
         await context.Response.WriteAsJsonAsync(
             new { data = new { submitSceneDraft = new { id = submission.DraftId } } },
             ApiJson.Options,
@@ -777,11 +801,12 @@ public sealed class MetadataServiceSimulator : IAsyncDisposable
         public void RecordFingerprint(JsonElement input)
             => _fingerprintSubmissions.Enqueue(new MetadataServiceFingerprintSubmission(input.Clone()));
 
-        public MetadataServiceSceneDraftSubmission RecordSceneDraft(JsonElement input)
+        public MetadataServiceSceneDraftSubmission RecordSceneDraft(JsonElement input, MetadataServiceUpload? image)
         {
             var submission = new MetadataServiceSceneDraftSubmission(
                 $"draft-{Interlocked.Increment(ref _nextDraftNumber)}",
-                input.Clone());
+                input.Clone(),
+                image);
             _sceneDraftSubmissions.Enqueue(submission);
             return submission;
         }
@@ -943,7 +968,9 @@ public sealed record MetadataServiceFingerprintSourceEntry(string Type, string V
 
 public sealed record MetadataServiceFingerprintSubmission(JsonElement Input);
 
-public sealed record MetadataServiceSceneDraftSubmission(string DraftId, JsonElement Input);
+public sealed record MetadataServiceSceneDraftSubmission(string DraftId, JsonElement Input, MetadataServiceUpload? Image = null);
+
+public sealed record MetadataServiceUpload(string FileName, string ContentType, byte[] Data);
 
 public sealed record MetadataServicePerformerDraftSubmission(string DraftId, JsonElement Input);
 
