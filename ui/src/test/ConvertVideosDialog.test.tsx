@@ -68,7 +68,7 @@ describe("ConvertVideosDialog", () => {
       outputFrameRate: null,
       convertMarginalSavings: false,
       replaceOriginal: true,
-      discardIfLarger: true,
+      convertEvenIfLarger: false,
     });
     expect(await screen.findByText("Conversion job queued")).toBeTruthy();
   });

@@ -31,34 +31,35 @@ const DEFAULT_SETTINGS: Settings = {
   effort: "highHardware",
   outputFrameRate: null,
   convertMarginalSavings: false,
+  convertEvenIfLarger: false,
   replaceOriginal: false,
-  discardIfLarger: true,
 };
 
-// One ladder from most quality to most speed, replacing the old quality x speed pair. Hardware entries
-// are listed separately rather than as a modifier: a machine may not have a usable hardware encoder at
-// all, and hardware is a different quality-per-bit trade rather than a speed setting. Measured on a 4K
-// source at matched output size, libx265 scored about 2.4 VMAF above hevc_nvenc.
+// One ladder from most quality to most speed. Each rung is a quality every video is measured against, not
+// a bitrate: Cove encodes short samples of each video, finds the smallest file that keeps that quality,
+// and leaves a video alone when that would not save enough. Hardware entries are listed separately
+// rather than as a modifier: a machine may not have a usable hardware encoder at all, and hardware is a
+// different quality-per-bit trade rather than a speed setting.
 const EFFORTS: ReadonlyArray<{ value: Settings["effort"]; label: string; hint: string }> = [
   {
     value: "highHardware",
     label: "High quality (GPU)",
-    hint: "Aims at the bitrate this resolution can make use of. Practically identical to the original on detailed 4K footage. Needs a supported GPU.",
+    hint: "Indistinguishable from the original on close inspection. Each video gets the smallest file that keeps it that way. Needs a supported GPU.",
   },
   {
     value: "highSoftware",
     label: "High quality (CPU)",
-    hint: "Same target, better quality per bit, but several times slower.",
+    hint: "The same quality with smaller files, but several times slower.",
   },
   {
     value: "balancedHardware",
     label: "Balanced — lower size, some detail lost (GPU)",
-    hint: "70% of the High target. Fine detail such as hair and freckles softens at a few feet; most of the picture holds up.",
+    hint: "Fine detail such as hair and freckles softens on close inspection; most of the picture holds up.",
   },
   {
     value: "balancedSoftware",
     label: "Balanced — lower size, some detail lost (CPU)",
-    hint: "The Balanced target on the CPU. Slower, slightly better for the size.",
+    hint: "The Balanced quality on the CPU. Slower, smaller files.",
   },
 ];
 
@@ -69,7 +70,11 @@ const FRAME_RATE_CHOICES = [60, 30, 24] as const;
 const CODECS: ReadonlyArray<{ value: VideoConversionCodec; label: string; hint: string }> = [
   { value: "hevc", label: "HEVC (H.265)", hint: "About half the size of H.264 at the same quality." },
   { value: "h264", label: "H.264", hint: "Plays everywhere; larger files." },
-  { value: "av1", label: "AV1", hint: "Smallest files; slow without a recent GPU." },
+  {
+    value: "av1",
+    label: "AV1",
+    hint: "About the same size as HEVC at these quality levels, where AV1 gains least. Much slower without a GPU that encodes AV1.",
+  },
   {
     value: "copy",
     label: "Keep codec (remux only)",
@@ -112,7 +117,10 @@ function loadSettings(): Settings {
         DEFAULT_SETTINGS.effort,
       ),
       outputFrameRate: frameRate,
-      discardIfLarger: typeof stored.discardIfLarger === "boolean" ? stored.discardIfLarger : DEFAULT_SETTINGS.discardIfLarger,
+      convertEvenIfLarger:
+        typeof stored.convertEvenIfLarger === "boolean"
+          ? stored.convertEvenIfLarger
+          : DEFAULT_SETTINGS.convertEvenIfLarger,
       convertMarginalSavings:
         typeof stored.convertMarginalSavings === "boolean"
           ? stored.convertMarginalSavings
@@ -281,7 +289,9 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
               }
               className={selectClass}
             >
-              <option value="">Keep source frame rate</option>
+              <option value="">
+                Keep source frame rate
+              </option>
               {FRAME_RATE_CHOICES.filter((fps) => maxSourceFrameRate == null || fps < maxSourceFrameRate - 0.01).map(
                 (fps) => (
                   <option key={fps} value={String(fps)}>
@@ -291,8 +301,8 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
               )}
             </select>
             <p className="text-xs text-muted">
-              Lowering the frame rate shrinks the file without touching per-frame detail, and lowers the
-              bitrate target with it. Motion becomes less smooth.
+              Lowering the frame rate shrinks the file without touching per-frame detail. Motion becomes less
+              smooth.
             </p>
           </div>
         </div>
@@ -309,12 +319,16 @@ export function ConvertVideosDialog({ open, onClose, videoIds, canReplaceOrigina
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
-                checked={settings.discardIfLarger}
-                onChange={() => update("discardIfLarger", !settings.discardIfLarger)}
+                checked={settings.convertEvenIfLarger ?? false}
+                onChange={() => update("convertEvenIfLarger", !settings.convertEvenIfLarger)}
                 className="mt-0.5 h-4 w-4 rounded border-border accent-accent"
               />
               <span className="text-sm text-foreground">
-                Discard the conversion if it isn't smaller than the original
+                Convert even when the result would be larger
+                <span className="block text-xs text-muted">
+                  A video already below the bitrate its resolution can use has no space to reclaim, so
+                  re-encoding it would only grow the file and lose quality.
+                </span>
               </span>
             </label>
             <label className="flex cursor-pointer items-start gap-3">

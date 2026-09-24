@@ -2006,7 +2006,7 @@ export interface VideoConversionOptions {
   /** Verify each converted file, make it primary and delete the original from disk. */
   replaceOriginal: boolean;
   /** Throw a re-encoded file away when it is not smaller than the original. */
-  discardIfLarger: boolean;
+  convertEvenIfLarger?: boolean;
 }
 
 export interface VideoConversionEncoderInfo {

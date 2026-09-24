@@ -141,7 +141,8 @@ describe("DetailListToolbar", () => {
       />,
     );
 
-    const toolbar = screen.getByPlaceholderText("Search…").closest("form")?.parentElement;
+    // The search sits inside the centered controls section, which sits inside the toolbar row.
+    const toolbar = screen.getByPlaceholderText("Search…").closest("form")?.parentElement?.parentElement;
     expect(toolbar).toHaveClass("w-full");
     expect(toolbar).not.toHaveClass("max-w-7xl");
   });

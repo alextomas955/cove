@@ -282,51 +282,82 @@ internal static class FfmpegHwAccel
     }
 
     /// <summary>
-    /// The <c>-c:v ...</c> arguments for a library conversion encode (see <see cref="VideoConversionPlanner"/>).
-    /// <paramref name="quality"/> is on the codec's CRF-style scale (lower = better) and is passed as each
-    /// encoder family's constant-quality knob; <paramref name="speed"/> maps to that family's preset
-    /// vocabulary. <paramref name="tenBit"/> keeps a 10-bit source 10-bit for HEVC/AV1; H.264 output is
-    /// always 8-bit 4:2:0 because browsers and Safari's hardware decoder reject High 10.
-    /// </summary>
-    /// <summary>
-    /// Encoder arguments that aim at <paramref name="targetKbps"/> rather than at a quality number.
+    /// The constant-quality control conversion searches over for <paramref name="encoder"/>, as a level
+    /// where higher is always a smaller file (see <see cref="VideoQualityKnob"/>).
     ///
-    /// Every family here is driven in a capped-VBR mode: the target is what the encode averages, and
-    /// the ceiling (1.5x, with a 2x buffer) lets busy scenes spend more while keeping the file close to
-    /// the prediction the user was shown before starting. A pure constant-bitrate mode would hold the
-    /// size exactly but waste bits on easy scenes and starve hard ones.
+    /// Start and Slope are where the search begins and how fast score is expected to fall per step;
+    /// the search measures the real slope after its first round, so these only set how quickly it
+    /// converges. Both come from searches on real footage at the High target:
+    ///
+    ///   hevc_nvenc  settled between CQ 21.5 and 27 on 1080p to 8K, about 0.5 dB per step
+    ///   libx265     CRF 19 where hevc_nvenc needed 21.5 on the same file, about 0.5 dB per step
+    ///   libsvtav1   CRF 19 at presets 4, 5 and 6, only about 0.2 dB per step
+    ///
+    /// libx264 and the QSV, AMF, VAAPI and VideoToolbox families use the same shape on their own scales
+    /// and have not been measured; the search still converges from a poor start, only in more rounds.
     /// </summary>
-    public static string ConversionBitrateArgs(string encoder, int targetKbps, VideoConversionEffort effort, bool tenBit)
+    public static VideoQualityKnob ConversionQualityKnob(string encoder) => encoder switch
+    {
+        // NVENC's -cq takes fractions, so the search can land between whole steps.
+        _ when encoder.EndsWith("_nvenc", StringComparison.Ordinal) => new(10, 45, 25, 0.5, 0.5),
+        "libx265" => new(10, 40, 20, 0.5, 0.5),
+        "libx264" => new(10, 40, 20, 0.5, 0.5),
+        "libsvtav1" => new(10, 60, 20, 1, 0.2),
+        _ when encoder.EndsWith("_qsv", StringComparison.Ordinal) => new(10, 45, 26, 1, 0.5),
+        _ when encoder.EndsWith("_amf", StringComparison.Ordinal) => new(10, 45, 26, 1, 0.5),
+        _ when encoder.EndsWith("_vaapi", StringComparison.Ordinal) => new(10, 45, 26, 1, 0.5),
+        // VideoToolbox's -q:v runs 1-100 with higher meaning better; the level is mapped onto it inverted.
+        _ when encoder.EndsWith("_videotoolbox", StringComparison.Ordinal) => new(20, 80, 45, 1, 0.3, HigherIsBetter: true),
+        _ => throw new ArgumentOutOfRangeException(nameof(encoder), encoder, "Not an encoder Cove converts with."),
+    };
+
+    /// <summary>
+    /// Encoder arguments for a constant-quality encode at <paramref name="level"/> (see
+    /// <see cref="ConversionQualityKnob"/>).
+    ///
+    /// Constant quality rather than a bitrate: each scene gets the bits it needs for the same quality,
+    /// so the level the samples settled on holds across the whole video instead of averaging out.
+    ///
+    /// <paramref name="maxKbps"/> is required for NVENC. Given only -cq and -b:v 0 it applies a default
+    /// peak rate of its own, which measured at about 51 Mbit/s on 8K: every CQ from 18 to 24 produced
+    /// the same file, so a search could never raise quality past that point.
+    /// </summary>
+    public static string ConversionQualityArgs(string encoder, double level, VideoConversionEffort effort, bool tenBit, int maxKbps)
     {
         var profile = VideoConversionPlanner.Profile(effort);
         var preset = encoder.EndsWith("_nvenc", StringComparison.Ordinal) ? profile.HardwarePreset : profile.SoftwarePreset;
-        var max = (int)(targetKbps * 1.5);
-        var buf = targetKbps * 2;
         var pix = tenBit && !encoder.StartsWith("h264", StringComparison.Ordinal) ? "yuv420p10le" : "yuv420p";
         var hwPix = tenBit && !encoder.StartsWith("h264", StringComparison.Ordinal) ? "p010le" : "nv12";
-        var rate = $"-b:v {targetKbps}k -maxrate {max}k -bufsize {buf}k";
+        var q = level.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        var whole = ((int)Math.Round(level)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (encoder.EndsWith("_nvenc", StringComparison.Ordinal) && maxKbps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxKbps), maxKbps, "NVENC constant quality needs an explicit peak rate.");
 
         return encoder switch
         {
             "libx264" or "libx265" =>
-                $"-c:v {encoder} -preset {preset} {rate}"
+                $"-c:v {encoder} -preset {preset} -crf {q}"
                 + (encoder == "libx265" ? " -x265-params log-level=error" : string.Empty)
                 + $" -pix_fmt {pix}",
-            "libsvtav1" => $"-c:v libsvtav1 -preset {(preset == "slow" ? 5 : 7)} {rate} -pix_fmt {pix}",
+            // SVT-AV1's presets matter far more than x265's. At the same measured quality on 1080p,
+            // preset 7 needed 711 MB, 6 608 MB, 5 493 MB and 4 466 MB, running at 74, 66, 49 and 38 fps.
+            // Preset 7 made AV1 44% larger than HEVC; 5 and 4 match or beat it.
+            "libsvtav1" => $"-c:v libsvtav1 -preset {(preset == "slow" ? 4 : 5)} -crf {whole} -pix_fmt {pix}",
             _ when encoder.EndsWith("_nvenc", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -preset {preset} -tune hq -rc vbr {rate}"
+                $"-c:v {encoder} -preset {preset} -tune hq -rc vbr -cq {q} -b:v 0"
+                + $" -maxrate {maxKbps}k -bufsize {maxKbps * 2}k"
                 + (tenBit && !encoder.StartsWith("h264", StringComparison.Ordinal)
                     ? " -pix_fmt p010le -profile:v main10"
                     : " -pix_fmt yuv420p"),
             _ when encoder.EndsWith("_qsv", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -preset {preset} {rate} -pix_fmt {hwPix}",
+                $"-c:v {encoder} -preset {preset} -global_quality {whole} -pix_fmt {hwPix}",
             _ when encoder.EndsWith("_amf", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -quality {(preset == "slow" ? "quality" : "balanced")} -rc vbr_peak {rate} -pix_fmt {hwPix}",
+                $"-c:v {encoder} -quality {(preset == "slow" ? "quality" : "balanced")} -rc cqp -qp_i {whole} -qp_p {whole} -qp_b {whole} -pix_fmt {hwPix}",
             _ when encoder.EndsWith("_vaapi", StringComparison.Ordinal) =>
-                $"-c:v {encoder} -rc_mode VBR {rate}"
+                $"-c:v {encoder} -rc_mode CQP -qp {whole}"
                 + (tenBit && encoder.StartsWith("hevc", StringComparison.Ordinal) ? " -profile:v main10" : string.Empty),
             _ when encoder.EndsWith("_videotoolbox", StringComparison.Ordinal) =>
-                $"-c:v {encoder} {rate}"
+                $"-c:v {encoder} -q:v {Math.Clamp(100 - (int)Math.Round(level), 1, 100)}"
                 + (tenBit && encoder.StartsWith("hevc", StringComparison.Ordinal)
                     ? " -pix_fmt p010le -profile:v main10"
                     : " -pix_fmt yuv420p"),
@@ -334,15 +365,33 @@ internal static class FfmpegHwAccel
         };
     }
 
-    /// <summary>The <c>-vf</c> argument a conversion encode needs, or an empty string. Only VAAPI needs one:
-    /// it encodes from GPU surfaces, so frames are converted and uploaded first.</summary>
-    public static string ConversionVideoFilter(string encoder, bool tenBit)
+    /// <summary>
+    /// The <c>-vf</c> argument a conversion encode needs, or an empty string. It is one chain because a
+    /// second <c>-vf</c> would replace the first rather than add to it.
+    ///
+    /// A lower output frame rate is done here with the fps filter rather than with <c>-r</c>. Measured on
+    /// a 59.94 fps source, <c>-r 30</c> passed its first four frames through before settling into
+    /// dropping, which left every later frame showing the picture from three source frames (about
+    /// 50 ms) before its timestamp - audio, copied unchanged, then led the video by about the amount
+    /// at which that becomes noticeable. The fps filter picks each frame by its timestamp.
+    ///
+    /// VAAPI encodes from GPU surfaces, so its frames are converted and uploaded last, after any
+    /// frame-rate change has already been made on the CPU side.
+    /// </summary>
+    public static string ConversionVideoFilter(string encoder, bool tenBit, double? frameRate = null)
     {
-        if (!encoder.EndsWith("_vaapi", StringComparison.Ordinal))
-            return string.Empty;
+        var chain = new List<string>();
+        if (frameRate is > 0)
+            chain.Add("fps=" + frameRate.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
 
-        var keepTenBit = tenBit && encoder != "h264_vaapi";
-        return $"-vf \"format={(keepTenBit ? "p010" : "nv12")},hwupload\"";
+        if (encoder.EndsWith("_vaapi", StringComparison.Ordinal))
+        {
+            var keepTenBit = tenBit && encoder != "h264_vaapi";
+            chain.Add($"format={(keepTenBit ? "p010" : "nv12")}");
+            chain.Add("hwupload");
+        }
+
+        return chain.Count == 0 ? string.Empty : $"-vf \"{string.Join(',', chain)}\"";
     }
 
     /// <summary>Returns extra input-side arguments required by the chosen encoder (e.g. the VAAPI
@@ -404,6 +453,22 @@ internal static class FfmpegHwAccel
             try { process.Kill(entireProcessTree: true); } catch { }
         }
         return output;
+    }
+
+    /// <summary>
+    /// True when this ffmpeg build has the libvmaf filter, which conversion uses to score quality
+    /// samples (its PSNR-HVS feature). BtbN's GPL builds, which Cove's container images use, include it;
+    /// a build a user supplies may not, and conversion then refuses to run rather than guess.
+    /// </summary>
+    public static bool HasQualityMeasurement(string ffmpegPath)
+    {
+        var output = RunFfmpegInfoQuery(ffmpegPath, "-hide_banner -filters");
+        // Rows look like " .. libvmaf           VV->V      Calculate the VMAF between two video streams."
+        return output.Split('\n').Any(line =>
+        {
+            var tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return tokens.Length >= 2 && tokens[1] == "libvmaf";
+        });
     }
 
     /// <summary>Returns the set of encoder NAMES available in this ffmpeg build.</summary>

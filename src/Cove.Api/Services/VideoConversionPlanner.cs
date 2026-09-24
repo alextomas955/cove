@@ -39,35 +39,30 @@ public enum VideoConversionContainer
 public enum VideoConversionEffort
 {
     /// <summary>
-    /// The bitrate judged practically identical to the original on high-detail 4K footage. Software
-    /// encoder: best quality per bit, and by far the slowest.
+    /// Indistinguishable from the original on close inspection (see <see cref="VideoQualitySearch.HighTarget"/>).
+    /// Software encoder: best quality per bit, and by far the slowest.
     /// </summary>
     HighSoftware,
 
-    /// <summary>The same target on the GPU. Several times faster.</summary>
+    /// <summary>The same quality on the GPU. Several times faster, for somewhat larger files.</summary>
     HighHardware,
 
     /// <summary>
-    /// 70% of the High target. Judged to lose fine detail - hair, freckles - at a few feet, while
-    /// most of the picture holds up. Software encoder.
+    /// Some fine detail - hair, freckles - lost at close inspection, while most of the picture holds up
+    /// (see <see cref="VideoQualitySearch.BalancedTarget"/>). Software encoder.
     /// </summary>
     BalancedSoftware,
 
-    /// <summary>70% of the High target, on the GPU.</summary>
+    /// <summary>The same quality as <see cref="BalancedSoftware"/>, on the GPU.</summary>
     BalancedHardware,
 }
 
-/// <summary>What a rung resolves to: which encoder family, its preset, its quality target, and how much
-/// of the source's video bitrate the result may use.</summary>
-/// <summary>
-/// What a rung resolves to: which encoder family, its preset, and what share of the resolution's
-/// transparent bitrate it aims for.
-/// </summary>
+/// <summary>What a rung resolves to: which encoder family and its preset. The quality it must keep is
+/// <see cref="VideoQualitySearch.Target"/>.</summary>
 public sealed record VideoConversionEffortProfile(
     bool PreferHardware,
     string SoftwarePreset,
-    string HardwarePreset,
-    double TargetShare);
+    string HardwarePreset);
 
 /// <summary>What a conversion job produces for every selected video.</summary>
 public sealed record VideoConversionSettings(
@@ -75,12 +70,16 @@ public sealed record VideoConversionSettings(
     VideoConversionContainer Container,
     VideoConversionEffort Effort,
     bool ReplaceOriginal,
-    bool DiscardIfLarger,
     /// <summary>Re-encode at this frame rate instead of the source's. Lowers the bitrate target too,
     /// since the target is derived from the output's frame rate.</summary>
     double? OutputFrameRate = null,
     /// <summary>Convert even when the predicted saving is too small to be obviously worthwhile.</summary>
-    bool ConvertMarginalSavings = false);
+    bool ConvertMarginalSavings = false,
+    /// <summary>
+    /// Convert even when the result is predicted to be larger than the original. Off by default: a
+    /// source already below its target has nothing to reclaim, so re-encoding it only costs quality.
+    /// </summary>
+    bool ConvertEvenIfLarger = false);
 
 /// <summary>A user-facing reason a video cannot be converted as asked. The message is shown on the job unit.</summary>
 public sealed class VideoConversionException(string message) : Exception(message);
@@ -264,19 +263,16 @@ public static class VideoConversionPlanner
     public static bool CopiesVideo(string sourceVideoCodec, VideoConversionCodec target)
         => target == VideoConversionCodec.Copy || string.Equals(sourceVideoCodec, CodecName(target), StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Why a file needs no conversion, or null when it does.</summary>
-    public static string? SkipReason(string sourcePath, string sourceVideoCodec, VideoConversionSettings settings)
-    {
-        if (!IsInContainer(sourcePath, settings.Container))
-            return null;
-
-        if (settings.Codec == VideoConversionCodec.Copy)
-            return $"Already an {ContainerLabel(settings.Container)} file.";
-
-        return CopiesVideo(sourceVideoCodec, settings.Codec)
-            ? $"Already {FfmpegHwAccel.CodecLabel(settings.Codec)} in {ContainerLabel(settings.Container)}."
+    /// <summary>
+    /// Why a file needs no conversion at all, or null when it does. Only a remux into the container the
+    /// file is already in qualifies. A file already in the target codec is not skipped here: whether
+    /// re-encoding it is worthwhile depends on its footage, and is measured (see <see cref="VideoQualitySearch"/>).
+    /// The most over-encoded files in a library are often already in the codec you would have picked.
+    /// </summary>
+    public static string? SkipReason(string sourcePath, VideoConversionSettings settings)
+        => settings.Codec == VideoConversionCodec.Copy && IsInContainer(sourcePath, settings.Container)
+            ? $"Already an {ContainerLabel(settings.Container)} file."
             : null;
-    }
 
     /// <summary>
     /// What each rung resolves to.
@@ -285,17 +281,13 @@ public static class VideoConversionPlanner
     /// hevc_nvenc preset above p4 are deliberately absent: on a 4K source at a fixed quality target,
     /// "slower" cost 4x "slow" for 0.3 VMAF, and p5/p6/p7 matched p4 within 0.2 VMAF and 1% of size
     /// while taking up to 2.4x as long.
-    ///
-    /// TargetShare is a fraction of the resolution's transparent bitrate (see
-    /// <see cref="VideoBitrateTarget"/>), not of the source's. That is what lets a conversion be judged
-    /// before it runs: a file already below its target has nothing to reclaim and is left alone.
     /// </summary>
     public static VideoConversionEffortProfile Profile(VideoConversionEffort effort) => effort switch
     {
-        VideoConversionEffort.HighSoftware => new(false, "slow", "p4", 1.00),
-        VideoConversionEffort.HighHardware => new(true, "medium", "p4", 1.00),
-        VideoConversionEffort.BalancedSoftware => new(false, "medium", "p4", 0.70),
-        VideoConversionEffort.BalancedHardware => new(true, "medium", "p4", 0.70),
+        VideoConversionEffort.HighSoftware => new(false, "slow", "p4"),
+        VideoConversionEffort.HighHardware => new(true, "medium", "p4"),
+        VideoConversionEffort.BalancedSoftware => new(false, "medium", "p4"),
+        VideoConversionEffort.BalancedHardware => new(true, "medium", "p4"),
         _ => throw new ArgumentOutOfRangeException(nameof(effort), effort, "Unknown conversion effort."),
     };
 
@@ -303,15 +295,15 @@ public static class VideoConversionPlanner
     public static bool PrefersHardware(VideoConversionEffort effort) => Profile(effort).PreferHardware;
 
     /// <summary>
-    /// Why this conversion is not worth running, or null to go ahead. Both cases are decided from
-    /// metadata alone, before anything is encoded.
+    /// Why this conversion is not worth running, or null to go ahead. Decided from the size the quality
+    /// search's samples predict, before the whole video is encoded.
     /// </summary>
-    public static string? NotWorthConverting(long sourceBytes, long projectedBytes)
+    public static string? NotWorthConverting(long sourceBytes, long projectedBytes, bool convertEvenIfLarger = false)
     {
         if (sourceBytes <= 0 || projectedBytes <= 0)
             return null;
 
-        if (projectedBytes >= sourceBytes)
+        if (projectedBytes >= sourceBytes && !convertEvenIfLarger)
         {
             return "The source is already at or below the bitrate this resolution can make use of, "
                  + "so re-encoding it would not save space and could only lose quality.";
@@ -356,9 +348,15 @@ public static class VideoConversionPlanner
     }
 
     /// <summary>
-    /// Builds the ffmpeg command line. <paramref name="encoder"/> is required unless the video stream is
-    /// copied. Keeps the main video stream, every audio stream, chapters and metadata; subtitles and MKV
-    /// font attachments are kept where the target container can hold them, and each one dropped is noted.
+    /// Builds the ffmpeg command line. Keeps the main video stream, every audio stream, chapters and
+    /// metadata; subtitles and MKV font attachments are kept where the target container can hold them,
+    /// and each one dropped is noted.
+    ///
+    /// The video is copied exactly when <paramref name="encoder"/> is null, and encoded at
+    /// <paramref name="qualityLevel"/> otherwise. The caller alone makes that choice. This method used
+    /// to work it out again from the codecs, and when the caller had decided an already-HEVC file was
+    /// worth re-encoding, the two disagreed: the result was a plain remux that silently ignored the
+    /// quality target and the frame-rate change.
     /// </summary>
     public static VideoConversionPlan Build(
         ProbedMedia source,
@@ -367,13 +365,17 @@ public static class VideoConversionPlanner
         VideoConversionSettings settings,
         string? encoder,
         string? decodeInputArgs,
-        int targetKbps = 0,
+        double qualityLevel = 0,
+        int maxKbps = 0,
         double? outputFrameRate = null)
     {
         var video = source.Video ?? throw new VideoConversionException("The file has no video stream to convert.");
         var mp4 = settings.Container == VideoConversionContainer.Mp4;
-        var copyVideo = CopiesVideo(video.CodecName, settings.Codec);
+        var copyVideo = string.IsNullOrWhiteSpace(encoder);
         var notes = new List<string>();
+
+        if (copyVideo && settings.Codec != VideoConversionCodec.Copy && !CopiesVideo(video.CodecName, settings.Codec))
+            throw new ArgumentException("An encoder is required to change the video codec.", nameof(encoder));
 
         if (copyVideo && mp4 && !Mp4VideoCodecs.Contains(video.CodecName))
         {
@@ -381,8 +383,6 @@ public static class VideoConversionPlanner
                 $"The {video.CodecName} video stream cannot be stored in MP4 without re-encoding. Convert it to H.264, HEVC or AV1, or choose MKV.");
         }
 
-        if (!copyVideo && string.IsNullOrWhiteSpace(encoder))
-            throw new ArgumentException("An encoder is required when the video is re-encoded.", nameof(encoder));
 
         var args = new StringBuilder("-hide_banner -nostdin -y -v error -nostats -progress pipe:1");
         if (!copyVideo)
@@ -438,11 +438,13 @@ public static class VideoConversionPlanner
         {
             var tenBit = IsTenBit(video);
 
-            // Encode to the bitrate the picture can make use of, rather than to an absolute quality.
-            // targetKbps is derived from the OUTPUT's resolution and frame rate, so reducing either
-            // lowers it automatically.
-            Append(args, FfmpegHwAccel.ConversionBitrateArgs(encoder!, targetKbps, settings.Effort, tenBit));
-            Append(args, FfmpegHwAccel.ConversionVideoFilter(encoder!, tenBit));
+            // Constant quality at the level the sample search settled on, so every scene keeps the quality
+            // the samples were measured at rather than sharing out an average bitrate.
+            Append(args, FfmpegHwAccel.ConversionQualityArgs(encoder!, qualityLevel, settings.Effort, tenBit, maxKbps));
+            // Dropping frame rate is the one size lever that costs no per-frame fidelity, and it lowers
+            // the bitrate target too since that is derived from the output's frame rate. It is a filter
+            // rather than -r: see ConversionVideoFilter for the 50 ms shift -r introduced.
+            Append(args, FfmpegHwAccel.ConversionVideoFilter(encoder!, tenBit, outputFrameRate is > 0 ? outputFrameRate : null));
 
             // Carry the colour description over explicitly so HDR and wide-gamut sources are not tagged as
             // (and then displayed as) plain BT.709.
@@ -450,17 +452,10 @@ public static class VideoConversionPlanner
             AppendColor(args, "-color_trc", video.ColorTransfer);
             AppendColor(args, "-colorspace", video.ColorSpace);
 
-            if (outputFrameRate is { } fps && fps > 0)
-            {
-                // Dropping frame rate is the one size lever that costs no per-frame fidelity, and it
-                // lowers the bitrate target too since that is derived from the output's frame rate.
-                args.Append(" -r ").Append(fps.ToString("0.###", CultureInfo.InvariantCulture));
-            }
-            else
-            {
-                // Keep the source's timestamps exactly, so markers and generated sprites stay aligned.
-                args.Append(" -fps_mode passthrough");
-            }
+            // Keep timestamps exactly as they leave the filter chain - the source's own, or the fps
+            // filter's when the rate is lowered - so markers and sprites stay aligned and the muxer
+            // never drops or duplicates a frame of its own accord.
+            args.Append(" -fps_mode passthrough");
         }
 
         var outputVideoCodec = copyVideo ? video.CodecName : CodecName(settings.Codec);
@@ -475,7 +470,45 @@ public static class VideoConversionPlanner
         return new VideoConversionPlan(args.ToString(), copyVideo, outputVideoCodec, audio.Count, notes);
     }
 
-        /// <summary>The full-decode check a converted file must pass before it can replace the original.</summary>
+    /// <summary>
+    /// Copies one sample window of the source to <paramref name="clipPath"/> without decoding it. The
+    /// sample encode and its reference are both taken from this one clip, which is what makes them
+    /// select exactly the same frames. Matroska holds any codec the source might be in.
+    /// </summary>
+    public static string SampleClipArguments(string sourcePath, int videoStreamIndex, double start, double length, string clipPath)
+        => string.Create(CultureInfo.InvariantCulture,
+            $"-hide_banner -nostdin -y -v error -ss {start:0.###} -i {Quote(sourcePath)} -t {length:0.###} "
+            + $"-map 0:{videoStreamIndex} -c copy -avoid_negative_ts make_zero -f matroska {Quote(clipPath)}");
+
+    /// <summary>
+    /// Encodes one sample clip exactly as the whole video would be: same encoder, same quality level,
+    /// same frame-rate filter. Video only - audio is copied in the real encode and plays no part here.
+    ///
+    /// Writes -progress to stdout like the full encode does. The process runner treats a quiet stdout as
+    /// a hung ffmpeg, and a software sample of 8K footage can legitimately run for minutes.
+    /// </summary>
+    public static string SampleEncodeArguments(
+        string clipPath, string outputPath, string encoder, double qualityLevel, VideoConversionEffort effort,
+        bool tenBit, int maxKbps, double? outputFrameRate, string? decodeInputArgs)
+    {
+        var args = new StringBuilder("-hide_banner -nostdin -y -v error -nostats -progress pipe:1");
+        Append(args, FfmpegHwAccel.InputArgsForEncoder(encoder));
+        Append(args, decodeInputArgs);
+        args.Append(" -i ").Append(Quote(clipPath)).Append(" -map 0:v:0 -an");
+        Append(args, FfmpegHwAccel.ConversionQualityArgs(encoder, qualityLevel, effort, tenBit, maxKbps));
+        Append(args, FfmpegHwAccel.ConversionVideoFilter(encoder, tenBit, outputFrameRate is > 0 ? outputFrameRate : null));
+        args.Append(" -fps_mode passthrough -f matroska ").Append(Quote(outputPath));
+        return args.ToString();
+    }
+
+    /// <summary>Scores an encoded sample against the clip it was made from (see <see cref="VideoQualitySearch.ScoreFilter"/>).</summary>
+    public static string SampleScoreArguments(
+        string encodedPath, string clipPath, int width, int height, double outputFrameRate, bool frameRateChanged, bool isVr, string logPath)
+        => "-hide_banner -nostdin -v error -nostats -progress pipe:1 -i " + Quote(encodedPath) + " -i " + Quote(clipPath)
+         + " -filter_complex \"" + VideoQualitySearch.ScoreFilter(width, height, outputFrameRate, frameRateChanged, isVr, logPath)
+         + "\" -f null -";
+
+    /// <summary>The full-decode check a converted file must pass before it can replace the original.</summary>
     public static string DecodeCheckArguments(string path, string? decodeInputArgs)
     {
         var args = new StringBuilder("-hide_banner -nostdin -v error -nostats -progress pipe:1");

@@ -34,9 +34,14 @@ public sealed class VideoConversionJobService(
     // ffmpeg writes a -progress block about twice a second; this long without one means it is hung.
     private static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(5);
 
-    // Share of a unit's progress bar for each phase.
-    private const double EncodeShare = 0.75;
-    private const double VerifyShare = 0.2;
+    // Share of a unit's progress bar for each phase: measuring quality on samples, the encode itself,
+    // and the decode check that precedes replacing an original.
+    private const double SearchShare = 0.15;
+    private const double EncodeShare = 0.65;
+    private const double VerifyShare = 0.15;
+
+    // Whether each ffmpeg build can score quality samples, keyed by path; asked once per build.
+    private readonly Dictionary<string, bool> _qualityMeasurement = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<(string Fingerprint, VideoConversionCodec Codec), string?> _encoders = [];
     private readonly object _encoderLock = new();
@@ -99,7 +104,7 @@ public sealed class VideoConversionJobService(
     {
         private long _bytes;
         private int _videos;
-        private int _discardedNotSmaller;
+        private int _leftAlone;
 
         public void Add(long sourceSize, long outputSize)
         {
@@ -107,12 +112,12 @@ public sealed class VideoConversionJobService(
             Interlocked.Increment(ref _videos);
         }
 
-        /// <summary>A file that encoded successfully and was then thrown away for being no smaller.</summary>
-        public void AddDiscardedNotSmaller() => Interlocked.Increment(ref _discardedNotSmaller);
+        /// <summary>A file left alone because keeping its quality would not have saved enough space.</summary>
+        public void AddLeftAlone() => Interlocked.Increment(ref _leftAlone);
 
         public long Bytes => Interlocked.Read(ref _bytes);
         public int Videos => Volatile.Read(ref _videos);
-        public int DiscardedNotSmaller => Volatile.Read(ref _discardedNotSmaller);
+        public int LeftAlone => Volatile.Read(ref _leftAlone);
     }
 
     private async Task RunAsync(int[] ids, VideoConversionSettings settings, IJobProgress progress, CancellationToken ct)
@@ -128,6 +133,21 @@ public sealed class VideoConversionJobService(
                 ?? throw new InvalidOperationException(
                     $"This ffmpeg build cannot encode {FfmpegHwAccel.CodecLabel(settings.Codec)}: "
                     + $"{FfmpegHwAccel.SoftwareEncoderFor(settings.Codec)} is not built in and no hardware encoder for it passed a test encode.");
+
+            // Every re-encode measures quality on samples first. Without the means to measure, there is
+            // no honest way to choose a setting, so refuse rather than guess one.
+            bool measurable;
+            lock (_qualityMeasurement)
+            {
+                if (!_qualityMeasurement.TryGetValue(ffmpeg, out measurable))
+                    _qualityMeasurement[ffmpeg] = measurable = FfmpegHwAccel.HasQualityMeasurement(ffmpeg);
+            }
+            if (!measurable)
+            {
+                throw new InvalidOperationException(
+                    "This ffmpeg build has no libvmaf filter, which conversion uses to measure the quality of each "
+                    + "video before encoding it. Use an ffmpeg build that includes libvmaf, such as BtbN's GPL builds.");
+            }
         }
 
         List<(int Id, string Label)> work;
@@ -169,11 +189,11 @@ public sealed class VideoConversionJobService(
         else if (reclaimed.Videos > 0 && reclaimed.Bytes < 0)
             summary += $" Used {FormatSize(-reclaimed.Bytes)} more across {reclaimed.Videos} replaced file(s).";
 
-        if (reclaimed.DiscardedNotSmaller > 0)
+        if (reclaimed.LeftAlone > 0)
         {
-            summary += reclaimed.DiscardedNotSmaller == 1
-                ? " 1 video was converted but discarded because the result was no smaller than the original."
-                : $" {reclaimed.DiscardedNotSmaller} videos were converted but discarded because the results were no smaller than the originals.";
+            summary += reclaimed.LeftAlone == 1
+                ? " 1 video was left alone because keeping its quality would not have saved enough space."
+                : $" {reclaimed.LeftAlone} videos were left alone because keeping their quality would not have saved enough space.";
         }
 
         logger.LogInformation(
@@ -182,6 +202,7 @@ public sealed class VideoConversionJobService(
 
         progress.SetSummary(summary);
     }
+
 
     private async Task ConvertAsync(
         string ffmpeg,
@@ -228,7 +249,7 @@ public sealed class VideoConversionJobService(
         unit.Report(0, "Reading the original file...");
         var source = await ProbeAsync(sourcePath, "original", ct);
         var sourceCodec = source.Video?.CodecName ?? string.Empty;
-        if (VideoConversionPlanner.SkipReason(sourcePath, sourceCodec, settings) is { } skip)
+        if (VideoConversionPlanner.SkipReason(sourcePath, settings) is { } skip)
         {
             unit.Complete(JobUnitOutcome.Skipped, skip);
             return;
@@ -250,23 +271,49 @@ public sealed class VideoConversionJobService(
         var sourceSize = new FileInfo(sourcePath).Length;
         EnsureFreeSpace(outputPath, sourceSize);
 
-        var copiesVideo = VideoConversionPlanner.CopiesVideo(sourceCodec, settings.Codec);
+        // A file already in the target codec is not left alone for that reason: whether re-encoding it
+        // pays is measured like any other. When it does not, the stream can still be copied into the
+        // requested container rather than the request being ignored.
+        var sameCodec = settings.Codec == VideoConversionCodec.Copy || VideoConversionPlanner.CopiesVideo(sourceCodec, settings.Codec);
+        var changesContainer = !VideoConversionPlanner.IsInContainer(sourcePath, settings.Container);
         var notes = new List<string>();
-        if (copiesVideo && settings.Codec != VideoConversionCodec.Copy)
-            notes.Add($"The video was already {FfmpegHwAccel.CodecLabel(settings.Codec)}, so it was copied without re-encoding.");
         var published = false;
         try
         {
-            // Decided from metadata: no frames are encoded to find out whether encoding is worthwhile.
-            var targetKbps = TargetKbpsFor(source, settings);
-            if (NotWorthConverting(source, sourceSize, settings, copiesVideo, targetKbps) is { } skipReason)
+            var current = settings.Codec == VideoConversionCodec.Copy ? null : encoder;
+            ConversionAttempt attempt;
+            while (true)
             {
-                reclaimed.AddDiscardedNotSmaller();
-                unit.Complete(JobUnitOutcome.Skipped, skipReason);
+                try
+                {
+                    attempt = await SearchAndEncodeAsync(
+                        ffmpeg, current, source, sourcePath, partialPath, sourceSize, settings, video.IsVr,
+                        sameCodec && changesContainer, notes, unit, ct);
+                    break;
+                }
+                catch (HardwareEncodeFailedException failure) when (current is not null && !FfmpegHwAccel.IsSoftwareEncoder(current))
+                {
+                    // Same policy as preview generation: a hardware encoder that passed its probe can still
+                    // fail on a real file (a 10-bit format the GPU lacks, an exhausted session). The software
+                    // encoder is measured afresh rather than handed the hardware one's setting, because the
+                    // two scales do not correspond.
+                    var software = FfmpegHwAccel.SoftwareEncoderFor(settings.Codec);
+                    logger.LogWarning("Hardware conversion with {Encoder} failed for {Path}; retrying with {Software}: {Error}",
+                        current, sourcePath, software, failure.Message);
+                    notes.Add($"{current} failed ({failure.Message}), so it was measured and encoded with {software} instead.");
+                    DeletePartial(partialPath);
+                    current = software;
+                }
+            }
+
+            if (attempt.SkipReason is { } leftAlone)
+            {
+                reclaimed.AddLeftAlone();
+                unit.Complete(JobUnitOutcome.Skipped, Describe(leftAlone, notes));
                 return;
             }
 
-            var plan = await EncodeAsync(ffmpeg, copiesVideo ? null : encoder, source, sourcePath, partialPath, settings, targetKbps, notes, unit, ct);
+            var plan = attempt.Plan!;
             notes.AddRange(plan.Notes);
 
             var output = await ProbeAsync(partialPath, "converted", ct);
@@ -277,29 +324,27 @@ public sealed class VideoConversionJobService(
             }
 
             var outputSize = new FileInfo(partialPath).Length;
-            if (!copiesVideo && settings.DiscardIfLarger && outputSize >= sourceSize)
+            if (attempt.Choice is { } made && outputSize >= sourceSize && !settings.ConvertEvenIfLarger)
             {
-                // Worth a log line of its own: this throws away a complete encode, which on a large
-                // file is many minutes of work, and the job summary alone would only show a skip.
-                reclaimed.AddDiscardedNotSmaller();
-                logger.LogInformation(
-                    "Discarded the conversion of {Path}: {Output} is no smaller than the original {Source}. " +
-                    "The source is {SourceKbps:F0} kbps, which constant-quality encoding did not beat.",
-                    sourcePath, FormatSize(outputSize), FormatSize(sourceSize),
-                    source.Duration > 0 ? sourceSize * 8d / source.Duration / 1000 : 0);
-                unit.Complete(JobUnitOutcome.Skipped,
-                    $"The converted file was {FormatSize(outputSize)}, no smaller than the original's {FormatSize(sourceSize)}, so it was discarded and the original kept.");
+                // The size was predicted from samples, and a video whose samples did not represent it can
+                // land wide of that. Replacing a file with a larger one is never what was asked for.
+                logger.LogWarning(
+                    "Discarded the conversion of {Path}: {Output} is no smaller than the original {Source}; its samples predicted {Predicted}.",
+                    sourcePath, FormatSize(outputSize), FormatSize(sourceSize), FormatSize(made.PredictedBytes));
+                unit.Complete(JobUnitOutcome.Skipped, Describe(
+                    $"The encoded file came out at {FormatSize(outputSize)}, not smaller than the original's {FormatSize(sourceSize)}, "
+                    + $"although its samples predicted about {FormatSize(made.PredictedBytes)}. It was discarded and the original kept.", notes));
                 return;
             }
 
             if (settings.ReplaceOriginal)
             {
-                unit.Report(EncodeShare, "Checking the converted file decodes cleanly...");
+                unit.Report(SearchShare + EncodeShare, "Checking the converted file decodes cleanly...");
                 await VerifyDecodesAsync(ffmpeg, partialPath, output.Duration, unit, ct);
             }
 
             int newFileId;
-            unit.Report(EncodeShare + VerifyShare, "Adding the converted file to the video...");
+            unit.Report(SearchShare + EncodeShare + VerifyShare, "Adding the converted file to the video...");
             using (await physicalFileCoordinator.AcquireReadAsync(ct))
             {
                 if (File.Exists(outputPath))
@@ -367,24 +412,9 @@ public sealed class VideoConversionJobService(
     }
 
     /// <summary>
-    /// The bitrate this conversion aims for, from the OUTPUT's resolution and frame rate.
-    /// </summary>
-    private static int TargetKbpsFor(ProbedMedia source, VideoConversionSettings settings)
-    {
-        var video = source.Video;
-        if (video is null)
-            return 0;
-
-        // The target follows the OUTPUT's frame rate: converting at a lower rate lowers it, which is
-        // what makes a frame-rate reduction shrink the file rather than just drop frames.
-        var fps = EffectiveFrameRate(source, settings) ?? video.FrameRate;
-        return VideoBitrateTarget.ForEffort(settings.Codec, settings.Effort, video.Width, video.Height, fps);
-    }
-
-    /// <summary>
     /// The frame rate the output will actually have. A requested rate only ever lowers: interpolating a
-    /// 30fps source up to 60 invents frames, costing size and gaining nothing, and it would also raise
-    /// the bitrate target for detail that is not there. A selection converted together can hold a mix of
+    /// 30fps source up to 60 invents frames, costing size and gaining nothing. A selection converted
+    /// together can hold a mix of
     /// source rates, so this is resolved per video rather than once for the batch.
     /// </summary>
     private static double? EffectiveFrameRate(ProbedMedia source, VideoConversionSettings settings)
@@ -400,37 +430,270 @@ public sealed class VideoConversionJobService(
         return requested < sourceRate - 0.01 ? requested : null;
     }
 
-    /// <summary>
-    /// Why this conversion should not run, or null to go ahead.
-    ///
-    /// This replaces a trial encode. Because the target comes from the output's resolution rather than
-    /// from a quality knob, the resulting size is arithmetic, and a file whose source already sits below
-    /// what its resolution can use is recognised without encoding a single frame.
-    /// </summary>
-    private string? NotWorthConverting(
-        ProbedMedia source, long sourceSize, VideoConversionSettings settings, bool copiesVideo, int targetKbps)
+    /// <summary>What one pass of measure-then-encode produced: a finished encode, or why the video was left alone.</summary>
+    private sealed record ConversionAttempt(VideoConversionPlan? Plan, QualityChoice? Choice, string? SkipReason);
+
+    /// <summary>The setting the quality search settled on, and what its samples measured and predicted.</summary>
+    private sealed record QualityChoice(string Encoder, double Level, double Score, double Target, long PredictedBytes, int MaxKbps, int Rounds)
     {
-        if (copiesVideo || targetKbps <= 0 || source.Duration <= 0)
-            return null;
+        public string Describe() => string.Create(CultureInfo.InvariantCulture,
+            $"Measured on samples: {Encoder} at quality level {Level:0.##} scored {Score:0.0} PSNR-HVS against a target of {Target:0.0}, "
+            + $"settled in {Rounds} round{(Rounds == 1 ? "" : "s")}, predicting about {FormatSize(PredictedBytes)}.");
+    }
 
-        var audioKbps = source.Audio.Sum(stream => stream.BitRateKbps);
-        var projected = VideoBitrateTarget.ProjectedBytes(targetKbps, source.Duration, audioKbps);
-        if (projected <= 0)
-            return null;
+    /// <summary>A hardware encoder failed where software may not. Handled by retrying the whole pass in software.</summary>
+    private sealed class HardwareEncodeFailedException(string message) : Exception(message);
 
-        if (VideoConversionPlanner.NotWorthConverting(sourceSize, projected) is { } reason)
+    /// <summary>
+    /// Measures the quality setting this video needs with <paramref name="encoder"/>, then encodes the whole
+    /// video at it. A null encoder copies the video stream (a remux). Throws
+    /// <see cref="HardwareEncodeFailedException"/> when a hardware encoder fails, so the caller can retry.
+    /// </summary>
+    private async Task<ConversionAttempt> SearchAndEncodeAsync(
+        string ffmpeg,
+        string? encoder,
+        ProbedMedia source,
+        string sourcePath,
+        string partialPath,
+        long sourceSize,
+        VideoConversionSettings settings,
+        bool isVr,
+        bool canRemuxInstead,
+        List<string> notes,
+        IJobUnit unit,
+        CancellationToken ct)
+    {
+        QualityChoice? choice = null;
+        var videoEncoder = encoder;
+        if (encoder is not null)
         {
-            logger.LogInformation(
-                "Skipping conversion: source is {SourceKbps:F0} kbps and the target for this resolution is {TargetKbps} kbps.",
-                source.VideoBitRateKbps, targetKbps);
-            return reason;
+            var (found, reason) = await SearchQualityAsync(ffmpeg, encoder, source, sourcePath, sourceSize, settings, isVr, unit, ct);
+            if (found is not null)
+            {
+                choice = found;
+                notes.Insert(0, found.Describe());
+            }
+            else if (canRemuxInstead)
+            {
+                // Same codec, different container: re-encoding would not pay, but the container change was
+                // still asked for and needs no re-encode at all.
+                notes.Add($"{reason} The video was copied into {ContainerLabelFor(settings)} unchanged instead.");
+                videoEncoder = null;
+            }
+            else
+            {
+                return new ConversionAttempt(null, null, reason);
+            }
         }
 
-        var saving = VideoConversionPlanner.ProjectedSaving(sourceSize, projected);
+        var plan = await EncodeAsync(ffmpeg, videoEncoder, source, sourcePath, partialPath, settings, choice, unit, ct);
+        return new ConversionAttempt(plan, choice, null);
+    }
+
+    /// <summary>
+    /// Finds the highest quality level (smallest file) at which this video's samples still reach the
+    /// target score, and whether the saving is worth the encode. Returns the choice, or null and a
+    /// user-facing reason to leave the video alone. See <see cref="VideoQualitySearch"/>.
+    /// </summary>
+    private async Task<(QualityChoice? Choice, string Reason)> SearchQualityAsync(
+        string ffmpeg,
+        string encoder,
+        ProbedMedia source,
+        string sourcePath,
+        long sourceSize,
+        VideoConversionSettings settings,
+        bool isVr,
+        IJobUnit unit,
+        CancellationToken ct)
+    {
+        var video = source.Video ?? throw new VideoConversionException("The file has no video stream to convert.");
+        var windows = VideoQualitySearch.SampleWindows(source.Duration);
+        if (windows.Count == 0)
+            throw new VideoConversionException("The file's length could not be read, so its quality could not be measured.");
+
+        var outputRate = EffectiveFrameRate(source, settings);
+        var scoreRate = outputRate ?? (video.FrameRate > 0 ? video.FrameRate : 30);
+        var target = VideoQualitySearch.Target(settings.Effort);
+        var search = new VideoQualitySearchState(FfmpegHwAccel.ConversionQualityKnob(encoder), target);
+        var tenBit = VideoConversionPlanner.IsTenBit(video);
+        var maxKbps = MaxRateFor(source);
+        var audioKbps = source.Audio.Sum(stream => stream.BitRateKbps);
+
+        // Any level that fails the target needs a lower (larger) level to pass, so once a failing level
+        // already predicts a file too big to be worth it, no passing one can be. That ends the search for
+        // an already-lean file after a single round.
+        var worthItBelow = settings.ConvertEvenIfLarger
+            ? long.MaxValue
+            : settings.ConvertMarginalSavings
+                ? sourceSize
+                : (long)(sourceSize * (1 - VideoConversionPlanner.MarginalSavingThreshold));
+
+        var work = Directory.CreateTempSubdirectory("cove-convert-");
+        try
+        {
+            unit.Report(0.01, "Measuring quality: taking samples...");
+            var clips = new List<string>(windows.Count);
+            for (var i = 0; i < windows.Count; i++)
+            {
+                var clip = Path.Combine(work.FullName, $"clip{i}.mkv");
+                var args = VideoConversionPlanner.SampleClipArguments(sourcePath, video.Index, windows[i].Start, windows[i].Length, clip);
+                var result = await RunGatedAsync(ffmpeg, args, encoder: null, _ => { }, ct);
+                if (result.ExitCode != 0)
+                    throw new VideoConversionException($"A sample of the file could not be taken: {LastLine(result.StandardError)} The original was kept.");
+                clips.Add(clip);
+            }
+
+            while (search.Next() is { } level)
+            {
+                var round = search.Rounds.Count + 1;
+                unit.Report(SearchShare * round / (VideoQualitySearch.MaxRounds + 1),
+                    string.Create(CultureInfo.InvariantCulture, $"Measuring quality: round {round}, {encoder} at level {level:0.##}..."));
+
+                var (score, bytesPerSecond) = await MeasureRoundAsync(
+                    ffmpeg, encoder, level, clips, work.FullName, settings, tenBit, maxKbps, outputRate, scoreRate, video, isVr, ct);
+                search.Record(level, score, bytesPerSecond);
+
+                var predicted = VideoQualitySearch.PredictBytes(bytesPerSecond, source.Duration, audioKbps);
+                logger.LogInformation(
+                    "Quality search for {Path}: {Encoder} level {Level} scored {Score:0.00} PSNR-HVS (target {Target}), predicting {Predicted}",
+                    sourcePath, encoder, level, score, target, FormatSize(predicted));
+
+                if (score < target && predicted >= worthItBelow)
+                {
+                    return (null, $"Keeping this quality would take more than {FormatSize(predicted)} against the original's "
+                                  + $"{FormatSize(sourceSize)}, so it was left alone.");
+                }
+            }
+
+            if (search.Best is not { } best)
+            {
+                return (null, search.Unreachable
+                    ? $"Even {encoder}'s highest quality setting did not reach the target on this video's samples, so it was left alone."
+                    : $"The quality search did not settle within {VideoQualitySearch.MaxRounds} rounds, so the video was left alone.");
+            }
+
+            var predictedBytes = VideoQualitySearch.PredictBytes(best.BytesPerSecond, source.Duration, audioKbps);
+            if (WorthItReason(sourceSize, predictedBytes, settings) is { } notWorth)
+                return (null, notWorth);
+
+            return (new QualityChoice(encoder, best.Level, best.Score, target, predictedBytes, maxKbps, search.Rounds.Count), string.Empty);
+        }
+        finally
+        {
+            try
+            {
+                work.Delete(recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "Could not remove the quality samples in {Path}", work.FullName);
+            }
+        }
+    }
+
+    /// <summary>
+    /// One search round: every sample encoded at <paramref name="level"/> and scored. Each sample is
+    /// scored on the CPU while the next one encodes, so the round costs little more than its encodes.
+    /// Returns the mean score across samples and the encoded bytes per second of video.
+    /// </summary>
+    private async Task<(double Score, double BytesPerSecond)> MeasureRoundAsync(
+        string ffmpeg,
+        string encoder,
+        double level,
+        IReadOnlyList<string> clips,
+        string workDir,
+        VideoConversionSettings settings,
+        bool tenBit,
+        int maxKbps,
+        double? outputRate,
+        double scoreRate,
+        ProbedStream video,
+        bool isVr,
+        CancellationToken ct)
+    {
+        var scores = new List<Task<double?>>(clips.Count);
+        long bytes = 0;
+        double seconds = 0;
+        var tag = level.ToString("0.##", CultureInfo.InvariantCulture);
+        try
+        {
+            for (var i = 0; i < clips.Count; i++)
+            {
+                var encoded = Path.Combine(workDir, $"sample{i}-{tag}.mkv");
+                var result = await RunGatedAsync(
+                    ffmpeg,
+                    VideoConversionPlanner.SampleEncodeArguments(
+                        clips[i], encoded, encoder, level, settings.Effort, tenBit, maxKbps, outputRate, config.FfmpegInputArgs),
+                    encoder, _ => { }, ct);
+                if (result.ExitCode != 0)
+                {
+                    if (!FfmpegHwAccel.IsSoftwareEncoder(encoder))
+                        throw new HardwareEncodeFailedException(LastLine(result.StandardError));
+                    throw new VideoConversionException(
+                        $"A quality sample could not be encoded: {LastLine(result.StandardError)} The original was kept.");
+                }
+
+                bytes += new FileInfo(encoded).Length;
+                seconds += (await ProbeAsync(encoded, "quality sample", ct)).Duration;
+
+                var log = Path.Combine(workDir, $"score{i}-{tag}.json");
+                scores.Add(ScoreSampleAsync(
+                    ffmpeg,
+                    VideoConversionPlanner.SampleScoreArguments(
+                        encoded, clips[i], video.Width, video.Height, scoreRate, outputRate is not null, isVr, log),
+                    log, ct));
+            }
+        }
+        finally
+        {
+            // Never leave a scoring process running behind an exception.
+            await Task.WhenAll(scores.Select(task => task.ContinueWith(_ => { }, TaskScheduler.Default)));
+        }
+
+        var values = await Task.WhenAll(scores);
+        return (VideoQualitySearch.RoundScore(values), seconds > 0 ? bytes / seconds : 0);
+    }
+
+    private async Task<double?> ScoreSampleAsync(string ffmpeg, string arguments, string logPath, CancellationToken ct)
+    {
+        FfmpegProcessResult result;
+        // Scoring decodes two inputs, the sample and its reference.
+        await using (await ffmpegConcurrency.AcquireAsync(2, ct))
+            result = await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, _ => { }, StallTimeout, ct);
+
+        if (result.ExitCode != 0)
+            throw new VideoConversionException($"A quality sample could not be measured: {LastLine(result.StandardError)} The original was kept.");
+        return VideoQualitySearch.ParsePsnrHvs(await File.ReadAllTextAsync(logPath, ct));
+    }
+
+    /// <summary>
+    /// The peak rate an encode may reach. NVENC needs one in constant-quality mode (see
+    /// <see cref="FfmpegHwAccel.ConversionQualityArgs"/>); twice the source's own rate leaves quality free
+    /// to rise wherever the search needs it, since an output needing more than that would not be a
+    /// conversion worth making anyway.
+    /// </summary>
+    private static int MaxRateFor(ProbedMedia source)
+        => source.VideoBitRateKbps > 0
+            ? (int)Math.Clamp(source.VideoBitRateKbps * 2, 8_000, 800_000)
+            : 400_000;
+
+    /// <summary>Why a conversion predicted to come out at <paramref name="predictedBytes"/> is not worth running, or null.</summary>
+    private static string? WorthItReason(long sourceSize, long predictedBytes, VideoConversionSettings settings)
+    {
+        if (settings.ConvertEvenIfLarger || sourceSize <= 0 || predictedBytes <= 0)
+            return null;
+
+        if (predictedBytes >= sourceSize)
+        {
+            return $"Keeping this quality would take about {FormatSize(predictedBytes)}, no smaller than the original's "
+                 + $"{FormatSize(sourceSize)}, so it was left alone.";
+        }
+
+        var saving = VideoConversionPlanner.ProjectedSaving(sourceSize, predictedBytes);
         if (saving < VideoConversionPlanner.MarginalSavingThreshold && !settings.ConvertMarginalSavings)
         {
-            return $"Converting would only save about {saving:P0} ({FormatSize(sourceSize)} to about "
-                 + $"{FormatSize(projected)}), so it was left alone. Re-run with marginal savings allowed to convert it anyway.";
+            return $"Keeping this quality would only save about {saving:P0} ({FormatSize(sourceSize)} to about "
+                 + $"{FormatSize(predictedBytes)}), so it was left alone. Allow small savings to convert it anyway.";
         }
 
         return null;
@@ -443,34 +706,21 @@ public sealed class VideoConversionJobService(
         string sourcePath,
         string partialPath,
         VideoConversionSettings settings,
-        int targetKbps,
-        List<string> notes,
+        QualityChoice? choice,
         IJobUnit unit,
         CancellationToken ct)
     {
-        var decodeArgs = config.FfmpegInputArgs;
-        var plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, encoder, decodeArgs, targetKbps, EffectiveFrameRate(source, settings));
+        var plan = VideoConversionPlanner.Build(
+            source, sourcePath, partialPath, settings, encoder, config.FfmpegInputArgs,
+            choice?.Level ?? 0, choice?.MaxKbps ?? 0, EffectiveFrameRate(source, settings));
         var action = plan.CopiesVideo ? "Remuxing" : $"Encoding with {encoder}";
 
-        var result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"{action}...", 0, EncodeShare, unit, ct, encoder);
+        var result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"{action}...", SearchShare, EncodeShare, unit, ct, encoder);
         if (result.ExitCode == 0)
             return plan;
 
-        // Same policy as preview generation: a hardware encoder that passed its probe can still fail on a
-        // real file (a 10-bit format the GPU lacks, an exhausted session), so encode once more in software.
         if (encoder is not null && !FfmpegHwAccel.IsSoftwareEncoder(encoder))
-        {
-            var software = FfmpegHwAccel.SoftwareEncoderFor(settings.Codec);
-            logger.LogWarning("Hardware conversion with {Encoder} failed for {Path}; retrying with {Software}: {Error}",
-                encoder, sourcePath, software, LastLine(result.StandardError));
-            notes.Add($"{encoder} failed ({LastLine(result.StandardError)}), so it was encoded with {software} instead.");
-            DeletePartial(partialPath);
-
-            plan = VideoConversionPlanner.Build(source, sourcePath, partialPath, settings, software, decodeArgs, targetKbps, EffectiveFrameRate(source, settings));
-            result = await RunTrackedAsync(ffmpeg, plan.Arguments, source.Duration, $"Encoding with {software}...", 0, EncodeShare, unit, ct, software);
-            if (result.ExitCode == 0)
-                return plan;
-        }
+            throw new HardwareEncodeFailedException(LastLine(result.StandardError));
 
         throw new VideoConversionException(result.TimedOut
             ? "ffmpeg stopped responding, so the conversion was stopped. The original was kept."
@@ -484,7 +734,7 @@ public sealed class VideoConversionJobService(
             VideoConversionPlanner.DecodeCheckArguments(path, config.FfmpegInputArgs),
             duration,
             "Checking the converted file decodes cleanly...",
-            EncodeShare,
+            SearchShare + EncodeShare,
             VerifyShare,
             unit,
             ct,
@@ -524,21 +774,30 @@ public sealed class VideoConversionJobService(
             unit.Report(start + share * fraction, $"{message} {fraction:P0}");
         }
 
+        return await RunGatedAsync(ffmpeg, arguments, encoder, OnProgress, ct);
+    }
+
+    /// <summary>
+    /// Runs one ffmpeg that reads a single input, within the limits it shares with the rest of Cove.
+    /// It reserves one decode slot: conversion caps its own parallelism, but it can run alongside a
+    /// generate job that does not know about it, and the configured limit is meant to bound everything
+    /// Cove decodes at once. A hardware encode also holds one of the GPU's encode sessions.
+    /// </summary>
+    private async Task<FfmpegProcessResult> RunGatedAsync(
+        string ffmpeg, string arguments, string? encoder, Action<string> onProgress, CancellationToken ct)
+    {
         logger.LogDebug("Running ffmpeg {Arguments}", arguments);
 
-        // A conversion reads one input, so it reserves one decode slot. Conversion caps its own
-        // parallelism, but it can run alongside a generate job that does not know about it, and the
-        // configured limit is meant to bound everything Cove decodes at once, not each job separately.
         if (encoder is null || FfmpegHwAccel.IsSoftwareEncoder(encoder))
         {
             await using var softwareSlot = await ffmpegConcurrency.AcquireAsync(1, ct);
-            return await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, OnProgress, StallTimeout, ct);
+            return await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, onProgress, StallTimeout, ct);
         }
 
         using (await hwEncodeSessionGate.AcquireAsync(ct))
         {
             await using var hardwareSlot = await ffmpegConcurrency.AcquireAsync(1, ct);
-            return await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, OnProgress, StallTimeout, ct);
+            return await FfmpegProcessRunner.RunWithProgressAsync(ffmpeg, arguments, onProgress, StallTimeout, ct);
         }
     }
 

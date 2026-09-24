@@ -25,8 +25,8 @@ public sealed class VideoConversionRequestDto
     public bool ConvertMarginalSavings { get; set; }
     /// <summary>Verify each converted file, make it the video's primary file and delete the original from disk.</summary>
     public bool ReplaceOriginal { get; set; }
-    /// <summary>Throw a re-encoded file away when it is not smaller than the original.</summary>
-    public bool DiscardIfLarger { get; set; } = true;
+    /// <summary>Convert even when the projected result is larger than the original.</summary>
+    public bool ConvertEvenIfLarger { get; set; }
 }
 
 [ApiController]
@@ -72,8 +72,8 @@ public sealed class VideoConversionController(
             return BadRequest(new { error = "Output frame rate must be between 1 and 240." });
 
         var settings = new VideoConversionSettings(
-            codec, container, effort, dto.ReplaceOriginal, dto.DiscardIfLarger,
-            dto.OutputFrameRate, dto.ConvertMarginalSavings);
+            codec, container, effort, dto.ReplaceOriginal,
+            dto.OutputFrameRate, dto.ConvertMarginalSavings, dto.ConvertEvenIfLarger);
         return Accepted(conversionService.Start(principalAccessor.Current, dto.VideoIds, settings));
     }
 
