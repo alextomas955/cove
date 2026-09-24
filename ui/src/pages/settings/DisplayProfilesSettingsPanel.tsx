@@ -10,11 +10,14 @@ import { formatRuleTitle } from "./displayProfiles/types";
 
 interface Props {
   canWrite: boolean;
+  /** Admins may edit the shared profiles (including the built-ins); everyone else only edits their own. */
+  canWriteShared: boolean;
 }
 
-export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
+export function DisplayProfilesSettingsPanel({ canWrite, canWriteShared }: Props) {
   const state = useDisplayProfilesSettings();
   const selectedProfile = state.selectedProfile;
+  const canEditSelected = canWrite && selectedProfile != null && (selectedProfile.userId != null || canWriteShared);
 
   return (
     <div className="space-y-6">
@@ -149,6 +152,11 @@ export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
                 <div>
                   <h4 className="text-lg font-semibold text-foreground">{selectedProfile.name}</h4>
                   <p className="mt-1 text-sm text-secondary">{selectedProfile.description || "No description set."}</p>
+                  {canWrite && !canEditSelected ? (
+                    <p className="mt-2 text-xs text-muted">
+                      Shared profiles can only be changed by an admin. Create your own profile to customize rules.
+                    </p>
+                  ) : null}
                   {state.overrideRuleCount > 0 ? (
                     <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
                       <Sparkles className="h-3.5 w-3.5" />
@@ -157,7 +165,7 @@ export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
                     </div>
                   ) : null}
                 </div>
-                {canWrite ? (
+                {canEditSelected ? (
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -226,7 +234,7 @@ export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
                   Drag rows to change precedence. Higher rows win when specificity ties.
                 </p>
               </div>
-              {canWrite && selectedProfile ? (
+              {canEditSelected ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -259,7 +267,7 @@ export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
                 items={state.rules}
                 getKey={(rule) => rule.id}
                 onReorder={state.reorderRules}
-                disabled={!canWrite || state.reorderRulesPending}
+                disabled={!canEditSelected || state.reorderRulesPending}
                 className="mt-4 space-y-2"
                 renderItem={(rule, { dragHandleProps, isDragging, isOver }) => {
                   const tagOverride = rule.tagId != null ? state.ruleTagMap.get(rule.tagId) : undefined;
@@ -269,7 +277,7 @@ export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex min-w-0 items-start gap-3">
-                          {canWrite ? (
+                          {canEditSelected ? (
                             <span
                               {...dragHandleProps}
                               className="mt-0.5 inline-flex shrink-0 cursor-grab items-center text-muted active:cursor-grabbing"
@@ -322,7 +330,7 @@ export function DisplayProfilesSettingsPanel({ canWrite }: Props) {
                             </div>
                           </div>
                         </div>
-                        {canWrite ? (
+                        {canEditSelected ? (
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"

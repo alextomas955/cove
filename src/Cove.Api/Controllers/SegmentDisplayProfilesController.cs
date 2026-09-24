@@ -50,7 +50,7 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
             return BadRequest("Profile name is required.");
 
         var userId = principalAccessor?.Current?.UserId;
-        var firstInScope = !await ApplyEditableProfileScope(db.SegmentDisplayProfiles.AsNoTracking(), userId).AnyAsync(ct);
+        var firstInScope = !await ApplyOwnerProfileScope(db.SegmentDisplayProfiles.AsNoTracking(), userId).AnyAsync(ct);
         if (dto.IsDefault)
             await ClearDefaultsAsync(userId, exceptProfileId: null, ct);
 
@@ -73,9 +73,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsWrite)]
     public async Task<ActionResult<SegmentDisplayProfileDto>> Update(int id, [FromBody] SegmentDisplayProfileUpdateDto dto, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(id, ct);
+        var (profile, error) = await LoadEditableProfileAsync(id, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
 
         var name = NormalizeRequiredText(dto.Name, "Profile name is required.");
         if (name is null)
@@ -92,9 +92,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsDelete)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(id, ct);
+        var (profile, error) = await LoadEditableProfileAsync(id, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
         if (profile.IsSystem)
             return Forbid();
 
@@ -114,9 +114,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsWrite)]
     public async Task<ActionResult<SegmentDisplayProfileDto>> SetDefault(int id, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(id, ct);
+        var (profile, error) = await LoadEditableProfileAsync(id, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
 
         await ClearDefaultsAsync(profile.UserId, profile.Id, ct);
         profile.IsDefault = true;
@@ -146,9 +146,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsWrite)]
     public async Task<ActionResult<SegmentDisplayRuleDto>> CreateRule(int profileId, [FromBody] SegmentDisplayRuleCreateDto dto, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(profileId, ct);
+        var (profile, error) = await LoadEditableProfileAsync(profileId, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
 
         var rule = new SegmentDisplayRule
         {
@@ -182,9 +182,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsWrite)]
     public async Task<IActionResult> CreateRulesBulk(int profileId, [FromBody] List<SegmentDisplayRuleCreateDto>? dtos, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(profileId, ct);
+        var (profile, error) = await LoadEditableProfileAsync(profileId, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
 
         var ruleDtos = dtos ?? [];
         if (ruleDtos.Count == 0)
@@ -193,7 +193,7 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             db.ChangeTracker.Clear();
-            var retryProfile = await LoadEditableProfileAsync(profileId, ct)
+            var retryProfile = (await LoadEditableProfileAsync(profileId, ct)).Profile
                 ?? throw new InvalidOperationException($"Segment display profile {profileId} disappeared during bulk rule creation.");
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
@@ -230,9 +230,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsWrite)]
     public async Task<ActionResult<SegmentDisplayRuleDto>> UpdateRule(int profileId, int id, [FromBody] SegmentDisplayRuleUpdateDto dto, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(profileId, ct);
+        var (profile, error) = await LoadEditableProfileAsync(profileId, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
 
         var rule = await db.SegmentDisplayRules
             .FirstOrDefaultAsync(item => item.ProfileId == profileId && item.Id == id, ct);
@@ -266,9 +266,9 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
     [RequiresPermission(Permissions.SegmentsDelete)]
     public async Task<IActionResult> DeleteRule(int profileId, int id, CancellationToken ct)
     {
-        var profile = await LoadEditableProfileAsync(profileId, ct);
+        var (profile, error) = await LoadEditableProfileAsync(profileId, ct);
         if (profile is null)
-            return NotFound();
+            return error!;
 
         var rule = await db.SegmentDisplayRules.FirstOrDefaultAsync(item => item.ProfileId == profileId && item.Id == id, ct);
         if (rule is null)
@@ -322,9 +322,23 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
         => ApplyVisibleProfileScope(db.SegmentDisplayProfiles.AsNoTracking(), principalAccessor?.Current?.UserId)
             .FirstOrDefaultAsync(profile => profile.Id == id, ct);
 
-    private Task<SegmentDisplayProfile?> LoadEditableProfileAsync(int id, CancellationToken ct)
-        => ApplyEditableProfileScope(db.SegmentDisplayProfiles, principalAccessor?.Current?.UserId)
-            .FirstOrDefaultAsync(profile => profile.Id == id, ct);
+    /// <summary>
+    /// Loads a profile for a write. Users edit their own profiles; the shared profiles (including the built-ins,
+    /// which every user falls back to) are editable only by admins, since a change there applies to everyone.
+    /// A shared profile the caller can see but not edit is 403, not 404.
+    /// </summary>
+    private async Task<(SegmentDisplayProfile? Profile, ActionResult? Error)> LoadEditableProfileAsync(int id, CancellationToken ct)
+    {
+        var principal = principalAccessor?.Current;
+        var profile = await ApplyVisibleProfileScope(db.SegmentDisplayProfiles, principal?.UserId)
+            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        if (profile is null)
+            return (null, NotFound());
+
+        var canEdit = profile.UserId == principal?.UserId
+            || (profile.UserId == null && principal?.Has(Permissions.SystemSettingsWrite) == true);
+        return canEdit ? (profile, null) : (null, Forbid());
+    }
 
     private static IQueryable<SegmentDisplayProfile> ApplyVisibleProfileScope(IQueryable<SegmentDisplayProfile> query, int? userId)
     {
@@ -334,7 +348,8 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
         return query.Where(profile => profile.UserId == null);
     }
 
-    private static IQueryable<SegmentDisplayProfile> ApplyEditableProfileScope(IQueryable<SegmentDisplayProfile> query, int? userId)
+    /// <summary>The profiles that share one owner's default slot: that user's own, or the shared ones for null.</summary>
+    private static IQueryable<SegmentDisplayProfile> ApplyOwnerProfileScope(IQueryable<SegmentDisplayProfile> query, int? userId)
     {
         if (userId.HasValue)
             return query.Where(profile => profile.UserId == userId.Value);
@@ -344,7 +359,7 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
 
     private async Task ClearDefaultsAsync(int? userId, int? exceptProfileId, CancellationToken ct)
     {
-        var defaults = await ApplyEditableProfileScope(db.SegmentDisplayProfiles, userId)
+        var defaults = await ApplyOwnerProfileScope(db.SegmentDisplayProfiles, userId)
             .Where(profile => profile.IsDefault && (!exceptProfileId.HasValue || profile.Id != exceptProfileId.Value))
             .ToListAsync(ct);
 
@@ -354,7 +369,7 @@ public class SegmentDisplayProfilesController(CoveContext db, SegmentSpanResolve
 
     private async Task AssignFallbackDefaultAsync(int? userId, CancellationToken ct)
     {
-        var fallback = await ApplyEditableProfileScope(db.SegmentDisplayProfiles, userId)
+        var fallback = await ApplyOwnerProfileScope(db.SegmentDisplayProfiles, userId)
             .OrderBy(profile => profile.Id)
             .FirstOrDefaultAsync(ct);
         if (fallback is null)

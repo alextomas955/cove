@@ -3747,7 +3747,7 @@ export function SettingsPage() {
         )}
 
         {resolvedActiveTab === "library-display-profiles" && canReadSegments && (
-          <DisplayProfilesSettingsPanel canWrite={canWriteSegments} />
+          <DisplayProfilesSettingsPanel canWrite={canWriteSegments} canWriteShared={canWriteSystemSettings} />
         )}
 
         {resolvedActiveTab === "data-sources-ai-data" && <AiDataSettingsPanel />}

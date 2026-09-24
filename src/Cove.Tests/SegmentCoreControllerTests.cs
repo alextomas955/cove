@@ -1750,7 +1750,7 @@ public class SegmentCoreControllerTests
             null,
             1,
             15), CancellationToken.None);
-        Assert.IsType<NotFoundResult>(updateAttempt.Result);
+        Assert.IsType<ForbidResult>(updateAttempt.Result);
 
         var updateResult = await controller.UpdateRule(createdProfile.Id, userDto.Id, new SegmentDisplayRuleUpdateDto(
             "ext:ai.faces",
@@ -2226,6 +2226,51 @@ public class SegmentCoreControllerTests
 
     private static VideoSegmentsController CreateVideoSegmentsController(CoveContext context, SegmentSpanResolver spanResolver)
         => new(context, spanResolver, new StubBlobService());
+
+    [Fact]
+    public async Task SegmentDisplayProfilesController_OnlyAdminsEditSharedProfiles()
+    {
+        await using var scope = await CreateContextAsync();
+        var context = scope.Context;
+        var shared = new SegmentDisplayProfile { Name = "Default", IsSystem = true, IsDefault = true, Version = 1 };
+        var own = new SegmentDisplayProfile { Name = "Mine", UserId = 7, Version = 1 };
+        var others = new SegmentDisplayProfile { Name = "Theirs", UserId = 9, Version = 1 };
+        context.SegmentDisplayProfiles.AddRange(shared, own, others);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var sharedRule = new SegmentDisplayRule { ProfileId = shared.Id, HostType = SegmentHostType.Video, Visible = true };
+        var ownRule = new SegmentDisplayRule { ProfileId = own.Id, HostType = SegmentHostType.Video, Visible = true, UserId = 7 };
+        var othersRule = new SegmentDisplayRule { ProfileId = others.Id, HostType = SegmentHostType.Video, Visible = true, UserId = 9 };
+        context.SegmentDisplayRules.AddRange(sharedRule, ownRule, othersRule);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var update = new SegmentDisplayRuleUpdateDto(null, null, null, null, SegmentHostType.Video, true, null, 5, null, false, null, null, 1);
+
+        SegmentDisplayProfilesController ControllerFor(CovePrincipal principal)
+        {
+            var accessor = new CurrentPrincipalAccessor();
+            accessor.Set(principal);
+            return new SegmentDisplayProfilesController(
+                context,
+                new SegmentSpanResolver(context, accessor, new MemoryCache(new MemoryCacheOptions())),
+                accessor);
+        }
+
+        var user = CreatePrincipal(7);
+        var userController = ControllerFor(user);
+        Assert.IsType<ForbidResult>((await userController.UpdateRule(shared.Id, sharedRule.Id, update, TestContext.Current.CancellationToken)).Result);
+        Assert.IsType<OkObjectResult>((await userController.UpdateRule(own.Id, ownRule.Id, update, TestContext.Current.CancellationToken)).Result);
+        Assert.IsType<NotFoundResult>((await userController.UpdateRule(others.Id, othersRule.Id, update, TestContext.Current.CancellationToken)).Result);
+
+        var adminController = ControllerFor(new CovePrincipal
+        {
+            UserId = 1,
+            Username = "admin",
+            Kind = PrincipalKind.User,
+            Roles = new HashSet<string>(),
+            Permissions = new HashSet<string>(user.Permissions) { Permissions.SystemSettingsWrite },
+        });
+        Assert.IsType<OkObjectResult>((await adminController.UpdateRule(shared.Id, sharedRule.Id, update, TestContext.Current.CancellationToken)).Result);
+        Assert.IsType<ForbidResult>(await adminController.Delete(shared.Id, TestContext.Current.CancellationToken));
+    }
 
     private static async Task<TestContextScope> CreateContextAsync()
     {
