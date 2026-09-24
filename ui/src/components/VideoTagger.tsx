@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useRef, type ReactNode, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { videos, scrapeAttempts, system } from "../api/client";
 import type {
@@ -14,6 +14,7 @@ import type {
   VideoCoverComparison,
 } from "../api/types";
 import { useAppConfig, useOptionalAppConfig } from "../state/AppConfigContext";
+import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { formatDuration, getResolutionLabel } from "./shared";
 import { createNestedRouteLinkProps } from "./cardNavigation";
 import {
@@ -90,6 +91,9 @@ interface VideoTaggerProps {
   selecting?: boolean;
   onSelect?: (videoId: number, options?: MultiSelectToggleOptions) => void;
   mode?: "bulk" | "detail";
+  // Identifies the list the videos came from (page, sort, search and filters); a new value is a new
+  // list, which starts again with unmatched videos shown.
+  resetKey?: string;
 }
 
 interface TaggerConfig {
@@ -198,6 +202,98 @@ interface VideoSearchState {
   // Hand edits made in the review beside the scrape, as the edit form would make them.
   tagEdits?: TaggerRelationshipEdits;
   performerEdits?: TaggerRelationshipEdits;
+}
+
+/** What one Apply all did, in enough detail that every row it covered is accounted for. */
+interface ApplyAllOutcome {
+  saved: number;
+  skipped: number;
+  /** Rows a cancellation stopped before they were started, and which are still unsaved. */
+  notAttempted: number;
+  reasons: string[];
+  failureCount: number;
+  cancelled: boolean;
+}
+
+/** Which rows one Apply all covered and how far it got, before any of them were resolved. */
+interface ApplyAllRun {
+  targetIds: number[];
+  /** Rows an import was actually sent for. */
+  startedIds: number[];
+  /** Rows whose result went away between the click and their turn, so nothing was sent for them. */
+  skippedIds: number[];
+  cancelled: boolean;
+}
+
+/**
+ * Reads a finished run against current row state, so the notice describes the situation now rather
+ * than when the batch ended. A row put right afterwards stops counting as a failure, and once
+ * nothing is left outstanding there is nothing to show.
+ */
+function summariseApplyAllRun(
+  run: ApplyAllRun | null,
+  states: Record<number, VideoSearchState | undefined>,
+): ApplyAllOutcome | null {
+  if (!run) return null;
+  const isSaved = (videoId: number) => states[videoId]?.saved === true;
+  const saved = run.startedIds.filter(isSaved).length;
+  // The row owns the reason; reading it back keeps one account of why an import failed.
+  const reasons = run.startedIds
+    .filter((videoId) => !isSaved(videoId))
+    .map((videoId) => states[videoId]?.error)
+    .filter((reason): reason is string => Boolean(reason));
+  const skipped = run.skippedIds.filter((videoId) => !isSaved(videoId)).length;
+  const notAttempted = run.targetIds.filter(
+    (videoId) => !run.startedIds.includes(videoId) && !run.skippedIds.includes(videoId) && !isSaved(videoId),
+  ).length;
+  if (reasons.length === 0 && skipped === 0 && notAttempted === 0) return null;
+  return { saved, skipped, notAttempted, reasons, failureCount: reasons.length, cancelled: run.cancelled };
+}
+
+/** How many distinct reasons the batch notice names before it summarises the rest. */
+const APPLY_ALL_REASON_LIMIT = 3;
+
+/**
+ * One sentence for what an Apply all did. Every row the batch covered lands in exactly one count, so
+ * the arithmetic always adds up to what the user asked for. Reasons are capped because a conflict
+ * names the entity it collided with, so a large batch can fail for as many distinct reasons as rows.
+ */
+function describeApplyAllOutcome(outcome: ApplyAllOutcome): string {
+  const parts = [`Applied ${outcome.saved}`];
+  if (outcome.failureCount > 0) parts.push(`failed ${outcome.failureCount}`);
+  if (outcome.skipped > 0) parts.push(`skipped ${outcome.skipped}`);
+  if (outcome.notAttempted > 0) parts.push(`not attempted ${outcome.notAttempted}`);
+  const counts = `${outcome.cancelled ? "Cancelled. " : ""}${parts.join(", ")}.`;
+
+  const distinct = [...new Set(outcome.reasons)];
+  if (distinct.length === 0) return counts;
+  const named = distinct.slice(0, APPLY_ALL_REASON_LIMIT).map(endWithStop).join(" ");
+  const remaining = distinct.length - APPLY_ALL_REASON_LIMIT;
+  return remaining > 0
+    ? `${counts} ${named} And ${remaining} other reason${remaining === 1 ? "" : "s"}.`
+    : `${counts} ${named}`;
+}
+
+/** Server messages are not guaranteed to be punctuated, and these are joined into a sentence. */
+function endWithStop(text: string): string {
+  return /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+}
+
+/**
+ * A tagger precondition that stopped a request being sent. These already read as an explanation, so
+ * they are shown as written; everything else is a transport or server failure, which the shared
+ * formatter words better than its raw message does.
+ */
+class TaggerPreconditionError extends Error {}
+
+/**
+ * Why an attempt failed, in the most specific wording available. Only this component's own
+ * preconditions bypass the shared formatter: routing timeouts, dropped connections and API errors
+ * through it is what keeps "API request timed out after 120000 ms" off the screen.
+ */
+function taggerFailureReason(err: unknown): string {
+  if (err instanceof TaggerPreconditionError && err.message.trim()) return err.message;
+  return getApiValidationFailureDetail(err);
 }
 
 type VideoFieldStrategy = "ignore" | "merge" | "overwrite";
@@ -648,21 +744,46 @@ function relationshipEditFields(state: VideoSearchState | undefined) {
 
 const CONCURRENCY_LIMIT = 5;
 
+interface BatchLifecycle {
+  onStart: () => void;
+  /** Runs once every worker has drained, even if one threw, so the toolbar is always handed back. */
+  onFinish: (cancelled: boolean) => void;
+}
+
+/**
+ * Runs one batch at a time per `batch` ref, which holds the running batch's controller until its last
+ * worker drains. Cancelling only aborts that controller: a batch started while the cancelled one still
+ * drains would take the ref from it, leaving the first uncancellable and both working the same rows,
+ * so a start is refused outright while the ref is held.
+ */
 async function runWithConcurrency<T>(
+  batch: RefObject<AbortController | null>,
   items: T[],
-  fn: (item: T) => Promise<void>,
+  fn: (item: T, signal: AbortSignal) => Promise<void>,
   limit: number,
-  signal?: AbortSignal,
+  lifecycle: BatchLifecycle,
 ): Promise<void> {
-  let index = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (index < items.length) {
-      if (signal?.aborted) return;
-      const i = index++;
-      await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
+  if (batch.current) return;
+  const controller = new AbortController();
+  batch.current = controller;
+  lifecycle.onStart();
+  try {
+    let index = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (index < items.length) {
+        if (controller.signal.aborted) return;
+        const i = index++;
+        await fn(items[i], controller.signal);
+      }
+    });
+    // Settled rather than all, so one worker throwing cannot hand the toolbar back while the others still run.
+    const outcomes = await Promise.allSettled(workers);
+    const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+    if (failure) throw failure.reason;
+  } finally {
+    batch.current = null;
+    lifecycle.onFinish(controller.signal.aborted);
+  }
 }
 
 export function VideoTagger({
@@ -672,6 +793,7 @@ export function VideoTagger({
   selecting = false,
   onSelect,
   mode = "bulk",
+  resetKey = "",
 }: VideoTaggerProps) {
   const { config } = useAppConfig();
   const metadataServers = config?.scraping?.metadataServers ?? [];
@@ -755,6 +877,14 @@ export function VideoTagger({
   // results, not a preference, and a stored "hide" would greet the next visit with an empty list before
   // anything has been searched.
   const [showUnmatched, setShowUnmatched] = useState(true);
+  // Reset during render rather than in an effect, so a new page never flashes as an empty list. The
+  // key, not the video ids, marks a new list: an apply that refetches the list and drops a video the
+  // filter now excludes must not undo the user's choice mid-pass.
+  const [showUnmatchedResetKey, setShowUnmatchedResetKey] = useState(resetKey);
+  if (showUnmatchedResetKey !== resetKey) {
+    setShowUnmatchedResetKey(resetKey);
+    setShowUnmatched(true);
+  }
   const [bulkStrategyDraft, setBulkStrategyDraft] = useState<VideoMetadataSearchStrategy>(
     taggerConfig.bulkMatchStrategy,
   );
@@ -874,7 +1004,7 @@ export function VideoTagger({
   );
 
   const searchVideo = useCallback(
-    async (video: Video, bulkStrategy?: VideoMetadataSearchStrategy) => {
+    async (video: Video, bulkStrategy?: VideoMetadataSearchStrategy, signal?: AbortSignal) => {
       const source = selectedSource;
       const query = getSourceQuery(video, source);
       updateSearchState(video.id, {
@@ -919,7 +1049,10 @@ export function VideoTagger({
         } else {
           const endpoint = source?.endpoint || undefined;
           if (!bulkStrategy && !query.trim()) throw new Error("Enter a title or name to search.");
-          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, bulkStrategy)).map(
+          // The row's query box searches by text alone whatever the bulk strategy, and says so in the request
+          // rather than leaving the server to infer it from a term arriving without a strategy.
+          const strategy = bulkStrategy ?? "text";
+          results = (await videos.searchMetadataServer(video.id, query || undefined, endpoint, strategy, signal)).map(
             (match) => ({ ...match, sourceKind: "metadata-server" as const }),
           );
         }
@@ -930,9 +1063,15 @@ export function VideoTagger({
           selectedIndex: results.length > 0 ? 0 : undefined,
         });
       } catch (err) {
+        // A cancelled batch abandons the searches it had sent; the row goes back to idle rather than failing.
+        // Only the abort itself is swallowed: a search that failed for its own reason still says why.
+        if (signal?.aborted && (err as { name?: unknown } | null)?.name === "AbortError") {
+          updateSearchState(video.id, { loading: false });
+          return;
+        }
         updateSearchState(video.id, {
           loading: false,
-          error: err instanceof Error ? err.message : "Search failed",
+          error: taggerFailureReason(err),
         });
       }
     },
@@ -953,7 +1092,7 @@ export function VideoTagger({
       });
       try {
         if (selectedSource?.kind !== "metadata-server")
-          throw new Error("Fingerprint search is only available for metadata-server sources.");
+          throw new TaggerPreconditionError("Fingerprint search is only available for metadata-server sources.");
         const results = (
           await videos.searchMetadataServer(video.id, undefined, selectedSource.endpoint || undefined, "fingerprint")
         ).map((match) => ({ ...match, sourceKind: "metadata-server" as const }));
@@ -965,7 +1104,7 @@ export function VideoTagger({
       } catch (err) {
         updateSearchState(video.id, {
           loading: false,
-          error: err instanceof Error ? err.message : "Search failed",
+          error: taggerFailureReason(err),
         });
       }
     },
@@ -996,7 +1135,7 @@ export function VideoTagger({
           error: results.length === 0 ? "No metadata-server entry found for this remote id." : undefined,
         });
       } catch (err) {
-        updateSearchState(video.id, { loading: false, error: err instanceof Error ? err.message : "Refresh failed" });
+        updateSearchState(video.id, { loading: false, error: taggerFailureReason(err) });
       }
     },
     [updateSearchState],
@@ -1004,12 +1143,9 @@ export function VideoTagger({
 
   // Batch scrape all (concurrent)
   const [batchSearching, setBatchSearching] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const searchBatchRef = useRef<AbortController | null>(null);
   const searchAll = useCallback(
     async (strategyOverride?: string) => {
-      setBatchSearching(true);
-      const controller = new AbortController();
-      abortRef.current = controller;
       const toSearch = videoList.filter((s) => !searchStates[s.id]?.saved);
       const bulkStrategy =
         selectedSource?.kind === "metadata-server"
@@ -1018,20 +1154,19 @@ export function VideoTagger({
             : taggerConfig.bulkMatchStrategy
           : undefined;
       await runWithConcurrency(
+        searchBatchRef,
         toSearch,
-        (video) => searchVideo(video, bulkStrategy),
+        (video, signal) => searchVideo(video, bulkStrategy, signal),
         CONCURRENCY_LIMIT,
-        controller.signal,
+        { onStart: () => setBatchSearching(true), onFinish: () => setBatchSearching(false) },
       );
-      setBatchSearching(false);
-      abortRef.current = null;
     },
     [selectedSource, taggerConfig.bulkMatchStrategy, videoList, searchStates, searchVideo],
   );
 
+  // Stops rows being started; the toolbar stays busy until the searches already sent come back.
   const cancelBatchSearch = useCallback(() => {
-    abortRef.current?.abort();
-    setBatchSearching(false);
+    searchBatchRef.current?.abort();
   }, []);
 
   // Videos the user has taken off this pass, so a bad or unwanted match stops occupying the list and
@@ -1051,7 +1186,7 @@ export function VideoTagger({
     else applyHandlersRef.current.delete(videoId);
   }, []);
   const [applyingAll, setApplyingAll] = useState(false);
-  const applyAbortRef = useRef<AbortController | null>(null);
+  const applyBatchRef = useRef<AbortController | null>(null);
   // A video counts as matched once a search returned results it has not been saved from yet.
   const applyAllTargets = videoList
     .filter((video) => {
@@ -1060,29 +1195,54 @@ export function VideoTagger({
       return !videoState?.saved && !!videoState?.results && videoState.results.length > 0;
     })
     .map((video) => video.id);
+  // Which rows the last Apply all covered, and how far it got. Only the run is recorded: what became
+  // of each row is read back from that row's own state when the notice renders, so a row put right
+  // afterwards drops out of the notice by itself and the two can never disagree about why it failed.
+  const [applyAllRun, setApplyAllRun] = useState<ApplyAllRun | null>(null);
+  // The dismiss button leaves with the summary, so focus moves to the list the summary described rather
+  // than dropping to the page body, where a keyboard user would have to find their way back from the top.
+  const videoListRef = useRef<HTMLDivElement>(null);
+  const dismissApplyAllRun = useCallback(() => {
+    setApplyAllRun(null);
+    videoListRef.current?.focus();
+  }, []);
   const applyAll = useCallback(async () => {
-    setApplyingAll(true);
-    const controller = new AbortController();
-    applyAbortRef.current = controller;
+    const targetIds = applyAllTargets;
+    const startedIds: number[] = [];
+    const skippedIds: number[] = [];
     await runWithConcurrency(
-      applyAllTargets,
+      applyBatchRef,
+      targetIds,
       async (videoId) => {
         // A row unmounted or saved since the click no longer has a handler; skip it rather than fail.
         const apply = applyHandlersRef.current.get(videoId);
-        if (!apply) return;
-        // One row's failure is reported on that row, so it must not abandon the rest of the batch.
+        if (!apply) {
+          skippedIds.push(videoId);
+          return;
+        }
+        startedIds.push(videoId);
+        // The row records its own outcome, and one row's failure must not abandon the batch.
         await apply().catch(() => undefined);
       },
       CONCURRENCY_LIMIT,
-      controller.signal,
+      {
+        onStart: () => {
+          setApplyingAll(true);
+          setApplyAllRun(null);
+        },
+        onFinish: (cancelled) => {
+          setApplyingAll(false);
+          // Cancelling stops rows being started but never interrupts an import already sent, so the rows
+          // that were never reached are recorded rather than dropped out of the arithmetic.
+          setApplyAllRun({ targetIds, startedIds, skippedIds, cancelled });
+        },
+      },
     );
-    setApplyingAll(false);
-    applyAbortRef.current = null;
   }, [applyAllTargets]);
   const cancelApplyAll = useCallback(() => {
-    applyAbortRef.current?.abort();
-    setApplyingAll(false);
+    applyBatchRef.current?.abort();
   }, []);
+  const applyAllOutcome = summariseApplyAllRun(applyAllRun, searchStates);
 
   if (taggerSources.length === 0) {
     return (
@@ -1122,6 +1282,9 @@ export function VideoTagger({
           setSearchStates({});
           setQueryOverrides({});
           setScraperInputKinds({});
+          // The results the last batch acted on are gone, so its summary describes nothing that is
+          // still on screen; keeping it would resurrect failures from the previous source.
+          setApplyAllRun(null);
         }}
         showToggle={
           mode === "bulk"
@@ -1386,8 +1549,41 @@ export function VideoTagger({
         </TaggerSettingsPanel>
       )}
 
+      {/* Outcome of the last Apply all. A failure is an alert, because it is added to the page rather
+          than updated in place and a polite region is not reliably announced for that. A run the user
+          cancelled themselves is only a status: they know they cancelled it, and interrupting a screen
+          reader assertively to say so would be noise. */}
+      {applyAllOutcome && (
+        <div
+          role={applyAllOutcome.failureCount > 0 ? "alert" : "status"}
+          className={`flex items-start gap-2 border-b border-border px-4 py-2 text-xs ${
+            applyAllOutcome.failureCount > 0 ? "bg-red-500/5 text-red-400" : "bg-surface text-muted"
+          }`}
+        >
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">
+            {describeApplyAllOutcome(applyAllOutcome)}
+            {applyAllOutcome.failureCount > 0 && " The videos that failed keep their changes and can be applied again."}
+          </p>
+          <button
+            type="button"
+            onClick={dismissApplyAllRun}
+            aria-label="Dismiss apply summary"
+            className="shrink-0 rounded p-0.5 opacity-70 hover:bg-foreground/10 hover:opacity-100"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
       {/* Video list */}
-      <div className="divide-y divide-border">
+      <div
+        ref={videoListRef}
+        tabIndex={-1}
+        role="region"
+        aria-label="Videos"
+        className="divide-y divide-border focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
+      >
         {visibleVideos.map((video) => (
           <TaggerVideoRow
             key={video.id}
@@ -1557,10 +1753,11 @@ function TaggerVideoRow({
         ? "Fragment JSON..."
         : "Title or name..."
     : "Search query...";
+  const textSearchLabel = isScraperSource ? "Search" : "Search for this text";
 
   const importMut = useMutation<Video | ScrapeAttempt, Error>({
     mutationFn: () => {
-      if (!selectedResult) throw new Error("No result selected");
+      if (!selectedResult) throw new TaggerPreconditionError("No result selected");
       const collectionModes = getVideoCollectionModes(selectedResult, state, taggerConfig);
       const tagActions = buildVideoRelationActionMap(
         selectedResult.tagNames,
@@ -1584,7 +1781,7 @@ function TaggerVideoRow({
           ? selectedResult.tagNames
           : selectedResult.tagNames.filter((name) => tagActions[relationKey(name)] === "exclude");
       if (selectedResult?.sourceKind === "scraper") {
-        if (!selectedResult.scrapeAttemptId) throw new Error("No scraper attempt selected");
+        if (!selectedResult.scrapeAttemptId) throw new TaggerPreconditionError("No scraper attempt selected");
         return scrapeAttempts.apply(
           selectedResult.scrapeAttemptId,
           buildScraperVideoApplyRequest(selectedResult, video, state, taggerConfig),
@@ -1650,13 +1847,33 @@ function TaggerVideoRow({
       };
       return videos.importFromMetadataServer(video.id, importReq);
     },
+    // The row and the Apply all summary both report this failure with the server's own wording, so
+    // the app-wide notice would be a third, vaguer account of the same thing.
+    meta: { suppressGlobalError: true },
+    // A retry starts from a clean slate, so a stale reason cannot sit beside a fresh attempt.
+    onMutate: () => onUpdateState({ error: undefined }),
+    // React Query routes anything thrown in here to onError, which would report an import that has
+    // already landed as a failure and invite the user to write it a second time. The whole body is
+    // guarded, not just the refresh: a 204 makes `result` undefined, and reading a warning off it
+    // would throw before the row was ever marked saved.
     onSuccess: async (result) => {
-      const importWarnings = "importWarnings" in result ? result.importWarnings : undefined;
-      onUpdateState({
-        saved: true,
-        warning: importWarnings && importWarnings.length > 0 ? importWarnings.join(" ") : undefined,
-      });
-      await invalidateVideoMetadataQueries(queryClient, video.id);
+      try {
+        const importWarnings =
+          result && typeof result === "object" && "importWarnings" in result ? result.importWarnings : undefined;
+        onUpdateState({
+          saved: true,
+          warning: importWarnings && importWarnings.length > 0 ? importWarnings.join(" ") : undefined,
+        });
+        await invalidateVideoMetadataQueries(queryClient, video.id);
+      } catch {
+        // The import itself succeeded, so the row stays saved and a stale list is the lesser problem.
+        onUpdateState({ saved: true });
+      }
+    },
+    // Apply all deliberately swallows a rejection so one row cannot abandon the batch, so the reason
+    // has to be recorded here: without this the row keeps its pending changes and looks untouched.
+    onError: (err) => {
+      onUpdateState({ error: taggerFailureReason(err) });
     },
   });
 
@@ -1817,17 +2034,32 @@ function TaggerVideoRow({
               />
             )}
             <button
+              type="button"
               onClick={onSearch}
               disabled={state?.loading}
-              aria-label="Search"
+              aria-label={textSearchLabel}
+              title={textSearchLabel}
               // Stretch to the one-line input's height; beside the multi-line fragment box, stay compact at the top.
-              className={`flex shrink-0 items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60 ${
+              className={`flex shrink-0 items-center rounded bg-accent px-2 py-1 text-white hover:bg-accent-hover disabled:opacity-60 ${
                 isFragmentInput ? "h-fit" : ""
               }`}
             >
-              {state?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-              <span className="hidden sm:inline">Search</span>
+              {state?.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
             </button>
+            {source?.kind === "metadata-server" && (
+              // The row's second search mode, so it sits beside the first rather than in the menu. It never
+              // reads the query box, which is what keeps the two visibly independent.
+              <button
+                type="button"
+                onClick={onSearchFingerprints}
+                disabled={state?.loading}
+                aria-label="Identify by file content"
+                title="Identify by file content (fingerprints). Ignores the search text."
+                className="flex shrink-0 items-center rounded border border-border bg-surface px-1.5 text-muted hover:border-accent/40 hover:text-accent disabled:opacity-60"
+              >
+                <Fingerprint className="h-3.5 w-3.5" />
+              </button>
+            )}
             {onDismiss && (
               // Sits beside Search so a row can be cleared whether or not it found a match.
               <button
@@ -1843,7 +2075,8 @@ function TaggerVideoRow({
               </button>
             )}
             {source?.kind === "metadata-server" && (
-              // The rare actions live behind one menu so the row shows a query and a Search button, nothing more.
+              // The rare actions, the two submissions, live behind one menu so the row shows its query and its
+              // two search modes and nothing more.
               <DismissibleMenu className="relative shrink-0">
                 <summary
                   role="button"
@@ -1858,19 +2091,6 @@ function TaggerVideoRow({
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </summary>
                 <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded border border-border bg-card shadow-xl">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      onSearchFingerprints();
-                    }}
-                    disabled={state?.loading}
-                    title="Search by fingerprint only"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-surface disabled:opacity-60"
-                  >
-                    <Fingerprint className="h-3.5 w-3.5 text-muted" />
-                    Search by fingerprint only
-                  </button>
                   <button
                     type="button"
                     onClick={(event) => {

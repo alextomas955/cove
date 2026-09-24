@@ -4,6 +4,7 @@ import type { FindFilter, PaginatedResponse } from "../api/types";
 import { fetchAllMatchingIds } from "../utils/selectAllMatching";
 import { getLoadError } from "../utils/queryLoadState";
 import { usePaginatedInfiniteQuery } from "./usePaginatedInfiniteQuery";
+import { useSettledListKey } from "./useSettledListKey";
 
 interface UseInfiniteListDataOptions<TItem extends { id: string | number }> {
   queryKey: readonly unknown[];
@@ -61,6 +62,10 @@ export function useInfiniteListData<TItem extends { id: string | number }>({
     ? getLoadError(infiniteQuery.data, infiniteQuery.error)
     : getLoadError(pageQuery.data, pageQuery.error);
   const refetch = infinitePageSize ? infiniteQuery.refetch : pageQuery.refetch;
+  const settledListKey = useSettledListKey(
+    [...queryKey, filter],
+    infinitePageSize ? infiniteQuery.isPlaceholderData : pageQuery.isPlaceholderData,
+  );
 
   const infiniteScroll = infinitePageSize
     ? {
@@ -82,6 +87,7 @@ export function useInfiniteListData<TItem extends { id: string | number }>({
     infiniteQuery,
     isPlaceholderData: infinitePageSize && infiniteQuery.isPlaceholderData,
     infiniteFilterKey,
+    settledListKey,
     loadMore,
     infiniteScroll,
     fetchAllIds,

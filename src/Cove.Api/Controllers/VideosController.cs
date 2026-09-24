@@ -24,11 +24,15 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.VideosRead)]
-public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null, VideoCoverComparisonService? coverComparisonService = null) : ControllerBase
+public partial class VideosController(IVideoRepository videoRepo, Data.CoveContext db, MetadataServerService metadataServerService, IThumbnailService thumbnailService, IScanService scanService, IMemoryCache memoryCache, IBlobService blobService, IStreamService streamService, IUserEngagementService engagementService, CustomFieldService customFields, IEventBus eventBus, ITagProvenanceService? tagProvenanceService = null, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, ISegmentSpanCacheInvalidator? segmentSpanCacheInvalidator = null, BulkDeletionJobService? bulkDeletionJobService = null, DuplicateSearchJobService? duplicateSearchJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, IAuthorizationService? authorizationService = null, DuplicateResolutionService? duplicateResolutionService = null, ExtensionEntityFilterService? extensionFilters = null, BlobReferenceTransactionCoordinator? blobReferenceTransactions = null, VideoMergeService? videoMergeService = null, VideoCoverComparisonService? coverComparisonService = null, LibraryWriteSignal? libraryWriteSignal = null) : ControllerBase
 {
     // The candidate pass projects ids only, so this just bounds how much of the library one
     // extension-filtered query walks; it is not a page size.
     private const int ExtensionFilterCandidateLimit = 50_000;
+
+    // A conflict that survives a fresh attempt is not a race the retry can settle; a few attempts cover a
+    // batch in which several related entities are contended in turn.
+    internal const int MetadataImportNameConflictAttempts = 3;
 
     private bool CanReadFiles => principalAccessor?.Current?.Has(Permissions.FilesRead) == true;
     private bool HasUserScopedEngagement => principalAccessor?.Current?.UserId != null;
@@ -255,6 +259,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         {
             return Ok(cachedResult);
         }
+        // Taken before the query runs, so a write that commits while it runs cannot leave its result cached.
+        var libraryWritten = libraryWriteSignal?.GetChangeToken();
 
         var findFilter = req.FindFilter ?? new FindFilter();
         var filter = req.ObjectFilter ?? new VideoFilter();
@@ -314,7 +320,15 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         var dtos = items.Select(video => MapListToDto(video, GetCustomFields(customFieldValues, video.Id), engagement.GetValueOrDefault(video.Id), HasUserScopedEngagement, effectiveTags)).ToList();
         var result = new PaginatedResponse<VideoDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage);
 
-        if (canCache) memoryCache.Set(cacheKey, result, TimeSpan.FromSeconds(1));
+        if (canCache)
+        {
+            // The cache only absorbs a burst of identical reads; a write committed through the context ends it,
+            // so a list refreshed after a save reflects the save. Raw SQL writes still wait out the second.
+            var entryOptions = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(1) };
+            if (libraryWritten != null)
+                entryOptions.AddExpirationToken(libraryWritten);
+            memoryCache.Set(cacheKey, result, entryOptions);
+        }
         return Ok(result);
     }
 
@@ -679,19 +693,26 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         var video = await videoRepo.GetByIdWithRelationsAsync(id, ct);
         if (video == null) return NotFound();
 
-        VideoMetadataSearchStrategy? parsedStrategy = strategy?.Trim().ToLowerInvariant() switch
+        if (!TryParseMetadataSearchStrategy(strategy, out var parsedStrategy))
+            return BadRequest(new { message = $"Unknown metadata search strategy '{strategy}'." });
+
+        return Ok(await metadataServerService.SearchVideosAsync(video, term, endpoint, parsedStrategy, ct));
+    }
+
+    // An absent strategy parses to null and leaves the service to infer one from whether a term was sent.
+    internal static bool TryParseMetadataSearchStrategy(string? value, out VideoMetadataSearchStrategy? strategy)
+    {
+        strategy = value?.Trim().ToLowerInvariant() switch
         {
             null or "" => null,
             "remote-id-and-fingerprint-text" => VideoMetadataSearchStrategy.RemoteIdAndFingerprintThenText,
             "remote-id-fingerprint" => VideoMetadataSearchStrategy.RemoteIdFingerprint,
             "remote-id" => VideoMetadataSearchStrategy.RemoteId,
             "fingerprint" => VideoMetadataSearchStrategy.Fingerprint,
+            "text" => VideoMetadataSearchStrategy.Text,
             _ => null,
         };
-        if (!string.IsNullOrWhiteSpace(strategy) && parsedStrategy == null)
-            return BadRequest(new { message = $"Unknown metadata search strategy '{strategy}'." });
-
-        return Ok(await metadataServerService.SearchVideosAsync(video, term, endpoint, parsedStrategy, ct));
+        return strategy != null || string.IsNullOrWhiteSpace(value);
     }
 
     // Fetch matches directly by this server's ids (e.g. a video's existing remote ids), so the tagger can
@@ -722,16 +743,38 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         if (video == null) return NotFound();
         IReadOnlyList<string> importWarnings;
 
-        try
+        // Imports run concurrently (the tagger's Apply all sends several at once), and two that need the same
+        // missing studio, performer or tag both find it missing and both create it. The name constraints let
+        // only one commit; the other surfaces here as a name conflict, from its commit or from a lookup that
+        // saw the winner's row. Running the loser again from a clean slate finds the winner's entity and links
+        // it, which is what it would have done had it started a moment later. Each attempt fetches the remote
+        // again and repeats its downloads, which is the price of retrying only when a conflict occurs.
+        for (var attempt = 1; ; attempt++)
         {
-            var imported = await metadataServerService.MergeVideoWithWarningsAsync(video, dto.Endpoint, dto.VideoId, dto, ct);
-            if (!imported.Imported) return NotFound();
-            await db.SaveChangesAsync(ct);
-            importWarnings = imported.Warnings;
-        }
-        catch (EntityNameConflictException exception)
-        {
-            return Conflict(new { code = "RELATED_ENTITY_NAME_CONFLICT", message = exception.Message, exception.EntityType });
+            try
+            {
+                var imported = await metadataServerService.MergeVideoWithWarningsAsync(video, dto.Endpoint, dto.VideoId, dto, ct);
+                if (!imported.Imported) return NotFound();
+                await db.SaveChangesAsync(ct);
+                importWarnings = imported.Warnings;
+                break;
+            }
+            catch (Exception exception) when (exception is EntityNameConflictException or TagNameConflictException
+                && attempt < MetadataImportNameConflictAttempts)
+            {
+                db.ChangeTracker.Clear();
+                metadataServerService.ResetTrackedIdentityState();
+                video = await videoRepo.GetByIdWithRelationsAsync(id, ct);
+                if (video == null) return NotFound();
+            }
+            catch (EntityNameConflictException exception)
+            {
+                return Conflict(new { code = "RELATED_ENTITY_NAME_CONFLICT", message = exception.Message, exception.EntityType });
+            }
+            catch (TagNameConflictException exception)
+            {
+                return Conflict(new { code = "TAG_NAME_CONFLICT", message = exception.Message, exception.ConflictingName });
+            }
         }
         PublishVideoEvent(EventType.VideoUpdated, id);
         var updated = await videoRepo.GetByIdWithRelationsAsync(id, ct);

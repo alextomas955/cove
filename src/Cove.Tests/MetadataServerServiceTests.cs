@@ -336,6 +336,266 @@ public sealed class MetadataServerServiceTests
         Assert.Equal("Other Studio", namesake.Name);
     }
 
+    // Two concurrent imports needing the same missing studio both create it, and the name constraint lets
+    // only one commit. The loser used to fail its whole import; it should link the winner's studio instead.
+    [Fact]
+    public async Task ImportFromMetadataServer_LinksTheStudioAConcurrentImportCreatedFirst()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetTags = false },
+            rival => rival.Add(RivalStudio(withRemoteId: true)).Entity,
+            RivalCommits.OnSave(() => new EntityNameConflictException(NameConflictEntityTypes.Studio)));
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(run.Response.Result);
+        Assert.Equal(2, run.Attempts);
+        var studio = Assert.Single(await run.Verify.Studios.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(run.Rival.WinnerId, studio.Id);
+        Assert.Equal(studio.Id, run.Saved.StudioId);
+        Assert.Equal("Remote Video", run.Saved.Title);
+    }
+
+    // A rival that created the studio by name alone, without the remote id, is found only through the name
+    // identity index, which the failed attempt had already built without it. The retry must rebuild it or
+    // it misses the winner and creates the duplicate the constraint just refused.
+    [Fact]
+    public async Task ImportFromMetadataServer_RebuildsTheNameIndexBeforeRetrying()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetTags = false },
+            rival => rival.Add(RivalStudio(withRemoteId: false)).Entity,
+            RivalCommits.OnSave(() => new EntityNameConflictException(NameConflictEntityTypes.Studio)));
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(run.Response.Result);
+        Assert.Equal(2, run.Attempts);
+        var studio = Assert.Single(await run.Verify.Studios.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(run.Rival.WinnerId, studio.Id);
+        Assert.Equal(studio.Id, run.Saved.StudioId);
+    }
+
+    // Tags are shared between videos more than any other related entity, and tag writes are serialised,
+    // so the loser of this race is refused by the context's own name check when it saves, with its own
+    // exception. The rival commits after the import resolved its tags and before it saves.
+    [Fact]
+    public async Task ImportFromMetadataServer_LinksTheTagAConcurrentImportCommittedBeforeTheSave()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetStudio = false },
+            rival => rival.Add(new Tag { Name = "Action" }).Entity,
+            RivalCommits.OnTagProvenance);
+
+        await AssertLinkedToTheRivalTagAsync(run);
+    }
+
+    // The same race when the rival commits while the import is still resolving the tag: the import's own
+    // namespace check sees the winner and refuses to create a second tag of that name.
+    [Fact]
+    public async Task ImportFromMetadataServer_LinksTheTagAConcurrentImportCommittedDuringResolution()
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto { SetPerformers = false, SetStudio = false },
+            rival => rival.Add(new Tag { Name = "Action" }).Entity,
+            RivalCommits.OnTagStaged);
+
+        await AssertLinkedToTheRivalTagAsync(run);
+    }
+
+    public static TheoryData<string, string> LastingConflicts => new()
+    {
+        { NameConflictEntityTypes.Studio, "RELATED_ENTITY_NAME_CONFLICT" },
+        { "tag", "TAG_NAME_CONFLICT" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LastingConflicts))]
+    public async Task ImportFromMetadataServer_ReportsANameConflictThatOutlastsItsRetries(string entityType, string expectedCode)
+    {
+        await using var run = await RunImportAgainstARivalAsync(
+            new MetadataServerVideoImportRequestDto(),
+            rival => null,
+            RivalCommits.OnSave(
+                () => entityType == "tag"
+                    ? TagNameConflictException.ForConcurrentWrite()
+                    : new EntityNameConflictException(entityType),
+                persistent: true));
+
+        var conflict = Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(run.Response.Result);
+        Assert.Equal(expectedCode, conflict.Value!.GetType().GetProperty("code")!.GetValue(conflict.Value));
+        Assert.Equal(Cove.Api.Controllers.VideosController.MetadataImportNameConflictAttempts, run.Attempts);
+    }
+
+    private static Studio RivalStudio(bool withRemoteId)
+    {
+        var studio = new Studio { Name = "Fixture Studio" };
+        if (withRemoteId)
+            studio.RemoteIds.Add(new StudioRemoteId { Endpoint = Endpoint, RemoteId = "remote-studio-1" });
+        return studio;
+    }
+
+    private static async Task AssertLinkedToTheRivalTagAsync(RivalImportRun run)
+    {
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(run.Response.Result);
+        Assert.Equal(2, run.Attempts);
+        var tag = Assert.Single(await run.Verify.Tags.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(run.Rival.WinnerId, tag.Id);
+        Assert.Contains(
+            await run.Verify.Set<VideoTag>().Where(link => link.VideoId == run.Saved.Id).ToListAsync(TestContext.Current.CancellationToken),
+            link => link.TagId == tag.Id);
+    }
+
+    /// <summary>When the rival entity commits, standing in for a concurrent import.</summary>
+    private sealed record RivalCommits(Func<Exception>? SaveConflict, bool Persistent, bool OnStagedTag, bool OnProvenance)
+    {
+        // At the loser's first save, which then fails the way the deferred name constraint fails at commit.
+        public static RivalCommits OnSave(Func<Exception> conflict, bool persistent = false) => new(conflict, persistent, false, false);
+
+        // When the import stages its new tag, before it checks the tag namespace.
+        public static RivalCommits OnTagStaged { get; } = new(null, false, true, false);
+
+        // When the import records tag provenance: after it resolved its tags, before it saves.
+        public static RivalCommits OnTagProvenance { get; } = new(null, false, false, true);
+    }
+
+    private sealed record RivalImportRun(
+        Microsoft.AspNetCore.Mvc.ActionResult<VideoDto> Response,
+        ConcurrentCreation Rival,
+        int Attempts,
+        CoveContext Verify,
+        Video Saved) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => Verify.DisposeAsync();
+    }
+
+    private static async Task<RivalImportRun> RunImportAgainstARivalAsync(
+        MetadataServerVideoImportRequestDto request,
+        Func<CoveContext, object?> createRival,
+        RivalCommits when)
+    {
+        var databaseName = $"metadata-import-race-{Guid.NewGuid():N}";
+        var rival = new ConcurrentCreation(databaseName, createRival, when.SaveConflict) { Persistent = when.Persistent };
+        await using var context = new CoveContext(new DbContextOptionsBuilder<CoveContext>()
+            .UseInMemoryDatabase(databaseName)
+            .AddInterceptors(rival)
+            .Options);
+        var video = new Video { Title = "Original Video" };
+        context.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        rival.Armed = true;
+        if (when.OnStagedTag)
+        {
+            context.ChangeTracker.Tracked += (_, tracked) =>
+            {
+                if (tracked.Entry.State == EntityState.Added && tracked.Entry.Entity is Tag)
+                    rival.CommitRivalOnce();
+            };
+        }
+        var tagProvenance = RivalOnTagProvenance.Wrap(new TagProvenanceService(context), when.OnProvenance ? rival.CommitRivalOnce : null);
+
+        var handler = new FixtureMetadataServerHandler(request => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """));
+        using var httpClient = new HttpClient(handler);
+        var principalAccessor = new Cove.Core.Auth.CurrentPrincipalAccessor();
+        using var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var controller = new Cove.Api.Controllers.VideosController(
+            new Cove.Data.Repositories.VideoRepository(context),
+            context,
+            CreateService(context, httpClient, tagProvenance: tagProvenance),
+            null!,
+            null!,
+            memoryCache,
+            null!,
+            null!,
+            new Cove.Data.Services.UserEngagementService(context, principalAccessor),
+            new CustomFieldService(context),
+            new EventBus(),
+            null,
+            principalAccessor);
+
+        var response = await controller.ImportFromMetadataServer(
+            video.Id,
+            request with { Endpoint = Endpoint, VideoId = "remote-video-1", SetCoverImage = false },
+            TestContext.Current.CancellationToken);
+
+        // Every attempt starts by fetching the remote video, so the fetches count the attempts.
+        var attempts = handler.Requests.Count(snapshot => snapshot.Query.Contains("findVideo", StringComparison.Ordinal));
+        var verify = new CoveContext(new DbContextOptionsBuilder<CoveContext>().UseInMemoryDatabase(databaseName).Options);
+        var saved = await verify.Videos.SingleAsync(item => item.Id == video.Id, TestContext.Current.CancellationToken);
+        return new RivalImportRun(response, rival, attempts, verify, saved);
+    }
+
+    // Commits the rival entity through its own context, as a concurrent import would, at the moment the test
+    // chose. It must never run inside the loser's SaveChanges when tags are involved: the context holds its
+    // process-wide tag namespace lock for the whole save, and the rival's save would wait on it forever.
+    private sealed class ConcurrentCreation(
+        string databaseName,
+        Func<CoveContext, object?> createRival,
+        Func<Exception>? saveConflict) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        private bool _rivalCommitted;
+        private int _conflicts;
+
+        public bool Armed { get; set; }
+        public bool Persistent { get; init; }
+        public int WinnerId { get; private set; }
+
+        public void CommitRivalOnce()
+        {
+            if (!Armed || _rivalCommitted)
+                return;
+            _rivalCommitted = true;
+            using var rival = new CoveContext(new DbContextOptionsBuilder<CoveContext>().UseInMemoryDatabase(databaseName).Options);
+            var winner = createRival(rival);
+            if (winner == null)
+                return;
+            rival.SaveChanges();
+            WinnerId = (int)rival.Entry(winner).Property("Id").CurrentValue!;
+        }
+
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (saveConflict == null || !Armed || (!Persistent && _conflicts > 0))
+                return ValueTask.FromResult(result);
+            CommitRivalOnce();
+            _conflicts++;
+            throw saveConflict();
+        }
+    }
+
+    // Passes every call through, running a hook before the first provenance record: the point where an
+    // import has resolved its tags and has not yet saved.
+    public class RivalOnTagProvenance : System.Reflection.DispatchProxy
+    {
+        private ITagProvenanceService _inner = null!;
+        private Action? _beforeRecord;
+
+        public static ITagProvenanceService Wrap(ITagProvenanceService inner, Action? beforeRecord)
+        {
+            var proxy = Create<ITagProvenanceService, RivalOnTagProvenance>();
+            var hooked = (RivalOnTagProvenance)(object)proxy;
+            hooked._inner = inner;
+            hooked._beforeRecord = beforeRecord;
+            return proxy;
+        }
+
+        protected override object? Invoke(System.Reflection.MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod!.Name == nameof(ITagProvenanceService.RecordAsync))
+                _beforeRecord?.Invoke();
+            try
+            {
+                return targetMethod.Invoke(_inner, args);
+            }
+            catch (System.Reflection.TargetInvocationException exception) when (exception.InnerException != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(exception.InnerException);
+                throw;
+            }
+        }
+    }
+
     [Fact]
     public async Task MergeVideoWithWarningsAsync_LeavesAnExistingStudioUntouched()
     {

@@ -1444,14 +1444,9 @@ public partial class CoveContext : DbContext
         {
             return base.SaveChanges();
         }
-        catch (DbUpdateException exception)
+        catch (Exception exception) when (TranslateNameConstraint(exception) is { } translated)
         {
-            if (IsTagNameConstraint(exception))
-                throw TagNameConflictException.ForConcurrentWrite();
-            var entityType = EntityNameConstraintType(exception);
-            if (entityType != null)
-                throw new EntityNameConflictException(entityType, exception);
-            throw;
+            throw translated;
         }
     }
 
@@ -1461,24 +1456,34 @@ public partial class CoveContext : DbContext
         {
             return await base.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception)
+        catch (Exception exception) when (TranslateNameConstraint(exception) is { } translated)
         {
-            if (IsTagNameConstraint(exception))
-                throw TagNameConflictException.ForConcurrentWrite();
-            var entityType = EntityNameConstraintType(exception);
-            if (entityType != null)
-                throw new EntityNameConflictException(entityType, exception);
-            throw;
+            throw translated;
         }
     }
 
-    private static string? EntityNameConstraintType(DbUpdateException exception)
+    // The name constraints are deferred, so a violation can surface from the statement, wrapped in a
+    // DbUpdateException, or from the commit SaveChanges issues after it, as the bare PostgresException.
+    internal static Exception? TranslateNameConstraint(Exception exception)
     {
-        if (exception.InnerException is not PostgresException postgres
-            || postgres.SqlState is not PostgresErrorCodes.ExclusionViolation and not PostgresErrorCodes.UniqueViolation)
+        var postgres = exception switch
         {
+            DbUpdateException { InnerException: PostgresException inner } => inner,
+            PostgresException bare => bare,
+            _ => null,
+        };
+        if (postgres == null)
             return null;
-        }
+        if (IsTagNameConstraint(postgres))
+            return TagNameConflictException.ForConcurrentWrite();
+        var entityType = EntityNameConstraintType(postgres);
+        return entityType == null ? null : new EntityNameConflictException(entityType, exception);
+    }
+
+    private static string? EntityNameConstraintType(PostgresException postgres)
+    {
+        if (postgres.SqlState is not PostgresErrorCodes.ExclusionViolation and not PostgresErrorCodes.UniqueViolation)
+            return null;
 
         return postgres.ConstraintName switch
         {
@@ -1488,8 +1493,8 @@ public partial class CoveContext : DbContext
         };
     }
 
-    private static bool IsTagNameConstraint(DbUpdateException exception)
-        => exception.InnerException is PostgresException
+    private static bool IsTagNameConstraint(PostgresException postgres)
+        => postgres is
         {
             SqlState: PostgresErrorCodes.ExclusionViolation,
             ConstraintName: "UQ_tag_name_claims_namespace",
