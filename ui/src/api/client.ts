@@ -1219,7 +1219,11 @@ export const performers = {
   bulkDelete: (ids: number[]) =>
     request<BulkDeletionJobStart>("/performers/bulk", { method: "DELETE", body: JSON.stringify({ ids }) }),
   merge: (targetId: number, sourceIds: number[]) =>
-    request<Performer>("/performers/merge", { method: "POST", body: JSON.stringify({ targetId, sourceIds }) }),
+    request<Performer>("/performers/merge", {
+      method: "POST",
+      body: JSON.stringify({ targetId, sourceIds }),
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
+    }),
   searchMetadataServer: (id: number, term?: string, endpoint?: string) =>
     request<MetadataServerPerformerMatch[]>(
       `/performers/${id}/metadata-server/search${buildQuery(undefined, { term, endpoint })}`,
@@ -1269,7 +1273,11 @@ export const tags = {
   bulkDelete: (ids: number[]) =>
     request<BulkDeletionJobStart>("/tags/bulk", { method: "DELETE", body: JSON.stringify({ ids }) }),
   merge: (targetId: number, sourceIds: number[]) =>
-    request<TagDetail>("/tags/merge", { method: "POST", body: JSON.stringify({ targetId, sourceIds }) }),
+    request<TagDetail>("/tags/merge", {
+      method: "POST",
+      body: JSON.stringify({ targetId, sourceIds }),
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
+    }),
   searchMetadataServer: (id: number, term?: string, endpoint?: string) =>
     request<MetadataServerTagMatch[]>(`/tags/${id}/metadata-server/search${buildQuery(undefined, { term, endpoint })}`),
   findMetadataServerByIds: (data: MetadataServerFindByIdsRequest) =>
@@ -1404,7 +1412,11 @@ export const studios = {
   bulkDelete: (ids: number[]) =>
     request<BulkDeletionJobStart>("/studios/bulk", { method: "DELETE", body: JSON.stringify({ ids }) }),
   merge: (targetId: number, sourceIds: number[]) =>
-    request<Studio>("/studios/merge", { method: "POST", body: JSON.stringify({ targetId, sourceIds }) }),
+    request<Studio>("/studios/merge", {
+      method: "POST",
+      body: JSON.stringify({ targetId, sourceIds }),
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
+    }),
   searchMetadataServer: (id: number, term?: string, endpoint?: string) => {
     const params = new URLSearchParams();
     if (term) params.set("term", term);
