@@ -270,7 +270,8 @@ export function ImageSourceDownloadDialog({
   const toggleIndex = (index: number) => {
     setSelectedIndexes((current) => {
       const next = new Set(current);
-      next.has(index) ? next.delete(index) : next.add(index);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
       return next;
     });
   };

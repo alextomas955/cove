@@ -440,7 +440,9 @@ export function MultiIdEditor({
                       aria-selected={isIncluded || isExcluded}
                       aria-disabled={isPlaceholderData || undefined}
                       onClick={() => {
-                        if (!isPlaceholderData) isIncluded ? removeId(entity.id) : addInclude(entity.id);
+                        if (isPlaceholderData) return;
+                        if (isIncluded) removeId(entity.id);
+                        else addInclude(entity.id);
                       }}
                       className={`flex min-h-11 w-full items-center gap-1 px-1 text-sm ${isPlaceholderData ? "cursor-wait" : "cursor-pointer"} ${activeResultIndex >= 0 && navigableEntities[activeResultIndex]?.id === entity.id ? "bg-accent/15 ring-1 ring-inset ring-accent" : ""} ${isIncluded ? "text-green-300" : isExcluded ? "text-red-300" : "text-foreground"}`}
                     >
@@ -449,7 +451,8 @@ export function MultiIdEditor({
                         tabIndex={-1}
                         onClick={(event) => {
                           event.stopPropagation();
-                          isIncluded ? removeId(entity.id) : addInclude(entity.id);
+                          if (isIncluded) removeId(entity.id);
+                          else addInclude(entity.id);
                         }}
                         className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-green-500/10 hover:text-green-400 disabled:cursor-wait ${isIncluded ? "text-green-400" : "text-muted"}`}
                         title="Include"
@@ -465,7 +468,8 @@ export function MultiIdEditor({
                           tabIndex={-1}
                           onClick={(event) => {
                             event.stopPropagation();
-                            isExcluded ? removeId(entity.id) : addExclude(entity.id);
+                            if (isExcluded) removeId(entity.id);
+                            else addExclude(entity.id);
                           }}
                           className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-red-500/10 hover:text-red-400 disabled:cursor-wait ${isExcluded ? "text-red-400" : "text-muted"}`}
                           title="Exclude"
@@ -492,7 +496,9 @@ export function MultiIdEditor({
                     aria-selected={isIncluded || isExcluded}
                     aria-disabled={isPlaceholderData || undefined}
                     onClick={() => {
-                      if (!isPlaceholderData) isIncluded ? removeId(entity.id) : addInclude(entity.id);
+                      if (isPlaceholderData) return;
+                      if (isIncluded) removeId(entity.id);
+                      else addInclude(entity.id);
                     }}
                     className={`flex min-h-11 w-full items-center gap-1 px-1 text-sm ${isPlaceholderData ? "cursor-wait" : "cursor-pointer"} ${activeResultIndex >= 0 && navigableEntities[activeResultIndex]?.id === entity.id ? "bg-accent/15 ring-1 ring-inset ring-accent" : ""} ${isIncluded ? "text-green-300" : isExcluded ? "text-red-300" : "text-foreground"}`}
                   >
@@ -501,7 +507,8 @@ export function MultiIdEditor({
                       tabIndex={-1}
                       onClick={(event) => {
                         event.stopPropagation();
-                        isIncluded ? removeId(entity.id) : addInclude(entity.id);
+                        if (isIncluded) removeId(entity.id);
+                        else addInclude(entity.id);
                       }}
                       className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-green-500/10 hover:text-green-400 disabled:cursor-wait ${isIncluded ? "text-green-400" : "text-muted"}`}
                       title="Include"
@@ -517,7 +524,8 @@ export function MultiIdEditor({
                         tabIndex={-1}
                         onClick={(event) => {
                           event.stopPropagation();
-                          isExcluded ? removeId(entity.id) : addExclude(entity.id);
+                          if (isExcluded) removeId(entity.id);
+                          else addExclude(entity.id);
                         }}
                         className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-red-500/10 hover:text-red-400 disabled:cursor-wait ${isExcluded ? "text-red-400" : "text-muted"}`}
                         title="Exclude"

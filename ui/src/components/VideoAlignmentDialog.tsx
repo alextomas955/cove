@@ -368,7 +368,8 @@ export function VideoAlignmentDialog({
                             onChange={(event) =>
                               setDeletions((current) => {
                                 const next = new Set(current);
-                                event.target.checked ? next.add(key) : next.delete(key);
+                                if (event.target.checked) next.add(key);
+                                else next.delete(key);
                                 return next;
                               })
                             }

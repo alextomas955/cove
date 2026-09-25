@@ -7281,7 +7281,8 @@ function ThemeSelector() {
   const toggleConfig = (key: string) => {
     setExpandedConfigs((prev) => {
       const n = new Set(prev);
-      n.has(key) ? n.delete(key) : n.add(key);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
       localStorage.setItem(CONFIGS_STORAGE_KEY, JSON.stringify([...n]));
       return n;
     });
