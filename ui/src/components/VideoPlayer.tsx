@@ -1171,6 +1171,7 @@ export function VideoPlayer({
     lastTickAt.current = Date.now();
   }, []);
 
+  // oxlint-disable-next-line react/refs -- extension lease cleanups can call this during a child's commit, before this component's layout effects, so it is kept current during render
   trackingLeaseTransitionRef.current = (paused, resume) => {
     if (paused) {
       pendingTrackingStartRef.current = null;
@@ -1506,7 +1507,7 @@ export function VideoPlayer({
   }, [currentTime, trackPlayerInteraction]);
 
   const playerKeyboardBindings = useMemo(() => {
-    const withPlayer = (action: (video: HTMLVideoElement) => void) => () => {
+    const runWithPlayer = (action: (video: HTMLVideoElement) => void) => {
       const v = videoRef.current;
       if (!v) return;
       if (interactionSnapshotRef.current.active) return;
@@ -1518,74 +1519,83 @@ export function VideoPlayer({
         id: "player.playPause",
         keys: "Space",
         surface: "player" as const,
-        action: withPlayer((v) => {
-          if (v.paused) playVideo();
-          else {
-            recordMediaUserPause();
-            v.pause();
-          }
-        }),
+        action: () =>
+          runWithPlayer((v) => {
+            if (v.paused) playVideo();
+            else {
+              recordMediaUserPause();
+              v.pause();
+            }
+          }),
       },
       {
         id: "player.seekBackward",
         keys: "ArrowLeft",
         surface: "player" as const,
-        action: withPlayer(() => seekToAbsoluteTime(currentTime - 5)),
+        action: () => runWithPlayer(() => seekToAbsoluteTime(currentTime - 5)),
       },
       {
         id: "player.seekForward",
         keys: "ArrowRight",
         surface: "player" as const,
-        action: withPlayer(() => seekToAbsoluteTime(currentTime + 5)),
+        action: () => runWithPlayer(() => seekToAbsoluteTime(currentTime + 5)),
       },
       {
         id: "player.seekBackwardLarge",
         keys: "Shift+ArrowLeft",
         surface: "player" as const,
-        action: withPlayer(() => seekToAbsoluteTime(currentTime - 10)),
+        action: () => runWithPlayer(() => seekToAbsoluteTime(currentTime - 10)),
       },
       {
         id: "player.seekForwardLarge",
         keys: "Shift+ArrowRight",
         surface: "player" as const,
-        action: withPlayer(() => seekToAbsoluteTime(currentTime + 10)),
+        action: () => runWithPlayer(() => seekToAbsoluteTime(currentTime + 10)),
       },
       {
         id: "player.volumeUp",
         keys: "ArrowUp",
         surface: "player" as const,
-        action: withPlayer((v) => {
-          v.volume = Math.min(1, v.volume + 0.1);
-          setVol(v.volume);
-          localStorage.setItem(VOLUME_KEY, String(v.volume));
-        }),
+        action: () =>
+          runWithPlayer((v) => {
+            v.volume = Math.min(1, v.volume + 0.1);
+            setVol(v.volume);
+            localStorage.setItem(VOLUME_KEY, String(v.volume));
+          }),
       },
       {
         id: "player.volumeDown",
         keys: "ArrowDown",
         surface: "player" as const,
-        action: withPlayer((v) => {
-          v.volume = Math.max(0, v.volume - 0.1);
-          setVol(v.volume);
-          localStorage.setItem(VOLUME_KEY, String(v.volume));
-        }),
+        action: () =>
+          runWithPlayer((v) => {
+            v.volume = Math.max(0, v.volume - 0.1);
+            setVol(v.volume);
+            localStorage.setItem(VOLUME_KEY, String(v.volume));
+          }),
       },
       {
         id: "player.mute",
         keys: "m",
         surface: "player" as const,
-        action: withPlayer((v) => {
-          v.muted = !v.muted;
-          setMuted(v.muted);
-          localStorage.setItem(MUTED_KEY, String(v.muted));
-        }),
+        action: () =>
+          runWithPlayer((v) => {
+            v.muted = !v.muted;
+            setMuted(v.muted);
+            localStorage.setItem(MUTED_KEY, String(v.muted));
+          }),
       },
-      { id: "player.fullscreen", keys: "f", surface: "player" as const, action: withPlayer(() => toggleFullscreen()) },
+      {
+        id: "player.fullscreen",
+        keys: "f",
+        surface: "player" as const,
+        action: () => runWithPlayer(() => toggleFullscreen()),
+      },
       ...Array.from({ length: 10 }, (_, value) => ({
         id: `player.seekPercent.${value}`,
         keys: String(value),
         surface: "player" as const,
-        action: withPlayer(() => seekToAbsoluteTime(timelineStart + timelineDuration * (value / 10))),
+        action: () => runWithPlayer(() => seekToAbsoluteTime(timelineStart + timelineDuration * (value / 10))),
       })),
     ];
   }, [
@@ -1965,6 +1975,7 @@ export function VideoPlayer({
     [interactionResetKey, videoId],
   );
   usePublishActiveMedia(
+    // oxlint-disable-next-line react/refs -- the context holds ref-reading player callbacks that extensions call from events, not during render
     mediaPlayerExtensionContext
       ? {
           kind: "video",
@@ -2232,6 +2243,7 @@ export function VideoPlayer({
         </div>
       ) : null}
 
+      {/* oxlint-disable-next-line react/refs -- the context holds ref-reading player callbacks that extensions call from events, not during render */}
       {mediaPlayerExtensionContext ? (
         <div className="pointer-events-none absolute inset-0 z-[4]">
           <ExtensionSlot
@@ -2341,6 +2353,7 @@ export function VideoPlayer({
           </span>
 
           <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
+            {/* oxlint-disable-next-line react/refs -- the context holds ref-reading player callbacks that extensions call from events, not during render */}
             {!compactControls && mediaPlayerExtensionContext ? (
               <>
                 <ExtensionSlot
@@ -2461,6 +2474,7 @@ export function VideoPlayer({
                           X-ray
                         </button>
                       ) : null}
+                      {/* oxlint-disable-next-line react/refs -- the context holds ref-reading player callbacks that extensions call from events, not during render */}
                       {compactControls && hasMediaPlayerActions && mediaPlayerExtensionContext ? (
                         <>
                           <div className="my-2 border-t border-border pt-2 px-2 text-xs text-secondary">

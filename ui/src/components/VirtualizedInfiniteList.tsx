@@ -1,4 +1,4 @@
-import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, RefObject, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, useWindowVirtualizer, Virtualizer } from "@tanstack/react-virtual";
 
 /**
@@ -517,17 +517,11 @@ function useActiveIndexNotifier({
 }) {
   const cb = onActiveIndexChange;
   const lastReportedRef = useRef<number | null>(null);
-  const virtualItemsRef = useRef(virtualItems);
-  const getScrollOffsetRef = useRef(getScrollOffset);
-  const getViewportSizeRef = useRef(getViewportSize);
 
-  virtualItemsRef.current = virtualItems;
-  getScrollOffsetRef.current = getScrollOffset;
-  getViewportSizeRef.current = getViewportSize;
-
-  const reportActiveIndex = useCallback(() => {
+  // Runs from effects and the scroll listeners they attach, always against the latest render's items.
+  const reportActiveIndex = useEffectEvent(() => {
     if (!cb) return;
-    const currentVirtualItems = virtualItemsRef.current;
+    const currentVirtualItems = virtualItems;
     if (currentVirtualItems.length === 0) {
       if (lastReportedRef.current !== null) {
         lastReportedRef.current = null;
@@ -536,8 +530,8 @@ function useActiveIndexNotifier({
       return;
     }
 
-    const viewportStart = getScrollOffsetRef.current();
-    const viewportEnd = viewportStart + getViewportSizeRef.current();
+    const viewportStart = getScrollOffset();
+    const viewportEnd = viewportStart + getViewportSize();
     const viewportMidpoint = viewportStart + (viewportEnd - viewportStart) / 2;
     let bestIndex: number | null = null;
     let bestVisible = 0;
@@ -562,7 +556,7 @@ function useActiveIndexNotifier({
       lastReportedRef.current = bestIndex;
       cb(bestIndex);
     }
-  }, [cb]);
+  });
 
   useEffect(() => {
     reportActiveIndex();
@@ -594,7 +588,7 @@ function useActiveIndexNotifier({
       target.removeEventListener("scroll", scheduleReport);
       window.removeEventListener("resize", scheduleReport);
     };
-  }, [cb, reportActiveIndex, scrollElement, windowScroll]);
+  }, [cb, scrollElement, windowScroll]);
 }
 
 // ---------- Infinite load triggers ----------
@@ -614,14 +608,13 @@ function useInfiniteLoadTrigger({
   loadMore: () => void;
   threshold: number;
 }) {
-  const loadMoreRef = useRef(loadMore);
-  loadMoreRef.current = loadMore;
+  const loadMoreEvent = useEffectEvent(loadMore);
 
   const lastIndex = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : -1;
   const shouldLoad = hasNextPage && !isFetchingNextPage && lastIndex >= itemCount - 1 - threshold && itemCount > 0;
 
   useEffect(() => {
-    if (shouldLoad) loadMoreRef.current();
+    if (shouldLoad) loadMoreEvent();
   }, [shouldLoad]);
 }
 
@@ -640,14 +633,13 @@ function useInfiniteLoadTriggerRows({
   loadMore: () => void;
   threshold: number;
 }) {
-  const loadMoreRef = useRef(loadMore);
-  loadMoreRef.current = loadMore;
+  const loadMoreEvent = useEffectEvent(loadMore);
 
   const lastRow = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : -1;
   const shouldLoad = hasNextPage && !isFetchingNextPage && lastRow >= rowCount - 1 - threshold && rowCount > 0;
 
   useEffect(() => {
-    if (shouldLoad) loadMoreRef.current();
+    if (shouldLoad) loadMoreEvent();
   }, [shouldLoad]);
 }
 

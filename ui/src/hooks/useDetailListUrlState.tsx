@@ -10,10 +10,8 @@ type CachedListState = ListUrlState<string>;
 const DetailListStateCacheContext = createContext<Map<string, CachedListState> | null>(null);
 
 export function DetailListStateCacheProvider({ children }: { children: ReactNode }) {
-  const cacheRef = useRef(new Map<string, CachedListState>());
-  return (
-    <DetailListStateCacheContext.Provider value={cacheRef.current}>{children}</DetailListStateCacheContext.Provider>
-  );
+  const [cache] = useState(() => new Map<string, CachedListState>());
+  return <DetailListStateCacheContext.Provider value={cache}>{children}</DetailListStateCacheContext.Provider>;
 }
 
 interface UseDetailListUrlStateOptions<TDisplayMode extends string> {
@@ -43,8 +41,7 @@ export function useDetailListUrlState<TDisplayMode extends string>(
   // A cached value is the starting point for a remounted tab, not its serialization baseline.
   // Reading the mutable cache again after each update would make the current state look like the
   // default and cause explicit URL parameters (notably sort=random) to be removed on later renders.
-  const initialCachedRef = useRef(cache?.get(options.stateKey));
-  const cached = initialCachedRef.current;
+  const [cached] = useState(() => cache?.get(options.stateKey));
   const saved = useMemo(
     () => (options.defaultFilterKey ? getDefaultFilter(options.defaultFilterKey) : null),
     [options.defaultFilterKey],

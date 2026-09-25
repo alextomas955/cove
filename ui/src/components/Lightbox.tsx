@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useEffectEvent, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { usePublishActiveMedia } from "./ActiveMedia";
 import {
@@ -99,7 +99,11 @@ export function Lightbox({
   const displayPosition = positionOffset + index + 1;
   const current = queuedImages[index];
   const currentSrc = useRef<string | undefined>(current?.src);
-  currentSrc.current = open ? current?.src : undefined;
+  const openSrc = open ? current?.src : undefined;
+  // Image loads resolve asynchronously, so they compare against the source shown after the latest commit.
+  useLayoutEffect(() => {
+    currentSrc.current = openSrc;
+  }, [openSrc]);
   const loading = Boolean(current && displayed?.src !== current.src);
   usePublishActiveMedia(
     open && !loading && current ? { kind: "image", id: current.id, surface: "lightbox" } : null,
@@ -164,10 +168,10 @@ export function Lightbox({
   // Read through refs below so that a late-resolving config does not re-run the reset and discard
   // pages the viewer loaded by navigating past the end of the queue. The delay is applied by its own
   // effect instead, so a config that lands mid-session still takes effect.
-  const autoPlayRef = useRef(autoPlay);
-  autoPlayRef.current = autoPlay;
-  const slideshowDelayRef = useRef(slideshowDelay);
-  slideshowDelayRef.current = slideshowDelay;
+  const startPlaybackForOpen = useEffectEvent(() => {
+    setPlaying(autoPlay);
+    setCurrentSlideshowDelay(slideshowDelay);
+  });
 
   useEffect(() => setCurrentSlideshowDelay(slideshowDelay), [slideshowDelay]);
 
@@ -178,8 +182,7 @@ export function Lightbox({
       setIndex(initialIndex);
       setZoom(1);
       setPan({ x: 0, y: 0 });
-      setPlaying(autoPlayRef.current);
-      setCurrentSlideshowDelay(slideshowDelayRef.current);
+      startPlaybackForOpen();
       trackedOpen.current = false;
       lastTrackedIndex.current = null;
     }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { auth, database, jobs, metadata, system, stashMigration } from "../api/client";
 import type { StashPreviewResult, StashImportOptions, StashImportResult, StashPathMapping } from "../api/client";
@@ -1288,32 +1288,37 @@ function formatJobDuration(ms: number): string {
   return `${hours}h ${mins.toString().padStart(2, "0")}m`;
 }
 
+type ProgressSample = { time: number; progress: number };
+
+// Records a sample when progress has moved and keeps only the last 30 seconds, the window the ETA
+// rate is measured over.
+export function recordProgressSample(history: ProgressSample[], time: number, progress: number): ProgressSample[] {
+  if (progress <= 0 || history[history.length - 1]?.progress === progress) return history;
+  const cutoff = time - 30000;
+  return [...history.filter((sample) => sample.time >= cutoff), { time, progress }];
+}
+
 function SetupImportProgressCard({ job }: { job: JobInfo }) {
   const [now, setNow] = useState(() => Date.now());
-  const progressHistory = useRef<{ time: number; progress: number }[]>([]);
+  const [progressHistory, setProgressHistory] = useState<ProgressSample[]>([]);
+  const readProgress = useEffectEvent(() => job.progress);
 
+  // Each tick advances the clock and samples progress, so the ETA is measured over the recent rate.
   useEffect(() => {
     if (job.status !== "running") return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+      setProgressHistory((history) => recordProgressSample(history, currentTime, readProgress()));
+    }, 1000);
     return () => window.clearInterval(id);
   }, [job.status]);
-
-  useEffect(() => {
-    if (job.status === "running" && job.progress > 0) {
-      const history = progressHistory.current;
-      const currentTime = Date.now();
-      history.push({ time: currentTime, progress: job.progress });
-
-      const cutoff = currentTime - 30000;
-      while (history.length > 0 && history[0].time < cutoff) history.shift();
-    }
-  }, [job.progress, job.status]);
 
   const progressPct = Math.round((job.progress ?? 0) * 100);
   const elapsedMs = now - new Date(job.startedAt).getTime();
 
   let etaMs: number | null = null;
-  const history = progressHistory.current;
+  const history = progressHistory;
   if (history.length >= 2 && job.progress >= 0.01) {
     const first = history[0];
     const last = history[history.length - 1];

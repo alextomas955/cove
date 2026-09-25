@@ -1,4 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useAppConfig } from "../state/AppConfigContext";
 import { useExtensions } from "../extensions/ExtensionLoader";
@@ -547,7 +557,10 @@ export function useRegisterKeyboardActions(registrations: KeyboardActionRegistra
     )
     .join("\u001d");
   const registrationsRef = useRef(registrations);
-  registrationsRef.current = registrations;
+  // Registered actions forward to the latest callbacks, so re-rendering does not re-register them.
+  useLayoutEffect(() => {
+    registrationsRef.current = registrations;
+  });
 
   useEffect(() => {
     if (!register) return;

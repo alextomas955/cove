@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -260,9 +261,11 @@ function SyncedComparison({
   const rightDuration = primaryFile(right)?.duration ?? 0;
   const duration = Math.max(leftDuration, 0.1);
   const offsetRef = useRef(offset);
-  offsetRef.current = offset;
+  useLayoutEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
+  // measureStage keeps this in step with stageSize, which it is the only writer of.
   const stageSizeRef = useRef(stageSize);
-  stageSizeRef.current = stageSize;
   const dragRef = useRef<{ kind: DragKind; pointerX: number; pointerY: number; view: View } | null>(null);
   const pixelRatio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 

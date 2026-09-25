@@ -1865,16 +1865,15 @@ function TaggerVideoRow({
     },
   });
 
-  // Keep the published apply pointed at the current mutation without re-registering on every render:
-  // the registration effect depends only on whether this row has something to apply.
-  const applyRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
-  applyRef.current = () => importMut.mutateAsync();
+  // mutateAsync keeps its identity across renders, so the registration only changes when whether this row
+  // has something to apply does.
+  const applyImport = importMut.mutateAsync;
   const canApply = Boolean(selectedResult) && !state?.saved;
   useEffect(() => {
     if (!onRegisterApply) return;
-    onRegisterApply(video.id, canApply ? () => applyRef.current() : null);
+    onRegisterApply(video.id, canApply ? () => applyImport() : null);
     return () => onRegisterApply(video.id, null);
-  }, [onRegisterApply, video.id, canApply]);
+  }, [applyImport, onRegisterApply, video.id, canApply]);
 
   const submitEndpoint = source?.kind === "metadata-server" ? source.endpoint : undefined;
   const normalizedSubmitEndpoint = normalizeEndpoint(submitEndpoint);

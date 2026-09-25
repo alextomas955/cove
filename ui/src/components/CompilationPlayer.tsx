@@ -53,10 +53,10 @@ export function CompilationPlayer({
   const automaticPlayback = config?.ui.autostartVideo ?? false;
   const playbackIntentSetRef = useRef(false);
   const playbackActiveRef = useRef(automaticPlayback);
-  const transitionPosterStateRef = useRef({ groupId, suppressed: false });
-  if (transitionPosterStateRef.current.groupId !== groupId) {
-    transitionPosterStateRef.current = { groupId, suppressed: false };
-  }
+  // Moving to the next item with autoplay hides its poster so the transition does not flash it. The
+  // choice belongs to the group it was made in, so opening another group shows posters again.
+  const [transitionPosterState, setTransitionPosterState] = useState({ groupId, suppressed: false });
+  const transitionPosterSuppressed = transitionPosterState.groupId === groupId && transitionPosterState.suppressed;
   const seekRef = useRef<((time: number) => void) | null>(null);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [loopCompilation, setLoopCompilation] = useState(false);
@@ -209,7 +209,7 @@ export function CompilationPlayer({
 
       const boundedIndex = Math.min(visibleItems.length - 1, Math.max(0, nextIndex));
       if (boundedIndex === currentItemIndex) return;
-      transitionPosterStateRef.current.suppressed = shouldAutoPlay;
+      setTransitionPosterState({ groupId, suppressed: shouldAutoPlay });
       if (!shouldAutoPlay) playbackIntentSetRef.current = true;
       if (shouldAutoPlay) {
         playbackActiveRef.current = true;
@@ -221,7 +221,7 @@ export function CompilationPlayer({
       }
       setCurrentItemIndex(boundedIndex);
     },
-    [currentItemIndex, visibleItems.length],
+    [currentItemIndex, groupId, visibleItems.length],
   );
 
   const advanceToNextItem = useCallback(() => {
@@ -327,9 +327,7 @@ export function CompilationPlayer({
           <VideoPlayer
             streamUrl={videos.streamUrl(currentVideoId)}
             posterUrl={
-              transitionPosterStateRef.current.suppressed
-                ? undefined
-                : (item.posterPath ?? videos.screenshotUrl(currentVideoId))
+              transitionPosterSuppressed ? undefined : (item.posterPath ?? videos.screenshotUrl(currentVideoId))
             }
             format={currentFile.format}
             videoCodec={currentFile.videoCodec}

@@ -455,6 +455,7 @@ export function ListPage({
     }
   });
   const resultsState: QueryLoadState<unknown> = reloading ? { status: "success", data: undefined } : resolvedLoadState;
+  // oxlint-disable-next-line react/refs -- intentionally shows the last committed results while a reload is pending
   const resultsChildren = reloading ? settledChildrenRef.current : children;
   const effectivePerPage = infinitePageSize ? Math.max(shownTotalCount, 1) : perPage;
   const totalPages = Math.max(1, Math.ceil(shownTotalCount / effectivePerPage));

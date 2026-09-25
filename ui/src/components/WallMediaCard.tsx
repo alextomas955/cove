@@ -76,20 +76,21 @@ export function WallMediaCard({
   const appConfig = useOptionalAppConfig();
   const mediaRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const onVideoElementChangeRef = useRef(onVideoElementChange);
-  onVideoElementChangeRef.current = onVideoElementChange;
-  const setVideoRef = useCallback((element: HTMLVideoElement | null) => {
-    const previous = videoRef.current;
-    videoRef.current = element;
-    if (previous && previous !== element)
-      queueMicrotask(() => {
-        if (videoRef.current === previous) return;
-        previous.pause();
-        previous.removeAttribute("src");
-        previous.load();
-      });
-    onVideoElementChangeRef.current?.(element);
-  }, []);
+  const setVideoRef = useCallback(
+    (element: HTMLVideoElement | null) => {
+      const previous = videoRef.current;
+      videoRef.current = element;
+      if (previous && previous !== element)
+        queueMicrotask(() => {
+          if (videoRef.current === previous) return;
+          previous.pause();
+          previous.removeAttribute("src");
+          previous.load();
+        });
+      onVideoElementChange?.(element);
+    },
+    [onVideoElementChange],
+  );
   const [videoFailed, setVideoFailed] = useState(false);
   const [videoAvailable, setVideoAvailable] = useState(false);
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
@@ -460,7 +461,8 @@ export function WallMediaCard({
         )}
         {children}
         {videoControls && useVideo && videoSrc && shouldLoadVideo && videoAvailable && !videoFailed
-          ? videoControls({
+          ? // oxlint-disable-next-line react/refs -- the controls call these ref-reading handlers from user events, not during render
+            videoControls({
               currentTime,
               duration: videoDuration,
               progressPercent: videoDuration > 0 ? Math.min(100, Math.max(0, (currentTime / videoDuration) * 100)) : 0,

@@ -1384,8 +1384,6 @@ function WidgetPresentationControl({
 
 function useDashboardDialog<T extends HTMLElement>(onClose: () => void) {
   const dialogRef = useRef<T>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -1403,7 +1401,7 @@ function useDashboardDialog<T extends HTMLElement>(onClose: () => void) {
     event.stopPropagation();
     if (event.key === "Escape") {
       event.preventDefault();
-      onCloseRef.current();
+      onClose();
       return;
     }
     if (event.key !== "Tab" || !dialogRef.current) return;
