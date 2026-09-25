@@ -380,11 +380,8 @@ export function ExtensionLoaderProvider({
   const unmountDisposal = useRef<Promise<void> | null>(null);
   const legacyBundleActive = useRef(false);
   const runtimeOwnerId = useMemo(createRuntimeOwnerId, []);
-  const componentRegistry = useMemo(() => new ExtensionComponentRegistry(), []);
-  const actionHandlerRegistry = useMemo(
-    () => new Map<ExtensionRuntimeOwner, Map<string, ExtensionActionHandler>>(),
-    [],
-  );
+  const [componentRegistry] = useState(() => new ExtensionComponentRegistry());
+  const [actionHandlerRegistry] = useState(() => new Map<ExtensionRuntimeOwner, Map<string, ExtensionActionHandler>>());
   const runtimeReconciler = useMemo(
     () =>
       createExtensionRuntimeReconciler<ExtensionComponent, ExtensionActionHandler>({

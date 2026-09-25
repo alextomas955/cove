@@ -747,6 +747,7 @@ function ExtensionDashboardWidgetHost({
         resetKey={`${widget.instanceId}:${getExtensionRevision(definition.extensionId)}`}
         fallback={<UnavailableWidget widget={widget} failed />}
       >
+        {/* oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference */}
         <Component
           dashboardId={dashboardId}
           instanceId={widget.instanceId}
@@ -1734,6 +1735,7 @@ function WidgetConfigurationDialog({
               resetKey={getExtensionRevision(definition.extensionId)}
               fallback={<UnavailableWidget widget={widget} failed />}
             >
+              {/* oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference */}
               <Editor
                 configuration={editorConfiguration}
                 presentation={getWidgetPresentation(widget)}

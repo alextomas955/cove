@@ -1289,7 +1289,7 @@ function formatJobDuration(ms: number): string {
 }
 
 function SetupImportProgressCard({ job }: { job: JobInfo }) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const progressHistory = useRef<{ time: number; progress: number }[]>([]);
 
   useEffect(() => {

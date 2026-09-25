@@ -427,10 +427,12 @@ export function WallMediaCard({
               if (intervalStart.current !== null && nextTime + 0.25 < previousTime) {
                 flushInterval("active");
                 intervalStart.current = nextTime;
+                // oxlint-disable-next-line react/purity -- runs in the onTimeUpdate event handler, not during render
                 lastKeepaliveSentAt.current = Date.now();
               }
               syncVideoMetrics();
               if (intervalStart.current !== null) {
+                // oxlint-disable-next-line react/purity -- runs in the onTimeUpdate event handler, not during render
                 const now = Date.now();
                 if (now - lastKeepaliveSentAt.current >= 10000) {
                   lastKeepaliveSentAt.current = now;

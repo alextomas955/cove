@@ -521,6 +521,7 @@ export function ListPage({
     let frameId = 0;
 
     if (container) {
+      // oxlint-disable-next-line react/immutability -- the effect owns this DOM style and restores it on cleanup
       container.style.scrollSnapType = "none";
     }
 

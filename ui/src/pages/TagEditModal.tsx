@@ -164,6 +164,10 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     remoteIds: setRemoteIds,
     customFields: setCustomFields,
   };
+
+  // The tag the form was last filled from; saving sends only the fields changed since.
+  const [baseline, setBaseline] = useState(tag);
+
   // When the tag refetches while the dialog is open, untouched fields follow it and the user's edits stay.
   useEffect(() => {
     if (!open || tag === baseline) return;
@@ -181,9 +185,6 @@ export function TagEditModal({ tag, open, onClose }: Props) {
       onClose();
     },
   });
-
-  // The tag the form was last filled from; saving sends only the fields changed since.
-  const [baseline, setBaseline] = useState(tag);
 
   // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
   // reopening after Cancel discards them.

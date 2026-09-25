@@ -97,6 +97,7 @@ function SingleColumnWindowScroll<TItem>(props: SingleColumnProps<TItem>) {
     scrollMargin: parentOffsetTop,
     getItemKey: (index) => props.getItemKey(props.items[index], index),
   });
+  // oxlint-disable-next-line react/immutability -- TanStack Virtual configures this by assignment on the instance
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     props.adjustScrollOnItemSizeChange === false ? () => false : undefined;
 
@@ -140,6 +141,7 @@ function SingleColumnContainerScroll<TItem>(
     overscan: props.overscan ?? 3,
     getItemKey: (index) => props.getItemKey(props.items[index], index),
   });
+  // oxlint-disable-next-line react/immutability -- TanStack Virtual configures this by assignment on the instance
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     props.adjustScrollOnItemSizeChange === false ? () => false : undefined;
 
@@ -294,6 +296,7 @@ function GridWindowScroll<TItem>(props: GridProps<TItem>) {
       return first ? `row-${props.getItemKey(first, rowIndex * columns)}` : `row-${rowIndex}`;
     },
   });
+  // oxlint-disable-next-line react/immutability -- TanStack Virtual configures this by assignment on the instance
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     props.adjustScrollOnItemSizeChange === false ? () => false : undefined;
 
@@ -356,6 +359,7 @@ function GridContainerScroll<TItem>(props: GridProps<TItem> & { scrollElementRef
       return first ? `row-${props.getItemKey(first, rowIndex * columns)}` : `row-${rowIndex}`;
     },
   });
+  // oxlint-disable-next-line react/immutability -- TanStack Virtual configures this by assignment on the instance
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     props.adjustScrollOnItemSizeChange === false ? () => false : undefined;
 

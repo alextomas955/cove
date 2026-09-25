@@ -126,7 +126,9 @@ function RuntimeProbe() {
       <button type="button" onClick={() => void runtime.refreshManifest()}>
         Refresh extensions
       </button>
+      {/* oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference */}
       {AlphaShared ? <AlphaShared /> : null}
+      {/* oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference */}
       {BetaShared ? <BetaShared /> : null}
       <ExtensionSlot slot="runtime-component-slot" context={{}} />
       <ExtensionSlot slot="runtime-html-slot" context={{}} />

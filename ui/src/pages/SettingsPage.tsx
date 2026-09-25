@@ -6904,6 +6904,209 @@ export function describeActivePalette(
   return theme ? theme.name : `${activeThemeId} — unavailable`;
 }
 
+// Style-specific configuration definitions
+// "range" type: continuous slider with CSS custom property. "select" (no type): dropdown.
+type RangeConfig = {
+  key: string;
+  label: string;
+  type: "range";
+  cssVar: string;
+  min: number;
+  max: number;
+  defaultValue: number;
+};
+type SelectConfig = { key: string; label: string; options: { value: string; label: string }[] };
+type StyleConfig = RangeConfig | SelectConfig;
+const styleConfigs: Record<string, StyleConfig[]> = {
+  gradient: [
+    {
+      key: "animated",
+      label: "Animation Speed",
+      type: "range",
+      cssVar: "--sv-anim-speed",
+      min: 0,
+      max: 100,
+      defaultValue: 55,
+    },
+    {
+      key: "background",
+      label: "Background Intensity",
+      type: "range",
+      cssVar: "--sv-bg-intensity",
+      min: 0,
+      max: 100,
+      defaultValue: 45,
+    },
+    {
+      key: "cards",
+      label: "Card Gradient",
+      type: "range",
+      cssVar: "--sv-card-gradient",
+      min: 0,
+      max: 100,
+      defaultValue: 50,
+    },
+    {
+      key: "carddir",
+      label: "Card Direction",
+      options: [
+        { value: "diagonal", label: "Diagonal" },
+        { value: "vertical", label: "Vertical" },
+        { value: "horizontal", label: "Horizontal" },
+      ],
+    },
+    {
+      key: "bgdir",
+      label: "Background Direction",
+      options: [
+        { value: "diagonal", label: "Diagonal" },
+        { value: "vertical", label: "Vertical" },
+        { value: "horizontal", label: "Horizontal" },
+      ],
+    },
+    {
+      key: "surfacedir",
+      label: "Surface Direction",
+      options: [
+        { value: "diagonal", label: "Diagonal" },
+        { value: "vertical", label: "Vertical" },
+        { value: "horizontal", label: "Horizontal" },
+      ],
+    },
+    {
+      key: "videopause",
+      label: "Pause on Video Player",
+      options: [
+        { value: "on", label: "On (recommended)" },
+        { value: "off", label: "Off" },
+      ],
+    },
+  ],
+  glass: [
+    {
+      key: "cardblur",
+      label: "Card Blur",
+      type: "range",
+      cssVar: "--sv-card-blur",
+      min: 0,
+      max: 100,
+      defaultValue: 27,
+    },
+    {
+      key: "surfaceblur",
+      label: "Surface Blur",
+      type: "range",
+      cssVar: "--sv-surface-blur",
+      min: 0,
+      max: 100,
+      defaultValue: 50,
+    },
+    {
+      key: "opacity",
+      label: "Surface Opacity",
+      type: "range",
+      cssVar: "--sv-surface-opacity",
+      min: 0,
+      max: 100,
+      defaultValue: 40,
+    },
+    {
+      key: "cardopacity",
+      label: "Card Opacity",
+      type: "range",
+      cssVar: "--sv-card-opacity",
+      min: 0,
+      max: 100,
+      defaultValue: 40,
+    },
+    {
+      key: "buttonopacity",
+      label: "Button Opacity",
+      type: "range",
+      cssVar: "--sv-button-opacity",
+      min: 0,
+      max: 100,
+      defaultValue: 55,
+    },
+  ],
+  animated: [
+    {
+      key: "hover",
+      label: "Card Hover Glow",
+      type: "range",
+      cssVar: "--sv-hover-glow",
+      min: 0,
+      max: 100,
+      defaultValue: 67,
+    },
+    {
+      key: "shimmer",
+      label: "Navbar Shimmer",
+      options: [
+        { value: "on", label: "On" },
+        { value: "off", label: "Off" },
+      ],
+    },
+    {
+      key: "entrance",
+      label: "Card Entrance",
+      options: [
+        { value: "on", label: "On" },
+        { value: "off", label: "Off" },
+      ],
+    },
+    {
+      key: "surfaceshimmer",
+      label: "Surface Shimmer",
+      options: [
+        { value: "on", label: "On" },
+        { value: "off", label: "Off" },
+      ],
+    },
+    {
+      key: "buttonglow",
+      label: "Button Glow",
+      options: [
+        { value: "on", label: "On" },
+        { value: "off", label: "Off" },
+      ],
+    },
+  ],
+  theme: [
+    {
+      key: "bgspeed",
+      label: "Background Animation Speed",
+      type: "range",
+      cssVar: "--sv-bg-anim-speed",
+      min: 0,
+      max: 100,
+      defaultValue: 55,
+    },
+  ],
+};
+
+// Attribute names used before style options were migrated to the current naming.
+const MIGRATED_STYLE_DATASET_KEYS = ["styleGradientSpeed", "styleGradientCardstrength", "styleGradientBgstrength"];
+
+// Apply a style option to the document as a data attribute for CSS targeting, plus its CSS custom
+// property for range-type configs.
+function applyStyleOptionToDocument(styleId: string, optionKey: string, value: string) {
+  document.documentElement.dataset[
+    `style${styleId.charAt(0).toUpperCase()}${styleId.slice(1)}${optionKey.charAt(0).toUpperCase()}${optionKey.slice(1)}`
+  ] = value;
+  const cfg = styleConfigs[styleId]?.find((c) => c.key === optionKey);
+  if (cfg && "cssVar" in cfg) {
+    document.documentElement.style.setProperty(cfg.cssVar, value);
+  }
+}
+
+function applyStyleOptionsToDocument(styleOptions: Record<string, Record<string, string>>) {
+  for (const key of MIGRATED_STYLE_DATASET_KEYS) delete document.documentElement.dataset[key];
+  for (const [styleId, opts] of Object.entries(styleOptions)) {
+    for (const [key, val] of Object.entries(opts)) applyStyleOptionToDocument(styleId, key, val);
+  }
+}
+
 function ThemeSelector() {
   const { user } = useAuth();
   const {
@@ -7025,15 +7228,7 @@ function ThemeSelector() {
         styleOptions: updated,
       },
     }));
-    // Apply to document as data attribute for CSS targeting
-    document.documentElement.dataset[
-      `style${styleId.charAt(0).toUpperCase()}${styleId.slice(1)}${optionKey.charAt(0).toUpperCase()}${optionKey.slice(1)}`
-    ] = value;
-    // Set CSS custom property for range-type configs
-    const cfg = styleConfigs[styleId]?.find((c) => c.key === optionKey);
-    if (cfg && "cssVar" in cfg) {
-      document.documentElement.style.setProperty(cfg.cssVar, value);
-    }
+    applyStyleOptionToDocument(styleId, optionKey, value);
   };
 
   useEffect(() => {
@@ -7042,204 +7237,8 @@ function ThemeSelector() {
 
   // Apply style options on mount (and clean up old migrated attributes)
   useEffect(() => {
-    // Remove old attribute names from pre-migration settings
-    delete document.documentElement.dataset.styleGradientSpeed;
-    delete document.documentElement.dataset.styleGradientCardstrength;
-    delete document.documentElement.dataset.styleGradientBgstrength;
-    for (const [styleId, opts] of Object.entries(styleOptions)) {
-      for (const [key, val] of Object.entries(opts)) {
-        document.documentElement.dataset[
-          `style${styleId.charAt(0).toUpperCase()}${styleId.slice(1)}${key.charAt(0).toUpperCase()}${key.slice(1)}`
-        ] = val;
-        // Set CSS custom property for range-type configs
-        const cfg = styleConfigs[styleId]?.find((c) => c.key === key);
-        if (cfg && "cssVar" in cfg) {
-          document.documentElement.style.setProperty(cfg.cssVar, val);
-        }
-      }
-    }
+    applyStyleOptionsToDocument(styleOptions);
   }, [styleOptions]);
-
-  // Style-specific configuration definitions
-  // "range" type: continuous slider with CSS custom property. "select" (no type): dropdown.
-  type RangeConfig = {
-    key: string;
-    label: string;
-    type: "range";
-    cssVar: string;
-    min: number;
-    max: number;
-    defaultValue: number;
-  };
-  type SelectConfig = { key: string; label: string; options: { value: string; label: string }[] };
-  type StyleConfig = RangeConfig | SelectConfig;
-  const styleConfigs: Record<string, StyleConfig[]> = {
-    gradient: [
-      {
-        key: "animated",
-        label: "Animation Speed",
-        type: "range",
-        cssVar: "--sv-anim-speed",
-        min: 0,
-        max: 100,
-        defaultValue: 55,
-      },
-      {
-        key: "background",
-        label: "Background Intensity",
-        type: "range",
-        cssVar: "--sv-bg-intensity",
-        min: 0,
-        max: 100,
-        defaultValue: 45,
-      },
-      {
-        key: "cards",
-        label: "Card Gradient",
-        type: "range",
-        cssVar: "--sv-card-gradient",
-        min: 0,
-        max: 100,
-        defaultValue: 50,
-      },
-      {
-        key: "carddir",
-        label: "Card Direction",
-        options: [
-          { value: "diagonal", label: "Diagonal" },
-          { value: "vertical", label: "Vertical" },
-          { value: "horizontal", label: "Horizontal" },
-        ],
-      },
-      {
-        key: "bgdir",
-        label: "Background Direction",
-        options: [
-          { value: "diagonal", label: "Diagonal" },
-          { value: "vertical", label: "Vertical" },
-          { value: "horizontal", label: "Horizontal" },
-        ],
-      },
-      {
-        key: "surfacedir",
-        label: "Surface Direction",
-        options: [
-          { value: "diagonal", label: "Diagonal" },
-          { value: "vertical", label: "Vertical" },
-          { value: "horizontal", label: "Horizontal" },
-        ],
-      },
-      {
-        key: "videopause",
-        label: "Pause on Video Player",
-        options: [
-          { value: "on", label: "On (recommended)" },
-          { value: "off", label: "Off" },
-        ],
-      },
-    ],
-    glass: [
-      {
-        key: "cardblur",
-        label: "Card Blur",
-        type: "range",
-        cssVar: "--sv-card-blur",
-        min: 0,
-        max: 100,
-        defaultValue: 27,
-      },
-      {
-        key: "surfaceblur",
-        label: "Surface Blur",
-        type: "range",
-        cssVar: "--sv-surface-blur",
-        min: 0,
-        max: 100,
-        defaultValue: 50,
-      },
-      {
-        key: "opacity",
-        label: "Surface Opacity",
-        type: "range",
-        cssVar: "--sv-surface-opacity",
-        min: 0,
-        max: 100,
-        defaultValue: 40,
-      },
-      {
-        key: "cardopacity",
-        label: "Card Opacity",
-        type: "range",
-        cssVar: "--sv-card-opacity",
-        min: 0,
-        max: 100,
-        defaultValue: 40,
-      },
-      {
-        key: "buttonopacity",
-        label: "Button Opacity",
-        type: "range",
-        cssVar: "--sv-button-opacity",
-        min: 0,
-        max: 100,
-        defaultValue: 55,
-      },
-    ],
-    animated: [
-      {
-        key: "hover",
-        label: "Card Hover Glow",
-        type: "range",
-        cssVar: "--sv-hover-glow",
-        min: 0,
-        max: 100,
-        defaultValue: 67,
-      },
-      {
-        key: "shimmer",
-        label: "Navbar Shimmer",
-        options: [
-          { value: "on", label: "On" },
-          { value: "off", label: "Off" },
-        ],
-      },
-      {
-        key: "entrance",
-        label: "Card Entrance",
-        options: [
-          { value: "on", label: "On" },
-          { value: "off", label: "Off" },
-        ],
-      },
-      {
-        key: "surfaceshimmer",
-        label: "Surface Shimmer",
-        options: [
-          { value: "on", label: "On" },
-          { value: "off", label: "Off" },
-        ],
-      },
-      {
-        key: "buttonglow",
-        label: "Button Glow",
-        options: [
-          { value: "on", label: "On" },
-          { value: "off", label: "Off" },
-        ],
-      },
-    ],
-    theme: [
-      {
-        key: "bgspeed",
-        label: "Background Animation Speed",
-        type: "range",
-        cssVar: "--sv-bg-anim-speed",
-        min: 0,
-        max: 100,
-        defaultValue: 55,
-      },
-    ],
-  };
 
   // Track which cards have their config expanded
   const CONFIGS_STORAGE_KEY = "cove-theme-configs";

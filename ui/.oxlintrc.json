@@ -14,12 +14,8 @@
     "vitest/valid-expect": ["error", { "maxArgs": 2 }],
     "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectUnique"] }],
 
-    "react/immutability": "warn",
-    "react/no-did-update-set-state": "warn",
-    "react/purity": "warn",
     "react/refs": "warn",
     "react/set-state-in-effect": "warn",
-    "react/static-components": "warn",
     "react-hooks/exhaustive-deps": "warn"
   },
   "ignorePatterns": ["coverage/", "src/generated/"]

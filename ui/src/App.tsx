@@ -577,6 +577,7 @@ export function AppRoutes({ route, navigate }: { route: Route; navigate: (r: Rou
   if (override) {
     const Component = resolveComponent(override.extensionId, override.componentName);
     if (Component) {
+      // oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference
       return <Component onNavigate={navigate} />;
     }
   }
@@ -597,6 +598,7 @@ export function AppRoutes({ route, navigate }: { route: Route; navigate: (r: Rou
       if (route.slug !== undefined) {
         props.slug = route.slug;
       }
+      // oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference
       return <Component {...props} />;
     }
   }
