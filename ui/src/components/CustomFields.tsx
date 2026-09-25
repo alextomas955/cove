@@ -23,6 +23,8 @@ import { formatDate } from "../utils/dateFormat";
 import { IsoDateInput } from "./IsoDateInput";
 import { compareNatural } from "../utils/naturalCompare";
 
+const NO_DEFINITIONS: CustomFieldDefinition[] = [];
+
 export function CustomFieldsDisplay({
   customFields,
   entityType,
@@ -31,7 +33,7 @@ export function CustomFieldsDisplay({
   entityType?: CustomFieldEntityType;
 }) {
   const definitionsQuery = useCustomFieldDefinitions(entityType, Boolean(entityType));
-  const definitions = definitionsQuery.data ?? [];
+  const definitions = definitionsQuery.data ?? NO_DEFINITIONS;
   const entries = useMemo(() => getDisplayEntries(customFields, definitions), [customFields, definitions]);
 
   if (entries.length === 0) return null;
@@ -83,7 +85,7 @@ export function CustomFieldsEditor({
   entityType?: CustomFieldEntityType;
 }) {
   const definitionsQuery = useCustomFieldDefinitions(entityType, Boolean(entityType));
-  const definitions = definitionsQuery.data ?? [];
+  const definitions = definitionsQuery.data ?? NO_DEFINITIONS;
   const [invalidJsonKeys, setInvalidJsonKeys] = useState<Set<string>>(() => new Set());
   const jsonDefinitionKeys = useMemo(
     () => new Set(definitions.filter((definition) => definition.type === "json").map((definition) => definition.key)),

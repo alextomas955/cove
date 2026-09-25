@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Check,
@@ -330,24 +330,25 @@ export function TutorialStoryboardDialog({
     }
   }
 
+  // Reads the current slide, topic order and callbacks without re-binding the listener on every navigation.
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
+    if (event.key === "Escape") {
+      markCompleteAndClose();
+    } else if (event.key === "ArrowRight") {
+      goToNext();
+    } else if (event.key === "ArrowLeft") {
+      goToPrevious();
+    }
+  });
+
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT"))
-        return;
-      if (event.key === "Escape") {
-        markCompleteAndClose();
-      } else if (event.key === "ArrowRight") {
-        goToNext();
-      } else if (event.key === "ArrowLeft") {
-        goToPrevious();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, selectedTopic.id, index, isLast, currentOrderIndex, orderedTopicIds]);
+    const listener = (event: KeyboardEvent) => handleKeyDown(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, [open]);
 
   useEffect(() => {
     if (!mobileTopicSearchOpen) return;

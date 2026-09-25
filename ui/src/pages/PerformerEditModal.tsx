@@ -313,7 +313,10 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     );
   };
 
-  const filteredTags = tagResults?.items.filter((tag) => !selectedTagIds.includes(tag.id)) ?? [];
+  const filteredTags = useMemo(
+    () => tagResults?.items.filter((tag) => !selectedTagIds.includes(tag.id)) ?? [],
+    [selectedTagIds, tagResults?.items],
+  );
   const tagExactMatchExists = useMemo(
     () =>
       trimmedTagSearch && tagResults?.items.some((tag) => tag.name.toLowerCase() === trimmedTagSearch.toLowerCase()),

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { savedFilters } from "../api/client";
@@ -34,13 +34,15 @@ export function useDefaultSavedFilterOnMount(
   ) => void,
 ) {
   const appliedRef = useRef(false);
+  const applyDefault = useEffectEvent(() => {
+    const def = getDefaultFilter(mode);
+    if (def) apply(def.findFilter, def.objectFilter, def.uiOptions);
+  });
+  // Intentionally mount-only: the default is a starting point the user can then change.
   useEffect(() => {
     if (appliedRef.current) return;
     appliedRef.current = true;
-    const def = getDefaultFilter(mode);
-    if (def) apply(def.findFilter, def.objectFilter, def.uiOptions);
-    // Intentionally mount-only: the default is a starting point the user can then change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    applyDefault();
   }, []);
 }
 

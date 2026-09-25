@@ -37,18 +37,19 @@ function VideoQuickView({ id, onClose, onNavigate }: Omit<VideoQuickViewProps, "
     queryFn: () => videos.get(id),
   });
 
+  const videoId = video?.id;
   useEffect(() => {
-    if (!video) {
+    if (videoId == null) {
       return;
     }
 
     trackInteraction({
       hostType: "video",
-      hostId: video.id,
+      hostId: videoId,
       kind: "openDetail",
       meta: { surface: "quickView" },
     });
-  }, [video?.id]);
+  }, [videoId]);
 
   if (isLoading || !video) {
     return (
@@ -236,12 +237,12 @@ function ImageQuickView({ id, onClose, onNavigate }: Omit<ImageQuickViewProps, "
     queryFn: () => images.get(id),
   });
 
+  const imageId = image?.id;
   useEffect(() => {
-    if (!image) {
+    if (imageId == null) {
       return;
     }
 
-    const imageId = image.id;
     const startedAt = typeof performance === "undefined" ? Date.now() : performance.now();
     const sessionId = createPlaybackSessionId();
     const elapsedSeconds = () => {
@@ -282,7 +283,7 @@ function ImageQuickView({ id, onClose, onNavigate }: Omit<ImageQuickViewProps, "
       window.removeEventListener("pagehide", handlePageHide);
       flushDwell("ended");
     };
-  }, [image?.id]);
+  }, [imageId]);
 
   if (isLoading || !image) {
     return (

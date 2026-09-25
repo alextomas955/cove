@@ -500,9 +500,13 @@ export function FacesPage({ onNavigate }: Props) {
     batchCompareFaceIds.length > 0
       ? items.find((face) => face.id === batchCompareFaceIds[batchCompareIndex])
       : undefined;
-  const activeComparison = batchComparisonFace?.topSuggestion
-    ? { face: batchComparisonFace, suggestion: batchComparisonFace.topSuggestion }
-    : comparison;
+  const activeComparison = useMemo(
+    () =>
+      batchComparisonFace?.topSuggestion
+        ? { face: batchComparisonFace, suggestion: batchComparisonFace.topSuggestion }
+        : comparison,
+    [batchComparisonFace, comparison],
+  );
   const comparisonFaceId = activeComparison?.face.id ?? null;
   const { data: comparisonFaceDetections = [] } = useQuery({
     queryKey: ["face", comparisonFaceId, "detections"],

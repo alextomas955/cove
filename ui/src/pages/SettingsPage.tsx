@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as signalR from "@microsoft/signalr";
 import { formatDate } from "../components/shared";
@@ -1854,7 +1854,8 @@ export function SettingsPage() {
     }
   }
 
-  // Debounced auto-save: triggers 800ms after draft changes
+  // Debounced auto-save: triggers 800ms after draft changes. TanStack Query keeps `mutate` stable.
+  const { mutate: saveConfig } = saveMutation;
   useEffect(() => {
     if (!draftState || !canWriteSystemSettings) return;
     // Skip the first render when draft is initialized from config
@@ -1864,12 +1865,12 @@ export function SettingsPage() {
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      saveMutation.mutate(normalizeConfig(draftState));
+      saveConfig(normalizeConfig(draftState));
     }, 800);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [draftState, canWriteSystemSettings]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draftState, canWriteSystemSettings, saveConfig]);
 
   if (configLoading || (canWriteSystemSettings && !draftState)) {
     return (
@@ -7172,7 +7173,7 @@ function ThemeSelector() {
     });
   };
 
-  const readPersistedStyleOptions = () => {
+  const readPersistedStyleOptions = useCallback(() => {
     try {
       const source = supportsServerBackedUiPreferences(user)
         ? (readAuthenticatedUserThemePreferences()?.styleOptions ?? {})
@@ -7240,7 +7241,7 @@ function ThemeSelector() {
     } catch {
       return {};
     }
-  };
+  }, [user]);
 
   // Style option configs stored in localStorage
   const [styleOptions, setStyleOptionsState] = useState<Record<string, Record<string, string>>>(() => {
@@ -7263,7 +7264,7 @@ function ThemeSelector() {
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- re-reads (and migrates, writing back to localStorage) the stored style options when the signed-in user changes
     setStyleOptionsState(readPersistedStyleOptions());
-  }, [user]);
+  }, [readPersistedStyleOptions]);
 
   // Apply style options on mount (and clean up old migrated attributes)
   useEffect(() => {

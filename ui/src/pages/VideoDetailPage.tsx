@@ -550,7 +550,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
     enabled: canReadSegments,
   });
   const segmentsLoadError = getLoadError(segmentsData, segmentsError);
-  const segments = segmentsData ?? [];
+  const segments = useMemo(() => segmentsData ?? [], [segmentsData]);
 
   const {
     data: displayProfilesData,
@@ -586,7 +586,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
     enabled: canReadSegments,
   });
   const detectionsLoadError = getLoadError(detectionsData, detectionsError);
-  const detections = detectionsData ?? [];
+  const detections = useMemo(() => detectionsData ?? [], [detectionsData]);
   const segmentsTabLoadError = segmentsLoadError ?? displayProfilesLoadError ?? resolvedSpansLoadError;
 
   const videoFaceIds = useMemo(() => {
@@ -2744,7 +2744,7 @@ function VideoScrubber({
       return 0;
     }
     return -1;
-  }, [currentTime, spriteData, duration, thumbCount]);
+  }, [currentTime, spriteData]);
 
   // Auto-scroll to active thumbnail
   useEffect(() => {

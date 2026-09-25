@@ -253,7 +253,7 @@ export function GalleryDetailPage({ id, onNavigate }: Props) {
         handler: () => setActiveTab("fileinfo"),
       },
     ],
-    [canReadGalleryImages, canWriteGallery],
+    [canReadGalleryImages, canWriteGallery, setActiveTab],
   );
   useKeySequence(
     galleryKeyboardShortcuts.map((shortcut) => ({
@@ -268,7 +268,7 @@ export function GalleryDetailPage({ id, onNavigate }: Props) {
     if (visibleGalleryTabs.length > 0 && !visibleGalleryTabs.some((tab) => tab.key === activeTab)) {
       setActiveTab(visibleGalleryTabs[0].key);
     }
-  }, [activeTab, visibleGalleryTabs]);
+  }, [activeTab, setActiveTab, visibleGalleryTabs]);
 
   const deleteMut = useMutation({
     mutationFn: () => galleries.delete(id),

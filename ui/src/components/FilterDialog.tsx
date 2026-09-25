@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useId, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useEffectEvent, useId, useRef } from "react";
 import {
   X,
   Search,
@@ -316,7 +316,7 @@ export function FilterDialog({
       { label: "All filters", items: remaining },
       { label: "Related items", items: related },
     ].filter((group) => group.items.length > 0);
-  }, [criteria, customSections, editFilter, expression, filteredCriteria, pinnedIds, search]);
+  }, [conditionDraft, customSections, editFilter, expression, filteredCriteria, pinnedIds, search]);
 
   const visibleNavigatorItems = useMemo(() => navigatorGroups.flatMap((group) => group.items), [navigatorGroups]);
   const rovingNavigatorId =
@@ -356,13 +356,17 @@ export function FilterDialog({
     selectedItem?.kind === "criterion" && selectedItem.criterion.type === "related"
       ? selectedItem.criterion
       : undefined;
-  const relatedExpressionInstances = relatedWorkspaceCriterion
-    ? directlyEditableExpressionChildren.flatMap((child, index) =>
-        child.filter && getExpressionConditionCriterion(child.filter, criteria)?.id === relatedWorkspaceCriterion.id
-          ? [{ index, path: [...simpleExpressionGroupPath, index], filter: child.filter }]
-          : [],
-      )
-    : [];
+  const relatedExpressionInstances = useMemo(
+    () =>
+      relatedWorkspaceCriterion
+        ? (directlyEditableExpressionGroup?.children ?? []).flatMap((child, index) =>
+            child.filter && getExpressionConditionCriterion(child.filter, criteria)?.id === relatedWorkspaceCriterion.id
+              ? [{ index, path: [...simpleExpressionGroupPath, index], filter: child.filter }]
+              : [],
+          )
+        : [],
+    [criteria, directlyEditableExpressionGroup, relatedWorkspaceCriterion, simpleExpressionGroupPath],
+  );
   const relatedWorkspaceObjectFilter =
     conditionDraft && relatedWorkspaceCriterion
       ? conditionDraft.filter
@@ -813,6 +817,10 @@ export function FilterDialog({
     discardExpressionCondition();
   };
 
+  // Lets the Escape listener below reach the latest save/discard logic, which also reads criteria,
+  // without adding those inputs to its subscription.
+  const exitExpressionConditionFromEscape = useEffectEvent(() => exitExpressionCondition());
+
   const canAutoCommitNewRelatedCondition = (() => {
     const criterion = conditionDraft ? getExpressionConditionCriterion(conditionDraft.filter, criteria) : undefined;
     return Boolean(
@@ -846,9 +854,9 @@ export function FilterDialog({
       if (event.key === "Escape") {
         event.preventDefault();
         if (canAutoCommitNewRelatedCondition) {
-          exitExpressionCondition();
+          exitExpressionConditionFromEscape();
         } else if (conditionDraft?.returnView === "simple" && !conditionDraft.isNew && relatedWorkspaceSelection) {
-          exitExpressionCondition();
+          exitExpressionConditionFromEscape();
         } else if (relatedWorkspaceSelection) {
           setRelatedWorkspaceSelection(null);
           window.setTimeout(
@@ -858,7 +866,7 @@ export function FilterDialog({
                 ?.focus(),
             0,
           );
-        } else if (conditionDraft) exitExpressionCondition();
+        } else if (conditionDraft) exitExpressionConditionFromEscape();
         else if (inlineStackReturnsToExpression) returnToExpression();
         else if (dialogView === "expression") returnToSimpleFilters();
         else if (relatedWorkspaceCriterion) {

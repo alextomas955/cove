@@ -278,7 +278,7 @@ export function StudioDetailPage({ id, onNavigate }: Props) {
     if (visibleStudioTabs.length > 0 && !visibleStudioTabs.some((tab) => tab.key === activeTab)) {
       setActiveTab(visibleStudioTabs[0].key as TabKey);
     }
-  }, [activeTab, visibleStudioTabs]);
+  }, [activeTab, setActiveTab, visibleStudioTabs]);
 
   const deleteMut = useMutation({
     mutationFn: () => studios.delete(id),

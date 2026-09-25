@@ -205,20 +205,7 @@ export function AudioDetailPage({ id, onNavigate }: Props) {
       nextTabs.push({ key: "edit", label: "Edit" });
     }
     return nextTabs;
-  }, [
-    audio?.files.length,
-    audio?.groups.length,
-    audio?.performers.length,
-    audio?.studioId,
-    audio?.tags.length,
-    audio?.tracks.length,
-    canReadFiles,
-    canReadGroups,
-    canReadPerformers,
-    canReadStudio,
-    canReadTags,
-    canWriteAudio,
-  ]);
+  }, [audio?.files.length, audio?.tracks.length, canReadFiles, canWriteAudio]);
 
   if (!tabs.some((tab) => tab.key === activeTab)) {
     setActiveTab("details");

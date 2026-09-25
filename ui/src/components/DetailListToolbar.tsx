@@ -14,7 +14,16 @@ import {
   ZoomOut,
 } from "lucide-react";
 import type { CustomFieldEntityType, FindFilter } from "../api/types";
-import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  isValidElement,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   clampEntityCardSizeLevel,
   getEntityCardMaxLevel,
@@ -150,12 +159,12 @@ export function DetailListPagination({
   const totalPages = Math.max(1, Math.ceil(totalCount / effectivePerPage));
   const clampedPage = Math.min(Math.max(1, page), totalPages);
 
+  // Correct standalone pagination as well as the copy rendered by the toolbar.
+  const repairPage = useEffectEvent((nextPage: number) => onFilterChange({ ...filter, page: nextPage }));
   useEffect(() => {
     if (totalCount > 0 && clampedPage !== page) {
-      onFilterChange({ ...filter, page: clampedPage });
+      repairPage(clampedPage);
     }
-    // Correct standalone pagination as well as the copy rendered by the toolbar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clampedPage, page, totalCount]);
 
   if (!showPagingControls || infinitePageSize || totalPages <= 1) return null;
@@ -211,12 +220,12 @@ export function DetailListToolbar({
   // Random sort with no seed (e.g. a default saved filter, or a re-mounted detail-page list) would
   // otherwise hit the backend's fixed fallback seed and return the *same* "random" order every time.
   // Mint a seed once so embedded lists re-shuffle on mount, matching the top-level list pages.
+  // Only react to the sort/seed pair; reshuffle sets a seed which clears this condition.
+  const mintRandomSeed = useEffectEvent(() => onFilterChange(reshuffleRandomSort(filter)));
   useEffect(() => {
     if (filter.sort === "random" && filter.seed == null) {
-      onFilterChange(reshuffleRandomSort(filter));
+      mintRandomSeed();
     }
-    // Only react to the sort/seed pair; reshuffle sets a seed which clears this condition.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter.sort, filter.seed]);
   const infinitePageSize = allowInfinitePageSize && (perPage === 0 || infinitePageSizeOnly);
   const effectivePerPage = infinitePageSize ? Math.max(totalCount, 1) : perPage;

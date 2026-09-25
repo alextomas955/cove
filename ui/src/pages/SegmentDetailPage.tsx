@@ -266,7 +266,7 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
     enabled: !!segment,
   });
   const siblingSegmentsLoadError = getLoadError(siblingSegmentsData, siblingSegmentsError);
-  const siblingSegments = siblingSegmentsData ?? [];
+  const siblingSegments = useMemo(() => siblingSegmentsData ?? [], [siblingSegmentsData]);
   const { data: playbackVideo, isLoading: playbackVideoLoading } = useQuery({
     queryKey: ["video", segment?.hostId],
     queryFn: () => videos.get(segment!.hostId),

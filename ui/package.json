@@ -9,7 +9,7 @@
     "build": "npm run generate:extension-runtime && tsc -b && vite build",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint",
+    "lint": "oxlint --report-unused-disable-directives-severity=error",
     "preview": "vite preview",
     "test": "npm run generate:extension-runtime && vitest run",
     "test:watch": "vitest"

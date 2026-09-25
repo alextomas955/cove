@@ -12,9 +12,7 @@
     "react/preserve-manual-memoization": "off",
     "react/use-memo": "off",
     "vitest/valid-expect": ["error", { "maxArgs": 2 }],
-    "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectUnique"] }],
-
-    "react-hooks/exhaustive-deps": "warn"
+    "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectUnique"] }]
   },
   "ignorePatterns": ["coverage/", "src/generated/"]
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useEffectEvent, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { usePublishActiveMedia } from "./ActiveMedia";
 import {
@@ -132,8 +132,10 @@ export function Lightbox({
   });
   const likeCount = likeMutation.data ?? engagement?.likeCount ?? 0;
 
+  const resetLikeMutation = useEffectEvent(() => likeMutation.reset());
+  // A like result belongs to the image it was recorded for; clear it when the viewer moves on.
   useEffect(() => {
-    likeMutation.reset();
+    resetLikeMutation();
   }, [current?.id]);
 
   const trackCurrentImageInteraction = useCallback(
@@ -222,14 +224,23 @@ export function Lightbox({
       });
       lastTrackedIndex.current = index;
     }
-  }, [count, current, index, open, trackCurrentImageInteraction]);
+  }, [current, displayCount, displayPosition, index, open, positionOffset, trackCurrentImageInteraction]);
 
+  const currentId = current?.id;
+  // Read when a dwell session starts, so its report describes the image and position it began on.
+  const getDwellContext = useEffectEvent(() => ({
+    index: positionOffset + index + 1,
+    count: displayCount,
+    source: current?.interactionSource ?? "lightbox",
+    ...current?.interactionMeta,
+  }));
   useEffect(() => {
-    if (!open || !current) {
+    if (!open || currentId === undefined) {
       return;
     }
 
-    const imageId = current.id;
+    const imageId = currentId;
+    const context = getDwellContext();
     const startedAt = typeof performance === "undefined" ? Date.now() : performance.now();
     const sessionId = createPlaybackSessionId();
     const elapsedSeconds = () => {
@@ -251,12 +262,7 @@ export function Lightbox({
           state,
           surface: "lightbox",
           scopeKey: `image:${imageId}:lightbox`,
-          context: {
-            index: positionOffset + index + 1,
-            count: displayCount,
-            source: current.interactionSource ?? "lightbox",
-            ...current.interactionMeta,
-          },
+          context,
           intervals: [{ startSec: 0, endSec: durationSec }],
         })
         .catch(() => {});
@@ -268,7 +274,7 @@ export function Lightbox({
       window.removeEventListener("pagehide", handlePageHide);
       flushDwell("ended");
     };
-  }, [count, current?.id, index, open]);
+  }, [count, currentId, index, open]);
 
   // Lock body scroll + claim keyboard ownership so background list/app shortcuts pause while open.
   useEffect(() => {
@@ -327,7 +333,7 @@ export function Lightbox({
     } finally {
       setBoundaryLoading(false);
     }
-  }, [boundaryLoading, goTo, hasPrevious, index, loadPrevious, resetView, wrap]);
+  }, [goTo, hasPrevious, index, loadPrevious, resetView, wrap]);
   const goNext = useCallback(async () => {
     if (index < count - 1 || !hasNext || !loadNext) {
       if (index === count - 1 && !wrap) return;
@@ -346,7 +352,7 @@ export function Lightbox({
     } finally {
       setBoundaryLoading(false);
     }
-  }, [boundaryLoading, count, goTo, hasNext, index, loadNext, resetView, wrap]);
+  }, [count, goTo, hasNext, index, loadNext, resetView, wrap]);
 
   const toggleSlideshow = useCallback(() => setPlaying((p) => !p), []);
 
@@ -416,7 +422,7 @@ export function Lightbox({
     }
 
     onClose();
-  }, [count, index, onClose, open, trackCurrentImageInteraction]);
+  }, [displayCount, displayPosition, onClose, open, trackCurrentImageInteraction]);
 
   // Slideshow
   useEffect(() => {

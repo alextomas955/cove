@@ -301,10 +301,14 @@ export function SetupWizardPage({ config, onComplete }: Props) {
     }
   }
 
+  const leaveStashImport = useEffectEvent(() => {
+    void goToPostContentSetup();
+  });
+
   useEffect(() => {
     if (!stashImportResultQuery.data) return;
     // oxlint-disable-next-line react/set-state-in-effect -- sets the step only after refetching bootstrap status from the server, not synchronously
-    goToPostContentSetup();
+    leaveStashImport();
     queryClient.invalidateQueries();
   }, [queryClient, stashImportResultQuery.data]);
 

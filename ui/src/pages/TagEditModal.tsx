@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useEffectEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tags, tagGroups } from "../api/client";
 import type { TagDetail, TagUpdate } from "../api/types";
@@ -214,9 +214,10 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   });
 
   // Each opening also clears the result of the previous save attempt, alongside the form refill above.
+  const resetSaveAttempt = useEffectEvent(() => mutation.reset());
   useEffect(() => {
     if (!open) return;
-    mutation.reset();
+    resetSaveAttempt();
   }, [tag.id, open]);
 
   const handleClose = () => {

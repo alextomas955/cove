@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TagGraphNode } from "../api/types";
 import { TagGraphView } from "../components/TagGraphView";
@@ -67,5 +67,25 @@ describe("TagGraphView layout preferences", () => {
     expect(screen.queryByText(/Tune the absolute node size range/)).not.toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(PREFS_KEY)!);
     expect(stored.showLayoutTuning).toBe(false);
+  });
+
+  it("resizes visible labels as soon as the label size changes", () => {
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({ layoutSettings: { labelDensity: 1, labelSize: 1 }, showLayoutTuning: true }),
+    );
+
+    const { container } = renderGraph();
+    const labelFontSize = () =>
+      Number(
+        [...container.querySelectorAll("text")].find((text) => text.textContent === "Alpha")?.getAttribute("font-size"),
+      );
+    const initialFontSize = labelFontSize();
+    expect(initialFontSize).toBeGreaterThan(0);
+
+    const labelSizeInput = screen.getByText("Label Size").closest("label")!.querySelector("input")!;
+    fireEvent.change(labelSizeInput, { target: { value: "1.5" } });
+
+    expect(labelFontSize()).toBeCloseTo(initialFontSize * 1.5);
   });
 });

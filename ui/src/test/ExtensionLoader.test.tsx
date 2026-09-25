@@ -26,11 +26,14 @@ vi.mock("../state/AppConfigContext", () => ({
   useAppConfig: () => ({ config: { ui: { troubleshootingModeEnabled: false } } }),
 }));
 
+// Like the real provider, return a stable value so hasPermission keeps its identity across renders.
+const authMock = vi.hoisted(() => ({
+  user: null,
+  hasPermission: () => true,
+}));
+
 vi.mock("../auth/AuthContext", () => ({
-  useAuth: () => ({
-    user: null,
-    hasPermission: () => true,
-  }),
+  useAuth: () => authMock,
 }));
 
 interface ExtensionBundleDescriptor {

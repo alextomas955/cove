@@ -1792,7 +1792,7 @@ function ActiveObjectFilterChipsContent({
     setAnnouncement(`Removed ${pending.label} filter. ${keys.length} selected.`);
     if (pending.key) buttonRefs.current.get(pending.key)?.focus();
     else onFocusFallback?.();
-  }, [keysSignature, onFocusFallback]);
+  }, [keys.length, keysSignature, onFocusFallback]);
 
   useEffect(() => {
     if (!managesRovingKeyboard) return;

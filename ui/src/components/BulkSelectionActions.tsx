@@ -363,14 +363,16 @@ export function BulkSelectionActions({
   const resource = ENTITY_RESOURCE_MAP[entityType];
   const canWrite = canWriteEntity(resource, hasPermission);
   const canDelete = canDeleteEntity(resource, hasPermission);
-  const removeFromParentAction = useMemo(
-    () => getRemoveFromParentAction(entityType, removeFromParent),
-    [entityType, removeFromParent?.id, removeFromParent?.label, removeFromParent?.type],
+  // Callers pass `removeFromParent` as an inline object literal, so key the memos on its fields.
+  const parentType = removeFromParent?.type;
+  const parentId = removeFromParent?.id;
+  const parentLabel = removeFromParent?.label;
+  const parent = useMemo<NestedListParent | undefined>(
+    () => (parentType && parentId != null ? { type: parentType, id: parentId, label: parentLabel } : undefined),
+    [parentType, parentId, parentLabel],
   );
-  const coverFromSelectionAction = useMemo(
-    () => getCoverFromSelectionAction(entityType, removeFromParent),
-    [entityType, removeFromParent?.id, removeFromParent?.label, removeFromParent?.type],
-  );
+  const removeFromParentAction = useMemo(() => getRemoveFromParentAction(entityType, parent), [entityType, parent]);
+  const coverFromSelectionAction = useMemo(() => getCoverFromSelectionAction(entityType, parent), [entityType, parent]);
   const canRemoveFromParent =
     !!removeFromParentAction &&
     (removeFromParentAction.permissionTarget === "parent"

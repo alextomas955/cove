@@ -54,9 +54,12 @@ export function FilterExpressionEditor({
   const [moveAnnouncement, setMoveAnnouncement] = useState("");
   const ratingOptions = useRatingOptions();
   const appConfig = useOptionalAppConfig();
-  const metadataServers = appConfig?.config?.scraping?.metadataServers ?? [];
-  const describeCondition = (filter: Record<string, unknown>) =>
-    describeFilterExpressionCondition(filter, criteria, ratingOptions, metadataServers);
+  const metadataServers = appConfig?.config?.scraping?.metadataServers;
+  const describeCondition = useCallback(
+    (filter: Record<string, unknown>) =>
+      describeFilterExpressionCondition(filter, criteria, ratingOptions, metadataServers ?? []),
+    [criteria, metadataServers, ratingOptions],
+  );
   const destinations = useMemo(() => {
     const result: ExpressionGroupDestination[] = [];
     const visit = (group: EditableFilterExpression, path: number[], depth: number) => {
@@ -80,7 +83,7 @@ export function FilterExpressionEditor({
     };
     visit(value as EditableFilterExpression, [], 0);
     return result;
-  }, [criteria, metadataServers, ratingOptions, value]);
+  }, [describeCondition, value]);
   const legalDestinations = useCallback(
     (sourcePath: number[]) => {
       const sourceFilter = getExpressionLeaf(value, sourcePath);

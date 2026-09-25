@@ -63,7 +63,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { GroupEditModal } from "./GroupEditModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { NarrativeText } from "../components/NarrativeText";
@@ -315,7 +315,16 @@ export function GroupDetailPage({ id, onNavigate }: Props) {
       },
       hasPermission,
     ).filter((tab) => tab.key !== "items" || canReadVideos || canReadGroups);
-  }, [canReadGroups, canReadVideos, group?.subGroupCount, groupItems.length, groupTabs, hasPermission]);
+  }, [
+    canReadGroups,
+    canReadVideos,
+    group?.itemCount,
+    group?.kind,
+    group?.subGroupCount,
+    groupItems.length,
+    groupTabs,
+    hasPermission,
+  ]);
 
   if (tabs.length > 0 && !tabs.some((tab) => tab.key === activeTab)) {
     setActiveTab(tabs[0].key as TabKey);
@@ -795,7 +804,7 @@ function GroupItemsPanel({
     enabled: canReadGroups,
   });
   const subGroupsLoadError = getLoadError(subGroupsData, subGroupsError);
-  const subGroups = subGroupsData ?? [];
+  const subGroups = useMemo(() => subGroupsData ?? [], [subGroupsData]);
   const { data: searchResults } = useQuery({
     queryKey: ["groups-search-for-subgroup", group.id, searchTerm],
     queryFn: () => groups.find({ page: 1, perPage: 20, q: searchTerm }),
@@ -909,7 +918,7 @@ function GroupItemsPanel({
     queryFn: queryMixedItemsPage,
     enabled: canReadGroups && (isDynamic || (!groupItemsLoading && !subGroupsLoading)),
   });
-  const displayedMixedItems = mixedData?.items ?? [];
+  const displayedMixedItems = useMemo(() => mixedData?.items ?? [], [mixedData?.items]);
   const getCompilationItemOrder = useCallback(async () => {
     const allItemsPage = await queryMixedItemsPage({ ...mixedFilter, page: 1, perPage: 0 });
     return allItemsPage.items
@@ -962,6 +971,7 @@ function GroupItemsPanel({
   const canDeleteSelectedItems =
     selectedCount > 0 && (selectedDeletableKinds.size > 0 || canDeleteAnyMixedHostType(hasPermission));
 
+  const clampMixedFilterPage = useEffectEvent((page: number) => setMixedFilter({ ...mixedFilter, page }));
   useEffect(() => {
     if (infinitePageSize) return;
 
@@ -970,7 +980,7 @@ function GroupItemsPanel({
     const currentPage = mixedFilter.page ?? 1;
     if (currentPage <= totalPages) return;
 
-    setMixedFilter({ ...mixedFilter, page: totalPages });
+    clampMixedFilterPage(totalPages);
   }, [infinitePageSize, mixedFilter.page, mixedFilter.perPage, totalItemCount]);
 
   const getSelectedItemsByIds = useCallback(

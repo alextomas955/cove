@@ -241,10 +241,10 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
 
   useDocumentTitle(image ? displayTitle : null);
 
+  const imageId = image?.id;
   useEffect(() => {
-    if (!image || !trackImageActivity) return;
+    if (imageId == null || !trackImageActivity) return;
 
-    const imageId = image.id;
     const startedAt = performance.now();
     const sessionId = createPlaybackSessionId();
     trackInteraction({
@@ -279,7 +279,7 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
       window.removeEventListener("pagehide", handlePageHide);
       flushDwell("ended");
     };
-  }, [image?.id, queryClient, trackImageActivity]);
+  }, [imageId, queryClient, trackImageActivity]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

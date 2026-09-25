@@ -320,6 +320,8 @@ function getSourceUrlSortScore(scrapers: ScraperSummary[], sourceUrl: string) {
   return scrapers.reduce((score, scraper) => score + (matchesUrlPattern(scraper, sourceUrl) ? 1 : 0), 0);
 }
 
+const NO_SCRAPER_PREFERENCES: { site: string; scraperId: string }[] = [];
+
 function chooseInitialSourceUrl(
   sourceUrls: string[],
   scrapers: ScraperSummary[],
@@ -374,7 +376,7 @@ export function MediaScrapeDialog({ open, onClose, entityType, entity }: Props) 
     enabled: open,
   });
 
-  const scraperPreferences = config?.scraping.scraperPreferences ?? [];
+  const scraperPreferences = config?.scraping.scraperPreferences ?? NO_SCRAPER_PREFERENCES;
   const sourceUrls = useMemo(() => normalizeSourceUrls(entity.urls), [entity.urls]);
   const availableEntityScrapers = useMemo(
     () => scrapers.filter((scraper) => scraper.entityType.toLowerCase() === entityType),

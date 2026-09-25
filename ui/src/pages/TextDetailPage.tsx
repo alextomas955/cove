@@ -311,19 +311,7 @@ export function TextDetailPage({ id, onNavigate }: Props) {
       nextTabs.push({ key: "edit", label: "Edit" });
     }
     return nextTabs;
-  }, [
-    canReadFiles,
-    canReadGroups,
-    canReadPerformers,
-    canReadStudio,
-    canReadTags,
-    canWriteText,
-    text?.files.length,
-    text?.groups.length,
-    text?.performers.length,
-    text?.studioId,
-    text?.tags.length,
-  ]);
+  }, [canReadFiles, canWriteText, text?.files.length]);
 
   if (!tabs.some((tab) => tab.key === activeTab)) {
     setActiveTab("details");

@@ -654,7 +654,6 @@ export function ExtensionLoaderProvider({
       };
     }
 
-    // oxlint-disable-next-line react/set-state-in-effect -- marks the manifest as loading at the start of the request this effect issues
     setLoaded(false);
     const requestGeneration = ++manifestRequestGeneration.current;
     void (async () => {
@@ -728,7 +727,6 @@ export function ExtensionLoaderProvider({
             id: slot.id,
             extensionId: slot.extensionId,
             slot: slot.slot,
-            // eslint-disable-next-line react/no-danger
             render: () => <div dangerouslySetInnerHTML={{ __html: slot.html! }} />,
             order: slot.order,
           }),
@@ -762,7 +760,7 @@ export function ExtensionLoaderProvider({
         unregisterContributions();
       }
     };
-  }, [getExtensionRevision, manifest, register, registerSlot, resolveComponent, troubleshootingMode, user]);
+  }, [getExtensionRevision, hasPermission, manifest, register, registerSlot, resolveComponent, troubleshootingMode]);
 
   // Withdraw the theme the inline boot script painted, where React must not simply replace it.
   //
@@ -1028,7 +1026,7 @@ export function ExtensionLoaderProvider({
   const getTabsForPage = useCallback(
     (pageType: string) =>
       manifest?.tabs.filter((t) => t.pageType === pageType && canAccessExtensionContribution(t, hasPermission)) ?? [],
-    [manifest, user],
+    [hasPermission, manifest],
   );
 
   const getPageOverride = useCallback(
@@ -1054,12 +1052,12 @@ export function ExtensionLoaderProvider({
 
   const availableComponentStyles = manifest?.componentStyles ?? [];
   const availableLayoutStyles = manifest?.layoutStyles ?? [];
-  const features = manifest?.features ?? [];
+  const features = useMemo(() => manifest?.features ?? [], [manifest]);
   const settingsTabs = [...(manifest?.settingsTabs ?? [])].sort((a, b) => a.order - b.order);
-  const settingsPanels = manifest?.settingsPanels ?? [];
-  const actions = manifest?.actions ?? [];
-  const listFilters = manifest?.listFilters ?? [];
-  const listSorts = manifest?.listSorts ?? [];
+  const settingsPanels = useMemo(() => manifest?.settingsPanels ?? [], [manifest]);
+  const actions = useMemo(() => manifest?.actions ?? [], [manifest]);
+  const listFilters = useMemo(() => manifest?.listFilters ?? [], [manifest]);
+  const listSorts = useMemo(() => manifest?.listSorts ?? [], [manifest]);
 
   const getFeature = useCallback(
     (key: string) => {

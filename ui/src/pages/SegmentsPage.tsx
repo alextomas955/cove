@@ -527,6 +527,7 @@ export function SegmentsPage({ onNavigate }: Props) {
       derivedQueryDescriptor,
       direction,
       q,
+      seed,
       videoSelection.excludeIds,
       videoSelection.includeIds,
       videoTagDepth,
@@ -587,6 +588,7 @@ export function SegmentsPage({ onNavigate }: Props) {
         durationModifier: combinedRawSegmentFilter.durationCriterion?.modifier,
         sort,
         direction,
+        seed,
         page,
         perPage: pageSize,
       });
@@ -738,25 +740,35 @@ export function SegmentsPage({ onNavigate }: Props) {
     chunkSize: defaultPerPage,
   });
 
+  const {
+    fetchNextPage: fetchNextRawPage,
+    hasNextPage: rawHasNextPage,
+    isFetchingNextPage: rawIsFetchingNextPage,
+  } = rawInfiniteQuery;
+  const {
+    fetchNextPage: fetchNextDerivedPage,
+    hasNextPage: derivedHasNextPage,
+    isFetchingNextPage: derivedIsFetchingNextPage,
+  } = derivedInfiniteQuery;
   const loadMoreSegments = useCallback(() => {
     if (isRawView) {
-      if (rawInfiniteQuery.hasNextPage && !rawInfiniteQuery.isFetchingNextPage) {
-        void rawInfiniteQuery.fetchNextPage();
+      if (rawHasNextPage && !rawIsFetchingNextPage) {
+        void fetchNextRawPage();
       }
       return;
     }
 
-    if (derivedInfiniteQuery.hasNextPage && !derivedInfiniteQuery.isFetchingNextPage) {
-      void derivedInfiniteQuery.fetchNextPage();
+    if (derivedHasNextPage && !derivedIsFetchingNextPage) {
+      void fetchNextDerivedPage();
     }
   }, [
-    derivedInfiniteQuery.fetchNextPage,
-    derivedInfiniteQuery.hasNextPage,
-    derivedInfiniteQuery.isFetchingNextPage,
+    derivedHasNextPage,
+    derivedIsFetchingNextPage,
+    fetchNextDerivedPage,
+    fetchNextRawPage,
     isRawView,
-    rawInfiniteQuery.fetchNextPage,
-    rawInfiniteQuery.hasNextPage,
-    rawInfiniteQuery.isFetchingNextPage,
+    rawHasNextPage,
+    rawIsFetchingNextPage,
   ]);
 
   const spanItems = infinitePageSize ? derivedInfiniteQuery.items : (segmentsWindowQuery.data?.items ?? []);

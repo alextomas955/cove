@@ -202,7 +202,6 @@ export function TagActionMenu({
   // Measure once the menu is in the DOM (so height is known), then re-clamp.
   useLayoutEffect(() => {
     if (open) place();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // The fixed-positioned menu can't follow the trigger, so dismiss it on scroll/resize instead.

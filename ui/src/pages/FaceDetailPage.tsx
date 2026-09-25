@@ -248,7 +248,7 @@ export function FaceDetailPage({ id, onNavigate }: Props) {
     enabled: face != null,
   });
   const faceDetectionsLoadError = getLoadError(faceDetectionsData, faceDetectionsError);
-  const faceDetections = faceDetectionsData ?? [];
+  const faceDetections = useMemo(() => faceDetectionsData ?? [], [faceDetectionsData]);
 
   const [label, setLabel] = useState("");
   const [performerSearch, setPerformerSearch] = useState("");

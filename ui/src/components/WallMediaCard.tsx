@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { HTMLAttributes, ReactNode } from "react";
 import { useOptionalAppConfig } from "../state/AppConfigContext";
 import { createPlaybackTracker, type PlaybackTrackingTarget } from "../utils/interactionTracking";
@@ -184,8 +184,12 @@ export function WallMediaCard({
     lastKeepaliveSentAt.current = 0;
   }, [videoSrc]);
 
-  useEffect(() => {
+  // Keyed by the serialized target so a structurally identical target does not reset the tracker.
+  const syncPlaybackTarget = useEffectEvent(() => {
     void playbackTracker.current.setTarget(playbackTrackingTarget);
+  });
+  useEffect(() => {
+    syncPlaybackTarget();
   }, [playbackTrackingSignature]);
 
   useEffect(
@@ -258,13 +262,13 @@ export function WallMediaCard({
     return () => controller.abort();
   }, [shouldLoadVideo, useVideo, videoSrc, videoStatusSrc]);
 
-  const seekToStartTime = () => {
+  const seekToStartTime = useCallback(() => {
     const video = videoRef.current;
     if (!video || videoStartTimeSec <= 0 || !Number.isFinite(video.duration)) return;
     if (video.duration > videoStartTimeSec) {
       video.currentTime = videoStartTimeSec;
     }
-  };
+  }, [videoStartTimeSec]);
 
   const restartBoundedVideo = (video: HTMLVideoElement, nextTime: number) => {
     if (videoEndTimeSec == null || !Number.isFinite(videoEndTimeSec) || nextTime < videoEndTimeSec) return false;
@@ -353,7 +357,7 @@ export function WallMediaCard({
 
   useEffect(() => {
     seekToStartTime();
-  }, [videoSrc, videoStartTimeSec, videoEndTimeSec, videoAvailable, shouldLoadVideo]);
+  }, [seekToStartTime, videoSrc, videoStartTimeSec, videoEndTimeSec, videoAvailable, shouldLoadVideo]);
 
   useEffect(() => {
     const video = videoRef.current;

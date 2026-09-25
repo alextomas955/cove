@@ -65,7 +65,7 @@ export function GlobalSearch({ navigate }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const lastTrackedSearchKey = useRef("");
   const searchId = useId();
-  const { hasPermission, permissions } = useAuth();
+  const { hasPermission } = useAuth();
   const serverAvailability = useSyncExternalStore(
     subscribeToServerAvailability,
     getServerAvailability,
@@ -97,7 +97,7 @@ export function GlobalSearch({ navigate }: Props) {
       audios: canReadEntity("audio", hasPermission),
       texts: canReadEntity("text", hasPermission),
     }),
-    [hasPermission, permissions],
+    [hasPermission],
   );
 
   const searchableLabels = useMemo(() => {

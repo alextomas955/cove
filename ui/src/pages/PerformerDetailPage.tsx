@@ -275,6 +275,7 @@ export function PerformerDetailPage({ id, onNavigate }: Props) {
         canWritePerformer,
         performer,
         performerFavorite,
+        setActiveTab,
         setPerformerFavorite,
       ],
     ),
@@ -293,7 +294,7 @@ export function PerformerDetailPage({ id, onNavigate }: Props) {
     if (visiblePerformerTabs.length > 0 && !visiblePerformerTabs.some((tab) => tab.key === activeTab)) {
       setActiveTab(visiblePerformerTabs[0].key as TabKey);
     }
-  }, [activeTab, visiblePerformerTabs]);
+  }, [activeTab, setActiveTab, visiblePerformerTabs]);
 
   if (isLoading) {
     return (
@@ -1185,7 +1186,7 @@ function PerformerFacesPanel({
     enabled: canReadFaces,
   });
   const loadError = getLoadError(linkedFacesData, error);
-  const linkedFaces = linkedFacesData ?? [];
+  const linkedFaces = useMemo(() => linkedFacesData ?? [], [linkedFacesData]);
 
   const sortedFaces = useMemo(() => {
     const dir = filter.direction === "asc" ? 1 : -1;

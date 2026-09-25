@@ -21,6 +21,9 @@ import { MODIFIER_LABELS } from "./filterEditorControls";
 import { NULL_VALUE_MODIFIERS } from "./filterCriterionState";
 import type { EntityType } from "./filterCriteriaTypes";
 
+const NO_IDS: number[] = [];
+const NO_NAMES: Record<string, string> = {};
+
 export function MultiIdEditor({
   value,
   onChange,
@@ -39,10 +42,10 @@ export function MultiIdEditor({
   const modifier = value?.modifier ?? (includeModifiers.includes("INCLUDES_ALL") ? "INCLUDES_ALL" : "INCLUDES");
   const nullModifiers = modifiers.filter((item) => NULL_VALUE_MODIFIERS.has(item));
   const isNullModifier = NULL_VALUE_MODIFIERS.has(modifier);
-  const includedIds = value?.value ?? [];
-  const excludedIds = supportsExclude ? (value?.excludes ?? []) : [];
+  const includedIds = value?.value ?? NO_IDS;
+  const excludedIds = supportsExclude ? (value?.excludes ?? NO_IDS) : NO_IDS;
   const includeHierarchy = (value as any)?.depth === -1;
-  const existingNames: Record<string, string> = (value as any)?._names ?? {};
+  const existingNames: Record<string, string> = (value as any)?._names ?? NO_NAMES;
   const [searchText, setSearchText] = useState("");
   const [activeResultIndex, setActiveResultIndex] = useState(-1);
   const [pendingNullModifier, setPendingNullModifier] = useState<CriterionModifier | null>(null);
@@ -130,6 +133,7 @@ export function MultiIdEditor({
   if (validSelectedValueFocusId !== selectedValueFocusId) {
     setSelectedValueFocusId(validSelectedValueFocusId);
   }
+  // Keyed on the selection's contents rather than array identity; the count only changes with them.
   useEffect(() => {
     const pending = pendingSelectedRemovalRef.current;
     if (!pending) return;
@@ -137,7 +141,7 @@ export function MultiIdEditor({
     setSelectionAnnouncement(`Removed ${pending.label}. ${selectedIds.length} selected.`);
     if (pending.id != null) selectedButtonRefs.current.get(pending.id)?.focus();
     else searchInputRef.current?.focus();
-  }, [selectedIdsSignature]);
+  }, [selectedIdsSignature, selectedIds.length]);
   const missingSelectedIds = useMemo(() => {
     const availableIds = new Set((entities as any[] | undefined)?.map((entity) => entity.id) ?? []);
     return selectedIds.filter((id) => !existingNames[String(id)] && !availableIds.has(id));
@@ -160,7 +164,7 @@ export function MultiIdEditor({
       if (query.data) map[String(query.data.id)] = query.data.label;
     }
     return map;
-  }, [entities, existingNames, selectedEntityQueries]);
+  }, [entities, entityType, existingNames, selectedEntityQueries]);
 
   const buildCriterion = (inc: number[], exc: number[], mod: string, includeChildren: boolean) => {
     // Include _names so filter chips can display entity names without waiting for queries

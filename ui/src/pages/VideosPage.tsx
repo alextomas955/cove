@@ -668,11 +668,16 @@ export function VideosPage({ onNavigate }: Props) {
       void retryLoad();
     },
   });
+  const {
+    fetchNextPage: fetchNextVideosPage,
+    hasNextPage: videosHasNextPage,
+    isFetchingNextPage: videosIsFetchingNextPage,
+  } = infiniteVideosQuery;
   const loadMoreVideos = useCallback(() => {
-    if (infiniteVideosQuery.hasNextPage && !infiniteVideosQuery.isFetchingNextPage) {
-      void infiniteVideosQuery.fetchNextPage();
+    if (videosHasNextPage && !videosIsFetchingNextPage) {
+      void fetchNextVideosPage();
     }
-  }, [infiniteVideosQuery.fetchNextPage, infiniteVideosQuery.hasNextPage, infiniteVideosQuery.isFetchingNextPage]);
+  }, [fetchNextVideosPage, videosHasNextPage, videosIsFetchingNextPage]);
 
   // Feed audio only follows a video while the feed is showing and sound is on by default.
   const [prevFeedAudioInputs, setPrevFeedAudioInputs] = useState({ defaultFeedVideoSound, displayMode });
@@ -763,7 +768,7 @@ export function VideosPage({ onNavigate }: Props) {
           })
         : videos.find(nextFilter);
     },
-    [backendObjectFilter, hasObjectFilter, visualSearchActive, visualSimilarity],
+    [backendObjectFilter, filterExpression, hasObjectFilter, visualSearchActive, visualSimilarity],
   );
   const { openVideo: navigateToVideo, navigateFromList: navigateFromVideoList } = useVideoQueueNavigation({
     items,
@@ -839,7 +844,7 @@ export function VideosPage({ onNavigate }: Props) {
     } finally {
       setSelectAllMatchingPending(false);
     }
-  }, [backendObjectFilter, filter, hasObjectFilter, selectIds, visualSearchActive, visualSimilarity]);
+  }, [backendObjectFilter, filter, filterExpression, hasObjectFilter, selectIds, visualSearchActive, visualSimilarity]);
 
   // When sort changes to random, generate a new seed for reproducibility
   const handleFilterChange = useCallback(

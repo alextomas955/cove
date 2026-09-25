@@ -273,7 +273,7 @@ export function TagDetailPage({ id, onNavigate }: Props) {
     if (visibleTagTabs.length > 0 && !visibleTagTabs.some((tab) => tab.key === activeTab)) {
       setActiveTab(visibleTagTabs[0].key as TabKey);
     }
-  }, [activeTab, visibleTagTabs]);
+  }, [activeTab, setActiveTab, visibleTagTabs]);
 
   useEffect(() => {
     if (!showOpsMenu) return;

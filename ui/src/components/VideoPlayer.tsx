@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { usePublishActiveMedia } from "./ActiveMedia";
 import {
@@ -400,8 +409,12 @@ export function VideoPlayer({
   const videoMetricsReadyRef = useRef(false);
   const playerActiveRef = useRef(true);
   const mediaIdentity = `${videoId}|${fileId ?? ""}|${streamUrl}|${clip?.start ?? ""}|${clip?.end ?? ""}`;
+  // Callers usually build `clip` inline, so effects read these primitives rather than the object.
+  const hasClip = clip != null;
   const clipStart = clip?.start ?? 0;
-  const clipEnd = Math.max(clipStart, clip?.end ?? duration);
+  const clipEndProp = clip?.end;
+  const clipLoop = clip?.loop;
+  const clipEnd = Math.max(clipStart, clipEndProp ?? duration);
   const timelineStart = clip ? clipStart : 0;
   const timelineDuration = clip ? Math.max(clipEnd - clipStart, 0.001) : Math.max(duration, 0.001);
   const visibleCurrentTime = clip ? Math.max(0, currentTime - clipStart) : currentTime;
@@ -530,7 +543,17 @@ export function VideoPlayer({
   );
   // Callers commonly build playbackTracking inline. Preserve the normalized target identity while its
   // serialized meaning is unchanged so parent renders cannot tear down tracking effects and flush intervals.
-  const playbackTrackingTarget = useMemo(() => nextPlaybackTrackingTarget, [playbackTrackingSignature]);
+  const [stablePlaybackTracking, setStablePlaybackTracking] = useState({
+    signature: playbackTrackingSignature,
+    target: nextPlaybackTrackingTarget,
+  });
+  if (stablePlaybackTracking.signature !== playbackTrackingSignature) {
+    setStablePlaybackTracking({ signature: playbackTrackingSignature, target: nextPlaybackTrackingTarget });
+  }
+  const playbackTrackingTarget =
+    stablePlaybackTracking.signature === playbackTrackingSignature
+      ? stablePlaybackTracking.target
+      : nextPlaybackTrackingTarget;
 
   useLayoutEffect(() => {
     const previousIdentity = interactionIdentityRef.current;
@@ -585,8 +608,12 @@ export function VideoPlayer({
     // file would suppress both the proactive fallback and the error-driven fallback for it.
   }, [videoId, fileId]);
 
-  useEffect(() => {
+  // Keyed by the serialized target so a structurally identical target does not reset the tracker.
+  const syncPlaybackTarget = useEffectEvent(() => {
     void playbackTracker.current.setTarget(playbackTrackingTarget);
+  });
+  useEffect(() => {
+    syncPlaybackTarget();
   }, [playbackTrackingSignature]);
 
   const trackPlayerInteraction = useCallback(
@@ -644,11 +671,15 @@ export function VideoPlayer({
     clipEndedHandled.current = false;
   }, [clip?.end, clip?.loop, clip?.start, videoId, streamUrl]);
 
-  useEffect(() => {
+  // Only the initial volume is pushed here; later changes are applied by the volume and mute handlers.
+  const applyInitialVolume = useEffectEvent(() => {
     const v = videoRef.current;
     if (!v) return;
     v.volume = vol;
     v.muted = muted;
+  });
+  useEffect(() => {
+    applyInitialVolume();
   }, []);
 
   const toAbsoluteTime = useCallback(
@@ -1034,8 +1065,8 @@ export function VideoPlayer({
     }
 
     if (shouldSeek) {
-      const nextTime = clip
-        ? Math.min(Math.max(effectiveStartTime ?? clip.start, clip.start), clip.end ?? duration)
+      const nextTime = hasClip
+        ? Math.min(Math.max(effectiveStartTime ?? clipStart, clipStart), clipEndProp ?? duration)
         : (effectiveStartTime ?? defaultPlaybackStartTime);
       if (v && nextTime != null) {
         if (selectedQuality === "Direct") {
@@ -1079,9 +1110,9 @@ export function VideoPlayer({
       }
     }
 
-    if (clip?.loop && clip.end != null) {
-      setAbLoop({ a: clip.start, b: clip.end });
-    } else if (clip) {
+    if (clipLoop && clipEndProp != null) {
+      setAbLoop({ a: clipStart, b: clipEndProp });
+    } else if (hasClip) {
       setAbLoop({ a: null, b: null });
     }
   }, [
@@ -1089,10 +1120,14 @@ export function VideoPlayer({
     clip?.end,
     clip?.loop,
     clip?.start,
+    clipEndProp,
+    clipLoop,
+    clipStart,
     defaultPlaybackStartTime,
     duration,
     effectiveSourceSignature,
     effectiveStartTime,
+    hasClip,
     mediaRecoveryPhase,
     navigationSeekTo,
     recordMediaUserPause,
@@ -1426,7 +1461,7 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
     };
-  }, [audioCodec, fileId, format, nativeHlsSupported, videoCodec, videoId]);
+  }, [audioCodec, compatibilityIdentity, fileId, format, nativeHlsSupported, videoCodec, videoId]);
 
   const prepareClipForPlayback = useCallback(() => {
     const video = videoRef.current;
@@ -1841,8 +1876,8 @@ export function VideoPlayer({
       const targetTime =
         pendingImperativeSeek?.time ??
         (pendingNavigationSeek ? navigationSeekTo : pendingRestore?.time) ??
-        (clip
-          ? Math.min(Math.max(effectiveResumeTime ?? clip.start, clip.start), clip.end ?? mediaDuration)
+        (hasClip
+          ? Math.min(Math.max(effectiveResumeTime ?? clipStart, clipStart), clipEndProp ?? mediaDuration)
           : (effectiveResumeTime ?? configuredStartTime)) ??
         positionBeforeLoad;
       if (targetTime != null && Number.isFinite(targetTime)) {
@@ -1880,13 +1915,15 @@ export function VideoPlayer({
     };
   }, [
     autostart,
-    clip?.start,
+    clipEndProp,
+    clipStart,
     compatibilityLookupPending,
     duration,
     effectiveResumeTime,
     effectiveSourceSignature,
     effectiveSourceType,
     effectiveStreamUrl,
+    hasClip,
     mediaIdentity,
     navigationSeekTo,
     playerVideoStartMinDuration,
@@ -2019,7 +2056,9 @@ export function VideoPlayer({
   const createMediaPlayerEntryContext = useCallback(
     (entry: SlotEntry<MediaPlayerExtensionContext>) => {
       const ownerKey = JSON.stringify([entry.extensionId ?? null, entry.id]);
-      const ownerToken = Symbol(ownerKey);
+      // resetInteractionModes clears every owner token and bumps the generation, which replaces this factory
+      // so each slot entry re-mounts with a fresh token for the new generation.
+      const ownerToken = Symbol(`${ownerKey}#${interactionGeneration}`);
       return {
         context: {
           acquireInteractionMode: (options?: MediaPlayerInteractionModeOptions) =>
