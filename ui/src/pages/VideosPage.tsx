@@ -26,7 +26,7 @@ import {
   type MultiSelectToggleOptions,
 } from "../hooks/useMultiSelect";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
-import { formatDuration, formatFileSize, getResolutionLabel, RatingBadge } from "../components/shared";
+import { formatDuration } from "../components/shared";
 import { VIDEO_CRITERIA } from "../components/filterCriteriaCatalogs";
 import type { CriterionDefinition } from "../components/filterCriteriaTypes";
 import { FILTER_EXPRESSION_STATE_KEY } from "../utils/filterExpressionTree";
@@ -34,7 +34,6 @@ import {
   Film,
   Eye,
   Loader2,
-  Search,
   Play,
   Pause,
   Layers,
@@ -213,7 +212,6 @@ export function VideosPage({ onNavigate }: Props) {
     perPage: defaultState.filter.perPage,
   });
   const [downloadTarget, setDownloadTarget] = useState<Video | "new" | null>(null);
-  const queryClient = useQueryClient();
   const { setQueue } = useVideoQueue();
   const { hasPermission, user } = useAuth();
   const { config } = useAppConfig();

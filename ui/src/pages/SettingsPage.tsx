@@ -4,7 +4,6 @@ import * as signalR from "@microsoft/signalr";
 import { formatDate } from "../components/shared";
 import {
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   BookOpen,
   Check,
@@ -38,7 +37,6 @@ import {
   FileText,
   Layers,
   UserCog,
-  AlertTriangle,
   X,
 } from "lucide-react";
 import {
@@ -49,7 +47,6 @@ import {
   database,
   plugins as pluginsApi,
   logs as logsApi,
-  tagGroups,
   auth as authApi,
   usersApi,
   entityEngagement,
@@ -66,7 +63,6 @@ import type {
 } from "../api/client";
 import type {
   JobInfo,
-  Plugin,
   RatingSystemOptions,
   RatingStarPrecision,
   RatingSystemType,
@@ -81,7 +77,6 @@ import type {
   CustomFieldJsonPathDefinition,
   CustomFieldJsonPathType,
   CustomFieldType,
-  DownloaderDescriptor,
   DownloaderPathOverrideConfig,
   DownloaderSiteCredentialConfig,
   DependencyInfo,
@@ -89,7 +84,6 @@ import type {
   ExtensionTutorialTopic,
   IdentifyDefaultsConfig,
   MetadataServerValidationResult,
-  TagGroup,
   UserTrackingPreferences,
 } from "../api/types";
 import { useExtensions } from "../extensions/ExtensionLoader";
@@ -1691,7 +1685,7 @@ export function SettingsPage() {
 
   const validateMetadataServerMutation = useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: ({ index, metadataServer }: { index: number; metadataServer: MetadataServer }) =>
+    mutationFn: ({ metadataServer }: { index: number; metadataServer: MetadataServer }) =>
       system.validateMetadataServer(metadataServer),
     onSuccess: (result, variables) => {
       setMetadataServerValidation((current) => ({ ...current, [String(variables.index)]: result }));
@@ -4648,17 +4642,10 @@ function LocalInterfacePanel({ serverRatingOptions }: { serverRatingOptions?: Pa
   const [localRatingOverride, setLocalRatingOverride] = useState<RatingSystemOptions | null>(() =>
     readStoredRatingOptionsOverride(),
   );
-  const [trackingPreferences, setTrackingPreferences] = useState<ResolvedTrackingPreferences>(() =>
-    resolveTrackingPreferences(user?.uiPreferences?.tracking),
-  );
 
   useEffect(() => {
     setLocalRatingOverride(readStoredRatingOptionsOverride());
   }, [serverRatingOptions, user]);
-
-  useEffect(() => {
-    setTrackingPreferences(resolveTrackingPreferences(user?.uiPreferences?.tracking));
-  }, [user]);
 
   const effectiveRatingOptions =
     localRatingOverride ?? normalizeRatingOptions(serverRatingOptions ?? defaultRatingSystemOptions);
@@ -4666,19 +4653,6 @@ function LocalInterfacePanel({ serverRatingOptions }: { serverRatingOptions?: Pa
   const updateRatingOptions = (nextOptions: RatingSystemOptions | null) => {
     writeStoredRatingOptionsOverride(nextOptions);
     setLocalRatingOverride(nextOptions);
-  };
-
-  const updateTrackingPreferences = (patch: Partial<ResolvedTrackingPreferences>) => {
-    const nextTracking = {
-      ...defaultTrackingPreferences,
-      ...trackingPreferences,
-      ...patch,
-    };
-    setTrackingPreferences(nextTracking);
-    updateAuthenticatedUserUiPreferences((current) => ({
-      ...current,
-      tracking: nextTracking,
-    }));
   };
 
   return (
@@ -5435,7 +5409,6 @@ function normalizeLogLevel(level: string) {
 }
 
 function TasksPanel({ activeTab, midSlot }: { activeTab: SettingsTab; midSlot?: React.ReactNode }) {
-  const queryClient = useQueryClient();
   const { data: activeJobs, refetch: refetchJobs } = useQuery({
     queryKey: ["jobs"],
     queryFn: () => jobs.list(),
@@ -7794,9 +7767,6 @@ function ExtensionsPanel({ mode }: { mode: "installed" | "registry" }) {
   const {
     loadFailures = [],
     retryFailedExtensions,
-    availableThemes,
-    activeThemeId,
-    setActiveTheme,
     getSettingsPanelsForTab,
     resolveComponent,
     manifest,
@@ -8519,7 +8489,7 @@ function ExtensionsPanel({ mode }: { mode: "installed" | "registry" }) {
 // ===== Find and Install Extensions =====
 export function FindAndInstallExtensions() {
   const queryClient = useQueryClient();
-  const { manifest, refreshManifest } = useExtensions();
+  const { refreshManifest } = useExtensions();
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState<string>("");
   const [registryType, setRegistryType] = useState<string>("");
@@ -8565,11 +8535,7 @@ export function FindAndInstallExtensions() {
     setPage(1);
   }, [searchQuery, category, registryType]);
 
-  const {
-    data: searchResults,
-    isLoading: searching,
-    refetch: doSearch,
-  } = useQuery({
+  const { data: searchResults, isLoading: searching } = useQuery({
     queryKey: ["registry-search", searchQuery, category, registryType, page],
     queryFn: () =>
       import("../api/client").then((m) =>

@@ -75,7 +75,7 @@ function shouldSuppressResultToast(result: unknown): boolean {
   );
 }
 
-function shouldSuppressQueuedAlert(action: ExtensionAction, result: unknown): boolean {
+function shouldSuppressQueuedAlert(action: ExtensionAction): boolean {
   if (action.suppressSuccessAlert) {
     return true;
   }
@@ -140,7 +140,7 @@ export function ExtensionSelectionActions({ entityType, selectedIds }: Props) {
       setPendingActionId(action.id);
     },
     onSuccess: (result, action) => {
-      if (shouldSuppressResultToast(result) || shouldSuppressQueuedAlert(action, result)) {
+      if (shouldSuppressResultToast(result) || shouldSuppressQueuedAlert(action)) {
         return;
       }
 

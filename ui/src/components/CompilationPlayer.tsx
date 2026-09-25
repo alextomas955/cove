@@ -10,7 +10,6 @@ import {
   Merge,
   Music,
   Repeat,
-  RotateCcw,
   Settings2,
   SkipBack,
   SkipForward,
@@ -244,16 +243,6 @@ export function CompilationPlayer({
     const timeoutId = window.setTimeout(() => advanceToNextItem(), displayDurationSec * 1000);
     return () => window.clearTimeout(timeoutId);
   }, [advanceToNextItem, autostart, displayDurationSec, item, itemIsImage, itemIsText, itemLoading]);
-
-  const restartItem = useCallback(() => {
-    if (!item) {
-      return;
-    }
-
-    setAutostart(true);
-    setAutostartToken((value) => value + 1);
-    seekRef.current?.(playbackStart);
-  }, [item, playbackStart]);
 
   const toggleType = useCallback((key: TypeFilterKey) => {
     setEnabledTypes((current) => ({ ...current, [key]: !current[key] }));

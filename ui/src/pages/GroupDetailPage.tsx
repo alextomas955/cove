@@ -34,7 +34,6 @@ import type {
 } from "../api/types";
 import {
   formatDate,
-  formatDuration,
   TagBadge,
   CustomFieldsDisplay,
   FieldProvenanceHover,
@@ -78,7 +77,6 @@ import {
   SegmentTile,
   TextTile,
 } from "../components/EntityCards";
-import { CompilationPlayer } from "../components/CompilationPlayer";
 import { DetailSkeleton } from "../components/DetailSkeleton";
 import { QuickViewDialog } from "../components/QuickViewDialog";
 import { DetailListPagination, DetailListToolbar } from "../components/DetailListToolbar";
@@ -108,7 +106,7 @@ import { withRequiredMultiId } from "../utils/detailRelationFilters";
 import { VirtualizedEntityGrid } from "../components/VirtualizedEntityLayouts";
 import { VirtualizedInfiniteList } from "../components/VirtualizedInfiniteList";
 import { getEntityCardMinWidthPx } from "../hooks/useEntityCardSize";
-import { RelatedEntityListView, useRelatedEntityDisplayMode } from "../components/RelatedEntityListView";
+import { useRelatedEntityDisplayMode } from "../components/RelatedEntityListView";
 import { ContextualVideoListView } from "../components/ContextualMediaListViews";
 import { isProtectedBuiltInGroup } from "../components/DynamicGroupFilterEditor";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -265,7 +263,7 @@ export function GroupDetailPage({ id, onNavigate }: Props) {
   } = useEntityEngagement("group", id, {
     enabled: !!group,
   });
-  const { data: playbackManifest, isLoading: playbackManifestLoading } = useQuery({
+  const { data: playbackManifest } = useQuery({
     queryKey: ["group", id, "playback-manifest"],
     queryFn: () => groups.items.playbackManifest(id),
     enabled: canReadVideos,

@@ -828,7 +828,6 @@ function SegmentRow({
 
 // ===== Raw segment chooser modal =====
 function RawSegmentChooser({
-  span,
   segments,
   onPick,
   onClose,

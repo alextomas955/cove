@@ -661,7 +661,7 @@ function CreateUserDialog({
         });
       }
 
-      const created = await usersApi.create({
+      await usersApi.create({
         username,
         password,
         displayName: displayName || undefined,

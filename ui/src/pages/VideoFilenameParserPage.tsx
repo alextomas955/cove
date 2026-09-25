@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { videos } from "../api/client";
-import type { Video, FindFilter } from "../api/types";
+import type { FindFilter } from "../api/types";
 import { Search, ChevronDown, Loader2, Check } from "lucide-react";
 
 interface Props {
@@ -211,7 +211,7 @@ interface RowState {
 
 // ===== Component =====
 
-export function VideoFilenameParserPage({ onNavigate }: Props) {
+export function VideoFilenameParserPage(_props: Props) {
   // Pattern config
   const [pattern, setPattern] = useState("{title}.{ext}");
   const [ignoredWordsStr, setIgnoredWordsStr] = useState("");

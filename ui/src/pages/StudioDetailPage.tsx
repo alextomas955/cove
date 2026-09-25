@@ -24,8 +24,6 @@ import type {
 } from "../api/types";
 import {
   formatDate,
-  formatDuration,
-  getResolutionLabel,
   TagBadge,
   CustomFieldsDisplay,
   FieldProvenanceHover,

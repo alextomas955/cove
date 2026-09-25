@@ -54,7 +54,7 @@ import { useAuth } from "../auth/AuthContext";
 import { canDeleteEntity, canReadEntity, canWriteEntity } from "../auth/visibility";
 import { useEntityEngagement } from "../hooks/useEntityEngagement";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import type { FaceHostFace, TagApplication } from "../api/types";
+import type { FaceHostFace } from "../api/types";
 import { createPlaybackSessionId, trackInteraction } from "../utils/interactionTracking";
 import { ImageVisualSimilarityPanel, useImageVisualSimilarityAvailable } from "../components/VisualSimilarityPanel";
 import { PerformerContextTagList, getPerformerContextTags } from "../components/PerformerContextTags";

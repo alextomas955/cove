@@ -37,14 +37,13 @@ import type {
   Image,
   PerformerSummary,
   Video,
-  SegmentRecord,
   Studio,
   Tag as TagType,
   TextDocument,
   TextFilterCriteria,
 } from "../api/types";
 import { formatDate, FieldProvenanceHover, formatDuration, formatFileSize, getResolutionLabel } from "./shared";
-import { RatingBanner, RatingBadge } from "./Rating";
+import { RatingBanner } from "./Rating";
 import {
   BookOpenText,
   Building2,
@@ -3013,7 +3012,6 @@ export function TagTile({
   tag,
   engagement,
   onClick,
-  onNavigate,
   children,
   selected,
   onSelect,

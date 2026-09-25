@@ -4,9 +4,7 @@ import { galleries, images, videos, fileOps } from "../api/client";
 import type { FindFilter, Gallery, Image, ImageFilterCriteria, Video, VideoFilterCriteria } from "../api/types";
 import {
   formatDate,
-  formatDuration,
   formatFileSize,
-  getResolutionLabel,
   TagBadge,
   CustomFieldsDisplay,
   FieldProvenanceHover,
@@ -24,7 +22,6 @@ import {
   Loader2,
   MoreVertical,
   RefreshCw,
-  Star,
   ThumbsUp,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -50,7 +47,6 @@ import { EntityDetailTabs } from "../components/EntityDetailTabs";
 import { QuickViewDialog } from "../components/QuickViewDialog";
 import { BulkSelectionActions } from "../components/BulkSelectionActions";
 import { useExtensionTabs } from "../components/useExtensionTabs";
-import { getImageDisplayTitle } from "../utils/imageDisplay";
 import { getGalleryDisplayTitle } from "../utils/galleryDisplay";
 import { useBackNavigation } from "../hooks/useBackNavigation";
 import { useKeySequence } from "../hooks/useKeySequence";

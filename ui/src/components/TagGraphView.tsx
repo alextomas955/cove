@@ -2026,10 +2026,6 @@ export function TagGraphView({
               const queued = selectedIds?.has(node.id) ?? false;
               const hovered = hoveredId === node.id;
               const connected = connectedIds.has(node.id);
-              const searchMatched =
-                searchQuery.length > 0 &&
-                (node.name.toLowerCase().includes(searchQuery) ||
-                  (node.description ?? "").toLowerCase().includes(searchQuery));
               const dimmedBySelection = selectedNode != null && !connected && selectedNode.anchorId !== node.anchorId;
               const dimmedByCluster = focusedClusterId != null && node.anchorId !== focusedClusterId;
               const opacity = dimmedByCluster ? 0.18 : dimmedBySelection ? 0.28 : 1;

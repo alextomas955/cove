@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Minus, Plus, Search, X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import {
   audios as audiosApi,
   faces as facesApi,

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { videos, images, playback } from "../api/client";
 import { formatDuration, formatFileSize, formatDate, getResolutionLabel, TagBadge } from "./shared";
-import { X, ExternalLink, Star, User, Tag, Building2, Calendar, Film, Clock, HardDrive, Monitor } from "lucide-react";
+import { X, ExternalLink, Star, User, Tag, Building2, Calendar, Clock, HardDrive, Monitor } from "lucide-react";
 import { RatingBadge } from "./Rating";
 import { getImageDisplayTitle } from "../utils/imageDisplay";
 import { useEntityEngagement } from "../hooks/useEntityEngagement";

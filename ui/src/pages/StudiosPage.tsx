@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { studios } from "../api/client";
-import type { EntityEngagement, Studio, StudioCreate, StudioFilterCriteria } from "../api/types";
+import type { Studio, StudioCreate, StudioFilterCriteria } from "../api/types";
 import { ListPage, type DisplayMode } from "../components/ListPage";
 import { CreateModalActions, EditModal, Field, TextInput, TextArea } from "../components/EditModal";
 import { EntityReferenceSelector } from "../components/EntityReferenceSelector";
-import { toggleOptionsFromEvent, useMultiSelect, type MultiSelectToggleHandler } from "../hooks/useMultiSelect";
+import { useMultiSelect } from "../hooks/useMultiSelect";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
 import { Building2, Merge } from "lucide-react";
 import { STUDIO_CRITERIA } from "../components/filterCriteriaCatalogs";
@@ -209,66 +209,6 @@ export function StudiosPage({ onNavigate }: Props) {
         queryKey="studios"
       />
     </>
-  );
-}
-
-function StudioListTable({
-  studios: items,
-  engagementById,
-  onNavigate,
-  selectedIds,
-  onToggle,
-  selecting,
-}: {
-  studios: Studio[];
-  engagementById: ReadonlyMap<number, EntityEngagement>;
-  onNavigate: (r: any) => void;
-  selectedIds?: Set<number>;
-  onToggle?: MultiSelectToggleHandler;
-  selecting?: boolean;
-}) {
-  return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-border text-left text-muted text-xs">
-          {selectedIds && <th className="w-8 py-2 px-3"></th>}
-          <th className="py-2 px-3">Name</th>
-          <th className="py-2 px-3">Parent</th>
-          <th className="py-2 px-3 text-right">Videos</th>
-          <th className="py-2 px-3 text-right">Rating</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((s) => (
-          <tr
-            key={s.id}
-            onClick={(event) =>
-              selecting ? onToggle?.(s.id, toggleOptionsFromEvent(event)) : onNavigate({ page: "studio", id: s.id })
-            }
-            className={`border-b border-border hover:bg-card cursor-pointer ${selectedIds?.has(s.id) ? "bg-accent/10" : ""}`}
-          >
-            {selectedIds && (
-              <td className="py-2 px-3">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(s.id)}
-                  onChange={() => {}}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onToggle?.(s.id, toggleOptionsFromEvent(event));
-                  }}
-                  className="w-3.5 h-3.5 rounded border-border cursor-pointer accent-accent"
-                />
-              </td>
-            )}
-            <td className="py-2 px-3 text-foreground">{s.name}</td>
-            <td className="py-2 px-3 text-secondary">{s.parentName ?? ""}</td>
-            <td className="py-2 px-3 text-secondary text-right">{s.videoCount}</td>
-            <td className="py-2 px-3 text-secondary text-right">{engagementById.get(s.id)?.rating ?? ""}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
 

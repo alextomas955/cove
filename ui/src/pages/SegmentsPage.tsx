@@ -17,7 +17,6 @@ import {
   buildAppliedDerivedQuery,
   buildDerivedQueryDescriptor,
   createDerivedSpanCustomFilterSection,
-  formatOperatorLabel,
   isDerivedSpanQueryFilterActive,
   readDerivedSpanQueryFilter,
 } from "./segments/derivedQueryCriterion";
@@ -39,14 +38,7 @@ import { buildSpanTitle } from "./segments/segmentDisplayUtils";
 import { SegmentsPageList } from "./segments/SegmentsPageList";
 import { useDerivedSpansQuery, useDerivedSpansCountQuery } from "./segments/useDerivedSpansQuery";
 import { useRawSegmentsQuery } from "./segments/useRawSegmentsQuery";
-import type {
-  AppliedDerivedQuery,
-  DerivedSpanItem,
-  DerivedSpanOperandFilterValue,
-  DerivedSpanQueryFilterValue,
-  RawSegmentItem,
-  SegmentsPageContentView,
-} from "./segments/types";
+import type { DerivedSpanItem, RawSegmentItem, SegmentsPageContentView } from "./segments/types";
 import { LOCATION_CHANGE_EVENT, buildCurrentUrl, navigateToUrl } from "../router/location";
 import { getLoadError } from "../utils/queryLoadState";
 import { RAW_SEGMENT_SORT_OPTIONS } from "../components/segmentSortOptions";

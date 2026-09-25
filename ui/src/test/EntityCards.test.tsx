@@ -749,7 +749,7 @@ describe.each([
 
 describe("AudioTile nested navigation", () => {
   it.each([
-    ["studio overlay", (container: HTMLElement) => screen.getByRole("link", { name: "Studio Nine" })],
+    ["studio overlay", () => screen.getByRole("link", { name: "Studio Nine" })],
     ["performer badge", (container: HTMLElement) => container.querySelector(".performer-badge")!],
     ["relation footer", (container: HTMLElement) => container.querySelector(".card-popovers")!],
   ])("does not start hover playback when the pointer moves onto the %s", (_label, getTarget) => {

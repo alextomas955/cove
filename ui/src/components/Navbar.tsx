@@ -67,8 +67,6 @@ export function Navbar({ currentPage, navigate }: NavbarProps) {
 
   const enabledMenuItems = config?.interface.menuItems.length ? config.interface.menuItems : null;
 
-  const enabledSet = enabledMenuItems ? new Set(enabledMenuItems) : null;
-
   const extensionNavItems = routes
     .filter((r) => r.navItem)
     .map((r) => ({

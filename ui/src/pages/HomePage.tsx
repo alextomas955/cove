@@ -36,7 +36,7 @@ import type {
   ExtensionDashboardWidgetContribution,
   TextDocument,
 } from "../api/types";
-import { formatDuration, formatFileSize, getResolutionLabel, RatingBadge } from "../components/shared";
+import { formatDuration, getResolutionLabel } from "../components/shared";
 import { RatingBanner } from "../components/Rating";
 import {
   ChevronLeft,
@@ -44,7 +44,6 @@ import {
   Settings2,
   Plus,
   Trash2,
-  Film,
   User,
   Building2,
   Tag as TagIcon,

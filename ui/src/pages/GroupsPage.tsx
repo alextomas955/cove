@@ -7,7 +7,7 @@ import { SortableList } from "../components/SortableList";
 import { CreateModalActions, EditModal, Field, TextInput, TextArea } from "../components/EditModal";
 import { useMultiSelect } from "../hooks/useMultiSelect";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
-import { Layers, Trash2, Loader2, Edit } from "lucide-react";
+import { Layers } from "lucide-react";
 import { GroupTile } from "../components/EntityCards";
 import { GROUP_CRITERIA } from "../components/filterCriteriaCatalogs";
 import { IsoDateInput } from "../components/IsoDateInput";
@@ -16,7 +16,7 @@ import { getDefaultFilter, resolveSavedDisplayMode } from "../components/SavedFi
 import { useListUrlState } from "../hooks/useListUrlState";
 import { useInfiniteListData } from "../hooks/useInfiniteListData";
 import { useAuth } from "../auth/AuthContext";
-import { canDeleteEntity, canWriteEntity } from "../auth/visibility";
+import { canWriteEntity } from "../auth/visibility";
 import { CustomFieldsEditor } from "../components/shared";
 import {
   DynamicGroupFilterEditor,
@@ -64,7 +64,6 @@ export function GroupsPage({ onNavigate }: Props) {
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
   const canWriteGroup = canWriteEntity("group", hasPermission);
-  const canDeleteGroup = canDeleteEntity("group", hasPermission);
 
   const hasObjectFilter = Object.keys(objectFilter).length > 0;
   const queryGroupsPage = useCallback(

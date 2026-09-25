@@ -9,7 +9,6 @@
     "vitest/valid-expect": ["error", { "maxArgs": 2 }],
     "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectUnique"] }],
 
-    "eslint/no-unused-vars": "warn",
     "react/immutability": "warn",
     "react/incompatible-library": "warn",
     "react/no-did-update-set-state": "warn",

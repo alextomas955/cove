@@ -17,18 +17,12 @@ import {
   FolderTree,
   ZoomIn,
   ZoomOut,
-  SlidersHorizontal,
   Rows3,
   MonitorPlay,
   Play,
   Pause,
 } from "lucide-react";
-import type {
-  CustomFieldEntityType,
-  ExtensionListFilterContribution,
-  ExtensionListSortContribution,
-  FindFilter,
-} from "../api/types";
+import type { ExtensionListFilterContribution, ExtensionListSortContribution, FindFilter } from "../api/types";
 import { ExtensionSlot } from "../router/RouteRegistry";
 import { getDefaultFilter, SavedFilterMenu } from "./SavedFilterMenu";
 import { InfiniteScrollSentinel } from "./InfiniteScrollSentinel";
@@ -39,7 +33,6 @@ import { migrateLegacyPerformerFavoriteCriterion } from "./filterCriterionState"
 import { useResolvedKeybindingOverrides } from "../hooks/useResolvedKeybindingOverrides";
 import { useKeySequence } from "../hooks/useKeySequence";
 import { resolveKeybinding } from "../keyboard/keybindings";
-import { useAppConfig } from "../state/AppConfigContext";
 import { useCustomFieldDefinitions } from "../hooks/useCustomFieldDefinitions";
 import {
   createCustomFieldQueryDefinitions,
@@ -63,7 +56,7 @@ import {
   type PreviousSearchSort,
 } from "../utils/relevanceSort";
 import { trackInteraction } from "../utils/interactionTracking";
-import { toolbarIconButtonClass, toolbarSegmentClass, toolbarSelectClass } from "./listToolbarStyles";
+import { toolbarIconButtonClass, toolbarSegmentClass } from "./listToolbarStyles";
 import { PageSizeSelect } from "./PageSizeSelect";
 import { ListPageCardSizeContext } from "./ListPageCardSizeContext";
 import { useExtensions } from "../extensions/ExtensionLoader";
@@ -151,7 +144,6 @@ export interface ListPageProps {
   showPagingControls?: boolean;
   customFilterSections?: FilterDialogCustomSection[];
   showClearAllObjectFilters?: boolean;
-  showCustomFilterDivider?: boolean;
   supportsFilterExpressions?: boolean;
 }
 const DEFAULT_ZOOM_LEVEL = 1;
@@ -313,7 +305,6 @@ export function ListPage({
   showPagingControls = true,
   customFilterSections,
   showClearAllObjectFilters = true,
-  showCustomFilterDivider = true,
   supportsFilterExpressions = false,
 }: ListPageProps) {
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
@@ -331,7 +322,6 @@ export function ListPage({
   const [autoScrollControlsAwake, setAutoScrollControlsAwake] = useState(true);
   const defaultUIOptionsModeRef = useRef<string | undefined>(undefined);
   const restoredPrefsRef = useRef(false);
-  const { config } = useAppConfig();
   const { getListFiltersForEntity, getListSortsForEntity } = useExtensions();
   const keybindingOverrides = useResolvedKeybindingOverrides();
   const customFieldEntityType = customFieldEntityTypeForFilterMode(filterMode);
@@ -1305,7 +1295,6 @@ export function ListPage({
           criteria={mergedCriteriaDefinitions}
           activeFilter={editorObjectFilter}
           customSections={mergedCustomFilterSections}
-          showCustomSectionDivider={showCustomFilterDivider}
           supportsFilterExpressions={supportsFilterExpressions}
           subjectLabel={title.toLowerCase()}
           onApply={(f) => {

@@ -282,10 +282,6 @@ function getNameSearchInput(entity: MediaScrapeEntity) {
   return sanitized || raw;
 }
 
-function buildFragmentDraft(entityType: MediaEntityType, entity: MediaScrapeEntity) {
-  return buildFragmentDraftForUrl(entityType, entity, entity.urls[0] ?? "");
-}
-
 function buildFragmentDraftForUrl(entityType: MediaEntityType, entity: MediaScrapeEntity, sourceUrl: string) {
   return JSON.stringify(
     {

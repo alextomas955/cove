@@ -787,14 +787,6 @@ export function ImageCreateModal({ open, initialTitle = "", onClose, onCreated }
     setNoDownloaderFound(false);
   };
 
-  const handleCreateWithoutDownload = (data: ImageCreate) => {
-    mutation.mutate({
-      data,
-      contextTagIdsByPerformer: EMPTY_FORM_STATE.contextTagIdsByPerformer,
-      selectedPerformerIds: EMPTY_FORM_STATE.selectedPerformerIds,
-    });
-  };
-
   const visibleError =
     (mutation.error ?? fileMutation.error ?? urlMutation.error) instanceof NoDownloaderFoundError
       ? null

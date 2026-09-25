@@ -8,7 +8,6 @@ import {
   tagApplications,
   tags,
   entityImages,
-  metadata,
   fileOps,
   galleries,
 } from "../api/client";
@@ -24,23 +23,19 @@ import {
   resolveTagProvenance,
 } from "../components/shared";
 import {
-  Plus,
   Trash2,
   Search,
   Eye,
   EyeOff,
-  ArrowLeft,
   ThumbsUp,
   Check,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   MoreVertical,
-  Gauge,
   Clapperboard,
   FolderOpen,
   Layers,
-  Clock,
   List,
   RefreshCw,
   Camera,
@@ -131,11 +126,7 @@ import { faceDisplayName } from "../utils/faceDisplay";
 import { getEditableTagIds, getLockedTagIds, mergeTagIds } from "../utils/tags";
 import { VideoVisualSimilarityPanel, useVideoVisualSimilarityAvailability } from "../components/VisualSimilarityPanel";
 import { VideoAudioSimilarityPanel, useVideoAudioSimilarityAvailability } from "../components/AudioSimilarityPanel";
-import {
-  EntityReferenceMultiSelector,
-  EntityReferenceSelector,
-  EntityReferenceValue,
-} from "../components/EntityReferenceSelector";
+import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { MetadataServerLinks } from "../components/MetadataServerLinks";
 import { normalizeStoredResumeTime } from "../utils/playbackResume";
@@ -376,7 +367,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
     autoplay: queueAutoplay,
     toggleAutoplay,
   } = useVideoQueue();
-  const { getTabsForPage, getExtensionRevision, resolveComponent: resolveExtComponent, getFeature } = useExtensions();
+  const { getTabsForPage, getExtensionRevision, resolveComponent: resolveExtComponent } = useExtensions();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
@@ -401,8 +392,6 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
   const canReadVideo = canReadEntity("video", hasPermission);
   const canDeleteVideo = canDeleteEntity("video", hasPermission);
   const canDeleteVideoFiles = hasPermission("videos.delete.file");
-  const canReadGroups = canReadEntity("group", hasPermission);
-  const canReadGalleries = canReadEntity("gallery", hasPermission);
   const canReadFaces = canReadEntity("face", hasPermission);
   const canWriteFaces = canWriteEntity("face", hasPermission);
   // Correcting face occurrences needs a provider extension; without one the host has nothing to defer
@@ -452,7 +441,6 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
   const videoPlayDuration = videoEngagement?.playDuration ?? 0;
   const videoResumeTime = videoEngagement?.resumeTime;
   const videoLikeCount = videoEngagement?.likeCount ?? 0;
-  const videoDerivedLikeCount = videoEngagement?.derivedLikeCount ?? 0;
   const videoPageVisitCount = videoEngagement?.pageVisitCount ?? 0;
   const primaryFileForResume =
     video?.primaryFileId === undefined
@@ -585,7 +573,6 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
 
   const {
     data: detectionsData,
-    isLoading: detectionsLoading,
     error: detectionsError,
     refetch: retryDetections,
   } = useQuery({
@@ -1682,7 +1669,6 @@ export function DetailsTab({
   onMarkFaceNotPresent,
   markingFaceId,
   onSplitFace,
-  onRequestReportTag,
 }: {
   video: Video;
   onNavigate: (r: any) => void;
@@ -3064,86 +3050,6 @@ function formatTimelineTime(seconds: number) {
   }
 
   return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function DetectionsPanel({
-  detections,
-  loading,
-  onSeek,
-}: {
-  detections: Detection[];
-  loading: boolean;
-  onSeek?: (time: number) => void;
-}) {
-  const classCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const detection of detections) {
-      counts.set(detection.class, (counts.get(detection.class) ?? 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
-  }, [detections]);
-
-  if (loading) {
-    return <div className="text-sm text-secondary">Loading detections...</div>;
-  }
-
-  if (detections.length === 0) {
-    return <div className="text-sm text-muted">No detections recorded for this video.</div>;
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-secondary">
-        <span>
-          {detections.length} detection{detections.length !== 1 ? "s" : ""}
-        </span>
-        {classCounts.map(([name, count]) => (
-          <span key={name} className="rounded-full border border-border bg-surface px-2 py-1">
-            {name} · {count}
-          </span>
-        ))}
-      </div>
-      <div className="space-y-1">
-        {detections.map((detection) => (
-          <div key={detection.id} className="rounded border border-border bg-card px-3 py-2 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                className="flex items-center gap-3 text-left hover:text-accent"
-                onClick={() => onSeek?.(detection.observedAtSec ?? 0)}
-              >
-                <span className="w-20 font-mono text-xs text-accent">
-                  {formatTimelineTime(detection.observedAtSec ?? 0)}
-                </span>
-                <span className="text-foreground">{detection.class}</span>
-                <span className="rounded bg-surface px-1.5 py-0.5 text-xs text-secondary">
-                  {Math.round(detection.score * 100)}%
-                </span>
-              </button>
-              <div className="text-xs text-secondary">
-                {detection.frameWidth}×{detection.frameHeight}
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs text-secondary">
-              <span className="rounded bg-surface px-1.5 py-0.5">x {detection.x.toFixed(3)}</span>
-              <span className="rounded bg-surface px-1.5 py-0.5">y {detection.y.toFixed(3)}</span>
-              <span className="rounded bg-surface px-1.5 py-0.5">w {detection.w.toFixed(3)}</span>
-              <span className="rounded bg-surface px-1.5 py-0.5">h {detection.h.toFixed(3)}</span>
-              {detection.refKind && detection.refId != null && (
-                <span className="rounded bg-surface px-1.5 py-0.5">
-                  {detection.refKind} #{detection.refId}
-                </span>
-              )}
-              {detection.groupKey && (
-                <span className="rounded bg-surface px-1.5 py-0.5">group {detection.groupKey}</span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // ===== Inline Video Edit Panel =====

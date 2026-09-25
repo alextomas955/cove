@@ -1,12 +1,4 @@
-import {
-  useState,
-  useMemo,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
+import { useState, useMemo, useCallback, useEffect, useId, useRef } from "react";
 import {
   X,
   Search,
@@ -103,7 +95,6 @@ interface FilterDialogProps {
   onApply: (filter: Record<string, unknown>) => void;
   preselectCriterion?: FilterDialogPreselection;
   customSections?: FilterDialogCustomSection[];
-  showCustomSectionDivider?: boolean;
   supportsFilterExpressions?: boolean;
   initialView?: "simple" | "advanced";
   initialExpressionPath?: number[];
@@ -134,7 +125,6 @@ export function FilterDialog({
   onApply,
   preselectCriterion,
   customSections,
-  showCustomSectionDivider = true,
   supportsFilterExpressions = false,
   initialView = "simple",
   initialExpressionPath,
@@ -912,17 +902,6 @@ export function FilterDialog({
     returnToExpression,
     returnToSimpleFilters,
   ]);
-
-  const handleRemoveCriterion = useCallback(
-    (criterion: CriterionDefinition, criterionId?: string) => {
-      setEditFilter((prev) => removeCriterionFilterValue(prev, criterion));
-
-      if (criterionId && expandedCriterion === criterionId) {
-        setExpandedCriterion(null);
-      }
-    },
-    [expandedCriterion],
-  );
 
   const handleSetCriterion = useCallback((criterion: CriterionDefinition, value: unknown) => {
     setEditFilter((prev) => setCriterionFilterValue(prev, criterion, value));

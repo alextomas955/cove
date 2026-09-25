@@ -20,7 +20,6 @@ import {
   FILTER_EXPRESSION_OPERATOR_PRESENTATION,
   getFilterExpressionPresentationChildren,
   getFilterExpressionPresentationOperator,
-  normalizeFilterExpressionOperator,
   sortFilterExpressionChildrenForDisplay,
 } from "../utils/filterExpressionPresentation";
 import { repairRelatedScopes } from "../utils/filterExpressionTree";
@@ -415,7 +414,6 @@ export function formatFilterChipValue(
 }
 
 function MultiIdFilterChipDisplay({
-  def,
   value,
   nameMap,
   fallback,

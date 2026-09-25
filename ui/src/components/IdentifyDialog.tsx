@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { metadata, system } from "../api/client";
 import type { MetadataServer, ScraperSummary } from "../api/types";
 import { useAppConfig } from "../state/AppConfigContext";
-import { Search, X, Loader2, Check, GripVertical, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Search, X, Loader2, ChevronDown, ChevronUp, Info } from "lucide-react";
 import {
   PERFORMER_GENDER_OPTIONS,
   buildAllowedGenderKeys,

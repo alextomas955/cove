@@ -4,8 +4,6 @@ import { audios, faces, galleries, groups, images, performers, videos, texts, en
 import type {
   Audio,
   AudioFilterCriteria,
-  Face,
-  FaceSimilar,
   FieldProvenance,
   FindFilter,
   Gallery,
@@ -23,8 +21,6 @@ import type {
 } from "../api/types";
 import {
   formatDate,
-  formatDuration,
-  getResolutionLabel,
   TagBadge,
   CustomFieldsDisplay,
   FieldProvenanceHover,
@@ -37,10 +33,8 @@ import {
   FolderOpen,
   GitMerge,
   Headphones,
-  Heart,
   ImageIcon,
   Layers,
-  Loader2,
   MapPin,
   MoreVertical,
   Music,
@@ -199,10 +193,6 @@ export function PerformerDetailPage({ id, onNavigate }: Props) {
   const canReadFaces = canReadEntity("face", hasPermission);
   const canReadPerformerVideos = canReadEntity("video", hasPermission);
   const canReadPerformerGalleries = canReadEntity("gallery", hasPermission);
-  const canReadPerformerImages = canReadEntity("image", hasPermission);
-  const canReadPerformerAudios = canReadEntity("audio", hasPermission);
-  const canReadPerformerTexts = canReadEntity("text", hasPermission);
-  const canReadPerformerGroups = canReadEntity("group", hasPermission);
   const canReadTags = canReadEntity("tag", hasPermission);
   const canScrapePerformer = hasAnyPermission(hasPermission, ["performers.scrape", "performers.write"]);
   const showPerformerOpsMenu = canWritePerformer || canScrapePerformer || canDeletePerformer;

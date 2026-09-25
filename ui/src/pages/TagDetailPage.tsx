@@ -36,8 +36,6 @@ import type {
 } from "../api/types";
 import {
   formatDate,
-  formatDuration,
-  getResolutionLabel,
   TagBadge,
   CustomFieldsDisplay,
   FieldProvenanceHover,
@@ -50,7 +48,6 @@ import {
   FolderOpen,
   GitMerge,
   Headphones,
-  Heart,
   ImageIcon,
   Layers,
   Loader2,
@@ -68,17 +65,6 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { NarrativeText } from "../components/NarrativeText";
 import { DetailMergeDialog } from "../components/DetailMergeDialog";
 import { ExtensionSlot } from "../router/RouteRegistry";
-import {
-  AudioTile,
-  VideoCard,
-  PerformerTile,
-  ImageTile,
-  GalleryTile,
-  StudioTile,
-  GroupTile,
-  SegmentTile,
-  TextTile,
-} from "../components/EntityCards";
 import { QuickViewDialog } from "../components/QuickViewDialog";
 import { DetailListPagination, DetailListToolbar } from "../components/DetailListToolbar";
 import { ListLoadError } from "../components/ListLoadError";
@@ -122,7 +108,6 @@ import { useAuth } from "../auth/AuthContext";
 import { canDeleteEntity, canReadEntity, canWriteEntity, filterItemsByPermission } from "../auth/visibility";
 import { withRequiredMultiId } from "../utils/detailRelationFilters";
 import { HierarchyContentToggle } from "../components/HierarchyContentToggle";
-import { getEntityCardMinWidthPx } from "../hooks/useEntityCardSize";
 import {
   useDetailBooleanUrlState,
   useDetailTabUrlState,

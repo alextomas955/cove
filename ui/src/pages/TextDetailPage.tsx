@@ -15,7 +15,6 @@ import {
   Link2,
   MoreVertical,
   RefreshCw,
-  Rows3,
   ThumbsUp,
   Trash2,
 } from "lucide-react";
@@ -938,26 +937,6 @@ function TextHistoryTab({
           <span className="text-muted">Updated:</span> <span className="text-foreground">{formatDate(updatedAt)}</span>
         </div>
       </div>
-    </div>
-  );
-}
-
-function RelatedSection({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-muted">
-        {icon}
-        {title}
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">{children}</div>
     </div>
   );
 }
