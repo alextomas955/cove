@@ -10,6 +10,12 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-25
+
+Fixed extension upgrades and uninstalls that could leave extensions stuck disabled.
+
+- Updating an extension together with a dependency it requires no longer fails partway and leaves the updated extensions disabled. Earlier versions unloaded the dependency first, which disabled its dependents, and then could not unload those dependents because a disabled extension no longer had the services its uninstall step runs with. The same failure affected uninstalling or updating any extension that had been disabled since the server last started, and every later attempt failed the same way until the server restarted. Cove now sets up the services just for the uninstall step, and the extension is unloaded even when that step cannot run. Extensions left disabled by this failure can be updated from Discover after upgrading. Other extensions that depend on an updated one are still disabled during the update and need to be enabled again afterwards.
+
 ## [1.5.0] - 2026-09-24
 
 - Videos can now be converted to another codec or container from the video list or a video's own page, using the FFmpeg that Cove already has. Pick a quality, optionally lower the frame rate, and convert a selection in the background; the converted file is attached to the video, and can optionally replace the original once it has been verified to decode cleanly and to show the same footage. Conversion measures quality rather than guessing a bitrate. For each video, Cove encodes a few short samples, scores them against the original, and searches for the smallest file that keeps the chosen quality.
