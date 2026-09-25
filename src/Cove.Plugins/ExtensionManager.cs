@@ -1704,17 +1704,7 @@ public class ExtensionManager : IExtensionContributionRuntime
         }
 
         var wasDataExtension = ext is IDataExtension;
-        using (var extensionLease = CreateExtensionExecutionLease(CaptureExtensionExecution(ext)))
-        {
-            try
-            {
-                await ext.OnUninstallAsync(extensionLease.Services, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "OnUninstall failed for extension {Id}", id);
-            }
-        }
+        await RunUninstallHookAsync(ext, ct);
 
         await ShutdownExtensionCoreAsync(id, ct, retireOverlay: true);
 
@@ -1736,6 +1726,44 @@ public class ExtensionManager : IExtensionContributionRuntime
         GC.WaitForPendingFinalizers();
         GC.Collect();
         return true;
+    }
+
+    /// <summary>
+    /// Run OnUninstall without letting it block the unload. A disabled runtime extension has no
+    /// current container, so one is built only for the hook; the unload's shutdown retires it.
+    /// </summary>
+    private async Task RunUninstallHookAsync(IExtension ext, CancellationToken ct)
+    {
+        if (IsOverlayExtension(ext.Id)
+            && _overlay?.TryGetGeneration(ext.Id, ext, out _) != true
+            && !BuildUninstallProvider(ext))
+        {
+            _logger?.LogWarning("Skipping OnUninstall for extension {Id}: no service container could be built", ext.Id);
+            return;
+        }
+
+        try
+        {
+            using var extensionLease = CreateExtensionExecutionLease(CaptureExtensionExecution(ext));
+            await ext.OnUninstallAsync(extensionLease.Services, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "OnUninstall failed for extension {Id}", ext.Id);
+        }
+    }
+
+    private bool BuildUninstallProvider(IExtension ext)
+    {
+        if (_rootServices == null || _hostDescriptors == null)
+            return false;
+
+        _overlay ??= new ExtensionServiceOverlay(_rootServices, _hostDescriptors, _logger);
+        return _overlay.TryBuildProvider(
+            ext.Id,
+            ext,
+            _context,
+            (failedId, ex) => _logger?.LogWarning(ex, "Failed to build uninstall service container for extension {Id}", failedId));
     }
 
     // ========================================================================
