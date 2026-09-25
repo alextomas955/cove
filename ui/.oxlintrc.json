@@ -6,6 +6,8 @@
   },
   "rules": {
     "vitest/require-mock-type-parameters": "off",
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectUnique"] }],
 
     "eslint/no-unused-vars": "warn",
     "react/immutability": "warn",
@@ -17,10 +19,7 @@
     "react/set-state-in-effect": "warn",
     "react/static-components": "warn",
     "react/use-memo": "warn",
-    "react-hooks/exhaustive-deps": "warn",
-    "vitest/expect-expect": "warn",
-    "vitest/no-conditional-expect": "warn",
-    "vitest/valid-expect": "warn"
+    "react-hooks/exhaustive-deps": "warn"
   },
   "ignorePatterns": ["coverage/", "src/generated/"]
 }

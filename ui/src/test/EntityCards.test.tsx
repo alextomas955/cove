@@ -479,7 +479,9 @@ describe("PerformerTile", () => {
     expect(icon.closest("a")).toHaveAttribute("href", "/performer/7");
     expect(icon.closest("a")).toHaveAttribute("tabindex", "-1");
     expect(icon.closest("a")).toHaveClass("relative", "z-10", "ml-auto");
-    if (colorClass) expect(icon).toHaveClass(colorClass);
+    expect([...icon.classList].filter((className) => className.startsWith("text-"))).toEqual(
+      colorClass ? [colorClass] : [],
+    );
   });
 
   it("does not render an empty foreground link for an unknown gender", () => {
