@@ -220,11 +220,9 @@ export function AudioDetailPage({ id, onNavigate }: Props) {
     canWriteAudio,
   ]);
 
-  useEffect(() => {
-    if (!tabs.some((tab) => tab.key === activeTab)) {
-      setActiveTab("details");
-    }
-  }, [activeTab, tabs]);
+  if (!tabs.some((tab) => tab.key === activeTab)) {
+    setActiveTab("details");
+  }
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

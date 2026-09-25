@@ -280,24 +280,33 @@ export function SetupWizardPage({ config, onComplete }: Props) {
     onError: (err: Error) => setError(err.message),
   });
 
+  // Both start undefined so results already cached at mount are still applied.
+  const [prevStashImportResult, setPrevStashImportResult] = useState<typeof stashImportResultQuery.data>(undefined);
+  if (stashImportResultQuery.data !== prevStashImportResult) {
+    setPrevStashImportResult(stashImportResultQuery.data);
+    if (stashImportResultQuery.data) {
+      setError(null);
+      setStashResult(stashImportResultQuery.data);
+    }
+  }
+
+  const [prevStashImportJob, setPrevStashImportJob] = useState<typeof stashImportJobQuery.data>(undefined);
+  if (stashImportJobQuery.data !== prevStashImportJob) {
+    const job = stashImportJobQuery.data;
+    setPrevStashImportJob(job);
+    if (job?.status === "failed") {
+      setError(job.error ?? "Stash import failed.");
+    } else if (job?.status === "cancelled") {
+      setError("Stash import was cancelled.");
+    }
+  }
+
   useEffect(() => {
     if (!stashImportResultQuery.data) return;
-    setError(null);
-    setStashResult(stashImportResultQuery.data);
+    // oxlint-disable-next-line react/set-state-in-effect -- sets the step only after refetching bootstrap status from the server, not synchronously
     goToPostContentSetup();
     queryClient.invalidateQueries();
   }, [queryClient, stashImportResultQuery.data]);
-
-  useEffect(() => {
-    const job = stashImportJobQuery.data;
-    if (!job) return;
-
-    if (job.status === "failed") {
-      setError(job.error ?? "Stash import failed.");
-    } else if (job.status === "cancelled") {
-      setError("Stash import was cancelled.");
-    }
-  }, [stashImportJobQuery.data]);
 
   const activeStashImportJob = stashImportJobQuery.data;
   const isStashImportActive = activeStashImportJob?.status === "pending" || activeStashImportJob?.status === "running";

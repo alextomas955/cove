@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { videos, tagApplications } from "../api/client";
 import type { Video, VideoUpdate, TagApplication } from "../api/types";
@@ -47,7 +47,9 @@ export function VideoEditModal({ video, open, onClose }: Props) {
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(video.remoteIds.map((remoteId) => ({ ...remoteId })));
 
-  useEffect(() => {
+  const [prevVideo, setPrevVideo] = useState(video);
+  if (video !== prevVideo) {
+    setPrevVideo(video);
     setTitle(video.title || "");
     setCode(video.code || "");
     setDetails(video.details || "");
@@ -65,7 +67,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
     setContextTagIdsByPerformer(buildPerformerContextTagIds(video));
     setCustomFields({ ...video.customFields });
     setRemoteIds(video.remoteIds.map((remoteId) => ({ ...remoteId })));
-  }, [video]);
+  }
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },

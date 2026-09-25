@@ -121,6 +121,26 @@ export function JobDrawer({ open, onClose }: Props) {
     [queryClient],
   );
 
+  // Clean up stale entries from realtimeJobs when the API no longer returns them
+  const [prevActiveJobs, setPrevActiveJobs] = useState(activeJobs);
+  if (activeJobs !== prevActiveJobs) {
+    setPrevActiveJobs(activeJobs);
+    if (activeJobs) {
+      const activeIds = new Set(activeJobs.map((j) => j.id));
+      setRealtimeJobs((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [id] of next) {
+          if (!activeIds.has(id)) {
+            next.delete(id);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+  }
+
   // Merge API jobs with real-time updates
   const mergedActive = activeJobs?.map((j) => realtimeJobs.get(j.id) ?? j) ?? [];
   // Also add any real-time jobs not in the API response
@@ -129,23 +149,6 @@ export function JobDrawer({ open, onClose }: Props) {
       mergedActive.push(job);
     }
   }
-
-  // Clean up stale entries from realtimeJobs when the API no longer returns them
-  useEffect(() => {
-    if (!activeJobs) return;
-    const activeIds = new Set(activeJobs.map((j) => j.id));
-    setRealtimeJobs((prev) => {
-      let changed = false;
-      const next = new Map(prev);
-      for (const [id] of next) {
-        if (!activeIds.has(id)) {
-          next.delete(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [activeJobs]);
 
   const runningCount = mergedActive.filter((j) => j.status === "running" || j.status === "pending").length;
 

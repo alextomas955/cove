@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { studios } from "../api/client";
 import type { Studio, StudioCreate, StudioFilterCriteria } from "../api/types";
@@ -226,7 +226,7 @@ export function StudioCreateModal({
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    name: "",
+    name: open ? initialName.trim() : "",
     details: "",
   });
   const [parentId, setParentId] = useState<number | undefined>(undefined);
@@ -234,9 +234,13 @@ export function StudioCreateModal({
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [createAnother, setCreateAnother] = useState(false);
 
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialName, setPrevInitialName] = useState(initialName);
+  if (open !== prevOpen || initialName !== prevInitialName) {
+    setPrevOpen(open);
+    setPrevInitialName(initialName);
     if (open) setForm((current) => ({ ...current, name: initialName.trim() }));
-  }, [initialName, open]);
+  }
 
   const resetForm = () => {
     setForm({ name: "", details: "" });

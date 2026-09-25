@@ -210,11 +210,14 @@ export function SavedFilterMenu({
     };
   }, [open]);
 
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) setPanelPosition(null);
+  }
+
   useLayoutEffect(() => {
-    if (!open) {
-      setPanelPosition(null);
-      return;
-    }
+    if (!open) return;
 
     const positionPanel = () => {
       const trigger = triggerRef.current;

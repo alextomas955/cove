@@ -482,6 +482,7 @@ export function BulkSelectionActions({
 
   useEffect(() => {
     if (batchDownloadStorageKey) {
+      // oxlint-disable-next-line react/set-state-in-effect -- re-reads the stored download options from localStorage when the storage key changes; storage reads stay out of render
       setBatchDownloadOptions(loadStoredBatchDownloadOptions(batchDownloadStorageKey));
     }
   }, [batchDownloadStorageKey]);

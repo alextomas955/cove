@@ -168,12 +168,39 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   // The tag the form was last filled from; saving sends only the fields changed since.
   const [baseline, setBaseline] = useState(tag);
 
+  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
+  // reopening after Cancel discards them.
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevTagId, setPrevTagId] = useState(tag.id);
+  const openOrTagChanged = open !== prevOpen || tag.id !== prevTagId;
+  if (openOrTagChanged) {
+    setPrevOpen(open);
+    setPrevTagId(tag.id);
+    if (open) {
+      setBaseline(tag);
+      setName(tag.name);
+      setSortName(tag.sortName ?? "");
+      setDescription(tag.description ?? "");
+      setColor(tag.color ?? "");
+      setTagGroupId(tag.tagGroupId ?? undefined);
+      setMinOccurrenceSec(tag.minOccurrenceSec ?? undefined);
+      setMinOccurrencePercent(tag.minOccurrencePercent ?? undefined);
+      setPlayerBarMode(readPlayerBarMode(tag.showAsSegment));
+      setSegmentColorOverride(tag.segmentColorOverride ?? "");
+      setSegmentLaneOverride(tag.segmentLaneOverride ?? undefined);
+      setAliases(tag.aliases);
+      setSelectedParentIds(tag.parents.map((t) => t.id));
+      setSelectedChildIds(tag.children.map((t) => t.id));
+      setRemoteIds(tag.remoteIds?.length ? tag.remoteIds : []);
+      setCustomFields({ ...tag.customFields });
+    }
+  }
+
   // When the tag refetches while the dialog is open, untouched fields follow it and the user's edits stay.
-  useEffect(() => {
-    if (!open || tag === baseline) return;
+  if (open && !openOrTagChanged && tag !== baseline) {
     applyFormFields(untouchedFieldUpdates(currentValues, tagFormValues(baseline), tagFormValues(tag)), formSetters);
     setBaseline(tag);
-  }, [tag]);
+  }
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
@@ -186,27 +213,10 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     },
   });
 
-  // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
-  // reopening after Cancel discards them.
+  // Each opening also clears the result of the previous save attempt, alongside the form refill above.
   useEffect(() => {
     if (!open) return;
     mutation.reset();
-    setBaseline(tag);
-    setName(tag.name);
-    setSortName(tag.sortName ?? "");
-    setDescription(tag.description ?? "");
-    setColor(tag.color ?? "");
-    setTagGroupId(tag.tagGroupId ?? undefined);
-    setMinOccurrenceSec(tag.minOccurrenceSec ?? undefined);
-    setMinOccurrencePercent(tag.minOccurrencePercent ?? undefined);
-    setPlayerBarMode(readPlayerBarMode(tag.showAsSegment));
-    setSegmentColorOverride(tag.segmentColorOverride ?? "");
-    setSegmentLaneOverride(tag.segmentLaneOverride ?? undefined);
-    setAliases(tag.aliases);
-    setSelectedParentIds(tag.parents.map((t) => t.id));
-    setSelectedChildIds(tag.children.map((t) => t.id));
-    setRemoteIds(tag.remoteIds?.length ? tag.remoteIds : []);
-    setCustomFields({ ...tag.customFields });
   }, [tag.id, open]);
 
   const handleClose = () => {

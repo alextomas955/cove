@@ -275,14 +275,16 @@ function ExpressionGroupEditor({
     group.relatedScope?.matchMode === "distinct" && group.children.length >= MAX_DISTINCT_RELATED_CONDITIONS;
   const operatorText =
     mode === "NOT" || mode === "NONE" ? presentation.label : `${presentation.label} of ${displayedChildren.length}`;
-  useEffect(() => {
+  const [prevGroup, setPrevGroup] = useState(group);
+  if (prevGroup !== group) {
+    setPrevGroup(group);
     setSelected(new Set());
     setGroupingMode(false);
     setOpenMenu(null);
     setMoveMenuIndex(null);
     setOperatorPickerOpen(false);
     setCollapsed(false);
-  }, [group]);
+  }
   useEffect(() => {
     if (!operatorPickerOpen) return;
     window.setTimeout(

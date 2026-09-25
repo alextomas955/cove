@@ -1585,6 +1585,7 @@ export function SettingsPage() {
       return;
     }
 
+    // oxlint-disable-next-line react/set-state-in-effect -- re-reads the tab from window.location once extension settings paths are known; the URL cannot be read during render
     setActiveTab((current) => {
       const nextTab = readSettingsTabFromUrl(extensionSettingsPathAliases);
       return current === nextTab ? current : nextTab;
@@ -1815,12 +1816,22 @@ export function SettingsPage() {
       .slice(0, 8);
   }, [resolvedSettingsGroupKeyByTab, settingsSearch, visibleTabs]);
 
-  useEffect(() => {
+  // Open the active tab's nav group whenever the tab or the grouping changes; null until the first render.
+  const [prevGroupInputs, setPrevGroupInputs] = useState<{
+    activeTab: SettingsTab;
+    groupKeyByTab: typeof resolvedSettingsGroupKeyByTab;
+  } | null>(null);
+  if (
+    prevGroupInputs === null ||
+    prevGroupInputs.activeTab !== activeTab ||
+    prevGroupInputs.groupKeyByTab !== resolvedSettingsGroupKeyByTab
+  ) {
+    setPrevGroupInputs({ activeTab, groupKeyByTab: resolvedSettingsGroupKeyByTab });
     const activeGroup = resolvedSettingsGroupKeyByTab.get(activeTab);
     if (activeGroup) {
       setOpenSettingsGroups((current) => ({ ...current, [activeGroup]: true }));
     }
-  }, [activeTab, resolvedSettingsGroupKeyByTab]);
+  }
 
   // Remember the user's last open/closed state for the settings nav groups.
   useEffect(() => {
@@ -1831,11 +1842,8 @@ export function SettingsPage() {
     }
   }, [openSettingsGroups]);
 
-  useEffect(() => {
-    if (!extensionsLoaded && !tabByKey.has(activeTab as BuiltInSettingsTab)) {
-      return;
-    }
-
+  // Fall back to a visible tab when the active one is hidden (an extension tab waits for extensions to load).
+  if (extensionsLoaded || tabByKey.has(activeTab as BuiltInSettingsTab)) {
     const nextTab = resolveVisibleSettingsTab(
       activeTab,
       visibleTabs,
@@ -1844,7 +1852,7 @@ export function SettingsPage() {
     if (nextTab !== activeTab) {
       setActiveTab(nextTab);
     }
-  }, [activeTab, canWriteSystemSettings, extensionsLoaded, visibleTabs]);
+  }
 
   // Debounced auto-save: triggers 800ms after draft changes
   useEffect(() => {
@@ -4644,6 +4652,7 @@ function LocalInterfacePanel({ serverRatingOptions }: { serverRatingOptions?: Pa
   );
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- re-reads the override from localStorage, which has no same-tab change event, when the server options or signed-in user change
     setLocalRatingOverride(readStoredRatingOptionsOverride());
   }, [serverRatingOptions, user]);
 
@@ -4759,36 +4768,49 @@ function MarkdownRenderingPreferencePanel() {
   );
 }
 
+function readExternalLinkResult(): { code: string | null; status: string; present: boolean } {
+  const fragment = new URLSearchParams(
+    window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
+  );
+  const codes = fragment.getAll("external_link_code");
+  const failed = fragment.has("external_link_error");
+  if (codes.length === 1 && codes[0] && !failed) {
+    return { code: codes[0], status: "", present: true };
+  }
+  if (codes.length > 0 || failed) {
+    return {
+      code: null,
+      status:
+        codes.length > 1 || (codes.length > 0 && failed)
+          ? "This external identity link is invalid or expired."
+          : "The external provider could not prepare that identity link.",
+      present: true,
+    };
+  }
+  return { code: null, status: "", present: false };
+}
+
 export function ExternalIdentityAccountControls() {
   const { authEnabled, user, logout } = useAuth();
   const queryClient = useQueryClient();
-  const [pendingCode, setPendingCode] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
+  // The provider hands its result back once in the URL fragment; read it when the panel mounts.
+  const [externalLinkResult] = useState(readExternalLinkResult);
+  const [pendingCode, setPendingCode] = useState<string | null>(externalLinkResult.code);
+  const [status, setStatus] = useState(externalLinkResult.status);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Strip the consumed link result from the URL so a reload does not replay it.
   useEffect(() => {
+    if (!externalLinkResult.present) return;
     const url = new URL(window.location.href);
     const fragment = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
-    const codes = fragment.getAll("external_link_code");
-    const failed = fragment.has("external_link_error");
     fragment.delete("external_link_code");
     fragment.delete("external_link_error");
     url.hash = fragment.toString() ? `#${fragment.toString()}` : "";
-    if (codes.length === 1 && codes[0] && !failed) {
-      setPendingCode(codes[0]);
-    } else if (codes.length > 0 || failed) {
-      setStatus(
-        codes.length > 1 || (codes.length > 0 && failed)
-          ? "This external identity link is invalid or expired."
-          : "The external provider could not prepare that identity link.",
-      );
-    }
-    if (codes.length > 0 || failed) {
-      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-    }
-  }, []);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [externalLinkResult]);
 
   const providersQuery = useQuery({
     queryKey: ["auth", "external-providers"],
@@ -5047,9 +5069,11 @@ function UserSettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
     }
   };
 
-  useEffect(() => {
+  const [prevUser, setPrevUser] = useState(user);
+  if (user !== prevUser) {
+    setPrevUser(user);
     setTrackingPreferences(resolveTrackingPreferences(user?.uiPreferences?.tracking));
-  }, [user]);
+  }
 
   const updateTrackingPreferences = (patch: Partial<ResolvedTrackingPreferences>) => {
     const nextTracking = {
@@ -5239,19 +5263,24 @@ function LogsPanel() {
     onError: (error: Error) => setStreamError(error.message),
   });
 
-  useEffect(() => {
+  // Both start undefined so query data already cached at mount is still applied.
+  const [prevLogLevelStatus, setPrevLogLevelStatus] = useState<typeof logLevelStatus>(undefined);
+  if (logLevelStatus !== prevLogLevelStatus) {
+    setPrevLogLevelStatus(logLevelStatus);
     if (logLevelStatus) {
       setServerLogLevel(logLevelStatus.level);
       setConfiguredLogLevel(logLevelStatus.configuredLevel);
       setTraceExpiresAt(logLevelStatus.traceExpiresAt ?? null);
     }
-  }, [logLevelStatus]);
+  }
 
-  useEffect(() => {
+  const [prevInitialLogEntries, setPrevInitialLogEntries] = useState<typeof initialLogEntries>(undefined);
+  if (initialLogEntries !== prevInitialLogEntries) {
+    setPrevInitialLogEntries(initialLogEntries);
     if (initialLogEntries) {
       setTailEntries(initialLogEntries.slice(-200));
     }
-  }, [initialLogEntries]);
+  }
 
   useEffect(() => {
     const connection = new signalR.HubConnectionBuilder().withUrl("/hubs/logs").withAutomaticReconnect().build();
@@ -7232,6 +7261,7 @@ function ThemeSelector() {
   };
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- re-reads (and migrates, writing back to localStorage) the stored style options when the signed-in user changes
     setStyleOptionsState(readPersistedStyleOptions());
   }, [user]);
 
@@ -8530,9 +8560,15 @@ export function FindAndInstallExtensions() {
   };
 
   // Reset to the first page whenever the search/filters change.
-  useEffect(() => {
+  const [prevRegistryFilters, setPrevRegistryFilters] = useState({ searchQuery, category, registryType });
+  if (
+    prevRegistryFilters.searchQuery !== searchQuery ||
+    prevRegistryFilters.category !== category ||
+    prevRegistryFilters.registryType !== registryType
+  ) {
+    setPrevRegistryFilters({ searchQuery, category, registryType });
     setPage(1);
-  }, [searchQuery, category, registryType]);
+  }
 
   const { data: searchResults, isLoading: searching } = useQuery({
     queryKey: ["registry-search", searchQuery, category, registryType, page],

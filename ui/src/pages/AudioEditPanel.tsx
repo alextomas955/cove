@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { audios } from "../api/client";
 import type { Audio, AudioUpdate, VideoGroupInput } from "../api/types";
@@ -110,15 +110,14 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
   };
   // When the audio refetches (after Mark organized, a scrape or a finished job), untouched fields follow it
   // and the user's edits stay.
-  useEffect(() => {
-    if (audio === baseline) return;
+  if (audio !== baseline) {
     const next = audioFormValues(audio);
     applyFormFields(
       audio.id === baseline.id ? untouchedFieldUpdates(currentValues, audioFormValues(baseline), next) : next,
       formSetters,
     );
     setBaseline(audio);
-  }, [audio]);
+  }
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },

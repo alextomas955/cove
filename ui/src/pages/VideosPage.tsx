@@ -1,5 +1,5 @@
 import { VideoCreateModal } from "../components/VideoCreateModal";
-import { useMemo, useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore, lazy, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { entityEngagement, entityImages, videos } from "../api/client";
 import type {
@@ -130,6 +130,19 @@ function isMobileViewerViewport() {
   );
 }
 
+function subscribeMobileViewer(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+
+  const mediaQuery = window.matchMedia(MOBILE_VIEWER_MEDIA_QUERY);
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }
+
+  mediaQuery.addListener(onChange);
+  return () => mediaQuery.removeListener(onChange);
+}
+
 function getBoolCriterionValue(value: unknown) {
   if (typeof value === "boolean") {
     return value;
@@ -195,7 +208,7 @@ export function VideosPage({ onNavigate }: Props) {
   const [selectAllMatchingPending, setSelectAllMatchingPending] = useState(false);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [wallColumnCount, setWallColumnCount] = useState(5);
-  const [isMobileViewer, setIsMobileViewer] = useState(isMobileViewerViewport);
+  const isMobileViewer = useSyncExternalStore(subscribeMobileViewer, isMobileViewerViewport, () => false);
   const verticalViewerRef = useRef<HTMLDivElement>(null);
   const [verticalFullscreen, setVerticalFullscreen] = useState(false);
   const [verticalFullscreenDismissed, setVerticalFullscreenDismissed] = useState(false);
@@ -230,32 +243,23 @@ export function VideosPage({ onNavigate }: Props) {
       : 720
     : (verticalViewerHeight ?? (typeof window !== "undefined" ? window.innerHeight : 720));
 
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      setIsMobileViewer(false);
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(MOBILE_VIEWER_MEDIA_QUERY);
-    const syncMobileViewer = () => setIsMobileViewer(mediaQuery.matches);
-    syncMobileViewer();
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", syncMobileViewer);
-      return () => mediaQuery.removeEventListener("change", syncMobileViewer);
-    }
-
-    mediaQuery.addListener(syncMobileViewer);
-    return () => mediaQuery.removeListener(syncMobileViewer);
-  }, []);
-
-  useEffect(() => {
+  // Leaving vertical mode resets its viewer state.
+  const [prevVerticalModeInputs, setPrevVerticalModeInputs] = useState({ displayMode, verticalFullscreenDismissed });
+  if (
+    displayMode !== prevVerticalModeInputs.displayMode ||
+    verticalFullscreenDismissed !== prevVerticalModeInputs.verticalFullscreenDismissed
+  ) {
+    setPrevVerticalModeInputs({ displayMode, verticalFullscreenDismissed });
     if (displayMode !== "vertical") {
       setVerticalFullscreen(false);
       setVerticalFullscreenDismissed(false);
       setVerticalAutoScrollEnabled(false);
       setActiveVerticalVideoId(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (displayMode !== "vertical") return;
 
     const mediaQuery = window.matchMedia("(max-width: 767px)");
     const syncMobileFullscreen = () => {
@@ -269,18 +273,37 @@ export function VideosPage({ onNavigate }: Props) {
     return () => mediaQuery.removeEventListener("change", syncMobileFullscreen);
   }, [displayMode, verticalFullscreenDismissed]);
 
-  useEffect(() => {
+  // Vertical mode starts from the configured feed sound default, including on first render.
+  const [prevVerticalSoundInputs, setPrevVerticalSoundInputs] = useState<{
+    defaultFeedVideoSound: boolean;
+    displayMode: typeof displayMode;
+  } | null>(null);
+  if (
+    prevVerticalSoundInputs === null ||
+    defaultFeedVideoSound !== prevVerticalSoundInputs.defaultFeedVideoSound ||
+    displayMode !== prevVerticalSoundInputs.displayMode
+  ) {
+    setPrevVerticalSoundInputs({ defaultFeedVideoSound, displayMode });
     if (displayMode === "vertical") {
       setVerticalSoundEnabled(defaultFeedVideoSound);
     }
-  }, [defaultFeedVideoSound, displayMode]);
+  }
 
-  useEffect(() => {
+  // The measured bounds only apply to the inline vertical viewer.
+  const [prevVerticalBoundsInputs, setPrevVerticalBoundsInputs] = useState({ displayMode, verticalFullscreen });
+  if (
+    displayMode !== prevVerticalBoundsInputs.displayMode ||
+    verticalFullscreen !== prevVerticalBoundsInputs.verticalFullscreen
+  ) {
+    setPrevVerticalBoundsInputs({ displayMode, verticalFullscreen });
     if (displayMode !== "vertical" || verticalFullscreen) {
       setVerticalViewerTop(0);
       setVerticalViewerHeight(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (displayMode !== "vertical" || verticalFullscreen) return;
 
     const updateVerticalBounds = () => {
       const element = verticalViewerRef.current;
@@ -320,12 +343,6 @@ export function VideosPage({ onNavigate }: Props) {
       document.body.style.overflow = previousOverflow;
     };
   }, [verticalFullscreen]);
-
-  useEffect(() => {
-    if (displayMode !== "feed") {
-      setFeedAudioVideoId(null);
-    }
-  }, [displayMode]);
 
   const wakeVerticalAutoScroll = useCallback(() => setVerticalAutoScrollAwake(true), []);
 
@@ -657,19 +674,17 @@ export function VideosPage({ onNavigate }: Props) {
     }
   }, [infiniteVideosQuery.fetchNextPage, infiniteVideosQuery.hasNextPage, infiniteVideosQuery.isFetchingNextPage]);
 
-  useEffect(() => {
-    if (displayMode !== "feed") {
+  // Feed audio only follows a video while the feed is showing and sound is on by default.
+  const [prevFeedAudioInputs, setPrevFeedAudioInputs] = useState({ defaultFeedVideoSound, displayMode });
+  if (
+    defaultFeedVideoSound !== prevFeedAudioInputs.defaultFeedVideoSound ||
+    displayMode !== prevFeedAudioInputs.displayMode
+  ) {
+    setPrevFeedAudioInputs({ defaultFeedVideoSound, displayMode });
+    if (displayMode !== "feed" || !defaultFeedVideoSound) {
       setFeedAudioVideoId(null);
-      return;
     }
-    if (!defaultFeedVideoSound) setFeedAudioVideoId(null);
-  }, [defaultFeedVideoSound, displayMode]);
-
-  useEffect(() => {
-    if (displayMode !== "vertical") {
-      setActiveVerticalVideoId(null);
-    }
-  }, [displayMode]);
+  }
 
   useEffect(() => {
     if (displayMode !== "vertical" || !verticalAutoScrollEnabled || activeVerticalVideoId == null) {

@@ -376,16 +376,21 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
   const [showMerge, setShowMerge] = useState(false);
   const [showIdentify, setShowIdentify] = useState(false);
   const [showSubmitDraft, setShowSubmitDraft] = useState(false);
-  // A draft goes to an external server, so never let an open dialog carry over to the next video in the queue.
-  useEffect(() => setShowSubmitDraft(false), [id]);
   const [showScrapeDialog, setShowScrapeDialog] = useState(false);
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [alternateFileId, setAlternateFileId] = useState<number | null>(null);
   const [alignmentDialogOpen, setAlignmentDialogOpen] = useState(false);
-  useEffect(() => setAlternateFileId(null), [id]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "details");
   const [selectedProfileId, setSelectedProfileId] = useState<number | undefined>(undefined);
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilterState>(EMPTY_SEGMENT_FILTER);
+  const [prevId, setPrevId] = useState(id);
+  if (id !== prevId) {
+    setPrevId(id);
+    // A draft goes to an external server, so never let an open dialog carry over to the next video in the queue.
+    setShowSubmitDraft(false);
+    setAlternateFileId(null);
+    setSegmentFilter(EMPTY_SEGMENT_FILTER);
+  }
   const queryClient = useQueryClient();
   const { backLabel, goBack } = useBackNavigation({ page: "videos" }, onNavigate);
   const canWriteVideo = canWriteEntity("video", hasPermission);
@@ -709,9 +714,6 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
     [segmentRawById, tagIdToGroupId],
   );
 
-  useEffect(() => {
-    setSegmentFilter(EMPTY_SEGMENT_FILTER);
-  }, [id]);
   const visualSimilarityAvailability = useVideoVisualSimilarityAvailability(id);
   const audioSimilarityAvailability = useVideoAudioSimilarityAvailability(id);
   const hasVisualSimilarity = visualSimilarityAvailability.available;
@@ -744,17 +746,14 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, onNavigate }: P
     hasPermission,
   );
 
-  useEffect(() => {
-    if (
-      (activeTab === "similar" && visualSimilarityAvailability.loading) ||
-      (activeTab === "audio-similar" && audioSimilarityAvailability.loading)
-    ) {
-      return;
-    }
-    if (!tabs.some((tab) => tab.key === activeTab)) {
-      setActiveTab("details");
-    }
-  }, [activeTab, audioSimilarityAvailability.loading, tabs, visualSimilarityAvailability.loading]);
+  // Fall back to Details when the active tab is not offered, but not while a similarity tab is still
+  // finding out whether it is available. Details is always offered, so this settles after one update.
+  const activeTabAvailabilityLoading =
+    (activeTab === "similar" && visualSimilarityAvailability.loading) ||
+    (activeTab === "audio-similar" && audioSimilarityAvailability.loading);
+  if (!activeTabAvailabilityLoading && !tabs.some((tab) => tab.key === activeTab)) {
+    setActiveTab("details");
+  }
 
   useEffect(() => {
     if (!queue || queueCurrentId === id) {
@@ -2528,13 +2527,18 @@ function VideoScrubber({
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
-  // Load and parse VTT sprite data
-  useEffect(() => {
-    let cancelled = false;
-
+  // Drop the previous video's sprites as soon as the video changes, before its own load starts.
+  const [prevVideoId, setPrevVideoId] = useState(videoId);
+  if (videoId !== prevVideoId) {
+    setPrevVideoId(videoId);
     setSpriteData(null);
     setSpriteError(false);
     setSpriteLoadSettled(false);
+  }
+
+  // Load and parse VTT sprite data
+  useEffect(() => {
+    let cancelled = false;
 
     serverAwareFetch(spriteVttUrl)
       .then((r) => {
@@ -3174,16 +3178,16 @@ function VideoEditPanel({
   // fields follow it and the user's edits stay.
   // After a save, the server may return what was sent in its own form (lists in display order, trimmed
   // text), so fields untouched since the save take the saved video's values rather than looking edited.
-  const pendingValues = useRef<VideoFormValues | null>(null);
-  const submittedValues = useRef<VideoFormValues | null>(null);
-  useEffect(() => {
-    if (video === baseline) return;
+  // The submitted values apply only while the baseline they were saved over is still current.
+  const pendingSave = useRef<{ values: VideoFormValues; baseline: Video } | null>(null);
+  const [submittedSave, setSubmittedSave] = useState<{ values: VideoFormValues; baseline: Video } | null>(null);
+  if (video !== baseline) {
     const next = videoFormValues(video);
-    const from = submittedValues.current ?? videoFormValues(baseline);
-    submittedValues.current = null;
+    const from = submittedSave?.baseline === baseline ? submittedSave.values : videoFormValues(baseline);
+    setSubmittedSave(null);
     applyFormFields(video.id === baseline.id ? untouchedFieldUpdates(currentValues, from, next) : next, formSetters);
     setBaseline(video);
-  }, [video]);
+  }
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },
@@ -3203,7 +3207,7 @@ function VideoEditPanel({
       return updated;
     },
     onSuccess: (_updated, data) => {
-      submittedValues.current = pendingValues.current;
+      setSubmittedSave(pendingSave.current);
       queryClient.invalidateQueries({ queryKey: ["video", video.id] });
       queryClient.invalidateQueries({ queryKey: ["tagapplications"] });
       queryClient.invalidateQueries({ queryKey: ["videos"] });
@@ -3221,7 +3225,7 @@ function VideoEditPanel({
   });
 
   const handleSave = () => {
-    pendingValues.current = currentValues;
+    pendingSave.current = { values: currentValues, baseline };
     mutation.mutate(
       changedUpdateFields(videoUpdatePayload(videoFormValues(baseline)), videoUpdatePayload(currentValues)),
     );

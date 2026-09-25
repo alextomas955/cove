@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { texts } from "../api/client";
 import type { VideoGroupInput, TextDocument, TextUpdate } from "../api/types";
@@ -109,15 +109,14 @@ export function TextEditPanel({ text, onSaved }: Props) {
   };
   // When the text refetches (after Mark organized, a scrape or a finished job), untouched fields follow it
   // and the user's edits stay.
-  useEffect(() => {
-    if (text === baseline) return;
+  if (text !== baseline) {
     const next = textFormValues(text);
     applyFormFields(
       text.id === baseline.id ? untouchedFieldUpdates(currentValues, textFormValues(baseline), next) : next,
       formSetters,
     );
     setBaseline(text);
-  }, [text]);
+  }
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },

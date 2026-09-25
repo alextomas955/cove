@@ -189,6 +189,9 @@ export function openTutorialStoryboard(request?: TutorialOpenRequest | string) {
   window.dispatchEvent(new CustomEvent<TutorialOpenRequest | undefined>(TUTORIAL_STORYBOARD_EVENT, { detail }));
 }
 
+// Stable default so an omitted prop does not rebuild the topic list on every render.
+const noExtensionTopics: ExtensionTutorialTopic[] = [];
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -204,7 +207,7 @@ export function TutorialStoryboardDialog({
   onClose,
   request,
   currentPage,
-  extensionTopics = [],
+  extensionTopics = noExtensionTopics,
   onTopicChange,
   onAppNavigate,
 }: Props) {
@@ -267,34 +270,65 @@ export function TutorialStoryboardDialog({
     }
   }, [index, open, selectedTopicId]);
 
-  useEffect(() => {
-    if (!open) return;
-    const topicIdsToOpen = ancestorsOf(selectedTopic.id, parentByChild);
-    if (parentIdsWithChildren.has(selectedTopic.id)) topicIdsToOpen.push(selectedTopic.id);
-    if (topicIdsToOpen.length === 0) return;
-    setExpandedTopicIds((current) => {
-      if (topicIdsToOpen.every((topicId) => current.has(topicId))) return current;
-      const next = new Set(current);
-      topicIdsToOpen.forEach((topicId) => next.add(topicId));
-      return next;
-    });
-  }, [open, parentByChild, parentIdsWithChildren, selectedTopic.id]);
+  // Only when opening, the selection or the topic tree changes, so a branch the user collapses stays collapsed.
+  // Null until the first render so a dialog mounted open expands straight away.
+  const [prevExpandInputs, setPrevExpandInputs] = useState<{
+    open: boolean;
+    parentByChild: Map<string, string>;
+    selectedTopicId: string;
+  } | null>(null);
+  if (
+    prevExpandInputs === null ||
+    prevExpandInputs.open !== open ||
+    prevExpandInputs.parentByChild !== parentByChild ||
+    prevExpandInputs.selectedTopicId !== selectedTopic.id
+  ) {
+    setPrevExpandInputs({ open, parentByChild, selectedTopicId: selectedTopic.id });
+    if (open) {
+      const topicIdsToOpen = ancestorsOf(selectedTopic.id, parentByChild);
+      if (parentIdsWithChildren.has(selectedTopic.id)) topicIdsToOpen.push(selectedTopic.id);
+      if (topicIdsToOpen.length > 0) {
+        setExpandedTopicIds((current) => {
+          if (topicIdsToOpen.every((topicId) => current.has(topicId))) return current;
+          const next = new Set(current);
+          topicIdsToOpen.forEach((topicId) => next.add(topicId));
+          return next;
+        });
+      }
+    }
+  }
 
-  useEffect(() => {
-    if (!open) return;
-    const nextTopicId = pickInitialTopicId(topics, request, currentPage);
-    const nextTopic = topics.find((topic) => topic.id === nextTopicId) ?? topics[0];
-    const nextSlideIndex = request?.slideId
-      ? Math.max(
-          0,
-          nextTopic.slides.findIndex((item) => item.id === request.slideId),
-        )
-      : 0;
-    setSelectedTopicId(nextTopic.id);
-    setIndex(nextSlideIndex);
-    setSearch("");
-    setMobileTopicSearchOpen(false);
-  }, [currentPage, open, request, topics]);
+  // Start from the requested topic and slide whenever the dialog opens or its request, page or topics change.
+  // Null until the first render so a dialog mounted open honours a requested slide.
+  const [prevOpenInputs, setPrevOpenInputs] = useState<{
+    open: boolean;
+    request: TutorialOpenRequest | undefined;
+    currentPage: string | undefined;
+    topics: TutorialStoryboardTopic[];
+  } | null>(null);
+  if (
+    prevOpenInputs === null ||
+    prevOpenInputs.open !== open ||
+    prevOpenInputs.request !== request ||
+    prevOpenInputs.currentPage !== currentPage ||
+    prevOpenInputs.topics !== topics
+  ) {
+    setPrevOpenInputs({ open, request, currentPage, topics });
+    if (open) {
+      const nextTopicId = pickInitialTopicId(topics, request, currentPage);
+      const nextTopic = topics.find((topic) => topic.id === nextTopicId) ?? topics[0];
+      const nextSlideIndex = request?.slideId
+        ? Math.max(
+            0,
+            nextTopic.slides.findIndex((item) => item.id === request.slideId),
+          )
+        : 0;
+      setSelectedTopicId(nextTopic.id);
+      setIndex(nextSlideIndex);
+      setSearch("");
+      setMobileTopicSearchOpen(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -977,7 +1011,11 @@ function scoreTopicContextMatch(
 
 function SlideImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
+    setFailed(false);
+  }
   const fileName = src.split("/").pop() ?? src;
 
   if (failed) {

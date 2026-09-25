@@ -282,7 +282,7 @@ export function VideoPlayer({
   const [showSpeed, setShowSpeed] = useState(false);
   const [rate, setRate] = useState(1);
   const [pip, setPip] = useState(false);
-  const [loop, setLoop] = useState(false);
+  const [loop, setLoop] = useState(() => !!clip?.loop);
   const [abLoop, setAbLoop] = useState<{ a: number | null; b: number | null }>({ a: null, b: null });
   const [showCaptions, setShowCaptions] = useState(false);
   const [showQuality, setShowQuality] = useState(false);
@@ -318,9 +318,11 @@ export function VideoPlayer({
       window.removeEventListener("scroll", closeOnPageScroll, true);
     };
   }, [showMobileOptions]);
-  useEffect(() => {
+  const [prevCompactControls, setPrevCompactControls] = useState(compactControls);
+  if (compactControls !== prevCompactControls) {
+    setPrevCompactControls(compactControls);
     if (!compactControls) setShowMobileOptions(false);
-  }, [compactControls]);
+  }
   const [selectedQuality, setSelectedQuality] = useState<string>("Direct");
   const selectedQualityRef = useRef("Direct");
   // Safari cannot play the piped fragmented MP4 transcode; it gets the same encode as an HLS playlist.
@@ -536,14 +538,28 @@ export function VideoPlayer({
     interactionIdentityRef.current = { videoId, interactionResetKey };
   }, [interactionResetKey, resetInteractionModes, videoId]);
 
+  // Per-video and per-file playback state is reset while rendering, so the first commit for a new
+  // video or file already uses the direct stream and a cleared timeline. The refs that go with it are
+  // reset by the effects below.
+  const [prevPlaybackIdentity, setPrevPlaybackIdentity] = useState({ videoId, fileId });
+  if (videoId !== prevPlaybackIdentity.videoId || fileId !== prevPlaybackIdentity.fileId) {
+    setPrevPlaybackIdentity({ videoId, fileId });
+    if (videoId !== prevPlaybackIdentity.videoId) {
+      setCurTime(0);
+      setBuffered(0);
+      setVideoBox({ left: 0, top: 0, width: 0, height: 0 });
+      setIntrinsicSize({ width: 0, height: 0 });
+    }
+    setPlaying(false);
+    setCompatibilityFallbackReason(null);
+    setSelectedQuality("Direct");
+    setTranscodeStartSec(0);
+    setCompatibilityLookup({ identity: compatibilityIdentity, pending: compatibilityRequired });
+  }
+
   useLayoutEffect(() => {
     videoMetricsReadyRef.current = false;
     pendingTrackingStartRef.current = null;
-    setPlaying(false);
-    setCurTime(0);
-    setBuffered(0);
-    setVideoBox({ left: 0, top: 0, width: 0, height: 0 });
-    setIntrinsicSize({ width: 0, height: 0 });
   }, [videoId]);
 
   useLayoutEffect(() => {
@@ -561,14 +577,9 @@ export function VideoPlayer({
     lastHideInteractionAt.current = 0;
     playTriggered.current = false;
     pendingAutostartRef.current = false;
-    setPlaying(false);
     autoTranscodeTriedRef.current = false;
     compatibilityFallbackAppliedRef.current = false;
-    setCompatibilityFallbackReason(null);
     selectedQualityRef.current = "Direct";
-    setSelectedQuality("Direct");
-    setTranscodeStartSec(0);
-    setCompatibilityLookup({ identity: compatibilityIdentity, pending: compatibilityRequired });
     // Keyed on the file as well as the video: a different file has its own container and codecs,
     // so the playback strategy has to be derived again. Leaving the guards set from the previous
     // file would suppress both the proactive fallback and the error-driven fallback for it.
@@ -609,11 +620,28 @@ export function VideoPlayer({
     [fullscreen, muted, playbackTrackingTarget, rate],
   );
 
-  useEffect(() => {
-    clipEndedHandled.current = false;
+  const [prevClipSource, setPrevClipSource] = useState({
+    clipEnd: clip?.end,
+    clipLoop: clip?.loop,
+    clipStart: clip?.start,
+    videoId,
+    streamUrl,
+  });
+  if (
+    clip?.end !== prevClipSource.clipEnd ||
+    clip?.loop !== prevClipSource.clipLoop ||
+    clip?.start !== prevClipSource.clipStart ||
+    videoId !== prevClipSource.videoId ||
+    streamUrl !== prevClipSource.streamUrl
+  ) {
+    setPrevClipSource({ clipEnd: clip?.end, clipLoop: clip?.loop, clipStart: clip?.start, videoId, streamUrl });
     if (clip) {
       setLoop(!!clip.loop);
     }
+  }
+
+  useEffect(() => {
+    clipEndedHandled.current = false;
   }, [clip?.end, clip?.loop, clip?.start, videoId, streamUrl]);
 
   useEffect(() => {
@@ -1013,6 +1041,7 @@ export function VideoPlayer({
         if (selectedQuality === "Direct") {
           v.currentTime = nextTime;
         } else {
+          // oxlint-disable-next-line react/set-state-in-effect -- the resume seek for a transcode is applied by restarting the stream at this offset, decided against the mounted media element
           setTranscodeStartSec(nextTime);
         }
         setCurTime(roundPlaybackTime(nextTime));

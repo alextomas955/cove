@@ -451,14 +451,21 @@ export function HomePage({ onNavigate, dashboardId }: Props) {
     if (dashboardQuery.data?.missingRequested) onNavigate({ page: "home" });
   }, [dashboardQuery.data?.missingRequested, onNavigate]);
 
-  useEffect(() => setEditingDashboard(null), [principalKey]);
+  const [prevPrincipalKey, setPrevPrincipalKey] = useState(principalKey);
+  if (principalKey !== prevPrincipalKey) {
+    setPrevPrincipalKey(principalKey);
+    setEditingDashboard(null);
+  }
 
+  // Leave the editor when a different dashboard loads than the one being edited.
   const loadedDashboardId = dashboardQuery.data?.dashboard.id;
-  useEffect(() => {
-    if (loadedDashboardId != null) {
-      setEditingDashboard((current) => (current == null || current.id === loadedDashboardId ? current : null));
+  const [prevLoadedDashboardId, setPrevLoadedDashboardId] = useState(loadedDashboardId);
+  if (loadedDashboardId !== prevLoadedDashboardId) {
+    setPrevLoadedDashboardId(loadedDashboardId);
+    if (loadedDashboardId != null && editingDashboard != null && editingDashboard.id !== loadedDashboardId) {
+      setEditingDashboard(null);
     }
-  }, [loadedDashboardId]);
+  }
 
   const refresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["dashboard-page"] });
@@ -930,11 +937,15 @@ function DashboardEditor({
     };
   }, [dirty]);
 
-  useEffect(() => {
-    if (!busy) return;
-    setShowCatalog(false);
-    setConfiguringId(null);
-  }, [busy]);
+  // Close the catalog and widget settings once an operation starts.
+  const [prevBusy, setPrevBusy] = useState(busy);
+  if (busy !== prevBusy) {
+    setPrevBusy(busy);
+    if (busy) {
+      setShowCatalog(false);
+      setConfiguringId(null);
+    }
+  }
 
   useEffect(() => {
     const instanceId = pendingScrollWidgetId.current;

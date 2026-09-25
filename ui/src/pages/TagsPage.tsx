@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tags, tagGroups } from "../api/client";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
@@ -343,7 +343,7 @@ export function TagCreateModal({
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    name: "",
+    name: open ? initialName.trim() : "",
     description: "",
     aliases: [] as string[],
     color: "",
@@ -357,9 +357,13 @@ export function TagCreateModal({
   const [createAnother, setCreateAnother] = useState(false);
   const { data: groups = [] } = useQuery({ queryKey: ["tag-groups"], queryFn: tagGroups.list });
 
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialName, setPrevInitialName] = useState(initialName);
+  if (open !== prevOpen || initialName !== prevInitialName) {
+    setPrevOpen(open);
+    setPrevInitialName(initialName);
     if (open) setForm((current) => ({ ...current, name: initialName.trim() }));
-  }, [initialName, open]);
+  }
 
   const resetForm = () => {
     setForm({

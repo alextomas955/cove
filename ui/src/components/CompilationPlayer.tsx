@@ -84,14 +84,11 @@ export function CompilationPlayer({
     [enabledTypes, items],
   );
 
-  useEffect(() => {
-    if (visibleItems.length === 0) {
-      setCurrentItemIndex(0);
-      return;
-    }
-
-    setCurrentItemIndex((index) => Math.min(index, visibleItems.length - 1));
-  }, [visibleItems.length]);
+  // Keep the index inside the filtered list when type filters or items shrink it.
+  const clampedItemIndex = visibleItems.length === 0 ? 0 : Math.min(currentItemIndex, visibleItems.length - 1);
+  if (clampedItemIndex !== currentItemIndex) {
+    setCurrentItemIndex(clampedItemIndex);
+  }
 
   const item = visibleItems[currentItemIndex];
   const nextItem = visibleItems[currentItemIndex + 1] ?? (loopCompilation ? visibleItems[0] : undefined);

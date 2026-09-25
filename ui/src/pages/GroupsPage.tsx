@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groups } from "../api/client";
 import type { FindFilter, Group, GroupCreate, GroupFilterCriteria, PaginatedResponse } from "../api/types";
@@ -348,7 +348,7 @@ function GroupCreateModal({
   }, [dynamicSources]);
   const defaultDynamicSourceKey = dynamicSourceOptions[0]?.key ?? FILTER_DYNAMIC_SOURCE_KEY;
   const [form, setForm] = useState({
-    name: "",
+    name: open ? initialName.trim() : "",
     date: "",
     director: "",
     description: "",
@@ -361,9 +361,13 @@ function GroupCreateModal({
   const [parentGroupIds, setParentGroupIds] = useState<number[]>([]);
   const [createAnother, setCreateAnother] = useState(false);
 
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialName, setPrevInitialName] = useState(initialName);
+  if (open !== prevOpen || initialName !== prevInitialName) {
+    setPrevOpen(open);
+    setPrevInitialName(initialName);
     if (open) setForm((current) => ({ ...current, name: initialName.trim() }));
-  }, [initialName, open]);
+  }
 
   const resetForm = () => {
     setForm({

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { videos } from "../api/client";
 import type { FindFilter } from "../api/types";
@@ -249,39 +249,40 @@ export function VideoFilenameParserPage(_props: Props) {
   });
 
   // Reparse whenever data or config changes
-  useEffect(() => {
-    if (!data?.items || !appliedConfig) return;
+  const [parsedSource, setParsedSource] = useState({ data, appliedConfig });
+  if (parsedSource.data !== data || parsedSource.appliedConfig !== appliedConfig) {
+    setParsedSource({ data, appliedConfig });
+    if (data?.items && appliedConfig) {
+      const compiled = compilePattern(appliedConfig.pattern, appliedConfig.whitespaceReplacement);
+      if (!compiled) {
+        setRows([]);
+      } else {
+        const items = appliedConfig.ignoreOrganized ? data.items.filter((s) => !s.organized) : data.items;
 
-    const compiled = compilePattern(appliedConfig.pattern, appliedConfig.whitespaceReplacement);
-    if (!compiled) {
-      setRows([]);
-      return;
-    }
-
-    const items = appliedConfig.ignoreOrganized ? data.items.filter((s) => !s.organized) : data.items;
-
-    const newRows: RowState[] = items.map((video) => {
-      const file = video.files[0];
-      const basename = file?.basename ?? "";
-      const parsed = compiled
-        ? applyPattern(
+        const newRows: RowState[] = items.map((video) => {
+          const file = video.files[0];
+          const basename = file?.basename ?? "";
+          const parsed = compiled
+            ? applyPattern(
+                basename,
+                compiled,
+                appliedConfig.ignoredWords,
+                appliedConfig.capitalizeTitle,
+                appliedConfig.whitespaceReplacement,
+              )
+            : null;
+          return {
+            videoId: video.id,
             basename,
-            compiled,
-            appliedConfig.ignoredWords,
-            appliedConfig.capitalizeTitle,
-            appliedConfig.whitespaceReplacement,
-          )
-        : null;
-      return {
-        videoId: video.id,
-        basename,
-        parsed,
-        selected: false,
-      };
-    });
+            parsed,
+            selected: false,
+          };
+        });
 
-    setRows(newRows);
-  }, [data, appliedConfig]);
+        setRows(newRows);
+      }
+    }
+  }
 
   // ===== Actions =====
 

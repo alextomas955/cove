@@ -92,8 +92,14 @@ export function WallMediaCard({
     [onVideoElementChange],
   );
   const [videoFailed, setVideoFailed] = useState(false);
-  const [videoAvailable, setVideoAvailable] = useState(false);
-  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+  const [observedShouldLoadVideo, setShouldLoadVideo] = useState(false);
+  // Without IntersectionObserver there is nothing to wait for, so an enabled video loads straight away.
+  const shouldLoadVideo =
+    typeof IntersectionObserver === "undefined" ? Boolean(useVideo && videoSrc) : observedShouldLoadVideo;
+  // Without a status endpoint a loadable video is available at once; otherwise the status fetch decides.
+  const [videoAvailable, setVideoAvailable] = useState(() =>
+    Boolean(useVideo && videoSrc && shouldLoadVideo && !videoStatusSrc),
+  );
   const [shouldPlayVideo, setShouldPlayVideo] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
@@ -140,11 +146,39 @@ export function WallMediaCard({
   }, [isFullscreen, muted, playbackTracking, shouldPlayVideo, trackingEnabled]);
   const playbackTrackingSignature = useMemo(() => JSON.stringify(playbackTrackingTarget), [playbackTrackingTarget]);
 
-  useEffect(() => {
+  const [prevVideoSrc, setPrevVideoSrc] = useState(videoSrc);
+  if (videoSrc !== prevVideoSrc) {
+    setPrevVideoSrc(videoSrc);
     setVideoFailed(false);
     setCurrentTime(0);
     setVideoDuration(0);
     setIsPlaying(false);
+  }
+
+  // Nothing is loaded while video is disabled, so the next enable waits for the load observer again.
+  if ((!useVideo || !videoSrc) && observedShouldLoadVideo) {
+    setShouldLoadVideo(false);
+  }
+
+  // Availability is re-established whenever any input to the status check changes: immediately when
+  // there is no status endpoint, otherwise by the fetch in the effect below.
+  const [prevAvailabilityInputs, setPrevAvailabilityInputs] = useState({
+    shouldLoadVideo,
+    useVideo,
+    videoSrc,
+    videoStatusSrc,
+  });
+  if (
+    shouldLoadVideo !== prevAvailabilityInputs.shouldLoadVideo ||
+    useVideo !== prevAvailabilityInputs.useVideo ||
+    videoSrc !== prevAvailabilityInputs.videoSrc ||
+    videoStatusSrc !== prevAvailabilityInputs.videoStatusSrc
+  ) {
+    setPrevAvailabilityInputs({ shouldLoadVideo, useVideo, videoSrc, videoStatusSrc });
+    setVideoAvailable(Boolean(useVideo && videoSrc && shouldLoadVideo && !videoStatusSrc));
+  }
+
+  useEffect(() => {
     intervalStart.current = null;
     lastSeenTime.current = 0;
     lastKeepaliveSentAt.current = 0;
@@ -169,7 +203,7 @@ export function WallMediaCard({
 
   useEffect(() => {
     if (!useVideo || !videoSrc) {
-      setShouldLoadVideo(false);
+      // oxlint-disable-next-line react/set-state-in-effect -- also notifies onVideoPlayEligibilityChange, which must happen after commit, not during render
       setVideoPlayEligibility(false);
       return;
     }
@@ -178,7 +212,6 @@ export function WallMediaCard({
     if (!element) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setShouldLoadVideo(true);
       setVideoPlayEligibility(true);
       return;
     }
@@ -208,18 +241,9 @@ export function WallMediaCard({
   }, [setVideoPlayEligibility, useVideo, videoLoadRootMargin, videoPlayThreshold, videoSrc]);
 
   useEffect(() => {
-    if (!useVideo || !videoSrc || !shouldLoadVideo) {
-      setVideoAvailable(false);
-      return;
-    }
-
-    if (!videoStatusSrc) {
-      setVideoAvailable(true);
-      return;
-    }
+    if (!useVideo || !videoSrc || !shouldLoadVideo || !videoStatusSrc) return;
 
     const controller = new AbortController();
-    setVideoAvailable(false);
     serverAwareFetch(videoStatusSrc, { method: "GET", signal: controller.signal })
       .then((response) => {
         return response.ok ? (response.json() as Promise<{ available?: boolean }>) : { available: false };

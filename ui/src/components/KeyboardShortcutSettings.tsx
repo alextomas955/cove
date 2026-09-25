@@ -118,9 +118,9 @@ export function KeyboardShortcutSettings() {
   }, [actions, extensionInfos, query]);
   const activeShortcutTab = shortcutTabs.find((tab) => tab.id === activeShortcutTabId) ?? shortcutTabs[0];
 
-  useEffect(() => {
-    if (!shortcutTabs.some((tab) => tab.id === activeShortcutTabId)) setActiveShortcutTabId("cove");
-  }, [activeShortcutTabId, shortcutTabs]);
+  if (activeShortcutTabId !== "cove" && !shortcutTabs.some((tab) => tab.id === activeShortcutTabId)) {
+    setActiveShortcutTabId("cove");
+  }
 
   const isRenaming = renaming !== null;
   useEffect(() => {

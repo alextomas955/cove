@@ -1,4 +1,4 @@
-import { useState, useEffect, useEffectEvent, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { usePublishActiveMedia } from "./ActiveMedia";
 import {
@@ -74,7 +74,7 @@ export function Lightbox({
   const [index, setIndex] = useState(initialIndex);
   const [displayed, setDisplayed] = useState<LightboxImage | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(open && autoPlay);
   const [currentSlideshowDelay, setCurrentSlideshowDelay] = useState(slideshowDelay);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -156,33 +156,47 @@ export function Lightbox({
     [current],
   );
 
-  useEffect(() => {
-    if (!open) {
-      setDisplayed(null);
-      setFailedSrc(null);
-    }
-  }, [open]);
-
-  useEffect(() => setFailedSrc(null), [current?.src]);
-
-  // Read through refs below so that a late-resolving config does not re-run the reset and discard
-  // pages the viewer loaded by navigating past the end of the queue. The delay is applied by its own
-  // effect instead, so a config that lands mid-session still takes effect.
-  const startPlaybackForOpen = useEffectEvent(() => {
-    setPlaying(autoPlay);
-    setCurrentSlideshowDelay(slideshowDelay);
-  });
-
-  useEffect(() => setCurrentSlideshowDelay(slideshowDelay), [slideshowDelay]);
-
-  // Sync index when initialIndex or open changes
-  useEffect(() => {
+  // Sync the queue and index when initialIndex or open changes, and clear the shown image on close.
+  // Only these two props trigger the reset, so a late-resolving images/autoPlay/slideshowDelay config
+  // does not discard pages the viewer loaded by navigating past the end of the queue. The delay is
+  // applied separately below, so a config that lands mid-session still takes effect.
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialIndex, setPrevInitialIndex] = useState(initialIndex);
+  if (open !== prevOpen || initialIndex !== prevInitialIndex) {
+    setPrevOpen(open);
+    setPrevInitialIndex(initialIndex);
     if (open) {
       setQueuedImages(images);
       setIndex(initialIndex);
       setZoom(1);
       setPan({ x: 0, y: 0 });
-      startPlaybackForOpen();
+      setPlaying(autoPlay);
+      setCurrentSlideshowDelay(slideshowDelay);
+    } else if (open !== prevOpen) {
+      setDisplayed(null);
+      setFailedSrc(null);
+    }
+  }
+
+  const [prevSlideshowDelay, setPrevSlideshowDelay] = useState(slideshowDelay);
+  if (slideshowDelay !== prevSlideshowDelay) {
+    setPrevSlideshowDelay(slideshowDelay);
+    setCurrentSlideshowDelay(slideshowDelay);
+  }
+
+  const [prevCurrentSrc, setPrevCurrentSrc] = useState(current?.src);
+  if (current?.src !== prevCurrentSrc) {
+    setPrevCurrentSrc(current?.src);
+    setFailedSrc(null);
+  }
+
+  // Fullscreen is only tracked while open; the listener below re-reads it on the next open.
+  if (!open && fullscreen) {
+    setFullscreen(false);
+  }
+
+  useEffect(() => {
+    if (open) {
       trackedOpen.current = false;
       lastTrackedIndex.current = null;
     }
@@ -269,10 +283,7 @@ export function Lightbox({
   }, [open]);
 
   useEffect(() => {
-    if (!open) {
-      setFullscreen(false);
-      return;
-    }
+    if (!open) return;
 
     const handleFullscreenChange = () => {
       setFullscreen(document.fullscreenElement === containerRef.current);

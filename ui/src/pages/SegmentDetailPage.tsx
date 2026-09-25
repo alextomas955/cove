@@ -249,13 +249,11 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
     setSegmentVideoTime(segment.startSec);
   };
 
-  useEffect(() => {
-    if (!segment) {
-      return;
-    }
-
+  const [prevSegment, setPrevSegment] = useState<typeof segment>(undefined);
+  if (segment !== prevSegment) {
+    setPrevSegment(segment);
     resetEditState();
-  }, [segment]);
+  }
 
   const {
     data: siblingSegmentsData,

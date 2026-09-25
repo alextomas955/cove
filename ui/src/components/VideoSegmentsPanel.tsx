@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Layers,
@@ -131,9 +131,11 @@ export function VideoSegmentsPanel({
   // member tags so segments tagged within that group match.
   const { data: allTagGroups = [] } = useQuery({ queryKey: ["taggroups"], queryFn: () => tagGroupsApi.list() });
 
-  useEffect(() => {
+  const [prevSelectionScope, setPrevSelectionScope] = useState({ currentProfileId, videoId });
+  if (currentProfileId !== prevSelectionScope.currentProfileId || videoId !== prevSelectionScope.videoId) {
+    setPrevSelectionScope({ currentProfileId, videoId });
     setSelectedSpanKeys(new Set());
-  }, [currentProfileId, videoId]);
+  }
 
   const selectedEntries = useMemo<AddToGroupEntry[]>(() => {
     return filteredSpans

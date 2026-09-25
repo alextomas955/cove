@@ -96,9 +96,11 @@ function SourcePdfViewer({
     Number.isFinite(pageCount ?? NaN) && (pageCount ?? 0) > 0 ? Math.floor(pageCount ?? 0) : undefined;
   const frameUrl = buildPdfFrameUrl(sourceUrl, page);
 
-  useEffect(() => {
+  const [prevSourceUrl, setPrevSourceUrl] = useState(sourceUrl);
+  if (prevSourceUrl !== sourceUrl) {
+    setPrevSourceUrl(sourceUrl);
     setPage(1);
-  }, [sourceUrl]);
+  }
 
   const setClampedPage = (nextPage: number) => {
     const maxPage = normalizedPageCount ?? Number.MAX_SAFE_INTEGER;
@@ -323,11 +325,9 @@ export function TextDetailPage({ id, onNavigate }: Props) {
     text?.tags.length,
   ]);
 
-  useEffect(() => {
-    if (!tabs.some((tab) => tab.key === activeTab)) {
-      setActiveTab("details");
-    }
-  }, [activeTab, tabs]);
+  if (!tabs.some((tab) => tab.key === activeTab)) {
+    setActiveTab("details");
+  }
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

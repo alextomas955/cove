@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { performers } from "../api/client";
 import type { FilterExpression, Performer, PerformerCreate, PerformerFilterCriteria } from "../api/types";
@@ -327,7 +327,7 @@ export function PerformerCreateModal({
   onCreated: (id: number) => void;
 }) {
   const qc = useQueryClient();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(open ? initialName.trim() : "");
   const [disambiguation, setDisambiguation] = useState("");
   const [gender, setGender] = useState("");
   const [birthdate, setBirthdate] = useState("");
@@ -344,9 +344,13 @@ export function PerformerCreateModal({
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [createAnother, setCreateAnother] = useState(false);
 
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialName, setPrevInitialName] = useState(initialName);
+  if (open !== prevOpen || initialName !== prevInitialName) {
+    setPrevOpen(open);
+    setPrevInitialName(initialName);
     if (open) setName(initialName.trim());
-  }, [initialName, open]);
+  }
 
   const resetForm = () => {
     setName("");

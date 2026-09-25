@@ -670,15 +670,15 @@ function StudioMetadataServerPanel({
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
+  const [termSource, setTermSource] = useState({ id: studio.id, name: studio.name });
+  if (termSource.id !== studio.id || termSource.name !== studio.name) {
+    setTermSource({ id: studio.id, name: studio.name });
     setTerm(studio.name);
-  }, [studio.id, studio.name]);
+  }
 
-  useEffect(() => {
-    if (selectedEndpoint && !metadataServers.some((box) => box.endpoint === selectedEndpoint)) {
-      setSelectedEndpoint("");
-    }
-  }, [selectedEndpoint, metadataServers]);
+  if (selectedEndpoint && !metadataServers.some((box) => box.endpoint === selectedEndpoint)) {
+    setSelectedEndpoint("");
+  }
 
   const searchMutation = useMutation({
     meta: { suppressGlobalError: true },

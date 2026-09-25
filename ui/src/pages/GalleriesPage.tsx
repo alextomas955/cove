@@ -464,7 +464,7 @@ function GalleryCreateModal({
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    title: "",
+    title: open ? initialTitle.trim() : "",
     code: "",
     date: "",
     details: "",
@@ -474,9 +474,13 @@ function GalleryCreateModal({
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [createAnother, setCreateAnother] = useState(false);
 
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialTitle, setPrevInitialTitle] = useState(initialTitle);
+  if (open !== prevOpen || initialTitle !== prevInitialTitle) {
+    setPrevOpen(open);
+    setPrevInitialTitle(initialTitle);
     if (open) setForm((current) => ({ ...current, title: initialTitle.trim() }));
-  }, [initialTitle, open]);
+  }
 
   const resetForm = () => {
     setForm({ title: "", code: "", date: "", details: "", photographer: "" });

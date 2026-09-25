@@ -495,11 +495,9 @@ export function ListPage({
     (displayMode === "grid" || displayMode === "wall" || displayMode === "feed" || displayMode === "vertical");
   const wakeAutoScrollControls = useCallback(() => setAutoScrollControlsAwake(true), []);
 
-  useEffect(() => {
-    if ((!infinitePageSize || !showAutoScrollControls) && autoScrollEnabled) {
-      setAutoScrollEnabled(false);
-    }
-  }, [autoScrollEnabled, infinitePageSize, showAutoScrollControls]);
+  if ((!infinitePageSize || !showAutoScrollControls) && autoScrollEnabled) {
+    setAutoScrollEnabled(false);
+  }
 
   useEffect(() => {
     if (!showInfiniteAutoScrollControls || !autoScrollControlsAwake) {

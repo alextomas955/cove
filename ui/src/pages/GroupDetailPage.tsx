@@ -317,11 +317,9 @@ export function GroupDetailPage({ id, onNavigate }: Props) {
     ).filter((tab) => tab.key !== "items" || canReadVideos || canReadGroups);
   }, [canReadGroups, canReadVideos, group?.subGroupCount, groupItems.length, groupTabs, hasPermission]);
 
-  useEffect(() => {
-    if (tabs.length > 0 && !tabs.some((tab) => tab.key === activeTab)) {
-      setActiveTab(tabs[0].key as TabKey);
-    }
-  }, [activeTab, tabs]);
+  if (tabs.length > 0 && !tabs.some((tab) => tab.key === activeTab)) {
+    setActiveTab(tabs[0].key as TabKey);
+  }
 
   if (isLoading) {
     return (
@@ -807,10 +805,19 @@ function GroupItemsPanel({
   const isDynamic = group.kind === "dynamic";
   const prerequisiteError = groupItemsLoadError ?? subGroupsLoadError;
 
-  useEffect(() => {
-    if (!addSubGroupRequestId || isDynamic || !canWriteGroup || !canReadGroups) return;
-    setShowAddDialog(true);
-  }, [addSubGroupRequestId, canReadGroups, canWriteGroup, isDynamic]);
+  // Open the add dialog for a pending request, including one that was made before this panel mounted.
+  const addRequest = { addSubGroupRequestId, canReadGroups, canWriteGroup, isDynamic };
+  const [handledAddRequest, setHandledAddRequest] = useState<typeof addRequest | null>(null);
+  if (
+    handledAddRequest === null ||
+    handledAddRequest.addSubGroupRequestId !== addSubGroupRequestId ||
+    handledAddRequest.canReadGroups !== canReadGroups ||
+    handledAddRequest.canWriteGroup !== canWriteGroup ||
+    handledAddRequest.isDynamic !== isDynamic
+  ) {
+    setHandledAddRequest(addRequest);
+    if (addSubGroupRequestId && !isDynamic && canWriteGroup && canReadGroups) setShowAddDialog(true);
+  }
 
   const staticMixedItems = useMemo(
     () => buildMixedGroupItems(groupItems ?? [], subGroups, isDynamic),

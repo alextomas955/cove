@@ -122,10 +122,14 @@ export function MultiIdEditor({
 
   const selectedIds = useMemo(() => Array.from(new Set([...includedIds, ...excludedIds])), [excludedIds, includedIds]);
   const selectedIdsSignature = selectedIds.join(",");
-  useEffect(() => {
-    if (selectedValueFocusId != null && selectedIds.includes(selectedValueFocusId)) return;
-    setSelectedValueFocusId(selectedIds[0] ?? null);
-  }, [selectedIdsSignature, selectedValueFocusId]);
+  // Keep the roving focus target on a value that is still selected.
+  const validSelectedValueFocusId =
+    selectedValueFocusId != null && selectedIds.includes(selectedValueFocusId)
+      ? selectedValueFocusId
+      : (selectedIds[0] ?? null);
+  if (validSelectedValueFocusId !== selectedValueFocusId) {
+    setSelectedValueFocusId(validSelectedValueFocusId);
+  }
   useEffect(() => {
     const pending = pendingSelectedRemovalRef.current;
     if (!pending) return;
@@ -198,9 +202,11 @@ export function MultiIdEditor({
     return visible;
   }, [entityType, filteredEntities, trimmedSearchText]);
 
-  useEffect(() => {
-    setActiveResultIndex((current) => (current >= navigableEntities.length ? -1 : current));
-  }, [navigableEntities.length]);
+  const [prevNavigableCount, setPrevNavigableCount] = useState(navigableEntities.length);
+  if (prevNavigableCount !== navigableEntities.length) {
+    setPrevNavigableCount(navigableEntities.length);
+    if (activeResultIndex >= navigableEntities.length) setActiveResultIndex(-1);
+  }
 
   useEffect(() => {
     if (activeResultIndex < 0) return;

@@ -235,11 +235,9 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
     return nextTabs;
   }, [canReadFiles, canWriteImage, hasVisualSimilarity, image?.files.length, imageFaces.length]);
 
-  useEffect(() => {
-    if (!tabs.some((tab) => tab.key === activeTab)) {
-      setActiveTab("details");
-    }
-  }, [activeTab, tabs]);
+  if (!tabs.some((tab) => tab.key === activeTab)) {
+    setActiveTab("details");
+  }
 
   useDocumentTitle(image ? displayTitle : null);
 
@@ -297,9 +295,11 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showOpsMenu]);
 
-  useEffect(() => {
+  const [prevId, setPrevId] = useState(id);
+  if (prevId !== id) {
+    setPrevId(id);
     setImageLoadFailed(false);
-  }, [id]);
+  }
 
   const openLightbox = useCallback(() => {
     if (imageLoadFailed) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { IsoDateInput } from "../components/IsoDateInput";
@@ -183,38 +183,44 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
 
   // Fill the form each time the dialog opens. A refetch while it is open keeps the user's edits, and
   // reopening after Cancel discards them.
-  useEffect(() => {
-    if (!open) return;
-    setBaseline(performer);
-    setName(performer.name);
-    setDisambiguation(performer.disambiguation || "");
-    setGender(performer.gender || "");
-    setBirthdate(performer.birthdate || "");
-    setEthnicity(performer.ethnicity || "");
-    setCountry(performer.country || "");
-    setEyeColor(performer.eyeColor || "");
-    setHairColor(performer.hairColor || "");
-    setHeightCm(performer.heightCm ?? undefined);
-    setWeight(performer.weight ?? undefined);
-    setMeasurements(performer.measurements || "");
-    setTattoos(performer.tattoos || "");
-    setPiercings(performer.piercings || "");
-    setRating(undefined);
-    setDetails(performer.details || "");
-    setDeathDate(performer.deathDate || "");
-    setFakeTits(performer.fakeTits || "");
-    setPenisLength(performer.penisLength ?? undefined);
-    setCircumcised(performer.circumcised || "");
-    setCareerStart(performer.careerStart || "");
-    setCareerEnd(performer.careerEnd || "");
-    setUrls(performer.urls.length > 0 ? performer.urls : [""]);
-    setAliases(performer.aliases.length > 0 ? performer.aliases : [""]);
-    setSelectedTagIds(performer.tags.map((t) => t.id));
-    setSelectedTagsById(buildSelectedTagLookup(performer.tags));
-    setTagSearch("");
-    setCustomFields({ ...performer.customFields });
-    setRemoteIds(performer.remoteIds.map((remoteId) => ({ ...remoteId })));
-  }, [performer.id, open]);
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevPerformerId, setPrevPerformerId] = useState(performer.id);
+  const openOrPerformerChanged = open !== prevOpen || performer.id !== prevPerformerId;
+  if (openOrPerformerChanged) {
+    setPrevOpen(open);
+    setPrevPerformerId(performer.id);
+    if (open) {
+      setBaseline(performer);
+      setName(performer.name);
+      setDisambiguation(performer.disambiguation || "");
+      setGender(performer.gender || "");
+      setBirthdate(performer.birthdate || "");
+      setEthnicity(performer.ethnicity || "");
+      setCountry(performer.country || "");
+      setEyeColor(performer.eyeColor || "");
+      setHairColor(performer.hairColor || "");
+      setHeightCm(performer.heightCm ?? undefined);
+      setWeight(performer.weight ?? undefined);
+      setMeasurements(performer.measurements || "");
+      setTattoos(performer.tattoos || "");
+      setPiercings(performer.piercings || "");
+      setRating(undefined);
+      setDetails(performer.details || "");
+      setDeathDate(performer.deathDate || "");
+      setFakeTits(performer.fakeTits || "");
+      setPenisLength(performer.penisLength ?? undefined);
+      setCircumcised(performer.circumcised || "");
+      setCareerStart(performer.careerStart || "");
+      setCareerEnd(performer.careerEnd || "");
+      setUrls(performer.urls.length > 0 ? performer.urls : [""]);
+      setAliases(performer.aliases.length > 0 ? performer.aliases : [""]);
+      setSelectedTagIds(performer.tags.map((t) => t.id));
+      setSelectedTagsById(buildSelectedTagLookup(performer.tags));
+      setTagSearch("");
+      setCustomFields({ ...performer.customFields });
+      setRemoteIds(performer.remoteIds.map((remoteId) => ({ ...remoteId })));
+    }
+  }
 
   const currentValues: PerformerFormValues = {
     name,
@@ -277,14 +283,13 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
   };
   // When the performer refetches while the dialog is open, untouched fields follow it and the user's edits
   // stay.
-  useEffect(() => {
-    if (!open || performer === baseline) return;
+  if (open && !openOrPerformerChanged && performer !== baseline) {
     applyFormFields(
       untouchedFieldUpdates(currentValues, performerFormValues(baseline), performerFormValues(performer)),
       formSetters,
     );
     setBaseline(performer);
-  }, [performer]);
+  }
 
   const mutation = useMutation({
     meta: { suppressGlobalError: true },

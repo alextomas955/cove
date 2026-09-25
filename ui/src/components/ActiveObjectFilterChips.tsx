@@ -1779,10 +1779,11 @@ function ActiveObjectFilterChipsContent({
   const pendingRemovalRef = useRef<{ key: string | null; label: string } | null>(null);
   const instructionsId = useId();
 
-  useEffect(() => {
-    if (focusedKey && keys.includes(focusedKey)) return;
-    setFocusedKey(keys[0] ?? null);
-  }, [focusedKey, keysSignature]);
+  // Keep the roving focus target on a filter that is still active.
+  const validFocusedKey = focusedKey && keys.includes(focusedKey) ? focusedKey : (keys[0] ?? null);
+  if (validFocusedKey !== focusedKey) {
+    setFocusedKey(validFocusedKey);
+  }
 
   useEffect(() => {
     const pending = pendingRemovalRef.current;

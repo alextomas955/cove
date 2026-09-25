@@ -102,12 +102,10 @@ export function CustomFieldsEditor({
     });
   }, []);
 
-  useEffect(() => {
-    setInvalidJsonKeys((current) => {
-      const next = new Set([...current].filter((key) => jsonDefinitionKeys.has(key)));
-      return next.size === current.size ? current : next;
-    });
-  }, [jsonDefinitionKeys]);
+  // Forget invalid state for JSON fields that no longer exist.
+  if ([...invalidJsonKeys].some((key) => !jsonDefinitionKeys.has(key))) {
+    setInvalidJsonKeys(new Set([...invalidJsonKeys].filter((key) => jsonDefinitionKeys.has(key))));
+  }
 
   useEffect(() => {
     onValidityChange?.(invalidJsonKeys.size === 0);
@@ -380,10 +378,17 @@ function JsonFieldInput({
   const [error, setError] = useState<string | null>(null);
   const label = definition.label || definition.key;
 
+  const [syncedFrom, setSyncedFrom] = useState({ open, serializedValue, key: definition.key });
+  if (syncedFrom.open !== open || syncedFrom.serializedValue !== serializedValue || syncedFrom.key !== definition.key) {
+    setSyncedFrom({ open, serializedValue, key: definition.key });
+    if (!open) {
+      setDraft(serializedValue);
+      setError(null);
+    }
+  }
+
   useEffect(() => {
     if (open) return;
-    setDraft(serializedValue);
-    setError(null);
     onValidityChange(definition.key, true);
   }, [definition.key, onValidityChange, open, serializedValue]);
 

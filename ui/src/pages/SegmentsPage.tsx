@@ -362,17 +362,13 @@ export function SegmentsPage({ onNavigate }: Props) {
     return nonRawProfiles.length > 0 ? nonRawProfiles : profiles;
   }, [profilesQuery.data]);
 
-  useEffect(() => {
-    if (availableProfiles.length === 0) {
-      return;
-    }
-
-    if (activeProfileId != null && availableProfiles.some((profile) => profile.id === activeProfileId)) {
-      return;
-    }
-
+  // Fall back to the default (or first) profile when the active one is unset or no longer available.
+  if (
+    availableProfiles.length > 0 &&
+    !(activeProfileId != null && availableProfiles.some((profile) => profile.id === activeProfileId))
+  ) {
     setActiveProfileId(availableProfiles.find((profile) => profile.isDefault)?.id ?? availableProfiles[0].id);
-  }, [activeProfileId, availableProfiles]);
+  }
 
   const selectedVideoQueries = useQueries({
     queries: !isRawView
@@ -947,9 +943,13 @@ export function SegmentsPage({ onNavigate }: Props) {
     [isRawView, videoSelection.includeIds],
   );
 
-  useEffect(() => {
-    handleSelectNone();
-  }, [handleSelectNone, selectionResetKey]);
+  // useMultiSelect clears the selected ids itself when selectionResetKey changes; the all-matching
+  // snapshot belongs to the same selection, so it is dropped alongside them.
+  const [prevSelectionResetKey, setPrevSelectionResetKey] = useState(selectionResetKey);
+  if (selectionResetKey !== prevSelectionResetKey) {
+    setPrevSelectionResetKey(selectionResetKey);
+    setSelectedMatchingItems(null);
+  }
 
   useEffect(() => {
     const currentSort = filter.sort ?? "updated_at";

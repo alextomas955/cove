@@ -184,7 +184,7 @@ export function FilterDialog({
     () => normalizeFilterExpressionForEditing(sourceActiveFilter, criteria),
     [sourceActiveFilter, criteria],
   );
-  const lastActiveFilterSignatureRef = useRef(activeFilterSignature);
+  const [lastActiveFilterSignature, setLastActiveFilterSignature] = useState(activeFilterSignature);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem("filter-pinned");
@@ -518,12 +518,10 @@ export function FilterDialog({
     ],
   );
 
-  useEffect(() => {
-    if (lastActiveFilterSignatureRef.current !== activeFilterSignature) {
-      lastActiveFilterSignatureRef.current = activeFilterSignature;
-      setEditFilter(cloneActiveFilter());
-    }
-  }, [activeFilterSignature, cloneActiveFilter]);
+  if (lastActiveFilterSignature !== activeFilterSignature) {
+    setLastActiveFilterSignature(activeFilterSignature);
+    setEditFilter(cloneActiveFilter());
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -539,29 +537,29 @@ export function FilterDialog({
     };
   }, [open]);
 
-  useEffect(() => {
+  // Opening seeds the editor state from the active filter; closing discards unapplied edits.
+  // `openingFocusPlan` carries what the open effect below needs to move focus into the dialog.
+  const [editorStateOpen, setEditorStateOpen] = useState(false);
+  const [openingFocusPlan, setOpeningFocusPlan] = useState<{
+    view: FilterDialogView;
+    inlineLeafPath: number[] | undefined;
+    leafIsRelated: boolean;
+    selectedCriterionId: string | null;
+  } | null>(null);
+  if (editorStateOpen !== open) {
+    setEditorStateOpen(open);
     if (!open) {
-      inlineAddedConditionRef.current = null;
-      if (wasOpenRef.current) {
-        setEditFilter(cloneActiveFilter());
-        setSearch("");
-        setExpandedCriterion(null);
-        setRelatedWorkspaceSelection(null);
-        setDialogView("simple");
-        setSelectedFiltersCollapsed(false);
-        setConditionDraft(null);
-        setSimpleExpressionGroupPath([]);
-        setInlineStackReturnsToExpression(false);
-        setNavigatorFocusId(null);
-        previousFocusRef.current?.focus();
-      }
-      wasOpenRef.current = false;
-      return;
-    }
-
-    if (!wasOpenRef.current) {
-      inlineAddedConditionRef.current = null;
-      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setEditFilter(cloneActiveFilter());
+      setSearch("");
+      setExpandedCriterion(null);
+      setRelatedWorkspaceSelection(null);
+      setDialogView("simple");
+      setSelectedFiltersCollapsed(false);
+      setConditionDraft(null);
+      setSimpleExpressionGroupPath([]);
+      setInlineStackReturnsToExpression(false);
+      setNavigatorFocusId(null);
+    } else {
       const openingFilter = cloneActiveFilter();
       const sourceExpression = sourceActiveFilter[FILTER_EXPRESSION_STATE_KEY] as
         | FilterExpression<Record<string, unknown>>
@@ -631,15 +629,37 @@ export function FilterDialog({
           : null,
       );
       setExpandedCriterion(nextSelected);
+      setOpeningFocusPlan({
+        view: openingView,
+        inlineLeafPath: openLeafInline ? openingExpressionPath : undefined,
+        leafIsRelated: openingLeafCriterion?.type === "related",
+        selectedCriterionId: nextSelected,
+      });
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      inlineAddedConditionRef.current = null;
+      if (wasOpenRef.current) {
+        previousFocusRef.current?.focus();
+      }
+      wasOpenRef.current = false;
+      return;
+    }
+
+    if (!wasOpenRef.current) {
+      inlineAddedConditionRef.current = null;
+      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       window.setTimeout(() => {
-        if (openingView === "expression") backButtonRef.current?.focus();
-        else if (openLeafInline && openingExpressionPath) {
+        if (openingFocusPlan?.view === "expression") backButtonRef.current?.focus();
+        else if (openingFocusPlan?.inlineLeafPath) {
           const condition = dialogRef.current?.querySelector<HTMLElement>(
-            `[data-inline-condition-path="${openingExpressionPath.join(".")}"]`,
+            `[data-inline-condition-path="${openingFocusPlan.inlineLeafPath.join(".")}"]`,
           );
           getFirstInlineEditorControl(condition?.querySelector<HTMLElement>("[data-inline-condition-editor]"))?.focus();
         } else if (
-          openingLeafCriterion?.type === "related" &&
+          openingFocusPlan?.leafIsRelated &&
           typeof preselectCriterion === "object" &&
           preselectCriterion.nestedCriterionId
         ) {
@@ -649,26 +669,16 @@ export function FilterDialog({
               "input:not([type='hidden']), select, textarea, button[aria-pressed='true']",
             ) ?? getFirstEditorControl(panel)
           )?.focus();
-        } else if (nextSelected && preselectCriterion) focusFirstEditorControl();
+        } else if (openingFocusPlan?.selectedCriterionId && preselectCriterion) focusFirstEditorControl();
         else searchRef.current?.focus();
-        if (nextSelected)
-          criterionButtonRefs.current.get(nextSelected)?.scrollIntoView?.({ block: "center", inline: "nearest" });
+        if (openingFocusPlan?.selectedCriterionId)
+          criterionButtonRefs.current
+            .get(openingFocusPlan.selectedCriterionId)
+            ?.scrollIntoView?.({ block: "center", inline: "nearest" });
       }, 0);
     }
     wasOpenRef.current = true;
-  }, [
-    cloneActiveFilter,
-    criteria,
-    customSections,
-    focusFirstEditorControl,
-    initialExpressionPath,
-    initialView,
-    normalizedActiveFilter,
-    open,
-    openAtRoot,
-    preselectCriterion,
-    sourceActiveFilter,
-  ]);
+  }, [focusFirstEditorControl, open, openingFocusPlan, preselectCriterion]);
 
   const dismiss = useCallback(() => {
     setEditFilter(cloneActiveFilter());

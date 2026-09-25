@@ -569,21 +569,26 @@ export function ExtensionLoaderProvider({
     }));
   }, []);
 
-  useEffect(() => {
-    if (!hasServerBackedUiPreferences) {
-      return;
+  // Adopt server-backed theme preferences whenever they change. Null until the first render so
+  // preferences present at mount are applied too, replacing any localStorage fallback.
+  const [prevServerTheme, setPrevServerTheme] = useState<{
+    hasServerBackedUiPreferences: boolean;
+    userThemePreferences: UserThemePreferences | null;
+  } | null>(null);
+  if (
+    prevServerTheme === null ||
+    prevServerTheme.hasServerBackedUiPreferences !== hasServerBackedUiPreferences ||
+    prevServerTheme.userThemePreferences !== userThemePreferences
+  ) {
+    setPrevServerTheme({ hasServerBackedUiPreferences, userThemePreferences });
+    const nextTheme = hasServerBackedUiPreferences ? userThemePreferences : null;
+    if (nextTheme) {
+      setActiveThemeIdState(nextTheme.activeThemeId ?? "default");
+      setActiveComponentStylesState(parseStyleSet(nextTheme.activeComponentStyles?.join(" ") ?? null));
+      setActiveLayoutStylesState(parseLayoutSet(nextTheme.activeLayoutStyle ?? null));
+      setCustomThemeColorsState(nextTheme.customThemeColors ?? {});
     }
-
-    const nextTheme = userThemePreferences;
-    if (!nextTheme) {
-      return;
-    }
-
-    setActiveThemeIdState(nextTheme.activeThemeId ?? "default");
-    setActiveComponentStylesState(parseStyleSet(nextTheme.activeComponentStyles?.join(" ") ?? null));
-    setActiveLayoutStylesState(parseLayoutSet(nextTheme.activeLayoutStyle ?? null));
-    setCustomThemeColorsState(nextTheme.customThemeColors ?? {});
-  }, [hasServerBackedUiPreferences, userThemePreferences]);
+  }
 
   // A selected theme that is missing from `availableThemes` is deliberately NOT rewritten to the
   // default here. A theme is absent for two reasons this side cannot tell apart — it was
@@ -624,6 +629,7 @@ export function ExtensionLoaderProvider({
 
     if (troubleshootingMode) {
       manifestRequestGeneration.current += 1;
+      // oxlint-disable-next-line react/set-state-in-effect -- marks the runtime as loading while this effect unloads every extension bundle
       setLoaded(false);
       void runtimeReconciler
         .reconcile([])
@@ -648,6 +654,7 @@ export function ExtensionLoaderProvider({
       };
     }
 
+    // oxlint-disable-next-line react/set-state-in-effect -- marks the manifest as loading at the start of the request this effect issues
     setLoaded(false);
     const requestGeneration = ++manifestRequestGeneration.current;
     void (async () => {
@@ -780,7 +787,47 @@ export function ExtensionLoaderProvider({
     }
   }, [troubleshootingMode, user?.id]);
 
-  // Apply active theme CSS variables and bundled component style
+  // If the theme bundles styles/layouts, auto-apply them unless the user explicitly overrode them.
+  // Re-evaluated on the same changes that re-apply the theme below; null until the first render.
+  const [prevThemeInputs, setPrevThemeInputs] = useState<{
+    activeThemeId: string | null;
+    customThemeColors: Record<string, string>;
+    hasUserComponentStyleOverride: boolean;
+    hasUserLayoutStyleOverride: boolean;
+    manifest: ExtensionManifest | null;
+    selectedTheme: typeof selectedTheme;
+    troubleshootingMode: boolean;
+  } | null>(null);
+  if (
+    prevThemeInputs === null ||
+    prevThemeInputs.activeThemeId !== activeThemeId ||
+    prevThemeInputs.customThemeColors !== customThemeColors ||
+    prevThemeInputs.hasUserComponentStyleOverride !== hasUserComponentStyleOverride ||
+    prevThemeInputs.hasUserLayoutStyleOverride !== hasUserLayoutStyleOverride ||
+    prevThemeInputs.manifest !== manifest ||
+    prevThemeInputs.selectedTheme !== selectedTheme ||
+    prevThemeInputs.troubleshootingMode !== troubleshootingMode
+  ) {
+    setPrevThemeInputs({
+      activeThemeId,
+      customThemeColors,
+      hasUserComponentStyleOverride,
+      hasUserLayoutStyleOverride,
+      manifest,
+      selectedTheme,
+      troubleshootingMode,
+    });
+    if (manifest && !troubleshootingMode && activeThemeId && activeThemeId !== "custom" && selectedTheme) {
+      if (!hasUserComponentStyleOverride) {
+        setActiveComponentStylesState(parseStyleSet(selectedTheme.componentStyle ?? "default"));
+      }
+      if (!hasUserLayoutStyleOverride) {
+        setActiveLayoutStylesState(parseLayoutSet(selectedTheme.layoutStyle ?? "default"));
+      }
+    }
+  }
+
+  // Apply active theme CSS variables
   useEffect(() => {
     if (!manifest || troubleshootingMode) return;
 
@@ -825,14 +872,6 @@ export function ExtensionLoaderProvider({
     }
 
     document.documentElement.setAttribute("data-theme", theme.id);
-
-    // If the theme bundles styles/layouts, auto-apply them unless the user explicitly overrode them.
-    if (!hasUserComponentStyleOverride) {
-      setActiveComponentStylesState(parseStyleSet(theme.componentStyle ?? "default"));
-    }
-    if (!hasUserLayoutStyleOverride) {
-      setActiveLayoutStylesState(parseLayoutSet(theme.layoutStyle ?? "default"));
-    }
 
     if (theme.cssVariables && Object.keys(theme.cssVariables).length > 0) {
       const style = document.createElement("style");
