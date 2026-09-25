@@ -841,7 +841,9 @@ function JsonPrimitiveValue({ value }: { value: unknown }) {
   return <span className="text-secondary">{JSON.stringify(value) ?? String(value)}</span>;
 }
 
+// JSON strings cannot contain raw U+0000-U+001F, so the string branch must exclude them.
 const JSON_TOKEN_PATTERN =
+  // oxlint-disable-next-line no-control-regex -- matching control characters is the purpose of this pattern
   /"(?:\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})|[^"\\\u0000-\u001F])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|\b(?:true|false|null)\b/g;
 const MAX_JSON_HIGHLIGHT_CHARACTERS = 100_000;
 const MAX_JSON_HIGHLIGHT_TOKENS = 2_000;

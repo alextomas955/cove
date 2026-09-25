@@ -4,6 +4,8 @@ import { auth } from "../api/client";
 import type { ExternalLoginMethodRow } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
+// Control characters in a redirect target can smuggle whitespace or line breaks past the same-origin check.
+// oxlint-disable-next-line no-control-regex -- matching control characters is the purpose of this pattern
 const unsafeLocalUrlCharacters = /[\\\u0000-\u001f\u007f]/;
 
 function getSafePostLoginRedirect(): string | null {

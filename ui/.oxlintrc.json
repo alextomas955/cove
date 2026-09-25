@@ -7,7 +7,6 @@
   "rules": {
     "vitest/require-mock-type-parameters": "off",
 
-    "eslint/no-control-regex": "warn",
     "eslint/no-unused-vars": "warn",
     "react/immutability": "warn",
     "react/incompatible-library": "warn",
