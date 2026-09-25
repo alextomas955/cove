@@ -2380,7 +2380,9 @@ type HydratedGroupItemData =
   | { type: "group"; group: Group };
 
 type HydratedGroupItemState =
-  { status: "loading" } | { status: "error" } | { status: "ready"; data: HydratedGroupItemData };
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; data: HydratedGroupItemData };
 
 function useGroupItemEntities(items: MixedGroupItem[]) {
   const queryItems = useMemo(

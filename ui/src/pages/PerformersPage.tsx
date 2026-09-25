@@ -80,7 +80,8 @@ export function PerformersPage({ onNavigate }: Props) {
   const canWritePerformer = canWriteEntity("performer", hasPermission);
 
   const filterExpression = objectFilter[FILTER_EXPRESSION_STATE_KEY] as
-    FilterExpression<PerformerFilterCriteria> | undefined;
+    | FilterExpression<PerformerFilterCriteria>
+    | undefined;
   const backendObjectFilter = useMemo(
     () => Object.fromEntries(Object.entries(objectFilter).filter(([key]) => key !== FILTER_EXPRESSION_STATE_KEY)),
     [objectFilter],

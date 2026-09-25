@@ -77,7 +77,8 @@ export function AudiosPage({ onNavigate }: Props) {
   const [selectAllMatchingPending, setSelectAllMatchingPending] = useState(false);
 
   const filterExpression = objectFilter[FILTER_EXPRESSION_STATE_KEY] as
-    FilterExpression<AudioFilterCriteria> | undefined;
+    | FilterExpression<AudioFilterCriteria>
+    | undefined;
   const backendObjectFilter = useMemo(
     () => Object.fromEntries(Object.entries(objectFilter).filter(([key]) => key !== FILTER_EXPRESSION_STATE_KEY)),
     [objectFilter],

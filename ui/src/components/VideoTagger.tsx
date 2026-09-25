@@ -165,7 +165,10 @@ function upgradeSavedPerformerGenders(saved: Partial<TaggerConfig>) {
 }
 
 type VideoMetadataSearchStrategy =
-  "remote-id-and-fingerprint-text" | "remote-id-fingerprint" | "remote-id" | "fingerprint";
+  | "remote-id-and-fingerprint-text"
+  | "remote-id-fingerprint"
+  | "remote-id"
+  | "fingerprint";
 
 const VIDEO_METADATA_SEARCH_STRATEGIES: TaggerRunAllOption[] = [
   {

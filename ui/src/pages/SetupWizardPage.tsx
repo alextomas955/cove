@@ -30,7 +30,15 @@ interface Props {
 }
 
 export type Step =
-  "welcome" | "source" | "paths" | "confirm" | "stash-config" | "backup-restore" | "owner" | "theme" | "done";
+  | "welcome"
+  | "source"
+  | "paths"
+  | "confirm"
+  | "stash-config"
+  | "backup-restore"
+  | "owner"
+  | "theme"
+  | "done";
 export type SetupMode = "fresh" | "stash" | "backup" | null;
 type ActiveSetupMode = Exclude<SetupMode, null>;
 

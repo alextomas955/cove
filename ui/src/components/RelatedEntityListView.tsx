@@ -88,7 +88,17 @@ import { EntityMedia, getTagMediaImageUrl } from "./EntityMedia";
 import { getWallColumnCountFromSizeLevel } from "./WallSizeControl";
 
 type RelatedEntityItem =
-  Video | Image | Performer | Gallery | Studio | Tag | Group | Audio | TextDocument | SegmentRecord | Face;
+  | Video
+  | Image
+  | Performer
+  | Gallery
+  | Studio
+  | Tag
+  | Group
+  | Audio
+  | TextDocument
+  | SegmentRecord
+  | Face;
 
 const ENTITY_CARD_SIZE_TYPE: Partial<Record<RelatedEntityType, string>> = {
   videos: "videos",

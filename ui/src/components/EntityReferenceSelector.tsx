@@ -21,7 +21,8 @@ import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 
 export type EntityReferenceType =
-  Extract<CustomFieldType, "tag" | "performer" | "studio" | "video" | "gallery" | "image" | "group"> | "face";
+  | Extract<CustomFieldType, "tag" | "performer" | "studio" | "video" | "gallery" | "image" | "group">
+  | "face";
 
 export interface EntityReferenceOption {
   id: number;

@@ -486,7 +486,8 @@ export function FilterDialog({
         };
         setEditFilter((current) => {
           const currentExpression = current[FILTER_EXPRESSION_STATE_KEY] as
-            FilterExpression<Record<string, unknown>> | undefined;
+            | FilterExpression<Record<string, unknown>>
+            | undefined;
           if (!currentExpression) return current;
           return {
             ...current,
@@ -573,9 +574,11 @@ export function FilterDialog({
       previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const openingFilter = cloneActiveFilter();
       const sourceExpression = sourceActiveFilter[FILTER_EXPRESSION_STATE_KEY] as
-        FilterExpression<Record<string, unknown>> | undefined;
+        | FilterExpression<Record<string, unknown>>
+        | undefined;
       const openingExpression = normalizedActiveFilter[FILTER_EXPRESSION_STATE_KEY] as
-        FilterExpression<Record<string, unknown>> | undefined;
+        | FilterExpression<Record<string, unknown>>
+        | undefined;
       const openingExpressionPath =
         initialExpressionPath && sourceExpression && openingExpression
           ? (remapExpressionLeafPath(sourceExpression, openingExpression, initialExpressionPath) ??
@@ -1005,7 +1008,8 @@ export function FilterDialog({
         const [{ path }] = relatedExpressionInstances;
         setEditFilter((current) => {
           const currentExpression = current[FILTER_EXPRESSION_STATE_KEY] as
-            FilterExpression<Record<string, unknown>> | undefined;
+            | FilterExpression<Record<string, unknown>>
+            | undefined;
           const filter = currentExpression ? getExpressionLeaf(currentExpression, path) : undefined;
           if (!currentExpression || !filter) return current;
           return {
@@ -1061,7 +1065,8 @@ export function FilterDialog({
   const updateInlineCondition = (path: number[], criterion: CriterionDefinition, value: unknown) => {
     setEditFilter((current) => {
       const currentExpression = current[FILTER_EXPRESSION_STATE_KEY] as
-        FilterExpression<Record<string, unknown>> | undefined;
+        | FilterExpression<Record<string, unknown>>
+        | undefined;
       const existingFilter = currentExpression ? getExpressionLeaf(currentExpression, path) : undefined;
       if (!currentExpression || !existingFilter) return current;
       const nextFilter = { ...existingFilter };
@@ -1085,7 +1090,8 @@ export function FilterDialog({
     if (!auxiliaryToggleKey) return;
     setEditFilter((current) => {
       const currentExpression = current[FILTER_EXPRESSION_STATE_KEY] as
-        FilterExpression<Record<string, unknown>> | undefined;
+        | FilterExpression<Record<string, unknown>>
+        | undefined;
       const filter = currentExpression ? getExpressionLeaf(currentExpression, path) : undefined;
       if (!currentExpression || !filter) return current;
       const nextFilter = { ...filter };
@@ -1319,7 +1325,8 @@ export function FilterDialog({
     );
     setEditFilter((current) => {
       const currentExpression = current[FILTER_EXPRESSION_STATE_KEY] as
-        FilterExpression<Record<string, unknown>> | undefined;
+        | FilterExpression<Record<string, unknown>>
+        | undefined;
       if (!currentExpression) return current;
       const group = getExpressionGroup(currentExpression, parentPath);
       if (!group) return current;
@@ -1945,7 +1952,8 @@ export function FilterDialog({
                 criterion={relatedWorkspaceCriterion}
                 value={
                   getCriterionFilterValue(relatedWorkspaceObjectFilter, relatedWorkspaceCriterion) as
-                    RelatedFilterCriterion | undefined
+                    | RelatedFilterCriterion
+                    | undefined
                 }
                 onChange={(value) =>
                   conditionCriterion?.id === relatedWorkspaceCriterion.id && conditionDraft

@@ -135,7 +135,15 @@ interface Props {
 }
 
 type TabKey =
-  "videos" | "performers" | "galleries" | "images" | "audios" | "texts" | "studios" | "groups" | (string & {});
+  | "videos"
+  | "performers"
+  | "galleries"
+  | "images"
+  | "audios"
+  | "texts"
+  | "studios"
+  | "groups"
+  | (string & {});
 
 export function StudioDetailPage({ id, onNavigate }: Props) {
   const { config } = useAppConfig();

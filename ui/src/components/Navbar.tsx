@@ -106,7 +106,8 @@ export function Navbar({ currentPage, navigate }: NavbarProps) {
 
   const allNavItems = enabledMenuItems
     ? (enabledMenuItems.map((page) => allItemsMap.get(page)).filter(Boolean) as (
-        (typeof BUILT_IN_NAVIGATION_ITEMS)[number] | (typeof extensionNavItems)[number]
+        | (typeof BUILT_IN_NAVIGATION_ITEMS)[number]
+        | (typeof extensionNavItems)[number]
       )[])
     : Array.from(allItemsMap.values());
 

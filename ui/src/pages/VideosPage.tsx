@@ -353,7 +353,8 @@ export function VideosPage({ onNavigate }: Props) {
   }, [objectFilter]);
 
   const filterExpression = normalizedObjectFilter[FILTER_EXPRESSION_STATE_KEY] as
-    FilterExpression<VideoFilterCriteria> | undefined;
+    | FilterExpression<VideoFilterCriteria>
+    | undefined;
   const backendObjectFilter = useMemo(
     () =>
       Object.fromEntries(

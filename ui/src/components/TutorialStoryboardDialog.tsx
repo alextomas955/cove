@@ -37,7 +37,14 @@ export const TUTORIAL_STORYBOARD_STORAGE_KEY = "cove-tutorial-storyboard-complet
 export const TUTORIAL_STORYBOARD_EVENT = "cove:tutorial-storyboard-open";
 
 export type TutorialSlideMockKind =
-  "tasks" | "feed" | "metadata" | "settings" | "videoPlayer" | "tagging" | "images" | "extension";
+  | "tasks"
+  | "feed"
+  | "metadata"
+  | "settings"
+  | "videoPlayer"
+  | "tagging"
+  | "images"
+  | "extension";
 type ManualBoxTone = "green" | "blue" | "purple" | "orange" | "pink" | "teal";
 type ManualBoxPointContent = {
   tone?: ManualBoxTone;

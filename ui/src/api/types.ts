@@ -34,7 +34,15 @@ export interface Video {
 }
 
 export type GlobalSearchEntityType =
-  "video" | "performer" | "studio" | "tag" | "gallery" | "image" | "group" | "audio" | "text";
+  | "video"
+  | "performer"
+  | "studio"
+  | "tag"
+  | "gallery"
+  | "image"
+  | "group"
+  | "audio"
+  | "text";
 
 export interface GlobalSearchItem {
   id: number;
@@ -1228,7 +1236,17 @@ export interface TagSegmentWall {
 export type SegmentHostType = "video" | "image" | "audio";
 export type DetectionHostType = "video" | "image";
 export type AffinityHostType =
-  "video" | "audio" | "text" | "image" | "performer" | "face" | "tag" | "studio" | "gallery" | "group" | "segment";
+  | "video"
+  | "audio"
+  | "text"
+  | "image"
+  | "performer"
+  | "face"
+  | "tag"
+  | "studio"
+  | "gallery"
+  | "group"
+  | "segment";
 export type InteractionHostType = AffinityHostType | "segment" | "search" | "collection";
 
 export interface Segment {
@@ -2134,7 +2152,16 @@ export interface InterfaceConfig {
 }
 
 export type CustomFieldEntityType =
-  "video" | "audio" | "text" | "performer" | "tag" | "studio" | "gallery" | "image" | "group" | "face";
+  | "video"
+  | "audio"
+  | "text"
+  | "performer"
+  | "tag"
+  | "studio"
+  | "gallery"
+  | "image"
+  | "group"
+  | "face";
 export type CustomFieldType =
   | "text"
   | "longText"
@@ -2435,7 +2462,8 @@ export interface RelatedFilterCriterion<TObjectFilter = Record<string, unknown>>
 }
 
 export type FilterExpressionNode<TFilter = Record<string, unknown>> =
-  { filter: TFilter; group?: never } | { group: FilterExpression<TFilter>; filter?: never };
+  | { filter: TFilter; group?: never }
+  | { group: FilterExpression<TFilter>; filter?: never };
 
 export interface FilterExpression<TFilter = Record<string, unknown>> {
   operator: "AND" | "OR" | "JUST_ONE" | "NOT";
