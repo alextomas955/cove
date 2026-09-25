@@ -746,12 +746,18 @@ public class ExtensionManager : IExtensionContributionRuntime
         StopBackgroundWorker(ext.Id);
         WithdrawFromExchange(ext.Id);
 
-        _overlay ??= new ExtensionServiceOverlay(_rootServices, _hostDescriptors, _logger);
-        return _overlay.TryBuildProvider(
-            ext.Id,
+        return TryBuildOverlayProvider(
             ext,
-            _context,
             (failedId, e) => DisableExtensionForStartupFailure(failedId, e, "provider build"));
+    }
+
+    private bool TryBuildOverlayProvider(IExtension ext, Action<string, Exception> onBuildFailure)
+    {
+        if (_rootServices == null || _hostDescriptors == null)
+            return false;
+
+        _overlay ??= new ExtensionServiceOverlay(_rootServices, _hostDescriptors, _logger);
+        return _overlay.TryBuildProvider(ext.Id, ext, _context, onBuildFailure);
     }
 
     /// <summary>
@@ -1734,16 +1740,29 @@ public class ExtensionManager : IExtensionContributionRuntime
     /// </summary>
     private async Task RunUninstallHookAsync(IExtension ext, CancellationToken ct)
     {
-        if (IsOverlayExtension(ext.Id)
-            && _overlay?.TryGetGeneration(ext.Id, ext, out _) != true
-            && !BuildUninstallProvider(ext))
-        {
-            _logger?.LogWarning("Skipping OnUninstall for extension {Id}: no service container could be built", ext.Id);
-            return;
-        }
-
         try
         {
+            if (IsOverlayExtension(ext.Id) && _overlay?.TryGetGeneration(ext.Id, ext, out _) != true)
+            {
+                Exception? buildFailure = null;
+                bool built;
+                try
+                {
+                    built = TryBuildOverlayProvider(ext, (_, ex) => buildFailure = ex);
+                }
+                catch (Exception ex)
+                {
+                    buildFailure = ex;
+                    built = false;
+                }
+
+                if (!built)
+                {
+                    _logger?.LogWarning(buildFailure, "Skipping OnUninstall for extension {Id}: no service container could be built", ext.Id);
+                    return;
+                }
+            }
+
             using var extensionLease = CreateExtensionExecutionLease(CaptureExtensionExecution(ext));
             await ext.OnUninstallAsync(extensionLease.Services, ct);
         }
@@ -1751,19 +1770,6 @@ public class ExtensionManager : IExtensionContributionRuntime
         {
             _logger?.LogWarning(ex, "OnUninstall failed for extension {Id}", ext.Id);
         }
-    }
-
-    private bool BuildUninstallProvider(IExtension ext)
-    {
-        if (_rootServices == null || _hostDescriptors == null)
-            return false;
-
-        _overlay ??= new ExtensionServiceOverlay(_rootServices, _hostDescriptors, _logger);
-        return _overlay.TryBuildProvider(
-            ext.Id,
-            ext,
-            _context,
-            (failedId, ex) => _logger?.LogWarning(ex, "Failed to build uninstall service container for extension {Id}", failedId));
     }
 
     // ========================================================================

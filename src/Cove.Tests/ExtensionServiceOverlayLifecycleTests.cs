@@ -496,6 +496,7 @@ public sealed class ExtensionServiceOverlayLifecycleTests
         Assert.Null(manager.GetExtension(extension.Id));
         Assert.Equal(1, extension.UninstallCount);
         Assert.Same(extension.Service, extension.UninstallService);
+        // Only the uninstall hook resolves the probe, so this disposal is the temporary container's.
         Assert.Equal(1, extension.Service.DisposeCount);
     }
 
@@ -516,6 +517,8 @@ public sealed class ExtensionServiceOverlayLifecycleTests
         Assert.Null(manager.GetExtension(dependent.Id));
         Assert.Equal(1, dependent.UninstallCount);
         Assert.Same(dependent.Service, dependent.UninstallService);
+        // Only the uninstall hook resolves the probe, so this disposal is the temporary container's.
+        Assert.Equal(1, dependent.Service.DisposeCount);
     }
 
     [Fact]
@@ -531,6 +534,32 @@ public sealed class ExtensionServiceOverlayLifecycleTests
 
         Assert.Null(manager.GetExtension(extension.Id));
         Assert.Equal(0, extension.UninstallCount);
+        Assert.Null(manager.GetLastFailureReason(extension.Id));
+    }
+
+    [Fact]
+    public async Task Unload_of_disabled_runtime_extension_completes_when_uninstall_provider_build_throws()
+    {
+        var manager = new ExtensionManager(CreateContext());
+        var extension = new UninstallTrackingExtension("com.example.uninstall-build-throws");
+        manager.Register(extension, "local");
+        MarkAsRuntimeExtension(manager, extension.Id);
+        await manager.DisableExtensionAsync(extension.Id, TestContext.Current.CancellationToken);
+
+        // Disabled before startup, so the uninstall build is the first to forward (and resolve) this
+        // host singleton, outside the overlay's ConfigureServices/BuildServiceProvider failure handling.
+        var hostServices = new ServiceCollection();
+        hostServices.AddLogging();
+        hostServices.AddSingleton<DisposalProbe>(_ => throw new InvalidOperationException("Expected host singleton failure."));
+        manager.CaptureHostServices(hostServices);
+        using var root = hostServices.BuildServiceProvider();
+        manager.PrepareRuntimeServices(root);
+
+        Assert.True(await manager.UnloadExtensionAsync(extension.Id, root, TestContext.Current.CancellationToken));
+
+        Assert.Null(manager.GetExtension(extension.Id));
+        Assert.Equal(0, extension.UninstallCount);
+        Assert.Null(manager.GetLastFailureReason(extension.Id));
     }
 
     private static async Task<ServiceProvider> InitializeRuntimeExtensionsAsync(
