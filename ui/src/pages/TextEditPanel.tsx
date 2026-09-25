@@ -30,7 +30,7 @@ function textFormValues(text: TextDocument) {
     date: text.date ?? "",
     studioId: text.studioId ?? undefined,
     urls: text.urls.length > 0 ? text.urls : [""],
-    customFields: { ...(text.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...text.customFields } as Record<string, unknown>,
     selectedTagIds: text.tags.map((tag) => tag.id),
     selectedPerformerIds: text.performers.map((performer) => performer.id),
     selectedGroups: text.groups.map((group) => ({ groupId: group.id, videoIndex: 0 })) as VideoGroupInput[],
@@ -67,7 +67,7 @@ export function TextEditPanel({ text, onSaved }: Props) {
   const [date, setDate] = useState(text.date ?? "");
   const [studioId, setStudioId] = useState<number | undefined>(text.studioId ?? undefined);
   const [urls, setUrls] = useState<string[]>(text.urls.length > 0 ? text.urls : [""]);
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(text.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...text.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(text.tags.map((tag) => tag.id));
   const [selectedPerformerIds, setSelectedPerformerIds] = useState<number[]>(

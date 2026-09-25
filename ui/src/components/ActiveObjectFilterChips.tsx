@@ -1394,7 +1394,7 @@ function RelatedFilterChipGroup({
         : [],
     ),
   );
-  const nestedEntries = getLogicalFilterEntries(nestedCriteria, { ...contextFilter, ...(related.objectFilter ?? {}) });
+  const nestedEntries = getLogicalFilterEntries(nestedCriteria, { ...contextFilter, ...related.objectFilter });
   const singular =
     def.entityType === "performers"
       ? "performer"

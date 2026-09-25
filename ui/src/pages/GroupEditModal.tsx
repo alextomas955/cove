@@ -32,7 +32,7 @@ function groupFormValues(group: Group) {
     description: group.description ?? "",
     urls: group.urls.length > 0 ? group.urls : [""],
     selectedTagIds: group.tags.map((t) => t.id),
-    customFields: { ...(group.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...group.customFields } as Record<string, unknown>,
     kind: (group.kind ?? "static") as "static" | "dynamic",
     querySourceKey: group.querySourceKey ?? FILTER_DYNAMIC_SOURCE_KEY,
     queryJson: group.queryJson ?? defaultDynamicGroupFilterQueryJson(),
@@ -85,7 +85,7 @@ export function GroupEditModal({ group, open, onClose }: Props) {
   const [queryJson, setQueryJson] = useState(group.queryJson ?? defaultDynamicGroupFilterQueryJson());
   const [showInVideoLists, setShowInVideoLists] = useState(group.showInVideoLists ?? false);
 
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(group.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...group.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const tagProvenanceById = buildTagProvenanceById(group.tags, group.fieldProvenance);
   const { data: dynamicSources } = useQuery({
@@ -113,7 +113,7 @@ export function GroupEditModal({ group, open, onClose }: Props) {
     setDescription(group.description ?? "");
     setUrls(group.urls.length > 0 ? group.urls : [""]);
     setSelectedTagIds(group.tags.map((t) => t.id));
-    setCustomFields({ ...(group.customFields ?? {}) });
+    setCustomFields({ ...group.customFields });
     setKind(group.kind ?? "static");
     setQuerySourceKey(group.querySourceKey ?? FILTER_DYNAMIC_SOURCE_KEY);
     setQueryJson(group.queryJson ?? defaultDynamicGroupFilterQueryJson());

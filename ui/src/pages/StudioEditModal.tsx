@@ -26,7 +26,7 @@ function studioFormValues(studio: Studio) {
     aliases: studio.aliases.length > 0 ? studio.aliases : [""],
     parentId: studio.parentId ?? undefined,
     selectedTagIds: studio.tags.map((t) => t.id),
-    customFields: { ...(studio.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...studio.customFields } as Record<string, unknown>,
     remoteIds: studio.remoteIds.map((remoteId) => ({ ...remoteId })) as RemoteIdValue[],
   };
 }
@@ -60,7 +60,7 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
   const [parentId, setParentId] = useState<number | undefined>(studio.parentId ?? undefined);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(studio.tags.map((t) => t.id));
 
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(studio.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...studio.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(studio.remoteIds.map((remoteId) => ({ ...remoteId })));
   const tagProvenanceById = buildTagProvenanceById(studio.tags, studio.fieldProvenance);
@@ -79,7 +79,7 @@ export function StudioEditModal({ studio, open, onClose }: Props) {
     setAliases(studio.aliases.length > 0 ? studio.aliases : [""]);
     setParentId(studio.parentId ?? undefined);
     setSelectedTagIds(studio.tags.map((t) => t.id));
-    setCustomFields({ ...(studio.customFields ?? {}) });
+    setCustomFields({ ...studio.customFields });
     setRemoteIds(studio.remoteIds.map((remoteId) => ({ ...remoteId })));
   }, [studio.id, open]);
 

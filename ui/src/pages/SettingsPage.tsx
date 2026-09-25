@@ -4676,7 +4676,7 @@ function LocalInterfacePanel({ serverRatingOptions }: { serverRatingOptions?: Pa
     };
     setTrackingPreferences(nextTracking);
     updateAuthenticatedUserUiPreferences((current) => ({
-      ...(current ?? {}),
+      ...current,
       tracking: nextTracking,
     }));
   };
@@ -4776,7 +4776,7 @@ function MarkdownRenderingPreferencePanel() {
         disabled={!accountBackedPreferences}
         onChange={(checked) =>
           updateAuthenticatedUserUiPreferences((current) => ({
-            ...(current ?? {}),
+            ...current,
             renderMarkdown: checked,
           }))
         }
@@ -5085,7 +5085,7 @@ function UserSettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
     };
     setTrackingPreferences(nextTracking);
     updateAuthenticatedUserUiPreferences((current) => ({
-      ...(current ?? {}),
+      ...current,
       tracking: nextTracking,
     }));
   };
@@ -5557,7 +5557,7 @@ function LibraryTasksSection({ refetchJobs, mode }: { refetchJobs: () => void; m
     const stored = loadStoredTaskOptions(TASK_DOWNLOAD_IMPORT_OPTIONS_KEY, {
       generate: DEFAULT_BATCH_DOWNLOAD_GENERATE_OPTIONS,
     });
-    return { ...DEFAULT_BATCH_DOWNLOAD_GENERATE_OPTIONS, ...(stored.generate ?? {}) };
+    return { ...DEFAULT_BATCH_DOWNLOAD_GENERATE_OPTIONS, ...stored.generate };
   });
   const [downloadImportCachedUrls, setDownloadImportCachedUrls] = useState<string[]>(() => {
     const stored = loadStoredTaskOptions(TASK_DOWNLOAD_IMPORT_CACHE_KEY, { urls: [] as string[] });
@@ -7046,9 +7046,9 @@ function ThemeSelector() {
     setStyleOptionsState(updated);
     localStorage.setItem("cove-style-options", JSON.stringify(updated));
     updateAuthenticatedUserUiPreferences((current) => ({
-      ...(current ?? {}),
+      ...current,
       theme: {
-        ...(current?.theme ?? {}),
+        ...current?.theme,
         styleOptions: updated,
       },
     }));

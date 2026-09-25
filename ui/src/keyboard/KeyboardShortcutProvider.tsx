@@ -227,7 +227,7 @@ export function KeyboardShortcutProvider({ children }: { children: ReactNode }) 
         // Server-backed preferences remain authoritative when browser storage is unavailable or full.
       }
       updateAuthenticatedUserUiPreferences((current) => ({
-        ...(current ?? {}),
+        ...current,
         keyboardShortcuts: value,
       }));
     },

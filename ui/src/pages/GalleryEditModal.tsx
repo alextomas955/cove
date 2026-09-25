@@ -31,7 +31,7 @@ function buildFormState(gallery: Gallery) {
     tagIds: gallery.tags.map((t) => t.id),
     performerIds: gallery.performers.map((p) => p.id),
     videoIds: gallery.videoIds,
-    customFields: { ...(gallery.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...gallery.customFields } as Record<string, unknown>,
   };
 }
 

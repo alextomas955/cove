@@ -538,7 +538,7 @@ function buildDefaultVideoFieldStrategies(video: Video, result: UnifiedVideoMatc
 }
 
 function getVideoFieldStrategies(video: Video, result: UnifiedVideoMatch, state: VideoSearchState | undefined) {
-  return { ...buildDefaultVideoFieldStrategies(video, result), ...(state?.fieldStrategies ?? {}) };
+  return { ...buildDefaultVideoFieldStrategies(video, result), ...state?.fieldStrategies };
 }
 
 // Default cover decision: an auto-generated frame cover (no explicit imagePath) is treated as "not set",
@@ -609,7 +609,7 @@ function getVideoCollectionModes(
   state: VideoSearchState | undefined,
   taggerConfig: TaggerConfig,
 ) {
-  return { ...buildDefaultVideoCollectionModes(result, state, taggerConfig), ...(state?.collectionModes ?? {}) };
+  return { ...buildDefaultVideoCollectionModes(result, state, taggerConfig), ...state?.collectionModes };
 }
 
 function collectionModeToFieldStrategy(mode: CollectionMode): VideoFieldStrategy {

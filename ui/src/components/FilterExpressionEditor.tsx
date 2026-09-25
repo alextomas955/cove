@@ -175,7 +175,6 @@ export function FilterExpressionEditor({
             onAddCondition={onAddCondition}
             onEditCondition={onEditCondition}
             describeCondition={describeCondition}
-            destinations={destinations}
             legalDestinations={legalDestinations}
             keyboardMove={keyboardMove}
             activeKeyboardDestination={activeKeyboardDestination}
@@ -213,7 +212,6 @@ function ExpressionGroupEditor({
   ungroupChildFromParent,
   removeGroupFromParent,
   describeCondition,
-  destinations,
   legalDestinations,
   keyboardMove,
   activeKeyboardDestination,
@@ -235,7 +233,6 @@ function ExpressionGroupEditor({
   ungroupChildFromParent?: () => void;
   removeGroupFromParent?: () => void;
   describeCondition: (filter: Record<string, unknown>) => string;
-  destinations: ExpressionGroupDestination[];
   legalDestinations: (sourcePath: number[]) => ExpressionGroupDestination[];
   keyboardMove: { sourcePath: number[]; destinationIndex: number } | null;
   activeKeyboardDestination?: ExpressionGroupDestination;
@@ -806,7 +803,6 @@ function ExpressionGroupEditor({
                     parentOperator={group.operator}
                     ungroupChildFromParent={() => ungroupChild(index)}
                     removeGroupFromParent={() => removeChild(index)}
-                    destinations={destinations}
                     legalDestinations={legalDestinations}
                     keyboardMove={keyboardMove}
                     activeKeyboardDestination={activeKeyboardDestination}

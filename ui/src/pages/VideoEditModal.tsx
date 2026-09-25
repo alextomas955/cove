@@ -43,7 +43,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
   const [contextTagIdsByPerformer, setContextTagIdsByPerformer] = useState<Record<number, number[]>>(() =>
     buildPerformerContextTagIds(video),
   );
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(video.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...video.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(video.remoteIds.map((remoteId) => ({ ...remoteId })));
 
@@ -63,7 +63,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
     setSelectedGalleryIds(video.galleries.map((g) => g.id));
     setSelectedGroups(video.groups.map((g) => ({ groupId: g.id, videoIndex: g.videoIndex })));
     setContextTagIdsByPerformer(buildPerformerContextTagIds(video));
-    setCustomFields({ ...(video.customFields ?? {}) });
+    setCustomFields({ ...video.customFields });
     setRemoteIds(video.remoteIds.map((remoteId) => ({ ...remoteId })));
   }, [video]);
 

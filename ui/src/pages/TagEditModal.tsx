@@ -41,7 +41,7 @@ function tagFormValues(tag: TagDetail) {
     selectedParentIds: tag.parents.map((t) => t.id),
     selectedChildIds: tag.children.map((t) => t.id),
     remoteIds: (tag.remoteIds?.length ? tag.remoteIds : []) as RemoteIdValue[],
-    customFields: { ...(tag.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...tag.customFields } as Record<string, unknown>,
   };
 }
 
@@ -120,7 +120,7 @@ export function TagEditModal({ tag, open, onClose }: Props) {
   const [selectedChildIds, setSelectedChildIds] = useState<number[]>(tag.children.map((t) => t.id));
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(tag.remoteIds?.length ? tag.remoteIds : []);
 
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(tag.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...tag.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
 
   const { data: groups = [] } = useQuery({
@@ -205,7 +205,7 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     setSelectedParentIds(tag.parents.map((t) => t.id));
     setSelectedChildIds(tag.children.map((t) => t.id));
     setRemoteIds(tag.remoteIds?.length ? tag.remoteIds : []);
-    setCustomFields({ ...(tag.customFields ?? {}) });
+    setCustomFields({ ...tag.customFields });
   }, [tag.id, open]);
 
   const handleClose = () => {

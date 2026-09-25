@@ -55,8 +55,8 @@ function setDefaultFilter(
   const key = mode.trim().toLowerCase();
   localStorage.setItem(`cove-default-filter-${mode}`, json);
   updateAuthenticatedUserUiPreferences((current) => ({
-    ...(current ?? {}),
-    defaultFilters: { ...(current?.defaultFilters ?? {}), [key]: json },
+    ...current,
+    defaultFilters: { ...current?.defaultFilters, [key]: json },
   }));
 }
 

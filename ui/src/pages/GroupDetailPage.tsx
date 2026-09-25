@@ -2103,7 +2103,7 @@ function normalizeFolderPath(value: string) {
 function matchesStringCollectionCriterion(values: string[], criterion?: StringCriterion, pathCaseSensitive = true) {
   if (!criterion) return true;
   const modifier = criterion.modifier ?? "EQUALS";
-  if (modifier === "IS_NULL") return values.length === 0 || values.every((value) => !value.trim());
+  if (modifier === "IS_NULL") return values.every((value) => !value.trim());
   if (modifier === "NOT_NULL") return values.some((value) => value.trim().length > 0);
   if (
     modifier === "NOT_EQUALS" ||
@@ -2111,7 +2111,7 @@ function matchesStringCollectionCriterion(values: string[], criterion?: StringCr
     modifier === "NOT_MATCHES_REGEX" ||
     modifier === "NOT_UNDER_PATH"
   ) {
-    return values.length === 0 || values.every((value) => matchesStringCriterion(value, criterion, pathCaseSensitive));
+    return values.every((value) => matchesStringCriterion(value, criterion, pathCaseSensitive));
   }
   return values.some((value) => matchesStringCriterion(value, criterion, pathCaseSensitive));
 }

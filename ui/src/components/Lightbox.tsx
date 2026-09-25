@@ -144,8 +144,8 @@ export function Lightbox({
         kind,
         meta: {
           source: current.interactionSource ?? "lightbox",
-          ...(current.interactionMeta ?? {}),
-          ...(extraMeta ?? {}),
+          ...current.interactionMeta,
+          ...extraMeta,
         },
       });
     },
@@ -238,7 +238,7 @@ export function Lightbox({
             index: positionOffset + index + 1,
             count: displayCount,
             source: current.interactionSource ?? "lightbox",
-            ...(current.interactionMeta ?? {}),
+            ...current.interactionMeta,
           },
           intervals: [{ startSec: 0, endSec: durationSec }],
         })

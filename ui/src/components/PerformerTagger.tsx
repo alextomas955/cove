@@ -296,7 +296,7 @@ function getPerformerFieldStrategies(
   result: UnifiedPerformerMatch,
   state?: PerformerSearchState,
 ) {
-  return { ...buildDefaultPerformerFieldStrategies(performer, result), ...(state?.fieldStrategies ?? {}) };
+  return { ...buildDefaultPerformerFieldStrategies(performer, result), ...state?.fieldStrategies };
 }
 
 function buildDefaultPerformerCollectionModes(result: UnifiedPerformerMatch): Record<string, CollectionMode> {
@@ -309,7 +309,7 @@ function buildDefaultPerformerCollectionModes(result: UnifiedPerformerMatch): Re
 }
 
 function getPerformerCollectionModes(result: UnifiedPerformerMatch, state?: PerformerSearchState) {
-  return { ...buildDefaultPerformerCollectionModes(result), ...(state?.collectionModes ?? {}) };
+  return { ...buildDefaultPerformerCollectionModes(result), ...state?.collectionModes };
 }
 
 function collectionModeToFieldStrategy(mode: CollectionMode): PerformerFieldStrategy {

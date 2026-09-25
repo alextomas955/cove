@@ -147,7 +147,7 @@ function toFormState(image?: Image): ImageFormState {
     contextTagIdsByPerformer: buildPerformerContextTagIds(image.contextTagApplications),
     selectedGalleryIds: image.galleryIds ?? [],
     selectedGroups: (image.groups ?? []).map((group) => ({ groupId: group.id, videoIndex: group.videoIndex ?? 0 })),
-    customFields: { ...(image.customFields ?? {}) },
+    customFields: { ...image.customFields },
   };
 }
 

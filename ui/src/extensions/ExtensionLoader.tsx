@@ -476,9 +476,9 @@ export function ExtensionLoaderProvider({
       localStorage.removeItem(THEME_STORAGE_KEY);
     }
     updateAuthenticatedUserUiPreferences((current) => ({
-      ...(current ?? {}),
+      ...current,
       theme: {
-        ...(current?.theme ?? {}),
+        ...current?.theme,
         activeThemeId: id,
       },
     }));
@@ -509,9 +509,9 @@ export function ExtensionLoaderProvider({
       }
       localStorage.setItem(COMPONENT_STYLE_STORAGE_KEY, [...next].join(" "));
       updateAuthenticatedUserUiPreferences((current) => ({
-        ...(current ?? {}),
+        ...current,
         theme: {
-          ...(current?.theme ?? {}),
+          ...current?.theme,
           activeComponentStyles: [...next],
         },
       }));
@@ -523,9 +523,9 @@ export function ExtensionLoaderProvider({
     const value = [...next].join(" ");
     localStorage.setItem(LAYOUT_STYLE_STORAGE_KEY, value);
     updateAuthenticatedUserUiPreferences((current) => ({
-      ...(current ?? {}),
+      ...current,
       theme: {
-        ...(current?.theme ?? {}),
+        ...current?.theme,
         activeLayoutStyle: value,
       },
     }));
@@ -564,9 +564,9 @@ export function ExtensionLoaderProvider({
     setCustomThemeColorsState(colors);
     localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, JSON.stringify(colors));
     updateAuthenticatedUserUiPreferences((current) => ({
-      ...(current ?? {}),
+      ...current,
       theme: {
-        ...(current?.theme ?? {}),
+        ...current?.theme,
         customThemeColors: colors,
       },
     }));

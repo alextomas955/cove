@@ -70,7 +70,7 @@ function performerFormValues(performer: Performer) {
     urls: performer.urls.length > 0 ? performer.urls : [""],
     aliases: performer.aliases.length > 0 ? performer.aliases : [""],
     selectedTagIds: performer.tags.map((t) => t.id),
-    customFields: { ...(performer.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...performer.customFields } as Record<string, unknown>,
     remoteIds: performer.remoteIds.map((remoteId) => ({ ...remoteId })) as RemoteIdValue[],
   };
 }
@@ -161,7 +161,7 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     buildSelectedTagLookup(performer.tags),
   );
   const [tagSearch, setTagSearch] = useState("");
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(performer.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...performer.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(performer.remoteIds.map((remoteId) => ({ ...remoteId })));
   const trimmedTagSearch = tagSearch.trim();
@@ -212,7 +212,7 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     setSelectedTagIds(performer.tags.map((t) => t.id));
     setSelectedTagsById(buildSelectedTagLookup(performer.tags));
     setTagSearch("");
-    setCustomFields({ ...(performer.customFields ?? {}) });
+    setCustomFields({ ...performer.customFields });
     setRemoteIds(performer.remoteIds.map((remoteId) => ({ ...remoteId })));
   }, [performer.id, open]);
 

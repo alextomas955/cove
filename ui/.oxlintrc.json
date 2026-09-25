@@ -9,8 +9,6 @@
 
     "eslint/no-control-regex": "warn",
     "eslint/no-unused-vars": "warn",
-    "eslint/no-useless-escape": "warn",
-    "oxc/only-used-in-recursion": "warn",
     "react/immutability": "warn",
     "react/incompatible-library": "warn",
     "react/no-did-update-set-state": "warn",
@@ -21,9 +19,6 @@
     "react/static-components": "warn",
     "react/use-memo": "warn",
     "react-hooks/exhaustive-deps": "warn",
-    "unicorn/no-useless-fallback-in-spread": "warn",
-    "unicorn/no-useless-length-check": "warn",
-    "unicorn/no-useless-spread": "warn",
     "vitest/expect-expect": "warn",
     "vitest/no-conditional-expect": "warn",
     "vitest/valid-expect": "warn"

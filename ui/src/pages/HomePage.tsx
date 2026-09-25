@@ -1459,15 +1459,13 @@ function WidgetCatalog({
   const matchesSearch = (label: string, description: string) =>
     !normalizedSearch || `${label} ${description}`.toLocaleLowerCase().includes(normalizedSearch);
   const flowConflictDescription = "Remove the Canvas widget before adding Flow content.";
-  const builtInItems = [
-    ...PREMADE_FILTERS.map((filter) => ({
-      key: `${filter.mode}:${filter.sortBy}:${filter.header}`,
-      label: filter.header,
-      description: hasCanvasWidget ? flowConflictDescription : `Collection · ${filter.mode}`,
-      disabled: disabled || hasCanvasWidget,
-      onClick: () => addPremade(filter),
-    })),
-  ].filter((item) => matchesSearch(item.label, item.description));
+  const builtInItems = PREMADE_FILTERS.map((filter) => ({
+    key: `${filter.mode}:${filter.sortBy}:${filter.header}`,
+    label: filter.header,
+    description: hasCanvasWidget ? flowConflictDescription : `Collection · ${filter.mode}`,
+    disabled: disabled || hasCanvasWidget,
+    onClick: () => addPremade(filter),
+  })).filter((item) => matchesSearch(item.label, item.description));
   const savedFilterItems = supportedSavedFilters
     .map((filter) => ({
       key: `saved:${filter.id}`,

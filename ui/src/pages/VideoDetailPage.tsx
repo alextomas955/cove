@@ -3159,7 +3159,7 @@ function videoFormValues(video: Video) {
     urls: video.urls.length > 0 ? video.urls : [""],
     studioId: video.studioId ?? undefined,
     remoteIds: (video.remoteIds?.length ? video.remoteIds : []) as RemoteIdValue[],
-    customFields: { ...(video.customFields ?? {}) } as Record<string, unknown>,
+    customFields: { ...video.customFields } as Record<string, unknown>,
     selectedTagIds: getEditableTagIds(video.tags),
     selectedPerformerIds: video.performers.map((p) => p.id),
     selectedGalleryIds: video.galleries.map((g) => g.id),
@@ -3213,7 +3213,7 @@ function VideoEditPanel({
   const [rating, setRating] = useState<number | undefined>(undefined);
   const [urls, setUrls] = useState(video.urls.length > 0 ? video.urls : [""]);
   const [remoteIds, setRemoteIds] = useState<RemoteIdValue[]>(video.remoteIds?.length ? video.remoteIds : []);
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...(video.customFields ?? {}) });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({ ...video.customFields });
   const [customFieldsValid, setCustomFieldsValid] = useState(true);
   const [studioId, setStudioId] = useState<number | undefined>(video.studioId ?? undefined);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(getEditableTagIds(video.tags));
