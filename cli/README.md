@@ -7,7 +7,7 @@ Cove CLI is an experimental command-line client for Cove's REST API.
 
 ## Build and install
 
-Building requires [Bun](https://bun.sh/) 1.3 or newer. From the repository checkout:
+Building requires [Bun](https://bun.sh/) 1.4 or newer. From the repository checkout:
 
 ```sh
 cd cli
