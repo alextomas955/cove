@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using Cove.Core.DTOs;
 using Cove.Core.Interfaces;
@@ -118,6 +119,29 @@ public sealed partial class CoveClient
             $"/api/studios/{studioId}",
             update,
             cancellationToken);
+
+    public Task<StudioDto> AddStudioAliasAsync(
+        int studioId,
+        string alias,
+        CancellationToken cancellationToken = default)
+        => SendAsync<StudioDto>(
+            HttpMethod.Post,
+            $"/api/studios/{studioId}/aliases",
+            new StudioAliasAddDto { Alias = alias },
+            cancellationToken);
+
+    public async Task<System.Net.HttpStatusCode> TryAddStudioAliasAsync(
+        int studioId,
+        string alias,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _client.PostAsJsonAsync(
+            $"/api/studios/{studioId}/aliases",
+            new StudioAliasAddDto { Alias = alias },
+            ApiJson.Options,
+            cancellationToken);
+        return response.StatusCode;
+    }
 
     public async Task DeleteStudioAsync(
         int studioId,
