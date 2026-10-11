@@ -2081,7 +2081,10 @@ describe("VideoTagger", () => {
       resultJson: JSON.stringify({ Title: "Scraped title", Studio: "Other Studio" }),
     });
     await userEvent.type(screen.getByPlaceholderText("Video URL..."), "{Enter}");
-    expect(await screen.findByText("Other Studio")).toBeInTheDocument();
+    // The new search's result renders after the scrape and the library lookup, which a busy runner can take
+    // well past the default second over, so wait for the scrape itself and allow the render longer.
+    await waitFor(() => expect(mocks.createScrapeAttempt).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Other Studio", undefined, { timeout: 5000 })).toBeInTheDocument();
     const request = await applyRow();
     expect(request.linkedStudioId).toBeUndefined();
     expect(request.collectionModes.studio).toBe("skip");
