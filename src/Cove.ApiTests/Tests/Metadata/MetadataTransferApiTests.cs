@@ -20,18 +20,15 @@ public sealed class MetadataTransferApiTests(
         var tag = await AsUser().CreateTagAsync(new TagBuilder()
                 .WithName($"Export tag {suffix}")
                 .WithDescription("Distinctive exported tag description")
-                .AsFavorite()
                 .Build(), TestContext.Current.CancellationToken);
         var studio = await AsUser().CreateStudioAsync(new StudioBuilder()
                 .WithName($"Export studio {suffix}")
                 .WithDetails("Distinctive exported studio details")
-                .AsFavorite()
                 .AsOrganized()
                 .Build(), TestContext.Current.CancellationToken);
         var performer = await AsUser().CreatePerformerAsync(new PerformerBuilder()
                 .WithName($"Export performer {suffix}")
                 .WithDetails("Distinctive exported performer details")
-                .AsFavorite()
                 .Build(), TestContext.Current.CancellationToken);
         var group = await AsUser().CreateGroupAsync($"Export group {suffix}", TestContext.Current.CancellationToken);
         var gallery = await AsUser().CreateGalleryAsync(new GalleryBuilder()
@@ -94,16 +91,16 @@ public sealed class MetadataTransferApiTests(
 
         var exportedPerformer = FindExportedEntity(root, "performers", "name", performer.Name);
         exportedPerformer.GetProperty("details").GetString().Should().Be("Distinctive exported performer details");
-        exportedPerformer.GetProperty("favorite").GetBoolean().Should().BeTrue();
+        exportedPerformer.TryGetProperty("favorite", out _).Should().BeFalse("favorites are each user's own, not library metadata");
 
         var exportedStudio = FindExportedEntity(root, "studios", "name", studio.Name);
         exportedStudio.GetProperty("details").GetString().Should().Be("Distinctive exported studio details");
-        exportedStudio.GetProperty("favorite").GetBoolean().Should().BeTrue();
+        exportedStudio.TryGetProperty("favorite", out _).Should().BeFalse("favorites are each user's own, not library metadata");
         exportedStudio.GetProperty("organized").GetBoolean().Should().BeTrue();
 
         var exportedTag = FindExportedEntity(root, "tags", "name", tag.Name);
         exportedTag.GetProperty("description").GetString().Should().Be("Distinctive exported tag description");
-        exportedTag.GetProperty("favorite").GetBoolean().Should().BeTrue();
+        exportedTag.TryGetProperty("favorite", out _).Should().BeFalse("favorites are each user's own, not library metadata");
 
         var exportedGallery = FindExportedEntity(root, "galleries", "title", gallery.Title!);
         exportedGallery.GetProperty("details").GetString().Should().Be("Distinctive exported gallery details");
@@ -172,12 +169,12 @@ public sealed class MetadataTransferApiTests(
         var importedTag = (await AsUser().GetTagsAsync(TestContext.Current.CancellationToken)).Should()
             .ContainSingle(candidate => candidate.Name == tagName).Which;
         importedTag.Description.Should().Be("Imported tag description");
-        importedTag.Favorite.Should().BeTrue();
+        importedTag.Favorite.Should().BeFalse("a favorite in an older export file is not imported");
 
         var importedStudio = (await AsUser().GetStudiosAsync(TestContext.Current.CancellationToken)).Should()
             .ContainSingle(candidate => candidate.Name == studioName).Which;
         importedStudio.Details.Should().Be("Imported studio details");
-        importedStudio.Favorite.Should().BeTrue();
+        importedStudio.Favorite.Should().BeFalse("a favorite in an older export file is not imported");
         importedStudio.Organized.Should().BeTrue();
 
         var importedPerformer = (await AsUser().GetPerformersAsync(TestContext.Current.CancellationToken)).Should()
@@ -185,7 +182,7 @@ public sealed class MetadataTransferApiTests(
         importedPerformer.Disambiguation.Should().Be("Imported identity");
         importedPerformer.Country.Should().Be("Imported country");
         importedPerformer.Details.Should().Be("Imported performer details");
-        importedPerformer.Favorite.Should().BeTrue();
+        importedPerformer.Favorite.Should().BeFalse("a favorite in an older export file is not imported");
 
         var importedGroup = (await AsUser().GetGroupsAsync(TestContext.Current.CancellationToken)).Should()
             .ContainSingle(candidate => candidate.Name == groupName).Which;

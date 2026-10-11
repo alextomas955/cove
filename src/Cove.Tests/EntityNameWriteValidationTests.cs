@@ -125,12 +125,12 @@ public sealed class EntityNameWriteValidationTests
         using (db.SuppressEntityNameValidation())
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        second.Favorite = true;
+        second.Details = "Updated without changing its identity";
         await new PerformerRepository(db).UpdateAsync(second, TestContext.Current.CancellationToken);
         secondStudio.Details = "Updated without changing its identity";
         await new StudioRepository(db).UpdateAsync(secondStudio, TestContext.Current.CancellationToken);
 
-        Assert.True(second.Favorite);
+        Assert.Equal("Updated without changing its identity", second.Details);
         Assert.Equal("duplicate", second.Name);
         Assert.Equal("one", second.Disambiguation);
         Assert.Equal(EntityNameRules.PerformerIdentityKey(second.Name, second.Disambiguation), second.IdentityKey);

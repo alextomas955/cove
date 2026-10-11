@@ -1,6 +1,7 @@
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Data;
+using Cove.Data.Repositories;
 
 namespace Cove.Api.Controllers;
 
@@ -16,12 +17,12 @@ internal static class TagDtoMapping
             .ThenBy(tag => tag.SortName ?? tag.Name, NaturalStringComparer.Instance)
             .ThenBy(tag => tag.Id);
 
-    public static TagDto MapTagDto(Tag tag, List<TagProvenanceDto>? provenance = null)
+    public static TagDto MapTagDto(Tag tag, CatalogFavorites favorites, List<TagProvenanceDto>? provenance = null)
         => new(
             tag.Id,
             tag.Name,
             tag.Description,
-            tag.Favorite,
+            favorites.IsTag(tag.Id),
             tag.Aliases.Select(alias => alias.Alias).ToList(),
             tag.ShowAsSegment,
             tag.SegmentColorOverride,

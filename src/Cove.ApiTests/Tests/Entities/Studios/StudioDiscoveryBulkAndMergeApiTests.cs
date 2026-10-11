@@ -20,10 +20,13 @@ public sealed class StudioDiscoveryBulkAndMergeApiTests(
     {
         var owner = AsUser();
         var suffix = Guid.NewGuid().ToString("N");
-        var second = await owner.CreateStudioAsync(new StudioBuilder().WithName($"B favorite studio {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
-        var first = await owner.CreateStudioAsync(new StudioBuilder().WithName($"A favorite studio {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        var second = await owner.CreateStudioAsync(new StudioBuilder().WithName($"B favorite studio {suffix}").Build(), TestContext.Current.CancellationToken);
+        var first = await owner.CreateStudioAsync(new StudioBuilder().WithName($"A favorite studio {suffix}").Build(), TestContext.Current.CancellationToken);
         await owner.CreateStudioAsync(new StudioBuilder().WithName($"Excluded studio {suffix}").Build(), TestContext.Current.CancellationToken);
-        await owner.CreateStudioAsync(new StudioBuilder().WithName($"Unrelated favorite studio {Guid.NewGuid():N}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        var unrelated = await owner.CreateStudioAsync(new StudioBuilder().WithName($"Unrelated favorite studio {Guid.NewGuid():N}").Build(), TestContext.Current.CancellationToken);
+        await owner.CreateStudioAsync(new StudioBuilder().WithName($"Owner favorite studio {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        foreach (var favorite in new[] { first, second, unrelated })
+            await AsUser(ApiTestUsers.Eva).SetEntityFavoriteAsync(AffinityHostType.Studio, favorite.Id, isFavorite: true, TestContext.Current.CancellationToken);
         var request = new FilteredQueryRequest<StudioFilter>
         {
             ObjectFilter = new StudioFilter { FavoriteCriterion = new BoolCriterion { Value = true } },
@@ -110,7 +113,8 @@ public sealed class StudioDiscoveryBulkAndMergeApiTests(
         };
 
         var updatedCount = await AsUser(ApiTestUsers.Eva).BulkUpdateStudiosAsync(request, TestContext.Current.CancellationToken);
-        var updated = await Task.WhenAll(selected.Select(studio => owner.GetStudioByIdAsync(studio.Id)));
+        var updated = await Task.WhenAll(selected.Select(studio => AsUser(ApiTestUsers.Eva).GetStudioByIdAsync(studio.Id)));
+        var ownerViews = await Task.WhenAll(selected.Select(studio => owner.GetStudioByIdAsync(studio.Id)));
         var retained = await owner.GetStudioByIdAsync(control.Id, TestContext.Current.CancellationToken);
         var engagements = await Task.WhenAll(selected.Select(studio => AsUser(ApiTestUsers.Eva).GetEntityEngagementAsync(AffinityHostType.Studio, studio.Id)));
         var retainedEngagement = await AsUser(ApiTestUsers.Eva).GetEntityEngagementAsync(AffinityHostType.Studio, control.Id, TestContext.Current.CancellationToken);
@@ -127,6 +131,8 @@ public sealed class StudioDiscoveryBulkAndMergeApiTests(
             studio.Tags.Select(tag => tag.Id).Should().Equal(replacementTag.Id);
         });
         engagements.Should().AllSatisfy(engagement => engagement.Rating.Should().Be(91));
+        engagements.Should().AllSatisfy(engagement => engagement.IsFavorite.Should().BeTrue());
+        ownerViews.Should().AllSatisfy(studio => studio.Favorite.Should().BeFalse());
         ownerEngagements.Should().AllSatisfy(engagement => engagement.Rating.Should().BeNull());
         retained.ParentId.Should().BeNull();
         retained.Favorite.Should().BeFalse();

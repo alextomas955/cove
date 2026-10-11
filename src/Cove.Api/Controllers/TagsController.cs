@@ -98,7 +98,7 @@ public class TagsController(
         var usageCountsByTagId = includeCounts
             ? await LoadTagUsageCountsAsync(items.Select(tag => tag.Id), ct)
             : new Dictionary<int, TagUsageCounts>();
-        var dtos = MapTagListDtos(items, usageCountsByTagId);
+        var dtos = MapTagListDtos(items, await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct), usageCountsByTagId);
         return Ok(new PaginatedResponse<TagListDto>(dtos, totalCount, page, perPage));
     }
 
@@ -164,7 +164,7 @@ public class TagsController(
             }
         }
         var usageCountsByTagId = await LoadTagUsageCountsAsync(items.Select(tag => tag.Id), ct);
-        var dtos = MapTagListDtos(items, usageCountsByTagId);
+        var dtos = MapTagListDtos(items, await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct), usageCountsByTagId);
         return Ok(new PaginatedResponse<TagListDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
@@ -267,6 +267,7 @@ public class TagsController(
         }
 
         var usageCountsByTagId = await LoadTagUsageCountsAsync(ids, ct);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var graphItems = items
             .Select(tag =>
             {
@@ -275,7 +276,7 @@ public class TagsController(
                 return new TagGraphNodeDto(
                     tag.Id,
                     tag.Name,
-                    tag.Favorite,
+                    favorites.IsTag(tag.Id),
                     tag.Description,
                     EntityImageUrls.TagOrNull(ControllerContext.HttpContext, tag),
                     tag.TagGroupId,
@@ -363,7 +364,6 @@ public class TagsController(
             Name = dto.Name, SortName = dto.SortName, Description = dto.Description,
             Color = NormalizeOptionalText(dto.Color),
             TagGroupId = NormalizeOptionalId(dto.TagGroupId),
-            Favorite = dto.Favorite,
             Organized = dto.Organized,
             MinOccurrenceSec = NormalizeOptionalPositive(dto.MinOccurrenceSec),
             MinOccurrencePercent = NormalizeOptionalPercent(dto.MinOccurrencePercent),
@@ -386,6 +386,8 @@ public class TagsController(
         }
         if (dto.CustomFields != null)
             await customFields.SaveValuesAsync(CustomFieldEntityTypes.Tag, tag.Id, dto.CustomFields, ct);
+        if (dto.Favorite)
+            await engagementService.SetFavoriteAsync(AffinityHostType.Tag, tag.Id, isFavorite: true, ct);
         var result = await tagRepo.GetByIdWithRelationsAsync(tag.Id, ct);
         return CreatedAtAction(nameof(GetById), new { id = tag.Id }, await MapToDetailDtoAsync(result!, ct));
     }
@@ -418,7 +420,6 @@ public class TagsController(
         // Omitted fields stay unchanged; clearFields removes a value.
         if (dto.Color != null) tag.Color = NormalizeOptionalText(dto.Color);
         if (dto.TagGroupId.HasValue) tag.TagGroupId = NormalizeOptionalId(dto.TagGroupId);
-        if (dto.Favorite.HasValue) tag.Favorite = dto.Favorite.Value;
         if (dto.Organized.HasValue) tag.Organized = dto.Organized.Value;
         if (dto.MinOccurrenceSec.HasValue) tag.MinOccurrenceSec = NormalizeOptionalPositive(dto.MinOccurrenceSec);
         if (dto.MinOccurrencePercent.HasValue) tag.MinOccurrencePercent = NormalizeOptionalPercent(dto.MinOccurrencePercent);
@@ -473,6 +474,8 @@ public class TagsController(
             else
                 await db.SaveChangesAsync(ct);
         }
+        if (dto.Favorite.HasValue)
+            await engagementService.SetFavoriteAsync(AffinityHostType.Tag, id, dto.Favorite.Value, ct);
         await EvictSegmentSpanCachesForTagsAsync([id], ct);
         var updated = tagRepo != null
             ? await tagRepo.GetByIdWithRelationsAsync(id, ct)
@@ -750,24 +753,25 @@ public class TagsController(
         var fieldProvenance = fieldProvenanceService == null
             ? null
             : (await fieldProvenanceService.GetForHostAsync(AffinityHostType.Tag, t.Id, ct)).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
 
         return new TagDetailDto(
             t.Id,
             t.Name,
             t.SortName,
             t.Description,
-            t.Favorite,
+            favorites.IsTag(t.Id),
             t.Aliases.Select(a => a.Alias).ToList(),
             t.ParentRelations
                 .Where(pr => pr.Parent != null)
                 .Select(pr => pr.Parent!)
-                .Select(parent => MapTagDto(parent))
+                .Select(parent => MapTagDto(parent, favorites))
                 .OrderForDisplay()
                 .ToList(),
             t.ChildRelations
                 .Where(cr => cr.Child != null)
                 .Select(cr => cr.Child!)
-                .Select(child => MapTagDto(child))
+                .Select(child => MapTagDto(child, favorites))
                 .OrderForDisplay()
                 .ToList(),
             usageCounts.VideoCount,
@@ -832,7 +836,7 @@ public class TagsController(
         return new TagUsageCounts(videoCount, segmentCount, imageCount, galleryCount, groupCount, performerCount, studioCount, audioCount, textCount);
     }
 
-    private List<TagListDto> MapTagListDtos(IReadOnlyList<Tag> items, IReadOnlyDictionary<int, TagUsageCounts> usageCountsByTagId)
+    private List<TagListDto> MapTagListDtos(IReadOnlyList<Tag> items, CatalogFavorites favorites, IReadOnlyDictionary<int, TagUsageCounts> usageCountsByTagId)
     {
         if (items.Count == 0) return [];
 
@@ -844,7 +848,7 @@ public class TagsController(
                 t.Id,
                 t.Name,
                 t.Description,
-                t.Favorite,
+                favorites.IsTag(t.Id),
                 t.Aliases.Select(a => a.Alias).ToList(),
                 usageCounts.VideoCount,
                 usageCounts.SegmentCount,
@@ -951,12 +955,12 @@ public class TagsController(
                 textCounts.GetValueOrDefault(id)));
     }
 
-    private static TagDto MapTagDto(Tag tag, List<TagProvenanceDto>? provenance = null)
+    private static TagDto MapTagDto(Tag tag, CatalogFavorites favorites, List<TagProvenanceDto>? provenance = null)
         => new(
             tag.Id,
             tag.Name,
             tag.Description,
-            tag.Favorite,
+            favorites.IsTag(tag.Id),
             tag.Aliases.Select(alias => alias.Alias).ToList(),
             tag.ShowAsSegment,
             tag.SegmentColorOverride,
@@ -1060,7 +1064,6 @@ public class TagsController(
             if (dto.MinOccurrenceSec.HasValue) tag.MinOccurrenceSec = dto.MinOccurrenceSec;
             if (dto.MinOccurrencePercent.HasValue) tag.MinOccurrencePercent = dto.MinOccurrencePercent;
             if (dto.Organized.HasValue) tag.Organized = dto.Organized.Value;
-            if (dto.Favorite.HasValue) tag.Favorite = dto.Favorite.Value;
 
             var parentIds = dto.ParentIds?
                 .Where(parentId => parentId != tag.Id)
@@ -1086,6 +1089,10 @@ public class TagsController(
         if (dto.Rating.HasValue)
             foreach (var tag in tags)
                 await engagementService.SetRatingAsync(AffinityHostType.Tag, tag.Id, dto.Rating, cancellationToken: ct);
+        // Favorites are per-user too.
+        if (dto.Favorite.HasValue)
+            foreach (var tag in tags)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Tag, tag.Id, dto.Favorite.Value, ct);
 
         await EvictSegmentSpanCachesForTagsAsync(tags.Select(tag => tag.Id), ct);
         return Ok(new BulkUpdateResult(tags.Select(tag => tag.Id).ToList()));

@@ -8,6 +8,58 @@ public static class EngagementQueryHelpers
 {
     public static int? CurrentUserId(CoveContext db) => db.CurrentPrincipalForReadOptimization?.UserId;
 
+    /// <summary>The ids among <paramref name="hostIds"/> that the current user has favorited.</summary>
+    public static async Task<HashSet<int>> GetFavoriteHostIdsAsync(CoveContext db, AffinityHostType hostType, IEnumerable<int> hostIds, CancellationToken cancellationToken = default)
+    {
+        if (CurrentUserId(db) is not int userId)
+            return [];
+
+        var ids = hostIds.Distinct().ToArray();
+        if (ids.Length == 0)
+            return [];
+
+        var favoriteIds = await db.UserEntityAffinities
+            .AsNoTracking()
+            .Where(affinity => affinity.UserId == userId
+                && affinity.HostType == hostType
+                && affinity.IsFavorite
+                && ids.Contains(affinity.HostId))
+            .Select(affinity => affinity.HostId)
+            .ToListAsync(cancellationToken);
+        return favoriteIds.ToHashSet();
+    }
+
+    /// <summary>Every performer, tag, and studio the current user has favorited, for mapping catalog DTOs.</summary>
+    public static async Task<CatalogFavorites> GetCatalogFavoritesAsync(CoveContext db, CancellationToken cancellationToken = default)
+    {
+        if (CurrentUserId(db) is not int userId)
+            return CatalogFavorites.None;
+
+        var favorites = await db.UserEntityAffinities
+            .AsNoTracking()
+            .Where(affinity => affinity.UserId == userId
+                && affinity.IsFavorite
+                && (affinity.HostType == AffinityHostType.Performer
+                    || affinity.HostType == AffinityHostType.Tag
+                    || affinity.HostType == AffinityHostType.Studio))
+            .Select(affinity => new { affinity.HostType, affinity.HostId })
+            .ToListAsync(cancellationToken);
+        HashSet<int> IdsOf(AffinityHostType hostType)
+            => favorites.Where(favorite => favorite.HostType == hostType).Select(favorite => favorite.HostId).ToHashSet();
+        return new CatalogFavorites(IdsOf(AffinityHostType.Performer), IdsOf(AffinityHostType.Tag), IdsOf(AffinityHostType.Studio));
+    }
+
+    public static async Task<bool> IsFavoriteAsync(CoveContext db, AffinityHostType hostType, int hostId, CancellationToken cancellationToken = default)
+        => (await GetFavoriteHostIdsAsync(db, hostType, [hostId], cancellationToken)).Contains(hostId);
+
+    /// <summary>Ids of the entities the given user has favorited, as a subquery usable inside other filters.</summary>
+    public static IQueryable<int> FavoriteHostIds(CoveContext db, int? userId, AffinityHostType hostType)
+        => userId is int selectedUserId
+            ? db.UserEntityAffinities
+                .Where(affinity => affinity.UserId == selectedUserId && affinity.HostType == hostType && affinity.IsFavorite)
+                .Select(affinity => affinity.HostId)
+            : db.UserEntityAffinities.Where(_ => false).Select(affinity => affinity.HostId);
+
     public static IQueryable<T> ApplyRatingMinimum<T>(CoveContext db, IQueryable<T> query, int? userId, RatingHostType hostType, int minRating)
         where T : class
     {
@@ -264,4 +316,16 @@ public static class EngagementQueryHelpers
         System.Linq.Expressions.Expression<Func<T, TKey>> keySelector,
         bool desc)
         => desc ? query.ThenByDescending(keySelector) : query.ThenBy(keySelector);
+}
+
+/// <summary>The current user's favorite performers, tags, and studios.</summary>
+public sealed record CatalogFavorites(IReadOnlySet<int> PerformerIds, IReadOnlySet<int> TagIds, IReadOnlySet<int> StudioIds)
+{
+    public static CatalogFavorites None { get; } = new(new HashSet<int>(), new HashSet<int>(), new HashSet<int>());
+
+    public bool IsPerformer(int performerId) => PerformerIds.Contains(performerId);
+
+    public bool IsTag(int tagId) => TagIds.Contains(tagId);
+
+    public bool IsStudio(int studioId) => StudioIds.Contains(studioId);
 }

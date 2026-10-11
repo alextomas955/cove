@@ -140,7 +140,6 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
                 Name = $"Tag {index:000}",
                 SortName = $"Tag Sort {index:000}",
                 Description = $"Descriptive tag {index:000}",
-                Favorite = index % 5 == 0,
                 CreatedAt = baseDate.AddDays(-120 + index),
                 UpdatedAt = baseDate.AddDays(-10 + index),
                 Aliases =
@@ -155,7 +154,6 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
             .Select(index => new Studio
             {
                 Name = $"Studio {index:000}",
-                Favorite = index % 4 == 0,
                 Details = $"Studio details {index:000}",
                 Organized = index % 3 != 0,
                 CreatedAt = baseDate.AddDays(-180 + index),
@@ -177,7 +175,6 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
             {
                 Name = $"Studio Child {index + 1:000}",
                 Parent = studios[index],
-                Favorite = index % 2 == 0,
                 Details = $"Child studio details {index + 1:000}",
                 Organized = true,
                 CreatedAt = baseDate.AddDays(-90 + index),
@@ -198,7 +195,6 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
                 HeightCm = 150 + (index % 40),
                 Weight = 50 + (index % 35),
                 Measurements = $"{30 + index % 6}-{25 + index % 6}-{34 + index % 6}",
-                Favorite = index % 6 == 0,
                 Details = $"Performer details {index:000}",
                 CreatedAt = baseDate.AddDays(-220 + index),
                 UpdatedAt = baseDate.AddDays(-16 + index),
@@ -491,6 +487,12 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
 
         var benchmarkUserId = _benchmarkUserId ?? throw new InvalidOperationException("Benchmark user was not initialized.");
 
+        // The benchmark user's favorites: every fifth tag, every fourth top-level studio, every other child studio,
+        // and every sixth performer.
+        AddFavorites(db, benchmarkUserId, AffinityHostType.Tag, tags.Where((_, index) => (index + 1) % 5 == 0).Select(tag => tag.Id));
+        AddFavorites(db, benchmarkUserId, AffinityHostType.Studio, studios.Where((_, index) => index < 18 ? (index + 1) % 4 == 0 : (index - 18) % 2 == 0).Select(studio => studio.Id));
+        AddFavorites(db, benchmarkUserId, AffinityHostType.Performer, performers.Where((_, index) => (index + 1) % 6 == 0).Select(performer => performer.Id));
+
         for (var index = 0; index < studios.Count; index++)
         {
             var studio = studios[index];
@@ -553,6 +555,15 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
 
         db.ChangeTracker.Clear();
     }
+
+    private static void AddFavorites(CoveContext db, int userId, AffinityHostType hostType, IEnumerable<int> hostIds)
+        => db.UserEntityAffinities.AddRange(hostIds.Select(hostId => new UserEntityAffinity
+        {
+            UserId = userId,
+            HostType = hostType,
+            HostId = hostId,
+            IsFavorite = true,
+        }));
 
     private static void AddRating(CoveContext db, int userId, RatingHostType hostType, int hostId, int value)
     {

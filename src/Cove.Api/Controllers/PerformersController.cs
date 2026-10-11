@@ -51,7 +51,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var (items, totalCount) = await performerRepo.FindAsync(filter, findFilter, ct);
         var usageCountsByPerformerId = await LoadPerformerUsageCountsAsync(items.Select(item => item.Id), ct);
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Performer, items.Select(item => item.Id), ct);
-        var dtos = items.Select(p => MapToDto(p, usageCountsByPerformerId.GetValueOrDefault(p.Id), GetCustomFields(customFieldValues, p.Id))).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var dtos = items.Select(p => MapToDto(p, favorites, usageCountsByPerformerId.GetValueOrDefault(p.Id), GetCustomFields(customFieldValues, p.Id))).ToList();
         return Ok(new PaginatedResponse<PerformerDto>(dtos, totalCount, page, perPage));
     }
 
@@ -65,7 +66,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var (items, totalCount) = await performerRepo.FindAsync(filter, findFilter, ct, req.FilterExpression);
         var usageCountsByPerformerId = await LoadPerformerUsageCountsAsync(items.Select(item => item.Id), ct);
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Performer, items.Select(item => item.Id), ct);
-        var dtos = items.Select(p => MapToDto(p, usageCountsByPerformerId.GetValueOrDefault(p.Id), GetCustomFields(customFieldValues, p.Id))).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var dtos = items.Select(p => MapToDto(p, favorites, usageCountsByPerformerId.GetValueOrDefault(p.Id), GetCustomFields(customFieldValues, p.Id))).ToList();
         return Ok(new PaginatedResponse<PerformerDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
@@ -163,7 +165,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var totalCount = await query.CountAsync(ct);
         var groups = await query.Skip((page - 1) * perPage).Take(perPage).ToListAsync(ct);
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Group, groups.Select(group => group.Id), ct);
-        return Ok(new PaginatedResponse<GroupDto>(groups.Select(group => MapGroupToDto(group, GetCustomFields(customFieldValues, group.Id))).ToList(), totalCount, page, perPage));
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return Ok(new PaginatedResponse<GroupDto>(groups.Select(group => MapGroupToDto(group, favorites, GetCustomFields(customFieldValues, group.Id))).ToList(), totalCount, page, perPage));
     }
 
     // A page of co-stars as full performers, kept for API clients; the Appears With tab reads /pairings.
@@ -232,9 +235,10 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var performersById = performers.ToDictionary(performer => performer.Id);
         var usageCountsByPerformerId = await LoadPerformerUsageCountsAsync(pageIds, ct);
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Performer, pageIds, ct);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var dtos = pageRows
             .Where(row => performersById.ContainsKey(row.PerformerId))
-            .Select(row => MapToDto(performersById[row.PerformerId], usageCountsByPerformerId.GetValueOrDefault(row.PerformerId), GetCustomFields(customFieldValues, row.PerformerId)))
+            .Select(row => MapToDto(performersById[row.PerformerId], favorites, usageCountsByPerformerId.GetValueOrDefault(row.PerformerId), GetCustomFields(customFieldValues, row.PerformerId)))
             .ToList();
 
         return Ok(new PaginatedResponse<PerformerDto>(dtos, totalCount, page, perPage));
@@ -342,7 +346,6 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
                 performer.Name,
                 performer.Disambiguation,
                 performer.Gender,
-                performer.Favorite,
                 // Only what EntityImageUrls needs to decide on and build the image URL.
                 Image = new Performer
                 {
@@ -357,13 +360,14 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
                     : (int?)null,
             })
             .ToListAsync(ct);
+        var favoriteCoStarIds = await EngagementQueryHelpers.GetFavoriteHostIdsAsync(db, AffinityHostType.Performer, coStarIds, ct);
         var coStars = coStarRows
             .Select(performer => new PerformerPairingCoStarDto(
                 performer.Id,
                 performer.Name,
                 performer.Disambiguation,
                 performer.Gender?.ToString(),
-                performer.Favorite,
+                favoriteCoStarIds.Contains(performer.Id),
                 EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer.Image),
                 performer.VideoCount))
             .ToList();
@@ -390,7 +394,7 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
             CareerStart = careerStart.Value, CareerStartPrecision = careerStart.Precision,
             CareerEnd = careerEnd.Value, CareerEndPrecision = careerEnd.Precision,
             Tattoos = dto.Tattoos, Piercings = dto.Piercings,
-            Favorite = dto.Favorite, Details = dto.Details
+            Details = dto.Details
         };
         if (dto.Urls?.Count > 0) performer.Urls = dto.Urls.Select(u => new PerformerUrl { Url = u }).ToList();
         if (dto.Aliases?.Count > 0) performer.Aliases = dto.Aliases.Select(a => new PerformerAlias { Alias = a }).ToList();
@@ -409,6 +413,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
             await _customFields.SaveValuesAsync(CustomFieldEntityTypes.Performer, performer.Id, dto.CustomFields, ct);
         if (dto.Rating.HasValue)
             await engagementService.SetRatingAsync(AffinityHostType.Performer, performer.Id, dto.Rating, cancellationToken: ct);
+        if (dto.Favorite)
+            await engagementService.SetFavoriteAsync(AffinityHostType.Performer, performer.Id, isFavorite: true, ct);
         var result = await performerRepo.GetByIdWithRelationsAsync(performer.Id, ct);
         return CreatedAtAction(nameof(GetById), new { id = performer.Id }, await MapToDetailDtoAsync(result!, ct));
     }
@@ -440,7 +446,6 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         if (dto.CareerEnd != null) { var date = PartialDate.Parse(dto.CareerEnd); p.CareerEnd = date.Value; p.CareerEndPrecision = date.Precision; }
         if (dto.Tattoos != null) p.Tattoos = dto.Tattoos;
         if (dto.Piercings != null) p.Piercings = dto.Piercings;
-        if (dto.Favorite.HasValue) p.Favorite = dto.Favorite.Value;
         if (dto.Details != null) p.Details = dto.Details;
         if (dto.Urls != null)
         {
@@ -503,6 +508,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         }
         if (dto.Rating.HasValue)
             await engagementService.SetRatingAsync(AffinityHostType.Performer, id, dto.Rating, cancellationToken: ct);
+        if (dto.Favorite.HasValue)
+            await engagementService.SetFavoriteAsync(AffinityHostType.Performer, id, dto.Favorite.Value, ct);
         var updated = await performerRepo.GetByIdWithRelationsAsync(id, ct);
         return Ok(await MapToDetailDtoAsync(updated!, ct));
     }
@@ -768,7 +775,8 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         var faceCount = await db.Faces
             .AsNoTracking()
             .CountAsync(face => face.PerformerId == performer.Id && face.MergedIntoFaceId == null, ct);
-        return MapToDto(performer, usageCounts, customFieldValues, fieldProvenance, faceCount);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return MapToDto(performer, favorites, usageCounts, customFieldValues, fieldProvenance, faceCount);
     }
 
     private static IQueryable<Group> ApplyGroupSort(IQueryable<Group> query, string? sort, bool desc) => sort switch
@@ -780,7 +788,7 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         _ => desc ? query.OrderByDescending(group => NaturalSort.Key(group.Name)) : query.OrderBy(group => NaturalSort.Key(group.Name)),
     };
 
-    private GroupDto MapGroupToDto(Group group, Dictionary<string, object>? customFieldValues = null) => new(
+    private GroupDto MapGroupToDto(Group group, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null) => new(
         group.Id,
         group.Name,
         group.Aliases,
@@ -790,7 +798,7 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         group.Director,
         group.Synopsis,
         group.Urls.Select(url => url.Url).ToList(),
-        group.GroupTags.Where(groupTag => groupTag.Tag != null).Select(groupTag => TagDtoMapping.MapTagDto(groupTag.Tag!)).OrderForDisplay().ToList(),
+        group.GroupTags.Where(groupTag => groupTag.Tag != null).Select(groupTag => TagDtoMapping.MapTagDto(groupTag.Tag!, favorites)).OrderForDisplay().ToList(),
         group.GroupItems.Select(item => item.VideoId).Where(videoId => videoId.HasValue).Distinct().Count(),
         group.GroupItems.Count,
         group.GroupItems.Any(item => item.Kind == GroupItemKind.VideoRange),
@@ -814,18 +822,18 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
             ? EntityImageUrls.GroupFront(ControllerContext.HttpContext, group.Id, group.UpdatedAt)
             : null;
 
-    private PerformerDto MapToDto(Performer p, PerformerUsageCounts? usageCounts = null, Dictionary<string, object>? customFieldValues = null, List<FieldProvenanceDto>? fieldProvenance = null, int faceCount = 0) => new(
+    private PerformerDto MapToDto(Performer p, CatalogFavorites favorites, PerformerUsageCounts? usageCounts = null, Dictionary<string, object>? customFieldValues = null, List<FieldProvenanceDto>? fieldProvenance = null, int faceCount = 0) => new(
         p.Id, p.Name, p.Disambiguation, p.Gender?.ToString(),
         PartialDate.Format(p.Birthdate, p.BirthdatePrecision), PartialDate.Format(p.DeathDate, p.DeathDatePrecision),
         p.Ethnicity, p.Country, p.EyeColor, p.HairColor, p.HeightCm, p.Weight,
         p.Measurements, p.FakeTits, p.PenisLength, p.Circumcised?.ToString(),
         PartialDate.Format(p.CareerStart, p.CareerStartPrecision), PartialDate.Format(p.CareerEnd, p.CareerEndPrecision),
-        p.Tattoos, p.Piercings, p.Favorite, p.Details,
+        p.Tattoos, p.Piercings, favorites.IsPerformer(p.Id), p.Details,
         p.Urls.Select(u => u.Url).ToList(),
         p.Aliases.Select(a => a.Alias).ToList(),
         p.PerformerTags
             .Where(pt => pt.Tag != null)
-            .Select(pt => TagDtoMapping.MapTagDto(pt.Tag!))
+            .Select(pt => TagDtoMapping.MapTagDto(pt.Tag!, favorites))
             .OrderForDisplay()
             .ToList(),
         p.RemoteIds.Select(remoteId => new PerformerRemoteIdDto(remoteId.Endpoint, remoteId.RemoteId)).ToList(),
@@ -1014,7 +1022,6 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
 
         foreach (var p in performers)
         {
-            if (dto.Favorite.HasValue) p.Favorite = dto.Favorite.Value;
             if (dto.Gender != null) p.Gender = ParseEnum<GenderEnum>(dto.Gender);
             if (dto.Country != null) p.Country = dto.Country;
             if (dto.Details != null) p.Details = dto.Details;
@@ -1033,6 +1040,11 @@ public class PerformersController(IPerformerRepository performerRepo, MetadataSe
         {
             foreach (var performer in performers)
                 await engagementService.SetRatingAsync(AffinityHostType.Performer, performer.Id, dto.Rating, cancellationToken: ct);
+        }
+        if (dto.Favorite.HasValue)
+        {
+            foreach (var performer in performers)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Performer, performer.Id, dto.Favorite.Value, ct);
         }
         return Ok(new BulkUpdateResult(performers.Select(performer => performer.Id).ToList()));
     }

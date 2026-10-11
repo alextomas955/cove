@@ -13,6 +13,7 @@ using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
 using Cove.Data;
+using Cove.Data.Repositories;
 
 namespace Cove.Api.Controllers;
 
@@ -292,17 +293,18 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
         var fieldProvenance = fieldProvenanceService == null
             ? null
             : (await fieldProvenanceService.GetForHostAsync(AffinityHostType.Image, image.Id, cancellationToken)).ToList();
-        return MapToDto(image, customFieldValues, null, groups, provenanceLookup, snapshot, principalAccessor?.Current?.UserId != null, contextTagApplications, fieldProvenance, performerCounts);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, cancellationToken);
+        return MapToDto(image, favorites, customFieldValues, null, groups, provenanceLookup, snapshot, principalAccessor?.Current?.UserId != null, contextTagApplications, fieldProvenance, performerCounts);
     }
 
-    private ImageDto MapToDto(Image i, Dictionary<string, object>? customFieldValues = null, int? galleryCount = null, List<GroupSummaryDto>? groups = null, IReadOnlyDictionary<int, List<TagProvenanceDto>>? provenanceLookup = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null) => new(
+    private ImageDto MapToDto(Image i, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null, int? galleryCount = null, List<GroupSummaryDto>? groups = null, IReadOnlyDictionary<int, List<TagProvenanceDto>>? provenanceLookup = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null) => new(
         i.Id, i.Title, i.Code, i.Details, i.Photographer,
         i.Organized,
         i.StudioId, i.Studio?.Name,
         PartialDate.Format(i.Date, i.DatePrecision),
         i.Urls.Select(u => u.Url).ToList(),
-        i.ImageTags.Where(it => it.Tag != null).Select(it => TagDtoMapping.MapTagDto(it.Tag!, GetTagProvenance(provenanceLookup, it.Tag!.Id))).OrderForDisplay().ToList(),
-        i.ImagePerformers.Where(ip => ip.Performer != null).Select(ip => ip.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), performer.Favorite, EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), performerCounts?.GetValueOrDefault(performer.Id)?.VideoCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.ImageCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.GalleryCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.AudioCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.TextCount ?? 0, performer.Country, PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
+        i.ImageTags.Where(it => it.Tag != null).Select(it => TagDtoMapping.MapTagDto(it.Tag!, favorites, GetTagProvenance(provenanceLookup, it.Tag!.Id))).OrderForDisplay().ToList(),
+        i.ImagePerformers.Where(ip => ip.Performer != null).Select(ip => ip.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), favorites.IsPerformer(performer.Id), EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), performerCounts?.GetValueOrDefault(performer.Id)?.VideoCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.ImageCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.GalleryCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.AudioCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.TextCount ?? 0, performer.Country, PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
         galleryCount ?? i.GalleryCount,
         i.ImageGalleries?.Select(ig => ig.GalleryId).ToList() ?? [],
         i.ImageGalleries?.Where(ig => ig.Gallery != null).Select(ig => new GallerySummaryDto(ig.GalleryId, ig.Gallery!.Title, PartialDate.Format(ig.Gallery.Date, ig.Gallery.DatePrecision))).ToList() ?? [],
@@ -330,17 +332,18 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
         var snapshots = await engagementService.GetSnapshotsAsync(AffinityHostType.Image, items.Select(item => item.Id), ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Image, items.Select(item => item.Id), ct);
         var groupLookup = await GetGroupsLookupAsync(items.Select(item => item.Id), ct);
-        return items.Select(i => MapListToDto(i, i.GalleryCount, GetCustomFields(customFieldValues, i.Id), GetGroups(groupLookup, i.Id), snapshots.GetValueOrDefault(i.Id), preferUserSnapshot)).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return items.Select(i => MapListToDto(i, favorites, i.GalleryCount, GetCustomFields(customFieldValues, i.Id), GetGroups(groupLookup, i.Id), snapshots.GetValueOrDefault(i.Id), preferUserSnapshot)).ToList();
     }
 
-    private ImageDto MapListToDto(Image i, int galleryCount, Dictionary<string, object>? customFieldValues = null, List<GroupSummaryDto>? groups = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false) => new(
+    private ImageDto MapListToDto(Image i, CatalogFavorites favorites, int galleryCount, Dictionary<string, object>? customFieldValues = null, List<GroupSummaryDto>? groups = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false) => new(
         i.Id, i.Title, i.Code, i.Details, i.Photographer,
         i.Organized,
         i.StudioId, i.Studio?.Name,
         PartialDate.Format(i.Date, i.DatePrecision),
         i.Urls.Select(u => u.Url).ToList(),
-        i.ImageTags.Where(it => it.Tag != null).Select(it => TagDtoMapping.MapTagDto(it.Tag!)).OrderForDisplay().ToList(),
-        i.ImagePerformers.Where(ip => ip.Performer != null).Select(ip => ip.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), performer.Favorite, EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), Country: performer.Country, DeathDate: PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
+        i.ImageTags.Where(it => it.Tag != null).Select(it => TagDtoMapping.MapTagDto(it.Tag!, favorites)).OrderForDisplay().ToList(),
+        i.ImagePerformers.Where(ip => ip.Performer != null).Select(ip => ip.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), favorites.IsPerformer(performer.Id), EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), Country: performer.Country, DeathDate: PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
         galleryCount,
         i.ImageGalleries?.Select(ig => ig.GalleryId).ToList() ?? [],
         i.ImageGalleries?.Where(ig => ig.Gallery != null).Select(ig => new GallerySummaryDto(ig.GalleryId, ig.Gallery!.Title, PartialDate.Format(ig.Gallery.Date, ig.Gallery.DatePrecision))).ToList() ?? [],
@@ -376,7 +379,8 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 
-        return applications.Count == 0 ? null : applications.Select(TagApplicationsController.Map).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return applications.Count == 0 ? null : applications.Select(application => TagApplicationsController.Map(application, favorites)).ToList();
     }
 
     // ===== Activity Tracking =====

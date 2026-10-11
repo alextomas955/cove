@@ -200,7 +200,6 @@ public partial class StashMigrationService
             entity.Tattoos = FirstText(entity.Tattoos, row.Tattoos);
             entity.Piercings = FirstText(entity.Piercings, row.Piercings);
             entity.Details = FirstText(entity.Details, row.Details);
-            entity.Favorite |= row.Favorite;
 
             string? imageBlobId = null;
             if (string.IsNullOrWhiteSpace(entity.ImageBlobId))
@@ -302,6 +301,7 @@ public partial class StashMigrationService
                 failedCustomPerformerImageSources.Count);
         }
 
+        await AddImportedFavoritesAsync(rows.Where(row => row.Favorite).Select(row => row.Id), idMap, AffinityHostType.Performer, ct);
         _logger.LogInformation("Imported {Count} performers in {Elapsed}", idMap.Count, stopwatch.Elapsed);
         return idMap;
     }

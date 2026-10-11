@@ -39,10 +39,13 @@ public sealed class TagDiscoveryBulkAndSegmentApiTests(
     {
         var owner = AsUser();
         var suffix = Guid.NewGuid().ToString("N");
-        var first = await owner.CreateTagAsync(new TagBuilder().WithName($"A favorite tag {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
-        var second = await owner.CreateTagAsync(new TagBuilder().WithName($"B favorite tag {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        var first = await owner.CreateTagAsync(new TagBuilder().WithName($"A favorite tag {suffix}").Build(), TestContext.Current.CancellationToken);
+        var second = await owner.CreateTagAsync(new TagBuilder().WithName($"B favorite tag {suffix}").Build(), TestContext.Current.CancellationToken);
         await owner.CreateTagAsync(new TagBuilder().WithName($"Excluded tag {suffix}").Build(), TestContext.Current.CancellationToken);
-        await owner.CreateTagAsync(new TagBuilder().WithName($"Unrelated favorite tag {Guid.NewGuid():N}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        var unrelated = await owner.CreateTagAsync(new TagBuilder().WithName($"Unrelated favorite tag {Guid.NewGuid():N}").Build(), TestContext.Current.CancellationToken);
+        await owner.CreateTagAsync(new TagBuilder().WithName($"Owner favorite tag {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        foreach (var favorite in new[] { first, second, unrelated })
+            await AsUser(ApiTestUsers.Eva).SetEntityFavoriteAsync(AffinityHostType.Tag, favorite.Id, isFavorite: true, TestContext.Current.CancellationToken);
         var request = new FilteredQueryRequest<TagFilter>
         {
             ObjectFilter = new TagFilter { FavoriteCriterion = new BoolCriterion { Value = true } },
@@ -221,7 +224,8 @@ public sealed class TagDiscoveryBulkAndSegmentApiTests(
         };
 
         var updatedCount = await AsUser(ApiTestUsers.Eva).BulkUpdateTagsAsync(request, TestContext.Current.CancellationToken);
-        var updated = await Task.WhenAll(selected.Select(tag => owner.GetTagByIdAsync(tag.Id)));
+        var updated = await Task.WhenAll(selected.Select(tag => AsUser(ApiTestUsers.Eva).GetTagByIdAsync(tag.Id)));
+        var ownerViews = await Task.WhenAll(selected.Select(tag => owner.GetTagByIdAsync(tag.Id)));
         var retained = await owner.GetTagByIdAsync(control.Id, TestContext.Current.CancellationToken);
         var engagements = await Task.WhenAll(selected.Select(tag => AsUser(ApiTestUsers.Eva).GetEntityEngagementAsync(AffinityHostType.Tag, tag.Id)));
         var retainedEngagement = await AsUser(ApiTestUsers.Eva).GetEntityEngagementAsync(AffinityHostType.Tag, control.Id, TestContext.Current.CancellationToken);
@@ -244,6 +248,8 @@ public sealed class TagDiscoveryBulkAndSegmentApiTests(
             tag.Children.Select(child => child.Id).Should().Equal(replacementChild.Id);
         });
         engagements.Should().AllSatisfy(engagement => engagement.Rating.Should().Be(91));
+        engagements.Should().AllSatisfy(engagement => engagement.IsFavorite.Should().BeTrue());
+        ownerViews.Should().AllSatisfy(tag => tag.Favorite.Should().BeFalse());
         ownerEngagements.Should().AllSatisfy(engagement => engagement.Rating.Should().BeNull());
         retained.Description.Should().Be("Control description");
         retained.Color.Should().Be("#445566");

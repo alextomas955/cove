@@ -19,7 +19,7 @@ public sealed class MetadataImportIdentityTests
             db,
             [
                 new Studio { Name = " existing STUDIO ", Details = "First" },
-                new Studio { Name = "EXISTING STUDIO", Details = "Last", Favorite = true },
+                new Studio { Name = "EXISTING STUDIO", Details = "Last" },
             ],
             overwrite: true,
             CancellationToken.None);
@@ -29,7 +29,6 @@ public sealed class MetadataImportIdentityTests
         Assert.Equal(existing.Id, studio.Id);
         Assert.Equal("Existing studio", studio.Name);
         Assert.Equal("Last", studio.Details);
-        Assert.True(studio.Favorite);
     }
 
     [Fact]
@@ -41,7 +40,7 @@ public sealed class MetadataImportIdentityTests
             db,
             [
                 new Performer { Name = " Shared name ", Disambiguation = " First ", Details = "Earlier" },
-                new Performer { Name = "SHARED NAME", Disambiguation = "FIRST", Details = "Later", Favorite = true },
+                new Performer { Name = "SHARED NAME", Disambiguation = "FIRST", Details = "Later" },
                 new Performer { Name = "Shared name", Disambiguation = "Second" },
             ],
             overwrite: false,
@@ -53,7 +52,6 @@ public sealed class MetadataImportIdentityTests
         var first = performers.Single(performer => performer.Disambiguation == "First");
         Assert.Equal("Shared name", first.Name);
         Assert.Equal("Later", first.Details);
-        Assert.True(first.Favorite);
         Assert.Contains(performers, performer => performer.Disambiguation == "Second");
     }
 

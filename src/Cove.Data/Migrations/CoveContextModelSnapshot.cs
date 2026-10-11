@@ -2909,9 +2909,6 @@ namespace Cove.Data.Migrations
                     b.Property<string>("FakeTits")
                         .HasColumnType("text");
 
-                    b.Property<bool>("Favorite")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("GalleryCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2983,8 +2980,6 @@ namespace Cove.Data.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Favorite");
 
                     b.HasIndex("GalleryCount");
 
@@ -3665,9 +3660,6 @@ namespace Cove.Data.Migrations
                     b.Property<string>("Details")
                         .HasColumnType("text");
 
-                    b.Property<bool>("Favorite")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("GalleryCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3733,8 +3725,6 @@ namespace Cove.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ChildStudioCount");
-
-                    b.HasIndex("Favorite");
 
                     b.HasIndex("GalleryCount");
 
@@ -3864,9 +3854,6 @@ namespace Cove.Data.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<bool>("Favorite")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("GalleryCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3953,8 +3940,6 @@ namespace Cove.Data.Migrations
                         .HasDefaultValue(0);
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Favorite");
 
                     b.HasIndex("GalleryCount");
 

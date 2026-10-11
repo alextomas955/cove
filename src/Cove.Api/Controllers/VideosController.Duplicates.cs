@@ -5,6 +5,7 @@ using Cove.Core.Auth;
 using Cove.Core.Common;
 using Cove.Core.Entities;
 using Cove.Core.Interfaces;
+using Cove.Data.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -283,10 +284,11 @@ public partial class VideosController
             .AsNoTracking()
             .AsSplitQuery()
             .ToListAsync(ct);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, videos.Select(video => video.Id), ct);
         var videoLookup = videos.ToDictionary(
             video => video.Id,
-            video => MapToDto(video, GetCustomFields(customFieldValues, video.Id)));
+            video => MapToDto(video, favorites, GetCustomFields(customFieldValues, video.Id)));
         var keptElsewhere = (await db.DuplicateSearchItems
                 .AsNoTracking()
                 .Where(item => item.Group != null && item.Group.SearchId == searchId && item.Keep && videoIds.Contains(item.VideoId))

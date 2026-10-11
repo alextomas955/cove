@@ -358,7 +358,7 @@ public class PerformerConfiguration : IEntityTypeConfiguration<Performer>
         builder.HasMany(p => p.RemoteIds).WithOne(si => si.Performer).HasForeignKey(si => si.PerformerId).OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(p => p.Name);
-        builder.HasIndex(p => p.Favorite);
+        builder.Ignore("Favorite");
         builder.HasIndex(p => p.VideoCount);
         builder.HasIndex(p => p.ImageCount);
         builder.HasIndex(p => p.GalleryCount);
@@ -417,7 +417,7 @@ public class TagConfiguration : IEntityTypeConfiguration<Tag>
 
         builder.HasIndex(t => t.Name).IsUnique();
     builder.HasIndex(t => t.TagGroupId);
-        builder.HasIndex(t => t.Favorite);
+        builder.Ignore("Favorite");
         builder.HasIndex(t => t.Organized);
         builder.HasIndex(t => t.VideoCount);
         builder.HasIndex(t => t.SegmentCount);
@@ -475,7 +475,7 @@ public class StudioConfiguration : IEntityTypeConfiguration<Studio>
 
         builder.HasIndex(s => s.Name);
         builder.HasIndex(s => s.ParentId);
-        builder.HasIndex(s => s.Favorite);
+        builder.Ignore("Favorite");
         builder.HasIndex(s => s.Organized);
         builder.HasIndex(s => s.VideoCount);
         builder.HasIndex(s => s.ImageCount);

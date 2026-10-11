@@ -307,7 +307,7 @@ public static class ReadScopeListOptimization
                     ? BuildScalarEqualsPredicate<TEntity>("StudioId", studioId)
                     : null;
             case "attribute":
-                return TryCompileAttributeRule<TEntity>(scopeValue);
+                return TryCompileAttributeRule<TEntity>(db, scopeValue);
             case "expression":
                 return TryCompileExpressionRule<TEntity>(db, entityKind, scopeValue);
             default:
@@ -381,7 +381,7 @@ public static class ReadScopeListOptimization
         return TryCompileRule<TEntity>(db, entityKind, scopeKind, nestedScopeValue.ValueKind == JsonValueKind.Undefined ? default : nestedScopeValue);
     }
 
-    private static Expression<Func<TEntity, bool>>? TryCompileAttributeRule<TEntity>(JsonElement scopeValue)
+    private static Expression<Func<TEntity, bool>>? TryCompileAttributeRule<TEntity>(CoveContext db, JsonElement scopeValue)
         where TEntity : BaseEntity
     {
         var path = (TryGetStringProperty(scopeValue, "path") ?? TryGetStringProperty(scopeValue, "field"))?.Trim();
@@ -390,7 +390,10 @@ public static class ReadScopeListOptimization
             return null;
         }
 
-        if (!TryResolveProperty(typeof(TEntity), path, out var property))
+        if (!TryResolveProperty(typeof(TEntity), path, out var property)
+            // A property without a column, such as a binary-compatibility shim, is absent to the database's rule
+            // evaluation, so leave it to that evaluation rather than build a query EF cannot translate.
+            || db.Model.FindEntityType(typeof(TEntity))?.FindProperty(property.Name) is null)
         {
             return null;
         }
