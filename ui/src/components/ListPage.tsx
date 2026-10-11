@@ -397,6 +397,15 @@ export function ListPage({
     const merged = [...(criteriaDefinitions ?? []), ...extensionCriteriaDefinitions, ...unavailableExtensionCriteria];
     return merged.length > 0 ? merged : undefined;
   }, [criteriaDefinitions, extensionCriteriaDefinitions, unavailableExtensionCriteria]);
+  const multiIdExtensionFilterKeys = useMemo(
+    () =>
+      new Set(
+        extensionCriteriaDefinitions
+          .filter((definition) => definition.type === "multiId")
+          .map((definition) => definition.filterKey),
+      ),
+    [extensionCriteriaDefinitions],
+  );
   const editorObjectFilter = useMemo(
     () =>
       migrateLegacyPerformerFavoriteCriterion(
@@ -1204,7 +1213,7 @@ export function ListPage({
                 });
               }
               const next = removeObjectFilterChipTarget(editorObjectFilter, mergedCriteriaDefinitions, target);
-              onObjectFilterChange(collapseExtensionCriteria(next, objectFilter));
+              onObjectFilterChange(collapseExtensionCriteria(next, objectFilter, multiIdExtensionFilterKeys));
               onFilterChange({ ...filter, page: 1 });
             }}
             onClearAll={
@@ -1345,7 +1354,7 @@ export function ListPage({
                 },
               });
             }
-            onObjectFilterChange(collapseExtensionCriteria(f, objectFilter));
+            onObjectFilterChange(collapseExtensionCriteria(f, objectFilter, multiIdExtensionFilterKeys));
             onFilterChange({ ...filter, page: 1 });
           }}
           preselectCriterion={filterDialogPreselect}

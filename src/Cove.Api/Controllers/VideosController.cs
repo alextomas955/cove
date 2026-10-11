@@ -260,7 +260,10 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         // Results carry the caller's own favorites and ratings and depend on what they may read, so the cache is per caller.
         var principal = principalAccessor?.Current;
         var cacheKey = $"videos_find_{principal?.Kind}:{principal?.UserId}:{principal?.TokenId}:{principal?.Username}_{JsonSerializer.Serialize(req)}";
-        var canCache = !RelativeDateFilterJson.ContainsRelativeRule(req);
+        // Extension providers may answer differently for the same caller over time (for example by
+        // the user's mode in that extension), and nothing evicts this cache when they do.
+        var canCache = !RelativeDateFilterJson.ContainsRelativeRule(req)
+            && (req.ObjectFilter?.ExtensionCriteria ?? []).Count == 0;
         if (canCache && memoryCache.TryGetValue(cacheKey, out PaginatedResponse<VideoDto>? cachedResult) && cachedResult != null)
         {
             return Ok(cachedResult);

@@ -39,11 +39,26 @@ export function executableExtensionFilterKey(contribution: ExtensionListFilterCo
   return extensionFilterKey(contribution.extensionId, contribution.filterId);
 }
 
+/** Editor spellings of modifiers whose wire form drops the underscore (for example `isnull`). */
+const UI_MODIFIER_BY_COMPACT: Record<string, string> = {
+  NOTEQUALS: "NOT_EQUALS",
+  GREATERTHAN: "GREATER_THAN",
+  LESSTHAN: "LESS_THAN",
+  INCLUDESALL: "INCLUDES_ALL",
+  EXCLUDESALL: "EXCLUDES_ALL",
+  ISNULL: "IS_NULL",
+  NOTNULL: "NOT_NULL",
+  NOTBETWEEN: "NOT_BETWEEN",
+  MATCHESREGEX: "MATCHES_REGEX",
+  NOTMATCHESREGEX: "NOT_MATCHES_REGEX",
+};
+
 function toUiModifier(value: string) {
-  return value
+  const modifier = value
     .replace(/([a-z])([A-Z])/g, "$1_$2")
     .replaceAll("-", "_")
     .toUpperCase();
+  return UI_MODIFIER_BY_COMPACT[modifier] ?? modifier;
 }
 
 function toApiModifier(value: unknown) {
@@ -72,23 +87,56 @@ function malformedExtensionCriteria(filter: Record<string, unknown>) {
     : [];
 }
 
+/** The multi-ID wire value: `{ value, excludes?, depth? }`, the only object an extension criterion carries. */
+function isMultiIdWireValue(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isMultiIdEditorCriterion(criterion: Record<string, unknown>) {
+  return Array.isArray(criterion.value) || Array.isArray(criterion.excludes) || typeof criterion.depth === "number";
+}
+
+/** Packs the entity picker's state into one wire value, leaving out display-only `_names`. */
+function toMultiIdWireValue(criterion: Record<string, unknown>) {
+  const value: Record<string, unknown> = {};
+  if (Array.isArray(criterion.value) && criterion.value.length > 0) value.value = criterion.value;
+  if (Array.isArray(criterion.excludes) && criterion.excludes.length > 0) value.excludes = criterion.excludes;
+  if (typeof criterion.depth === "number") value.depth = criterion.depth;
+  return value;
+}
+
 export function expandExtensionCriteria(filter: Record<string, unknown>) {
   const expanded = { ...filter };
   const criteria = Array.isArray(filter.extensionCriteria) ? filter.extensionCriteria : [];
   delete expanded.extensionCriteria;
   for (const criterion of criteria) {
     if (!isExtensionCriterion(criterion)) continue;
-    expanded[extensionFilterKey(criterion.extensionId, criterion.filterId)] = {
-      modifier: toUiModifier(criterion.modifier),
-      value: criterion.value,
-    };
+    const modifier = toUiModifier(criterion.modifier);
+    const wireValue: unknown = criterion.value;
+    expanded[extensionFilterKey(criterion.extensionId, criterion.filterId)] = isMultiIdWireValue(wireValue)
+      ? {
+          modifier,
+          value: Array.isArray(wireValue.value) ? wireValue.value : [],
+          ...(Array.isArray(wireValue.excludes) ? { excludes: wireValue.excludes } : {}),
+          ...(typeof wireValue.depth === "number" ? { depth: wireValue.depth } : {}),
+        }
+      : { modifier, value: wireValue };
   }
   const malformed = malformedExtensionCriteria(filter);
   if (malformed.length > 0) expanded.extensionCriteria = malformed;
   return expanded;
 }
 
-export function collapseExtensionCriteria(filter: Record<string, unknown>, preservedSource?: Record<string, unknown>) {
+/**
+ * Collapses editor keys back into `extensionCriteria`. Keys in `multiIdKeys` (entity-picker filters)
+ * send their whole picker state as one value; a criterion shaped like picker state is packed the
+ * same way so a saved one survives while its owner is unavailable.
+ */
+export function collapseExtensionCriteria(
+  filter: Record<string, unknown>,
+  preservedSource?: Record<string, unknown>,
+  multiIdKeys?: ReadonlySet<string>,
+) {
   const collapsed: Record<string, unknown> = {};
   const extensionCriteria: ExtensionFilterCriterion[] = [];
   for (const [key, value] of Object.entries(filter)) {
@@ -102,7 +150,10 @@ export function collapseExtensionCriteria(filter: Record<string, unknown>, prese
     extensionCriteria.push({
       ...owned,
       modifier: toApiModifier(criterion.modifier),
-      value: criterion.value,
+      value:
+        multiIdKeys?.has(key) || isMultiIdEditorCriterion(criterion)
+          ? toMultiIdWireValue(criterion)
+          : criterion.value,
     });
   }
   const preserved = malformedExtensionCriteria(preservedSource ?? filter);
@@ -115,6 +166,7 @@ export function collapseExtensionCriteria(filter: Record<string, unknown>, prese
 function inferCriterionType(value: unknown): CriterionType {
   if (typeof value === "boolean") return "bool";
   if (typeof value === "number") return "number";
+  if (isMultiIdWireValue(value)) return "multiId";
   return "string";
 }
 

@@ -114,6 +114,66 @@ public sealed class ExtensionEntityFilterServiceTests
             service.ApplyAsync("tags", Enumerable.Repeat(Criterion("owner.actual", "has-preview", true), ExtensionEntityFilterService.DefaultCriteriaLimit + 1).ToArray(), [1], CovePrincipal.System(), TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData("includes", """{"value":[3,4],"excludes":[9],"depth":-1}""")]
+    [InlineData("includes_all", """{"value":[3,4]}""")]
+    [InlineData("includes", """{"value":[],"excludes":[9]}""")]
+    [InlineData("excludes", """{"value":[3]}""")]
+    [InlineData("is_null", """{}""")]
+    [InlineData("not_null", """{"value":[]}""")]
+    public async Task ApplyAsync_passes_valid_multi_id_values_to_the_provider_unchanged(string modifier, string valueJson)
+    {
+        var runtime = new FakeRuntime(
+            MultiIdContribution(),
+            request => new ExtensionEntityFilterResult(request.CandidateIds, "revision-1"));
+        var service = new ExtensionEntityFilterService(runtime);
+
+        var result = await service.ApplyAsync(
+            "videos", [MultiIdCriterion(modifier, valueJson)], [1, 2], CovePrincipal.System(), TestContext.Current.CancellationToken);
+
+        Assert.Equal([1, 2], result);
+        var request = Assert.Single(runtime.Requests);
+        Assert.Equal(valueJson, request.Value.GetRawText());
+    }
+
+    [Theory]
+    [InlineData("includes", """[3,4]""")]
+    [InlineData("includes", """{"value":"3"}""")]
+    [InlineData("includes", """{"value":[3.5]}""")]
+    [InlineData("includes", """{"value":[0]}""")]
+    [InlineData("includes", """{"value":[3],"excludes":[-1]}""")]
+    [InlineData("includes", """{"value":[3],"depth":-2}""")]
+    [InlineData("includes", """{"value":[3],"_names":{"3":"Kissing"}}""")]
+    [InlineData("includes", """{"value":[]}""")]
+    [InlineData("includes", """{}""")]
+    [InlineData("is_null", """{"value":[3]}""")]
+    [InlineData("not_null", """{"excludes":[3]}""")]
+    [InlineData("equals", """{"value":[3]}""")]
+    public async Task ApplyAsync_rejects_malformed_multi_id_values(string modifier, string valueJson)
+    {
+        var runtime = new FakeRuntime(
+            MultiIdContribution(),
+            request => new ExtensionEntityFilterResult(request.CandidateIds, "revision-1"));
+        var service = new ExtensionEntityFilterService(runtime);
+
+        await Assert.ThrowsAsync<ExtensionEntityFilterValidationException>(() =>
+            service.ApplyAsync("videos", [MultiIdCriterion(modifier, valueJson)], [1], CovePrincipal.System(), TestContext.Current.CancellationToken));
+        Assert.Empty(runtime.Requests);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_rejects_a_multi_id_declaration_without_an_entity_reference_type()
+    {
+        var runtime = new FakeRuntime(
+            MultiIdContribution() with { EntityReferenceType = null },
+            request => new ExtensionEntityFilterResult(request.CandidateIds, "revision-1"));
+        var service = new ExtensionEntityFilterService(runtime);
+
+        await Assert.ThrowsAsync<ExtensionEntityFilterValidationException>(() =>
+            service.ApplyAsync("videos", [MultiIdCriterion("includes", """{"value":[3]}""")], [1], CovePrincipal.System(), TestContext.Current.CancellationToken));
+        Assert.Empty(runtime.Requests);
+    }
+
     [Fact]
     public async Task ApplyAsync_composes_multiple_extension_filters_deterministically()
     {
@@ -198,6 +258,48 @@ public sealed class ExtensionEntityFilterServiceTests
         Assert.Equal(2, page.TotalCount);
         Assert.Equal(2, page.Page);
         Assert.Equal("Beta", Assert.Single(page.Items).Name);
+    }
+
+    // Providers may answer per user (Segment Studio by the user's mode), and the find cache key does
+    // not identify the user, so a request with extension criteria must reach the provider every time.
+    [Fact]
+    public async Task Videos_find_does_not_cache_results_that_depend_on_an_extension_provider()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var options = new DbContextOptionsBuilder<CoveContext>().UseSqlite(connection).Options;
+        await using var db = new CoveContext(options);
+        await db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+        db.Videos.AddRange(new Video { Title = "Alpha" }, new Video { Title = "Beta" });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var matchEverything = true;
+        var runtime = new FakeRuntime(
+            new UIListFilterContribution("segments", "videos", "Has segments", "boolean", "owner.actual", Modifiers: ["equals"]) { FilterId = "has-segments" },
+            request => new ExtensionEntityFilterResult(matchEverything ? request.CandidateIds : [], "revision-1"));
+        var accessor = new CurrentPrincipalAccessor();
+        accessor.Set(CovePrincipal.System());
+        var controller = new VideosController(
+            new VideoRepository(db), db, null!, null!, null!, new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()), null!, null!,
+            new NoOpUserEngagementService(), new CustomFieldService(db), new Cove.Core.Events.EventBus(),
+            principalAccessor: accessor,
+            extensionFilters: new ExtensionEntityFilterService(runtime))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+        var query = new VideoFilteredQueryRequest
+        {
+            ObjectFilter = new VideoFilter { ExtensionCriteria = [Criterion("owner.actual", "has-segments", true)] },
+        };
+
+        async Task<int> CountAsync()
+        {
+            var response = Assert.IsType<OkObjectResult>(await controller.FindPost(query, TestContext.Current.CancellationToken));
+            return Assert.IsType<PaginatedResponse<VideoDto>>(response.Value).TotalCount;
+        }
+
+        Assert.Equal(2, await CountAsync());
+        matchEverything = false;
+        Assert.Equal(0, await CountAsync());
     }
 
     [Fact]
@@ -401,6 +503,23 @@ public sealed class ExtensionEntityFilterServiceTests
             FilterId = filterId,
             Modifier = "equals",
             Value = JsonSerializer.SerializeToElement(value),
+        };
+
+    private static UIListFilterContribution MultiIdContribution()
+        => new("segment-tags", "videos", "Segment tags", "multiid", "owner.actual",
+            EntityReferenceType: "tags",
+            Modifiers: ["INCLUDES", "INCLUDES_ALL", "EXCLUDES", "IS_NULL", "NOT_NULL"])
+        {
+            FilterId = "segment-tags",
+        };
+
+    private static ExtensionFilterCriterion MultiIdCriterion(string modifier, string valueJson)
+        => new()
+        {
+            ExtensionId = "owner.actual",
+            FilterId = "segment-tags",
+            Modifier = modifier,
+            Value = JsonDocument.Parse(valueJson).RootElement.Clone(),
         };
 
     private sealed class FakeRuntime(

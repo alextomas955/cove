@@ -24,7 +24,7 @@ function hasStringCriterionValue(criterion: { modifier?: CriterionModifier; valu
     return true;
   }
 
-  const value = criterion.value?.trim() ?? "";
+  const value = typeof criterion.value === "string" ? criterion.value.trim() : "";
   if (value === "") {
     return false;
   }

@@ -219,12 +219,62 @@ public sealed class ExtensionEntityFilterService
             "integer" => criterion.Value.ValueKind == JsonValueKind.Number && criterion.Value.TryGetInt64(out _),
             "number" => criterion.Value.ValueKind == JsonValueKind.Number,
             "string" or "enum" => criterion.Value.ValueKind == JsonValueKind.String,
+            "multiid" => !string.IsNullOrWhiteSpace(declaration.EntityReferenceType)
+                && IsValidMultiIdValue(modifier, criterion.Value),
             _ => false,
         };
         if (!validValue)
             throw new ExtensionEntityFilterValidationException("The extension filter value does not match its declared type.");
 
         return declaration;
+    }
+
+    /// <summary>
+    /// Accepts the entity picker's criterion as one JSON object: <c>value</c> (included IDs),
+    /// optional <c>excludes</c>, and optional <c>depth</c> (-1 includes every descendant). Null
+    /// modifiers carry no IDs; include modifiers need at least one included or excluded ID.
+    /// </summary>
+    private static bool IsValidMultiIdValue(string modifier, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+            return false;
+        var included = 0;
+        var excluded = 0;
+        foreach (var property in value.EnumerateObject())
+        {
+            switch (property.Name)
+            {
+                case "value" when TryCountPositiveIds(property.Value, out included):
+                case "excludes" when TryCountPositiveIds(property.Value, out excluded):
+                    break;
+                case "depth" when property.Value.ValueKind == JsonValueKind.Number
+                    && property.Value.TryGetInt32(out var depth) && depth >= -1:
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return modifier switch
+        {
+            "includes" or "includesall" => included + excluded > 0,
+            "excludes" => included > 0 && excluded == 0,
+            "isnull" or "notnull" => included == 0 && excluded == 0,
+            _ => false,
+        };
+    }
+
+    private static bool TryCountPositiveIds(JsonElement ids, out int count)
+    {
+        count = 0;
+        if (ids.ValueKind != JsonValueKind.Array)
+            return false;
+        foreach (var id in ids.EnumerateArray())
+        {
+            if (id.ValueKind != JsonValueKind.Number || !id.TryGetInt32(out var parsed) || parsed <= 0)
+                return false;
+            count++;
+        }
+        return true;
     }
 
     private static string NormalizeEntityType(string value)
