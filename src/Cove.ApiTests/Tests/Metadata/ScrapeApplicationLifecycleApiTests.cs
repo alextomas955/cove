@@ -268,12 +268,12 @@ public sealed class ScrapeApplicationLifecycleApiTests(
 
         using var assertions = new AssertionScope();
         resolved.Performers.Should().ContainSingle();
-        resolved.Performers[0].Input.Should().Be(resolvedPerformer.Name);
+        resolved.Performers[0].Input.Should().Be(relationRequest.Performers[0]);
         resolved.Performers[0].MatchedName.Should().Be(resolvedPerformer.Name);
         resolved.Tags.Should().BeEquivalentTo(new[]
         {
             new ScrapeRelationMatchDto(resolvedTag.Name, resolvedTag.Name),
-            new ScrapeRelationMatchDto(resolvedTag.Aliases.Single(), resolvedTag.Name),
+            new ScrapeRelationMatchDto(relationRequest.Tags[1], resolvedTag.Name),
         });
         resolved.Performers.Should().NotContain(match => match.Input == resolvedPerformer.Aliases.Single());
         resolved.Performers.Should().NotContain(match => match.Input == missingPerformerName);
