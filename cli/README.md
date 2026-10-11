@@ -52,6 +52,18 @@ cove-cli videos filters remove-ids "Selected videos" 42
 
 Removing the last video ID deletes the saved filter.
 
+Organize tags into tag groups by name or ID:
+
+```sh
+cove-cli tag-groups create Season --color "#6ee7b7"
+cove-cli tags set-group Season Summer Winter
+cove-cli tags clear-group Winter
+cove-cli tag-groups update Season --name Seasons --description ""
+cove-cli tag-groups delete Seasons --yes
+```
+
+An empty `--description` or `--color` clears it. Deleting a tag group keeps its tags and leaves them ungrouped.
+
 Authenticate interactively with a Cove server:
 
 ```sh

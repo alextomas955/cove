@@ -64,6 +64,17 @@ export interface Performer extends PerformerSummary {
   updatedAt?: string;
 }
 
+export interface TagGroup extends CoveRecord {
+  id: number;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  sortOrder: number;
+  tagCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Tag extends TagReference {
   aliases: string[];
   videoCount?: number;

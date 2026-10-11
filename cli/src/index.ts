@@ -13,7 +13,7 @@ import { CliError, toCliError } from "./errors";
 import { listEntities, mergeObjectFilters } from "./entity-list";
 import { filterByCompletionValues, filterByObjectFilter } from "./filter-by";
 import type { FilterByResource } from "./filter-by";
-import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
+import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTagGroup, renderTagGroupAssignment, renderTagGroupDeleted, renderTagGroups, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
 import type { CatalogEntityKind, RenderContext } from "./output";
 import { resolveResultWindow } from "./pagination";
 import type { ResultWindowOptions } from "./pagination";
@@ -26,6 +26,7 @@ import type { ApiTokenRecord, Audio, GalleryRecord, GlobalSearchResponse, GroupI
 import { cleanInline, configureCliHelp, DEFAULT_ACCENT, terminalColorsEnabled, terminalHyperlinksEnabled, uiPalette } from "./ui";
 import type { UiColor } from "./ui";
 import { resolvePerformer, resolveTag, videosForCriteria } from "./videos";
+import { assertTagGroup, listTagGroups, resolveTagGroup, tagGroupColor } from "./tag-groups";
 
 type OutputFormat = "human" | "json" | "jsonl";
 type HyperlinkMode = "auto" | "always" | "never";
@@ -191,6 +192,22 @@ function positiveInteger(option: string, maximum?: number): (value: string) => n
 
 function entityId(value: string): number {
   return positiveInteger("ID", 2_147_483_647)(value);
+}
+
+function sortOrder(value: string): number {
+  const parsed = Number(value);
+  if (!/^-?\d+$/.test(value) || parsed < -2_147_483_648 || parsed > 2_147_483_647) throw new CliError("INVALID_ARGUMENT", "--sort-order must be a whole number.");
+  return parsed;
+}
+
+/** Resolves every reference before any change is sent, so one unknown tag leaves all of them untouched. */
+async function resolveTagsOnce(client: CoveClient, references: string[]): Promise<Array<{ id: number; name: string }>> {
+  const tags = new Map<number, { id: number; name: string }>();
+  for (const reference of references) {
+    const tag = await resolveTag(client, reference);
+    tags.set(tag.id, { id: tag.id, name: tag.name });
+  }
+  return [...tags.values()];
 }
 
 function singlePositiveInteger(option: string, maximum?: number): (value: string, previous?: number) => number {
@@ -1122,7 +1139,6 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
     });
 
   const readFamilies = [
-    { command: "tag-groups", path: "taggroups", label: "Tag groups", detail: true },
     { command: "custom-fields", path: "custom-fields", label: "Custom fields", detail: true },
     { command: "bookmarks", path: "me/bookmarks", label: "Bookmarks", detail: false },
     { command: "share-links", path: "share-links", label: "Share links", detail: false },
@@ -1308,6 +1324,88 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
     print(tag, global, () => renderCatalogDetail(tag, "tag", renderFor(global, { server: client.server })));
   });
   addSavedFilterCommands(tagCommands, "tags", "tag");
+  withExamples(tagCommands.command("set-group <tag-group> <tags...>").description("Move tags into a tag group, by ID, exact name, or exact alias"), [
+    "cove-cli tags set-group Season Summer Winter",
+    "cove-cli tags set-group 7 42 43 \"Rainy Day\" --json",
+  ]).action(async (groupReference: string, tagReferences: string[], _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const group = await resolveTagGroup(client, groupReference);
+    const tags = await resolveTagsOnce(client, tagReferences);
+    await client.post<unknown>("tags/bulk", { ids: tags.map(tag => tag.id), tagGroupId: group.id });
+    print({ tagGroup: { id: group.id, name: group.name }, tags }, global, () => renderTagGroupAssignment(group, tags, renderFor(global)));
+  });
+  withExamples(tagCommands.command("clear-group <tags...>").description("Remove tags from their tag group"), [
+    "cove-cli tags clear-group Winter",
+    "cove-cli tags clear-group 42 43 --json",
+  ]).action(async (tagReferences: string[], _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const tags = await resolveTagsOnce(client, tagReferences);
+    await client.post<unknown>("tags/bulk", { ids: tags.map(tag => tag.id), clearFields: ["tagGroupId"] });
+    print({ tagGroup: null, tags }, global, () => renderTagGroupAssignment(null, tags, renderFor(global)));
+  });
+
+  const tagGroupCommands = program.command("tag-groups").description("Browse and manage Cove tag groups").helpGroup("Catalog:");
+  withExamples(tagGroupCommands.command("list").description("List tag groups in their display order"), [
+    "cove-cli tag-groups list --profile personal",
+    "cove-cli tag-groups list --json",
+  ]).action(async (_options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const groups = await listTagGroups(client);
+    print(groups, global, () => renderTagGroups(groups, renderFor(global)), groups);
+  });
+  withExamples(tagGroupCommands.command("show <id-or-name>").description("Show one tag group by ID or name"), [
+    "cove-cli tag-groups show 7 --profile personal",
+    "cove-cli tag-groups show Season --json",
+  ]).action(async (reference: string, _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const group = await resolveTagGroup(client, reference);
+    print(group, global, () => renderTagGroup(group, undefined, "neutral", renderFor(global)));
+  });
+  withExamples(tagGroupCommands.command("create <name>").description("Create a tag group")
+    .option("--description <text>", "describe what the group holds")
+    .option("--color <hex>", "#RRGGBB or #RRGGBBAA color", tagGroupColor)
+    .option("--sort-order <number>", "position among tag groups; defaults to after the last one", sortOrder), [
+    "cove-cli tag-groups create Season --color \"#6ee7b7\"",
+    "cove-cli tag-groups create Weather --description \"Sky and weather tags\" --sort-order 20 --json",
+  ]).action(async (name: string, options: { description?: string; color?: string; sortOrder?: number }, command: Command) => {
+    const global = globals(command);
+    if (!name.trim()) throw new CliError("INVALID_ARGUMENT", "The tag group name cannot be empty.");
+    const { client } = await clientFor(store, global);
+    const group = assertTagGroup(await client.post<unknown>("taggroups", { name: name.trim(), description: options.description, color: options.color || undefined, sortOrder: options.sortOrder }));
+    print(group, global, () => renderTagGroup(group, "Tag group created", "success", renderFor(global)));
+  });
+  withExamples(tagGroupCommands.command("update <id-or-name>").description("Rename, recolor, describe, or reorder a tag group")
+    .option("--name <name>", "new name")
+    .option("--description <text>", "new description; pass \"\" to clear it")
+    .option("--color <hex>", "new #RRGGBB or #RRGGBBAA color; pass \"\" to clear it", tagGroupColor)
+    .option("--sort-order <number>", "new position among tag groups", sortOrder), [
+    "cove-cli tag-groups update Season --name Seasons",
+    "cove-cli tag-groups update 7 --color \"#f59e0b\" --description \"\" --json",
+  ]).action(async (reference: string, options: { name?: string; description?: string; color?: string; sortOrder?: number }, command: Command) => {
+    const global = globals(command);
+    if (options.name !== undefined && !options.name.trim()) throw new CliError("INVALID_ARGUMENT", "--name cannot be empty.");
+    if (options.name === undefined && options.description === undefined && options.color === undefined && options.sortOrder === undefined) {
+      throw new CliError("INVALID_ARGUMENT", "Pass at least one of --name, --description, --color, or --sort-order.");
+    }
+    const { client } = await clientFor(store, global);
+    const current = await resolveTagGroup(client, reference);
+    const group = assertTagGroup(await client.put<unknown>(`taggroups/${current.id}`, { name: options.name?.trim(), description: options.description, color: options.color, sortOrder: options.sortOrder }));
+    print(group, global, () => renderTagGroup(group, "Tag group updated", "success", renderFor(global)));
+  });
+  withExamples(tagGroupCommands.command("delete <id-or-name>").description("Delete a tag group; its tags stay and become ungrouped").requiredOption("--yes", "confirm deletion"), [
+    "cove-cli tag-groups delete Seasons --yes",
+    "cove-cli tag-groups delete 7 --yes --json",
+  ]).action(async (reference: string, _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const group = await resolveTagGroup(client, reference);
+    await client.delete(`taggroups/${group.id}`);
+    print({ id: group.id, name: group.name, deleted: true, ungroupedTagCount: group.tagCount }, global, () => renderTagGroupDeleted(group, renderFor(global)));
+  });
 
   const performerCommands = program.command("performers").description("Browse Cove performers").helpGroup("Explore:");
   const performerList = withTagFilterOptions(performerCommands.command("list").description("List performers"), "performers");

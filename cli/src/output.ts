@@ -1,4 +1,4 @@
-import type { ApiTokenRecord, Audio, GalleryRecord, GlobalSearchResponse, GroupItem, GroupRecord, ImageRecord, IssuedApiToken, MetadataServerSummary, Performer, PerformerSummary, RemoteId, SavedFilter, SegmentRecord, SimilarImageResult, SimilarVideoResult, StudioRecord, Tag, TagReference, TextRecord, Video } from "./types";
+import type { ApiTokenRecord, Audio, GalleryRecord, GlobalSearchResponse, GroupItem, GroupRecord, ImageRecord, IssuedApiToken, MetadataServerSummary, Performer, PerformerSummary, RemoteId, SavedFilter, SegmentRecord, SimilarImageResult, SimilarVideoResult, StudioRecord, Tag, TagGroup, TagReference, TextRecord, Video } from "./types";
 import { savedFilterDefaultSort } from "./saved-filters";
 import { cleanInline as clean, colorizeHex, stripTerminalSequences, terminalColorsEnabled, terminalHyperlinksEnabled, uiPalette } from "./ui";
 import type { UiColor, UiPalette } from "./ui";
@@ -534,6 +534,40 @@ export function renderIssuedApiToken(token: IssuedApiToken, context: RenderConte
 
 export function renderApiTokenRevoked(id: string, context: RenderContext = {}): string {
   return renderStatusCard("API token revoked", [["ID", clean(id)]], "success", resolveRenderContext(context));
+}
+
+export function renderTagGroups(items: TagGroup[], context: RenderContext = {}): string {
+  const resolved = resolveRenderContext(context);
+  const columns: Column<TagGroup>[] = [
+    { label: "TAG GROUP", width: 16, value: item => `● ${item.name}`, format: (value, item, paint) => item.color ? colorizeHex(value, item.color, resolved.color) : paint.accent(value) },
+    { label: "TAGS", width: 6, value: item => formatCount(item.tagCount) },
+  ];
+  if (resolved.terminalWidth >= 50) columns.push({ label: "COLOR", width: 9, value: item => item.color ?? "—" });
+  if (resolved.terminalWidth >= 64) columns.push({ label: "ID", width: 5, value: item => String(item.id) });
+  return renderCompactList("Tag groups", ["tag group", "tag groups"], items, items.length, columns, resolved, "Run `cove-cli tag-groups create <name>` to add one.");
+}
+
+/** Detail or confirmation card for one tag group; mutations use the success tone. */
+export function renderTagGroup(item: TagGroup, title = clean(item.name), tone: "success" | "neutral" = "neutral", context: RenderContext = {}): string {
+  const resolved = resolveRenderContext(context);
+  const values: Array<[string, string]> = [["ID", String(item.id)], ["Name", clean(item.name)]];
+  if (item.description) values.push(["Description", item.description]);
+  values.push(["Color", item.color ?? "—"], ["Sort order", String(item.sortOrder)], ["Tags", formatCount(item.tagCount)]);
+  return renderStatusCard(title, values, tone, resolved);
+}
+
+export function renderTagGroupDeleted(item: TagGroup, context: RenderContext = {}): string {
+  const ungrouped = `${formatCount(item.tagCount)} ${item.tagCount === 1 ? "tag" : "tags"}`;
+  return renderStatusCard("Tag group deleted", [["ID", String(item.id)], ["Name", clean(item.name)], ["Ungrouped", ungrouped]], "success", resolveRenderContext(context));
+}
+
+/** Confirms a tag group assignment; a null group means the tags were ungrouped. */
+export function renderTagGroupAssignment(group: TagGroup | null, tags: TagReference[], context: RenderContext = {}): string {
+  const resolved = resolveRenderContext(context);
+  const names = tags.map(tag => clean(tag.name)).join(", ");
+  const noun = tags.length === 1 ? "tag" : "tags";
+  if (!group) return renderStatusCard(`Removed ${formatCount(tags.length)} ${noun} from their tag group`, [["Tags", names]], "success", resolved);
+  return renderStatusCard(`Moved ${formatCount(tags.length)} ${noun} to ${clean(group.name)}`, [["Tags", names]], "success", resolved);
 }
 
 export function renderAudios(audios: Audio[], context: RenderContext = {}): string {
