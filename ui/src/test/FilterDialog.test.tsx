@@ -553,6 +553,16 @@ describe("FilterDialog", () => {
     });
   });
 
+  it("names the listed items in the related performer workspace", () => {
+    renderWithQueryClient(
+      <FilterDialog open onClose={vi.fn()} criteria={AUDIO_CRITERIA} activeFilter={{}} onApply={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByText("Related Performers"));
+    expect(screen.getByText(/Find audios by performer/)).toBeInTheDocument();
+    expect(screen.queryByText(/Find videos by performer/)).not.toBeInTheDocument();
+  });
+
   it("builds a performer filter from related audios", async () => {
     const onApply = vi.fn();
     renderWithQueryClient(

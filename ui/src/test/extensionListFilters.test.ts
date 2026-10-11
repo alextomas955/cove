@@ -1,14 +1,63 @@
 import { describe, expect, it } from "vitest";
 import {
   collapseExtensionCriteria,
+  createExtensionCriterionDefinition,
   executableExtensionFilterKey,
   expandExtensionCriteria,
   extensionFilterKey,
   unavailableExtensionCriterionDefinitions,
 } from "../extensions/extensionListFilters";
-import { isCriterionValueValid } from "../components/filterCriterionState";
+import {
+  expressionPassthroughFilter,
+  filterToExpression,
+  isCriterionValueValid,
+} from "../components/filterCriterionState";
 
 describe("extension list filter object representation", () => {
+  it("keeps extension-run filters out of advanced filter groups but not custom-field filters", () => {
+    const executable = createExtensionCriterionDefinition({
+      extensionId: "owner.segments",
+      id: "segment-tags",
+      label: "Segment tags",
+      entityType: "videos",
+      filterId: "segment-tags",
+      criterionType: "multiid",
+      entityReferenceType: "tags",
+    } as Parameters<typeof createExtensionCriterionDefinition>[0]);
+    expect(executable).toMatchObject({
+      filterKey: extensionFilterKey("owner.segments", "segment-tags"),
+      type: "multiId",
+      entityType: "tags",
+      expressionSupported: false,
+    });
+
+    const customField = createExtensionCriterionDefinition({
+      extensionId: "owner.fields",
+      id: "mood",
+      label: "Mood",
+      entityType: "videos",
+      customFieldKey: "mood",
+      customFieldType: "text",
+    } as Parameters<typeof createExtensionCriterionDefinition>[0]);
+    expect(customField?.expressionSupported).toBeUndefined();
+
+    const filter = {
+      [executable!.filterKey]: { modifier: "INCLUDES", value: [3] },
+      ratingCriterion: { modifier: "EQUALS", value: 80 },
+    };
+    const criteria = [
+      executable!,
+      { id: "rating", label: "Rating", type: "rating" as const, filterKey: "ratingCriterion" },
+    ];
+    expect(filterToExpression(filter, criteria)).toEqual({
+      operator: "AND",
+      children: [{ filter: { ratingCriterion: { modifier: "EQUALS", value: 80 } } }],
+    });
+    expect(expressionPassthroughFilter(filter, criteria)).toEqual({
+      [executable!.filterKey]: { modifier: "INCLUDES", value: [3] },
+    });
+  });
+
   it("round-trips namespaced criteria without changing core filters", () => {
     const saved = {
       favoriteCriterion: { value: true },
@@ -79,6 +128,7 @@ describe("extension list filter object representation", () => {
     const expanded = expandExtensionCriteria(saved);
 
     expect(definition.type).toBe("multiId");
+    expect(definition.expressionSupported).toBe(false);
     expect(() => isCriterionValueValid(expanded[definition.filterKey], definition)).not.toThrow();
     expect(isCriterionValueValid(expanded[definition.filterKey], definition)).toBe(true);
     expect(isCriterionValueValid({ modifier: "EQUALS", value: [7] }, { ...definition, type: "string" })).toBe(false);

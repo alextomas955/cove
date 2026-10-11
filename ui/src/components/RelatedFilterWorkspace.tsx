@@ -42,7 +42,7 @@ export function RelatedFilterWorkspace({
   const entityType = criterion.entityType!;
   const singular = entityType === "performers" ? "performer" : entityType === "audios" ? "audio" : "video";
   const plural = entityType === "performers" ? "performers" : entityType === "audios" ? "audios" : "videos";
-  const resultPlural = entityType === "performers" ? "videos" : "performers";
+  const resultPlural = criterion.relatedResultLabel ?? (entityType === "performers" ? "videos" : "performers");
   const relativePronoun = entityType === "performers" ? "who" : "that";
   const EntityIcon = entityType === "performers" ? Users : entityType === "audios" ? Headphones : Film;
   const nestedCriteria = useMemo(
