@@ -60,7 +60,7 @@ export function getTagMediaImageUrl(tag: TagMediaReference) {
   return tag.imagePath || (tag.hasImage ? entityImages.tagImageUrl(tag.id) : null);
 }
 
-/** Names the tag's group, with its color, inside a tag's hover popup. Renders nothing for an ungrouped tag. */
+/** Names the tag's group, with its color, in a tag's hover popup and detail page. Renders nothing for an ungrouped tag. */
 export function TagGroupCaption({ tag, className }: { tag: TagMediaReference; className?: string }) {
   const name = tag.tagGroupName?.trim();
   if (!name) return null;

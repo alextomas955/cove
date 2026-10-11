@@ -103,6 +103,7 @@ export function TagGroupsManager({
   // Wait for the group list, which Undo and the preview read; let the tag lists refresh on their own.
   const invalidateGroups = () => {
     void queryClient.invalidateQueries({ queryKey: ["tags"] });
+    void queryClient.invalidateQueries({ queryKey: ["tag"] });
     return queryClient.invalidateQueries({ queryKey: ["tag-groups"] });
   };
 
@@ -182,6 +183,7 @@ export function TagGroupsManager({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tag-groups"] });
       queryClient.invalidateQueries({ queryKey: ["tags"] });
+      queryClient.invalidateQueries({ queryKey: ["tag"] });
     },
   });
 

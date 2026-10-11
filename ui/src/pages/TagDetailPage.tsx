@@ -63,6 +63,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TagEditModal } from "./TagEditModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { NarrativeText } from "../components/NarrativeText";
+import { TagGroupCaption } from "../components/EntityMedia";
 import { DetailMergeDialog } from "../components/DetailMergeDialog";
 import { ExtensionSlot } from "../router/RouteRegistry";
 import { QuickViewDialog } from "../components/QuickViewDialog";
@@ -419,6 +420,7 @@ export function TagDetailPage({ id, onNavigate }: Props) {
         ]}
         metaRow={
           <>
+            <TagGroupCaption tag={tag} />
             <span title={`Created ${formatDate(tag.createdAt)}`}>Updated {formatDate(tag.updatedAt)}</span>
           </>
         }

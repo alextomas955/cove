@@ -156,6 +156,36 @@ describe("TagDetailPage", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("shows the tag's group without opening the editor", async () => {
+    mocks.tagGet.mockResolvedValue({
+      ...buildTag(),
+      tagGroupId: 7,
+      tagGroupName: "Season",
+      tagGroupColor: "#6ee7b7",
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TagDetailPage id={1206} onNavigate={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    const groupName = await screen.findByText("Season");
+    expect(groupName.parentElement).toHaveTextContent("Tag groupSeason");
+  });
+
+  it("omits the tag group caption for an ungrouped tag", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TagDetailPage id={1206} onNavigate={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Jerk Off Instruction" })).toBeInTheDocument();
+    expect(screen.queryByText("Tag group")).not.toBeInTheDocument();
+  });
+
   it("retains hero content spacing when hierarchy links precede the tabs", async () => {
     mocks.tagGet.mockResolvedValue({
       ...buildTag(),
