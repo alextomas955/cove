@@ -12,7 +12,7 @@ import type {
 } from "../api/types";
 import { useOptionalAppConfig } from "../state/AppConfigContext";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
-import { getEditableTagIds } from "../utils/tags";
+import { getEditableTagIds, toTagOption } from "../utils/tags";
 import { COMPARISON_ROWS, folderOf, primaryFile, rowTones, type ComparisonRow } from "./duplicates/duplicateModel";
 import { metadataServerLabel } from "./MetadataServerLinks";
 import { EntityReferenceMultiSelector, type EntityReferenceOption } from "./EntityReferenceSelector";
@@ -759,9 +759,7 @@ export function VideoMergeReview({
     relationship(
       "tags",
       "tag",
-      all.flatMap((video) =>
-        video.tags.map((tag) => ({ id: tag.id, label: tag.name, secondaryLabel: tag.tagGroupName ?? undefined })),
-      ),
+      all.flatMap((video) => video.tags.map(toTagOption)),
       "Search tags...",
     );
     relationship(

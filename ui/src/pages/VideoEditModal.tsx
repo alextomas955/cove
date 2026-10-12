@@ -9,7 +9,7 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StudioSelector } from "../components/StudioSelector";
 import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../components/RemoteIdsEditor";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
-import { getEditableTagIds, getLockedTagIds, mergeTagIds } from "../utils/tags";
+import { getEditableTagIds, getLockedTagIds, mergeTagIds, toTagOption } from "../utils/tags";
 import { videoEditClearFields } from "../utils/videoEditClearFields";
 import { VrLayoutFields, detectedVrLayout, explicitVrLayout } from "../components/VrLayoutFields";
 import type { VrDescriptor } from "../vr/immersiveVideo";
@@ -135,7 +135,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
   const tagProvenanceById = buildTagProvenanceById(video.tags, video.fieldProvenance);
   // Chip labels are already present on the loaded video, so seed the selectors with them instead of
   // letting each chip re-fetch its name by id (which also frees the connection pool for search).
-  const tagSeedOptions = video.tags.map((tag) => ({ id: tag.id, label: tag.name }));
+  const tagSeedOptions = video.tags.map(toTagOption);
   const performerSeedOptions = video.performers.map((performer) => ({
     id: performer.id,
     label: performer.name,

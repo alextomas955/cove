@@ -5,6 +5,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EntityReferenceMultiSelector, EntityReferenceSelector } from "../components/EntityReferenceSelector";
+import { toTagOption } from "../utils/tags";
 
 const mocks = vi.hoisted(() => ({ tagsCreate: vi.fn(), tagsFind: vi.fn() }));
 
@@ -212,6 +213,82 @@ describe("EntityReferenceMultiSelector", () => {
     expect(screen.getByText("Massage")).toBeInTheDocument();
     expect(screen.getByText("Outdoor")).toBeInTheDocument();
     expect(screen.queryByText("Loading tag...")).not.toBeInTheDocument();
+  });
+
+  it("colors selected tag chips like their Details-tab badges", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="tag"
+          values={[10, 11, 12]}
+          onChange={vi.fn()}
+          seedOptions={[
+            toTagOption({
+              id: 10,
+              name: "Grouped",
+              color: null,
+              tagGroupColor: "#336699",
+              tagGroupName: "Example group",
+            }),
+            toTagOption({ id: 11, name: "Own color", color: "#cc0000", tagGroupColor: "#336699", tagGroupName: null }),
+            toTagOption({ id: 12, name: "Plain", color: null, tagGroupColor: null, tagGroupName: null }),
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    const chip = (name: string) => screen.getByText(name).parentElement!;
+    expect(chip("Grouped")).toHaveStyle({ borderColor: "rgba(51, 102, 153, 0.58)" });
+    expect(screen.getByTitle("Tag group: Example group")).toBeInTheDocument();
+    expect(chip("Own color")).toHaveStyle({ borderColor: "rgba(204, 0, 0, 0.58)" });
+    expect(chip("Plain").getAttribute("style")).toBeNull();
+    expect(chip("Plain").querySelector('[title^="Tag group"]')).toBeNull();
+  });
+
+  it("names an uncolored group on its tag chips", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="tag"
+          values={[10]}
+          onChange={vi.fn()}
+          seedOptions={[
+            toTagOption({ id: 10, name: "Grouped", color: null, tagGroupColor: null, tagGroupName: "Plain group" }),
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Grouped").parentElement!.getAttribute("style")).toBeNull();
+    expect(screen.getByTitle("Tag group: Plain group")).toBeInTheDocument();
+  });
+
+  it("colors tag chips from the parent's payload rather than an older cached list", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(
+      ["tags", "all"],
+      [{ id: 10, name: "Grouped", color: null, tagGroupColor: "#00ff00", tagGroupName: "Old group" }],
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="tag"
+          values={[10]}
+          onChange={vi.fn()}
+          seedOptions={[
+            toTagOption({ id: 10, name: "Grouped", color: null, tagGroupColor: "#336699", tagGroupName: "New group" }),
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Grouped").parentElement).toHaveStyle({ borderColor: "rgba(51, 102, 153, 0.58)" });
+    expect(screen.getByTitle("Tag group: New group")).toBeInTheDocument();
   });
 
   it("keeps the dropdown results mounted while the next search is loading", async () => {

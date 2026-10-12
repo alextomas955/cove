@@ -16,7 +16,9 @@ import type {
 } from "../api/types";
 import { TagProvenanceHover } from "./TagProvenanceHover";
 import { TagActionMenu } from "./shared";
+import { TagGroupMarker, getTagChipColorStyle } from "./TagChipAppearance";
 import { rankSearchOptions } from "../utils/searchRanking";
+import { toTagOption } from "../utils/tags";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 
@@ -29,6 +31,18 @@ export interface EntityReferenceOption {
   label: string;
   secondaryLabel?: string;
   favorite?: boolean;
+  /** Tags only: the colors and group a chip wears, matching the tag's badge on the Details tab. */
+  tagColor?: string | null;
+  tagGroupColor?: string | null;
+  tagGroupName?: string | null;
+}
+
+/** A tag's chip tint and group dot, or nothing for other entities and uncolored tags. */
+function tagChipAppearance(option: EntityReferenceOption | undefined) {
+  return {
+    style: getTagChipColorStyle(option?.tagColor ?? option?.tagGroupColor),
+    marker: <TagGroupMarker color={option?.tagGroupColor} name={option?.tagGroupName} />,
+  };
 }
 
 type ReferenceAutocompleteValue = { kind: "entity"; option: EntityReferenceOption } | { kind: "create"; query: string };
@@ -185,6 +199,7 @@ export function EntityReferenceSelector({
   });
 
   const selected = selectedSearchOption ?? selectedOption;
+  const selectedAppearance = tagChipAppearance(selected);
   const selectedInputLabel =
     selected?.label ?? selectedLabel?.trim() ?? (selectedLoading ? `Loading ${labels.singular}...` : "");
   const showSelectedInInput =
@@ -260,7 +275,11 @@ export function EntityReferenceSelector({
     <div className="relative flex min-w-0 flex-col gap-2">
       {typeof value === "number" && selectedDisplay === "chip" ? (
         <div className="flex flex-wrap gap-1">
-          <span className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-[10px] text-foreground">
+          <span
+            style={selectedAppearance.style}
+            className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-[10px] text-foreground"
+          >
+            {selectedAppearance.marker}
             <span className="min-w-0 truncate">
               {selected?.label ??
                 (selectedLoading ? `Loading ${labels.singular}...` : `Unavailable ${labels.singular}`)}
@@ -451,8 +470,10 @@ export function EntityReferenceMultiSelector({
   // caller-provided seeds (parent entity payload), the warm "all" list, then the current search results.
   // Without this, each selected chip fires its own authz-gated GET-by-id, which both shows "Loading…"
   // for seconds and saturates the browser connection pool so the search request queues behind it.
+  // The seeds go last so they win: the parent's payload is fresher than a cached list (a tag's group color
+  // can have changed since), and it is what the entity's Details view draws from.
   const chipSeedOptions = useMemo(
-    () => [...(seedOptions ?? []), ...(cachedOptions ?? []), ...searchOptions],
+    () => [...(cachedOptions ?? []), ...searchOptions, ...(seedOptions ?? [])],
     [seedOptions, cachedOptions, searchOptions],
   );
   const selectedOptions = useEntityReferenceOptions(entityType, values, chipSeedOptions);
@@ -532,12 +553,15 @@ export function EntityReferenceMultiSelector({
           {values.map((id) => {
             const option = selectedOptions.get(id);
             const lockedValue = locked.has(id);
+            const appearance = tagChipAppearance(option);
             const chip = (
               <span
                 key={id}
+                style={appearance.style}
                 className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-[10px] text-foreground"
                 title={[lockedValue ? "Derived tag" : null, valueTitles?.[id]].filter(Boolean).join(" · ") || undefined}
               >
+                {appearance.marker}
                 <span>{option?.label ?? `Loading ${labels.singular}...`}</span>
                 {valueTitles?.[id] ? <span className="sr-only"> ({valueTitles[id]})</span> : null}
                 {option?.secondaryLabel ? <span className="text-muted">{option.secondaryLabel}</span> : null}
@@ -789,10 +813,6 @@ async function getEntityReference(entityType: EntityReferenceType, id: number): 
     case "group":
       return toGroupOption(await groups.get(id));
   }
-}
-
-function toTagOption(tag: Tag): EntityReferenceOption {
-  return { id: tag.id, label: tag.name, favorite: tag.favorite };
 }
 
 function toPerformerOption(performer: Performer): EntityReferenceOption {

@@ -35,6 +35,12 @@ describe("TagBadge group marker", () => {
     expect(screen.getByTitle("Tag group")).toBeInTheDocument();
   });
 
+  it("marks a group that has no color with a neutral dot", () => {
+    render(<TagBadge name="Grouped tag" tag={{ color: null, tagGroupColor: null, tagGroupName: "Plain group" }} />);
+
+    expect(screen.getByTitle("Tag group: Plain group")).toBeInTheDocument();
+  });
+
   it("shows no marker for an ungrouped tag", () => {
     render(<TagBadge name="Ungrouped tag" tag={{ color: null, tagGroupColor: null, tagGroupName: null }} />);
 
