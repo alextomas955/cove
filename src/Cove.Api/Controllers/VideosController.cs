@@ -1593,6 +1593,11 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             foreach (var video in videos)
                 await engagementService.SetVideoRatingAsync(video.Id, dto.Rating, cancellationToken: ct);
         }
+        if (dto.Favorite.HasValue)
+        {
+            foreach (var video in videos)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Video, video.Id, dto.Favorite.Value, ct);
+        }
         return Ok(new BulkUpdateResult(videos.Select(video => video.Id).ToList()));
     }
 

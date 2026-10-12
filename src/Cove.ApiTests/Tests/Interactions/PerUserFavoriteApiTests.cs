@@ -144,6 +144,50 @@ public sealed class PerUserFavoriteApiTests(
         anthonyMatches.Items.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GivenMedia_WhenMemberBulkFavoritesAndUnfavorites_ThenOnlyThatMemberChanges()
+    {
+        // Arrange
+        var suffix = Guid.NewGuid().ToString("N");
+        var owner = AsUser();
+        var video = await owner.CreateVideoAsync(new VideoBuilder().WithTitle($"Bulk favorite video {suffix}").Build(), TestContext.Current.CancellationToken);
+        var image = await owner.CreateImageAsync($"Bulk favorite image {suffix}", TestContext.Current.CancellationToken);
+        var gallery = await owner.CreateGalleryAsync(new GalleryBuilder().WithTitle($"Bulk favorite gallery {suffix}").Build(), TestContext.Current.CancellationToken);
+        var control = await owner.CreateVideoAsync(new VideoBuilder().WithTitle($"Bulk favorite control {suffix}").Build(), TestContext.Current.CancellationToken);
+        var eva = AsUser(ApiTestUsers.Eva);
+        var anthony = AsUser(ApiTestUsers.Anthony);
+        await anthony.SetEntityFavoriteAsync(AffinityHostType.Video, video.Id, isFavorite: true, TestContext.Current.CancellationToken);
+        await anthony.SetEntityFavoriteAsync(AffinityHostType.Image, image.Id, isFavorite: true, TestContext.Current.CancellationToken);
+        await anthony.SetEntityFavoriteAsync(AffinityHostType.Gallery, gallery.Id, isFavorite: true, TestContext.Current.CancellationToken);
+
+        // Act & Assert
+        await eva.BulkUpdateVideosAsync(new BulkVideoUpdateDto { Ids = [video.Id], Favorite = true }, TestContext.Current.CancellationToken);
+        await eva.BulkUpdateImagesAsync(new BulkImageUpdateDto { Ids = [image.Id], Favorite = true }, TestContext.Current.CancellationToken);
+        await eva.BulkUpdateGalleriesAsync(new BulkGalleryUpdateDto { Ids = [gallery.Id], Favorite = true }, TestContext.Current.CancellationToken);
+        await ShouldBeMediaFavoriteForAsync(eva, video.Id, image.Id, gallery.Id, expected: true);
+        await ShouldBeMediaFavoriteForAsync(owner, video.Id, image.Id, gallery.Id, expected: false);
+        (await eva.GetEntityEngagementAsync(AffinityHostType.Video, control.Id, TestContext.Current.CancellationToken)).IsFavorite.Should().BeFalse();
+
+        // A bulk edit that does not choose a favorite leaves favorites as they are.
+        await eva.BulkUpdateVideosAsync(new BulkVideoUpdateDto { Ids = [video.Id], Organized = true }, TestContext.Current.CancellationToken);
+        await eva.BulkUpdateImagesAsync(new BulkImageUpdateDto { Ids = [image.Id], Organized = true }, TestContext.Current.CancellationToken);
+        await eva.BulkUpdateGalleriesAsync(new BulkGalleryUpdateDto { Ids = [gallery.Id], Organized = true }, TestContext.Current.CancellationToken);
+        await ShouldBeMediaFavoriteForAsync(eva, video.Id, image.Id, gallery.Id, expected: true);
+
+        await eva.BulkUpdateVideosAsync(new BulkVideoUpdateDto { Ids = [video.Id], Favorite = false }, TestContext.Current.CancellationToken);
+        await eva.BulkUpdateImagesAsync(new BulkImageUpdateDto { Ids = [image.Id], Favorite = false }, TestContext.Current.CancellationToken);
+        await eva.BulkUpdateGalleriesAsync(new BulkGalleryUpdateDto { Ids = [gallery.Id], Favorite = false }, TestContext.Current.CancellationToken);
+        await ShouldBeMediaFavoriteForAsync(eva, video.Id, image.Id, gallery.Id, expected: false);
+        await ShouldBeMediaFavoriteForAsync(anthony, video.Id, image.Id, gallery.Id, expected: true);
+    }
+
+    private static async Task ShouldBeMediaFavoriteForAsync(CoveClient user, int videoId, int imageId, int galleryId, bool expected)
+    {
+        (await user.GetEntityEngagementAsync(AffinityHostType.Video, videoId, TestContext.Current.CancellationToken)).IsFavorite.Should().Be(expected);
+        (await user.GetEntityEngagementAsync(AffinityHostType.Image, imageId, TestContext.Current.CancellationToken)).IsFavorite.Should().Be(expected);
+        (await user.GetEntityEngagementAsync(AffinityHostType.Gallery, galleryId, TestContext.Current.CancellationToken)).IsFavorite.Should().Be(expected);
+    }
+
     private async Task<(PerformerDto Performer, TagDetailDto Tag, StudioDto Studio)> CreateCatalogEntitiesAsync(string? suffix = null)
     {
         suffix ??= Guid.NewGuid().ToString("N");

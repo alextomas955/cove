@@ -637,6 +637,11 @@ public class GalleriesController(IGalleryRepository galleryRepo, Data.CoveContex
             foreach (var gallery in galleries)
                 await engagementService.SetRatingAsync(AffinityHostType.Gallery, gallery.Id, dto.Rating, cancellationToken: ct);
         }
+        if (dto.Favorite.HasValue)
+        {
+            foreach (var gallery in galleries)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Gallery, gallery.Id, dto.Favorite.Value, ct);
+        }
         return Ok(new BulkUpdateResult(galleries.Select(gallery => gallery.Id).ToList()));
     }
 

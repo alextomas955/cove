@@ -532,6 +532,11 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
             foreach (var image in images)
                 await engagementService.SetRatingAsync(AffinityHostType.Image, image.Id, dto.Rating, cancellationToken: ct);
         }
+        if (dto.Favorite.HasValue)
+        {
+            foreach (var image in images)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Image, image.Id, dto.Favorite.Value, ct);
+        }
         return Ok(new BulkUpdateResult(images.Select(image => image.Id).ToList()));
     }
 

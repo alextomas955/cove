@@ -65,6 +65,8 @@ export function ImageSelectionActions({
       setShowBulkEdit(false);
       onSelectNone();
       invalidate();
+      // Ratings and favorites set here are the user's engagement, which cards and the lightbox read separately.
+      queryClient.invalidateQueries({ queryKey: ["engagement", "image"] });
     },
   });
 
