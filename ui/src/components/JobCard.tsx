@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { Loader2, CheckCircle, XCircle, Ban, Clock, Trash2, ChevronUp, ChevronDown, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Ban,
+  Clock,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  ExternalLink,
+  TriangleAlert,
+} from "lucide-react";
 import type { JobInfo } from "../api/types";
 import { formatDateTime } from "../utils/dateFormat";
 
@@ -15,12 +26,29 @@ export function formatJobDuration(ms: number): string {
   return `${hours}h ${mins.toString().padStart(2, "0")}m`;
 }
 
-export function jobStatusIcon(status: JobInfo["status"]) {
+/** A job that ran to the end but failed some of its units, which "completed" alone would hide. */
+function completedWithFailures(job: JobInfo): boolean {
+  return job.status === "completed" && (job.unitsFailed ?? 0) > 0;
+}
+
+/**
+ * The status icon. A completed job with failed units gets a warning icon, labelled for screen readers
+ * unless `labelledElsewhere`, where text beside it already says so.
+ */
+export function jobStatusIcon(status: JobInfo["status"], hasFailedUnits = false, labelledElsewhere = false) {
   switch (status) {
     case "running":
       return <Loader2 className="w-4 h-4 text-accent animate-spin" />;
     case "completed":
-      return <CheckCircle className="w-4 h-4 text-green-400" />;
+      return hasFailedUnits ? (
+        labelledElsewhere ? (
+          <TriangleAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
+        ) : (
+          <TriangleAlert className="w-4 h-4 text-amber-400" role="img" aria-label="Completed with failures" />
+        )
+      ) : (
+        <CheckCircle className="w-4 h-4 text-green-400" />
+      );
     case "failed":
       return <XCircle className="w-4 h-4 text-red-400" />;
     case "cancelled":
@@ -82,6 +110,8 @@ const STATUS_BADGE_CLASS: Record<JobInfo["status"], string> = {
   cancelled: "bg-card text-muted",
 };
 
+const COMPLETED_WITH_FAILURES_BADGE_CLASS = "bg-amber-600/20 text-amber-300";
+
 export interface JobCardProps {
   job: JobInfo;
   /** "drawer" = compact card with a leading status icon; "panel" = settings card with a status badge and queue controls. */
@@ -101,6 +131,7 @@ export function JobCard({ job, variant = "drawer", onCancel, onMoveUp, onMoveDow
   const isPanel = variant === "panel";
   const isFinished = job.status !== "running" && job.status !== "pending";
   const counts = isFinished ? finishedCounts(job) : null;
+  const hasFailedUnits = completedWithFailures(job);
 
   const containerClass = isPanel
     ? "flex items-start justify-between gap-2 rounded-xl border border-border bg-card p-3"
@@ -109,14 +140,18 @@ export function JobCard({ job, variant = "drawer", onCancel, onMoveUp, onMoveDow
   return (
     <div className={containerClass}>
       <div className="flex items-start gap-2 min-w-0 flex-1">
-        {!isPanel && <span className="mt-0.5 flex-shrink-0">{jobStatusIcon(job.status)}</span>}
+        {!isPanel && <span className="mt-0.5 flex-shrink-0">{jobStatusIcon(job.status, hasFailedUnits)}</span>}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {isPanel && <span className="flex-shrink-0">{jobStatusIcon(job.status)}</span>}
+            {isPanel && <span className="flex-shrink-0">{jobStatusIcon(job.status, hasFailedUnits, true)}</span>}
             <span className="truncate text-sm font-medium text-foreground">{job.description}</span>
             {isPanel && (
-              <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${STATUS_BADGE_CLASS[job.status]}`}>
-                {job.status}
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                  hasFailedUnits ? COMPLETED_WITH_FAILURES_BADGE_CLASS : STATUS_BADGE_CLASS[job.status]
+                }`}
+              >
+                {hasFailedUnits ? "completed with failures" : job.status}
               </span>
             )}
           </div>
