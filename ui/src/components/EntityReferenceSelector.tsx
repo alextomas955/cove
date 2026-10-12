@@ -467,7 +467,7 @@ export function EntityReferenceMultiSelector({
     [searchResults, trimmedSearch],
   );
   // Resolve chip labels from options we already have in memory before falling back to per-id fetches:
-  // caller-provided seeds (parent entity payload), the warm "all" list, then the current search results.
+  // the warm "all" list, the current search results and caller-provided seeds (parent entity payload).
   // Without this, each selected chip fires its own authz-gated GET-by-id, which both shows "Loading…"
   // for seconds and saturates the browser connection pool so the search request queues behind it.
   // The seeds go last so they win: the parent's payload is fresher than a cached list (a tag's group color

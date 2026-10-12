@@ -13,7 +13,7 @@ export function TagGroupMarker({ color, name }: { color?: string | null; name?: 
       title={resolvedName ? `Tag group: ${resolvedName}` : "Tag group"}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full${resolvedColor ? "" : " bg-current opacity-50"}`}
+        className={`h-1.5 w-1.5 rounded-full${resolvedColor ? "" : " bg-muted"}`}
         style={resolvedColor ? { backgroundColor: resolvedColor } : undefined}
       />
     </span>

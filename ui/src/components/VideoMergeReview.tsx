@@ -765,7 +765,13 @@ export function VideoMergeReview({
     relationship(
       "performers",
       "performer",
-      all.flatMap((video) => video.performers.map((performer) => ({ id: performer.id, label: performer.name }))),
+      all.flatMap((video) =>
+        video.performers.map((performer) => ({
+          id: performer.id,
+          label: performer.name,
+          secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
+        })),
+      ),
       "Search performers...",
     );
     relationship(
