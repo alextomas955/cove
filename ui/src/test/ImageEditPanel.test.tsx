@@ -71,6 +71,24 @@ describe("ImageEditPanel", () => {
     await waitFor(() => expect(mocks.imagesUpdate).toHaveBeenCalledWith(12, { title: "Renamed Poster" }));
   });
 
+  it("refreshes the gallery's image list after saving", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const galleryImagesKey = ["gallery-images", 4, {}, "infinite", { page: 1, perPage: 60 }];
+    queryClient.setQueryData(galleryImagesKey, { cached: true });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ImageEditPanel image={image} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("Sunset Poster"), { target: { value: "Renamed Poster" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(queryClient.getQueryState(galleryImagesKey)?.isInvalidated).toBe(true));
+  });
+
   it("keeps the user's edits when saving fails", async () => {
     mocks.imagesUpdate.mockRejectedValue(new Error("Validation failed"));
     const queryClient = new QueryClient({
