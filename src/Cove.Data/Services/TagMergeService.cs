@@ -158,7 +158,6 @@ public sealed class TagMergeService(
         target.Description = FirstText(target.Description, sources.Select(tag => tag.Description));
         target.Color = FirstText(target.Color, sources.Select(tag => tag.Color));
         target.TagGroupId ??= sources.Select(tag => tag.TagGroupId).FirstOrDefault(value => value != null);
-        target.Favorite |= sources.Any(tag => tag.Favorite);
         target.Organized |= sources.Any(tag => tag.Organized);
         target.MinOccurrenceSec ??= sources.Select(tag => tag.MinOccurrenceSec).FirstOrDefault(value => value != null);
         target.MinOccurrencePercent ??= sources.Select(tag => tag.MinOccurrencePercent).FirstOrDefault(value => value != null);

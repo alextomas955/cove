@@ -80,7 +80,7 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
         var studio = new Studio
         {
             Name = dto.Name, ParentId = dto.ParentId,
-            Favorite = dto.Favorite, Details = dto.Details,
+            Details = dto.Details,
             Organized = dto.Organized
         };
         if (dto.Urls?.Count > 0) studio.Urls = dto.Urls.Select(u => new StudioUrl { Url = u }).ToList();
@@ -100,6 +100,8 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
             await _customFields.SaveValuesAsync(CustomFieldEntityTypes.Studio, studio.Id, dto.CustomFields, ct);
         if (dto.Rating.HasValue)
             await engagementService.SetRatingAsync(AffinityHostType.Studio, studio.Id, dto.Rating, cancellationToken: ct);
+        if (dto.Favorite)
+            await engagementService.SetFavoriteAsync(AffinityHostType.Studio, studio.Id, isFavorite: true, ct);
         var result = await studioRepo.GetByIdWithRelationsAsync(studio.Id, ct);
         return CreatedAtAction(nameof(GetById), new { id = studio.Id }, await MapToDetailDtoAsync(result!, ct));
     }
@@ -115,7 +117,6 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
 
         if (dto.Name != null) studio.Name = dto.Name;
         if (dto.ParentId.HasValue) studio.ParentId = dto.ParentId;
-        if (dto.Favorite.HasValue) studio.Favorite = dto.Favorite.Value;
         if (dto.Details != null) studio.Details = dto.Details;
         if (dto.Organized.HasValue) studio.Organized = dto.Organized.Value;
         if (clearFields.Contains("parentId")) studio.ParentId = null;
@@ -157,6 +158,8 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
         }
         if (dto.Rating.HasValue)
             await engagementService.SetRatingAsync(AffinityHostType.Studio, id, dto.Rating, cancellationToken: ct);
+        if (dto.Favorite.HasValue)
+            await engagementService.SetFavoriteAsync(AffinityHostType.Studio, id, dto.Favorite.Value, ct);
         var updated = await studioRepo.GetByIdWithRelationsAsync(id, ct);
         return Ok(await MapToDetailDtoAsync(updated!, ct));
     }
@@ -246,7 +249,6 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
         {
             if (clearFields.Contains("parentId")) s.ParentId = null;
             if (clearFields.Contains("details")) s.Details = null;
-            if (dto.Favorite.HasValue) s.Favorite = dto.Favorite.Value;
             if (dto.Details != null) s.Details = dto.Details;
             if (dto.Organized.HasValue) s.Organized = dto.Organized.Value;
 
@@ -259,6 +261,11 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
         {
             foreach (var studio in studios)
                 await engagementService.SetRatingAsync(AffinityHostType.Studio, studio.Id, dto.Rating, cancellationToken: ct);
+        }
+        if (dto.Favorite.HasValue)
+        {
+            foreach (var studio in studios)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Studio, studio.Id, dto.Favorite.Value, ct);
         }
         return Ok(new BulkUpdateResult(studios.Select(studio => studio.Id).ToList()));
     }
@@ -289,7 +296,8 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
         var fieldProvenance = fieldProvenanceService == null
             ? null
             : (await fieldProvenanceService.GetForHostAsync(AffinityHostType.Studio, studio.Id, ct)).ToList();
-        return MapToDto(studio, usageCounts, customFieldValues, fieldProvenance);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return MapToDto(studio, favorites, usageCounts, customFieldValues, fieldProvenance);
     }
 
     private async Task<StudioUsageCounts> LoadRecursiveStudioUsageCountsAsync(int studioId, CancellationToken ct)
@@ -323,11 +331,11 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
         return new StudioUsageCounts(videoCount, imageCount, galleryCount, groupCount, performerCount, childStudioCount, audioCount, textCount);
     }
 
-    private StudioDto MapToDto(Studio s, StudioUsageCounts? usageCounts = null, Dictionary<string, object>? customFieldValues = null, List<FieldProvenanceDto>? fieldProvenance = null) => new(
-        s.Id, s.Name, s.ParentId, s.Parent?.Name, s.Favorite, s.Details, s.Organized,
+    private StudioDto MapToDto(Studio s, CatalogFavorites favorites, StudioUsageCounts? usageCounts = null, Dictionary<string, object>? customFieldValues = null, List<FieldProvenanceDto>? fieldProvenance = null) => new(
+        s.Id, s.Name, s.ParentId, s.Parent?.Name, favorites.IsStudio(s.Id), s.Details, s.Organized,
         s.Urls.Select(u => u.Url).ToList(),
         s.Aliases.Select(a => a.Alias).ToList(),
-        s.StudioTags.Where(st => st.Tag != null).Select(st => TagDtoMapping.MapTagDto(st.Tag!)).OrderForDisplay().ToList(),
+        s.StudioTags.Where(st => st.Tag != null).Select(st => TagDtoMapping.MapTagDto(st.Tag!, favorites)).OrderForDisplay().ToList(),
         s.RemoteIds.Select(sid => new StudioRemoteIdDto(sid.Endpoint, sid.RemoteId)).ToList(),
         usageCounts?.VideoCount ?? s.VideoCount,
         usageCounts?.ImageCount ?? s.ImageCount,
@@ -357,7 +365,8 @@ public class StudiosController(IStudioRepository studioRepo, MetadataServerServi
             return [];
 
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Studio, items.Select(item => item.Id), ct);
-        return items.Select(studio => MapToDto(studio, usageCountsByStudioId.GetValueOrDefault(studio.Id), GetCustomFields(customFieldValues, studio.Id))).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return items.Select(studio => MapToDto(studio, favorites, usageCountsByStudioId.GetValueOrDefault(studio.Id), GetCustomFields(customFieldValues, studio.Id))).ToList();
     }
 
     private static Dictionary<string, object>? GetCustomFields(IReadOnlyDictionary<int, Dictionary<string, object>> lookup, int id)

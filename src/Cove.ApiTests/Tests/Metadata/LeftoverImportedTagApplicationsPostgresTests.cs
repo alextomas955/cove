@@ -27,6 +27,7 @@ public sealed class LeftoverImportedTagApplicationsPostgresTests
         var cleanupIndex = migrations.IndexOf(MigrationId<RemoveLeftoverImportedVideoTagApplications>());
         Assert.True(cleanupIndex > 0);
         await db.GetService<IMigrator>().MigrateAsync(migrations[cleanupIndex - 1], ct);
+        await AllowCurrentModelTagInsertsAsync(db, ct);
 
         // "Scraped" is also linked on a second video, recorded long enough on a third, and recorded too briefly
         // on a fourth, so after the cleanup it counts two videos.
@@ -102,6 +103,7 @@ public sealed class LeftoverImportedTagApplicationsPostgresTests
         var cleanupIndex = migrations.IndexOf(MigrationId<RemoveLeftoverScrapedAudioAndTextTagApplications>());
         Assert.True(cleanupIndex > 0);
         await db.GetService<IMigrator>().MigrateAsync(migrations[cleanupIndex - 1], ct);
+        await AllowCurrentModelTagInsertsAsync(db, ct);
 
         var removed = new Tag { Name = "Scraped then removed" };
         var linked = new Tag { Name = "Still linked" };
@@ -149,6 +151,11 @@ public sealed class LeftoverImportedTagApplicationsPostgresTests
         var remaining = await db.TagApplications.Select(application => application.Id).OrderBy(id => id).ToListAsync(ct);
         Assert.Equal(keptIds, remaining);
     }
+
+    // This schema still has the shared tag favorite column that a later migration drops, and the current model
+    // no longer writes it, so tags inserted here need a default for it.
+    private static Task AllowCurrentModelTagInsertsAsync(CoveContext db, CancellationToken ct)
+        => db.Database.ExecuteSqlRawAsync("""ALTER TABLE tags ALTER COLUMN "Favorite" SET DEFAULT FALSE""", ct);
 
     private static string MigrationId<TMigration>() where TMigration : Migration
         => typeof(TMigration).GetCustomAttributes(typeof(MigrationAttribute), false).Cast<MigrationAttribute>().Single().Id;

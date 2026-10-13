@@ -2199,6 +2199,7 @@ public record BulkVideoUpdateDto
     public List<int> Ids { get; init; } = [];
     public List<string>? ClearFields { get; init; }
     public int? Rating { get; init; }
+    public bool? Favorite { get; init; }
     public bool? Organized { get; init; }
     public bool? IsVr { get; init; }
     public int? StudioId { get; init; }
@@ -2244,6 +2245,7 @@ public record BulkImageUpdateDto
     public List<int> Ids { get; init; } = [];
     public List<string>? ClearFields { get; init; }
     public int? Rating { get; init; }
+    public bool? Favorite { get; init; }
     public bool? Organized { get; init; }
     public int? StudioId { get; init; }
     [PartialDate]
@@ -2264,6 +2266,7 @@ public record BulkGalleryUpdateDto
     public List<int> Ids { get; init; } = [];
     public List<string>? ClearFields { get; init; }
     public int? Rating { get; init; }
+    public bool? Favorite { get; init; }
     public bool? Organized { get; init; }
     public int? StudioId { get; init; }
     [PartialDate]

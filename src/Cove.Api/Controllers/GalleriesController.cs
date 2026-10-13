@@ -12,6 +12,7 @@ using Cove.Core.Helpers;
 using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
+using Cove.Data.Repositories;
 
 namespace Cove.Api.Controllers;
 
@@ -300,8 +301,10 @@ public class GalleriesController(IGalleryRepository galleryRepo, Data.CoveContex
             && await db.Images.AsNoTracking().AnyAsync(image => image.Id == gallery.CoverImageId.Value, cancellationToken)
                 ? gallery.CoverImageId
                 : null;
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, cancellationToken);
         return MapToDto(
             gallery,
+            favorites,
             customFieldValues,
             GetRelationshipCount(relationshipCounts.ImageCounts, gallery.Id),
             GetRelationshipCount(relationshipCounts.VideoCounts, gallery.Id),
@@ -311,12 +314,12 @@ public class GalleriesController(IGalleryRepository galleryRepo, Data.CoveContex
             visibleCoverImageId: visibleCoverImageId);
     }
 
-    private GalleryDto MapToDto(Gallery g, Dictionary<string, object>? customFieldValues = null, int? imageCount = null, int? videoCount = null, IReadOnlyDictionary<int, List<TagProvenanceDto>>? provenanceLookup = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null, string? displayName = null, int? visibleCoverImageId = null) => new(
+    private GalleryDto MapToDto(Gallery g, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null, int? imageCount = null, int? videoCount = null, IReadOnlyDictionary<int, List<TagProvenanceDto>>? provenanceLookup = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null, string? displayName = null, int? visibleCoverImageId = null) => new(
         g.Id, g.Title, g.Code, PartialDate.Format(g.Date, g.DatePrecision), g.Details, g.Photographer,
         g.Organized, g.StudioId, g.Studio?.Name,
         g.Urls.Select(u => u.Url).ToList(),
-        g.GalleryTags.Where(gt => gt.Tag != null).Select(gt => TagDtoMapping.MapTagDto(gt.Tag!, GetTagProvenance(provenanceLookup, gt.Tag!.Id))).OrderForDisplay().ToList(),
-        g.GalleryPerformers.Where(gp => gp.Performer != null).Select(gp => gp.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), performer.Favorite, EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), performerCounts?.GetValueOrDefault(performer.Id)?.VideoCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.ImageCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.GalleryCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.AudioCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.TextCount ?? 0, performer.Country, PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
+        g.GalleryTags.Where(gt => gt.Tag != null).Select(gt => TagDtoMapping.MapTagDto(gt.Tag!, favorites, GetTagProvenance(provenanceLookup, gt.Tag!.Id))).OrderForDisplay().ToList(),
+        g.GalleryPerformers.Where(gp => gp.Performer != null).Select(gp => gp.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), favorites.IsPerformer(performer.Id), EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), performerCounts?.GetValueOrDefault(performer.Id)?.VideoCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.ImageCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.GalleryCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.AudioCount ?? 0, performerCounts?.GetValueOrDefault(performer.Id)?.TextCount ?? 0, performer.Country, PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
         imageCount ?? g.ImageCount,
         videoCount ?? g.VideoCount,
         g.VideoGalleries?.Select(sg => sg.VideoId).ToList() ?? [],
@@ -386,8 +389,10 @@ public class GalleriesController(IGalleryRepository galleryRepo, Data.CoveContex
         var visibleCoverIds = requestedCoverIds.Length == 0
             ? []
             : (await db.Images.AsNoTracking().Where(image => requestedCoverIds.Contains(image.Id)).Select(image => image.Id).ToListAsync(ct)).ToHashSet();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         return items.Select(g => MapToDto(
             g,
+            favorites,
             GetCustomFields(customFieldValues, g.Id),
             GetRelationshipCount(relationshipCounts.ImageCounts, g.Id),
             GetRelationshipCount(relationshipCounts.VideoCounts, g.Id),
@@ -631,6 +636,11 @@ public class GalleriesController(IGalleryRepository galleryRepo, Data.CoveContex
         {
             foreach (var gallery in galleries)
                 await engagementService.SetRatingAsync(AffinityHostType.Gallery, gallery.Id, dto.Rating, cancellationToken: ct);
+        }
+        if (dto.Favorite.HasValue)
+        {
+            foreach (var gallery in galleries)
+                await engagementService.SetFavoriteAsync(AffinityHostType.Gallery, gallery.Id, dto.Favorite.Value, ct);
         }
         return Ok(new BulkUpdateResult(galleries.Select(gallery => gallery.Id).ToList()));
     }

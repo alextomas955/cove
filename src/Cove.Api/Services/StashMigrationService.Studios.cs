@@ -117,7 +117,6 @@ public partial class StashMigrationService
             var row = byId[stashId];
             if (string.IsNullOrWhiteSpace(entity.Details) && !string.IsNullOrWhiteSpace(row.Details))
                 entity.Details = row.Details;
-            entity.Favorite |= row.Favorite;
             if (string.IsNullOrWhiteSpace(entity.ImageBlobId))
                 entity.ImageBlobId = GetBlobId(blobMap, row.ImageBlob);
 
@@ -199,6 +198,7 @@ public partial class StashMigrationService
             idMap,
             RatingHostType.Studio,
             ct);
+        await AddImportedFavoritesAsync(rows.Where(row => row.Favorite).Select(row => row.Id), idMap, AffinityHostType.Studio, ct);
         _logger.LogInformation("Imported {Count} studios in {Elapsed}", idMap.Count, stopwatch.Elapsed);
         return idMap;
     }

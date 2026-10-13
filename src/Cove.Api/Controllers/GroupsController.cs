@@ -12,6 +12,7 @@ using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
 using Cove.Core.Helpers;
+using Cove.Data.Repositories;
 
 namespace Cove.Api.Controllers;
 
@@ -52,7 +53,8 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
         var (items, totalCount) = await groupRepo.FindAsync(filter, findFilter, ct);
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Group, items.Select(item => item.Id), ct);
         var dynamicCounts = await GetDynamicCountsAsync(items, ct);
-        var dtos = items.Select(group => MapToDto(group, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var dtos = items.Select(group => MapToDto(group, favorites, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList();
         return Ok(new PaginatedResponse<GroupDto>(dtos, totalCount, page, perPage));
     }
 
@@ -64,7 +66,8 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
         var (items, totalCount) = await groupRepo.FindAsync(filter, findFilter, ct);
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Group, items.Select(item => item.Id), ct);
         var dynamicCounts = await GetDynamicCountsAsync(items, ct);
-        var dtos = items.Select(group => MapToDto(group, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var dtos = items.Select(group => MapToDto(group, favorites, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList();
         return Ok(new PaginatedResponse<GroupDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
@@ -336,7 +339,8 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
         var groups = relations.Where(r => r.SubGroup != null).Select(r => r.SubGroup!).ToList();
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Group, groups.Select(group => group.Id), ct);
         var dynamicCounts = await GetDynamicCountsAsync(groups, ct);
-        return Ok(groups.Select(group => MapToDto(group, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList());
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return Ok(groups.Select(group => MapToDto(group, favorites, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList());
     }
 
     [HttpGet("{id:int}/containinggroups")]
@@ -353,7 +357,8 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
         var groups = relations.Where(r => r.ContainingGroup != null).Select(r => r.ContainingGroup!).ToList();
         var customFieldValues = await _customFields.GetValuesAsync(CustomFieldEntityTypes.Group, groups.Select(group => group.Id), ct);
         var dynamicCounts = await GetDynamicCountsAsync(groups, ct);
-        return Ok(groups.Select(group => MapToDto(group, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList());
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return Ok(groups.Select(group => MapToDto(group, favorites, GetCustomFields(customFieldValues, group.Id), dynamicCounts.GetValueOrDefault(group.Id))).ToList());
     }
 
     [HttpPost("{id:int}/subgroups")]
@@ -451,10 +456,11 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
         var fieldProvenance = fieldProvenanceService == null
             ? null
             : (await fieldProvenanceService.GetForHostAsync(AffinityHostType.Group, group.Id, ct)).ToList();
-        return MapToDto(group, customFieldValues, dynamicCounts.GetValueOrDefault(group.Id), fieldProvenance);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return MapToDto(group, favorites, customFieldValues, dynamicCounts.GetValueOrDefault(group.Id), fieldProvenance);
     }
 
-    private GroupDto MapToDto(Group g, Dictionary<string, object>? customFieldValues = null, GroupItemTypeCounts? dynamicCounts = null, List<FieldProvenanceDto>? fieldProvenance = null)
+    private GroupDto MapToDto(Group g, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null, GroupItemTypeCounts? dynamicCounts = null, List<FieldProvenanceDto>? fieldProvenance = null)
     {
         var counts = dynamicCounts ?? CountStaticItems(g);
         var itemCount = g.Kind == GroupKind.Dynamic ? dynamicCounts?.ItemCount ?? g.CachedItemCount ?? counts.ItemCount : g.GroupItems.Count;
@@ -463,7 +469,7 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
             g.Id, g.Name, g.Aliases, PartialDate.Format(g.Date, g.DatePrecision),
             g.StudioId, g.Studio?.Name, g.Director, g.Synopsis,
             g.Urls.Select(u => u.Url).ToList(),
-            g.GroupTags.Where(gt => gt.Tag != null).Select(gt => TagDtoMapping.MapTagDto(gt.Tag!)).OrderForDisplay().ToList(),
+            g.GroupTags.Where(gt => gt.Tag != null).Select(gt => TagDtoMapping.MapTagDto(gt.Tag!, favorites)).OrderForDisplay().ToList(),
             counts.VideoCount,
             itemCount,
             g.GroupItems.Any(item => item.Kind == GroupItemKind.VideoRange),

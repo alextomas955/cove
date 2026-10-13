@@ -206,7 +206,6 @@ public sealed partial class UserEngagementService(
             affinity.FavoritedAt = isFavorite ? DateTime.UtcNow : null;
         }
 
-        await MirrorLegacyFavoriteAsync(hostType, hostId, isFavorite, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         TraceFavoriteSet(hostType, hostId, isFavorite);
         return (await GetSnapshotsAsync(hostType, [hostId], cancellationToken)).GetValueOrDefault(hostId) ?? EmptySnapshot;
@@ -1480,24 +1479,6 @@ public sealed partial class UserEngagementService(
             _ => false,
         };
 
-    private async Task MirrorLegacyFavoriteAsync(AffinityHostType hostType, int hostId, bool isFavorite, CancellationToken cancellationToken)
-    {
-        switch (hostType)
-        {
-            case AffinityHostType.Performer:
-                var performer = await db.Performers.FirstOrDefaultAsync(item => item.Id == hostId, cancellationToken);
-                if (performer != null) performer.Favorite = isFavorite;
-                break;
-            case AffinityHostType.Tag:
-                var tag = await db.Tags.FirstOrDefaultAsync(item => item.Id == hostId, cancellationToken);
-                if (tag != null) tag.Favorite = isFavorite;
-                break;
-            case AffinityHostType.Studio:
-                var studio = await db.Studios.FirstOrDefaultAsync(item => item.Id == hostId, cancellationToken);
-                if (studio != null) studio.Favorite = isFavorite;
-                break;
-        }
-    }
     private static RatingHostType ToRatingHostType(AffinityHostType hostType) => hostType switch
     {
         AffinityHostType.Video => RatingHostType.Video,

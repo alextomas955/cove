@@ -21,7 +21,7 @@ public sealed class PerformerPairingsApiTests(
         var focal = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Pairing focal {suffix}").Build(), ct);
         var partner = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Pairing partner {suffix}").WithGender("Female").Build(), ct);
         var guest = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Pairing guest {suffix}").Build(), ct);
-        var hidden = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Pairing hidden {suffix}").AsFavorite().Build(), ct);
+        var hidden = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Pairing hidden {suffix}").WithDisambiguation("Restricted").AsFavorite().Build(), ct);
         var unrelated = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Pairing unrelated {suffix}").Build(), ct);
         var studio = await owner.CreateStudioAsync($"Pairing studio {suffix}", ct);
         var duo = await owner.CreateVideoAsync(new VideoBuilder()
@@ -81,14 +81,14 @@ public sealed class PerformerPairingsApiTests(
         var roleName = $"Pairings restricted {suffix}";
         var role = await owner.CreateRoleAsync(new CreateRoleRequest(
             roleName,
-            "Hides favorite performers from pairings.",
+            "Hides restricted performers from pairings.",
             [Permissions.VideosRead, Permissions.PerformersRead, Permissions.StudiosRead]), ct);
         await owner.CreateContentRuleAsync(new CreateContentRuleRequest(
             role.Id,
             EntityKinds.Performer,
             "deny",
             "attribute",
-            "{\"path\":\"favorite\",\"equals\":true}",
+            "{\"path\":\"disambiguation\",\"equals\":\"Restricted\"}",
             "read"), ct);
         var username = $"pairings-restricted-{suffix}";
         const string password = "Pairings restricted password 123!";

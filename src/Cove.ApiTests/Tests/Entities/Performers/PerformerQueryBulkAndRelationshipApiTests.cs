@@ -64,10 +64,13 @@ public sealed class PerformerQueryBulkAndRelationshipApiTests(
     {
         var owner = AsUser();
         var suffix = Guid.NewGuid().ToString("N");
-        var second = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"B favorite performer {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
-        var first = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"A favorite performer {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        var second = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"B favorite performer {suffix}").Build(), TestContext.Current.CancellationToken);
+        var first = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"A favorite performer {suffix}").Build(), TestContext.Current.CancellationToken);
         await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Excluded performer {suffix}").Build(), TestContext.Current.CancellationToken);
-        await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Unrelated favorite performer {Guid.NewGuid():N}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        var unrelated = await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Unrelated favorite performer {Guid.NewGuid():N}").Build(), TestContext.Current.CancellationToken);
+        await owner.CreatePerformerAsync(new PerformerBuilder().WithName($"Owner favorite performer {suffix}").AsFavorite().Build(), TestContext.Current.CancellationToken);
+        foreach (var favorite in new[] { second, first, unrelated })
+            await AsUser(ApiTestUsers.Eva).SetEntityFavoriteAsync(AffinityHostType.Performer, favorite.Id, isFavorite: true, TestContext.Current.CancellationToken);
         var request = new FilteredQueryRequest<PerformerFilter>
         {
             ObjectFilter = new PerformerFilter { FavoriteCriterion = new BoolCriterion { Value = true } },
@@ -118,7 +121,8 @@ public sealed class PerformerQueryBulkAndRelationshipApiTests(
         };
 
         var updatedCount = await AsUser(ApiTestUsers.Eva).BulkUpdatePerformersAsync(request, TestContext.Current.CancellationToken);
-        var updated = await Task.WhenAll(selected.Select(performer => owner.GetPerformerByIdAsync(performer.Id)));
+        var updated = await Task.WhenAll(selected.Select(performer => AsUser(ApiTestUsers.Eva).GetPerformerByIdAsync(performer.Id)));
+        var ownerViews = await Task.WhenAll(selected.Select(performer => owner.GetPerformerByIdAsync(performer.Id)));
         var retained = await owner.GetPerformerByIdAsync(control.Id, TestContext.Current.CancellationToken);
         var engagements = await Task.WhenAll(selected.Select(performer => AsUser(ApiTestUsers.Eva).GetEntityEngagementAsync(AffinityHostType.Performer, performer.Id)));
         var retainedEngagement = await AsUser(ApiTestUsers.Eva).GetEntityEngagementAsync(AffinityHostType.Performer, control.Id, TestContext.Current.CancellationToken);
@@ -135,6 +139,9 @@ public sealed class PerformerQueryBulkAndRelationshipApiTests(
             performer.Tags.Select(tag => tag.Id).Should().Equal(replacementTag.Id);
         });
         engagements.Should().AllSatisfy(engagement => engagement.Rating.Should().Be(91));
+        engagements.Should().AllSatisfy(engagement => engagement.IsFavorite.Should().BeTrue());
+        ownerViews.Should().AllSatisfy(performer => performer.Favorite.Should().BeFalse());
+        ownerEngagements.Should().AllSatisfy(engagement => engagement.IsFavorite.Should().BeFalse());
         ownerEngagements.Should().AllSatisfy(engagement => engagement.Rating.Should().BeNull());
         retained.Favorite.Should().BeFalse();
         retained.Gender.Should().Be("Male");

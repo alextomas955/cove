@@ -756,7 +756,7 @@ public class DynamicGroupsAndBookmarksTests
         var principalAccessor = scope.PrincipalAccessor;
         principalAccessor.Set(CreatePrincipal(7));
 
-        var favoritePerformer = new Performer { Name = "Favorite", Favorite = true };
+        var favoritePerformer = new Performer { Name = "Favorite" };
         var otherPerformer = new Performer { Name = "Other" };
         var included = new Audio
         {
@@ -786,6 +786,8 @@ public class DynamicGroupsAndBookmarksTests
             }),
         };
         context.AddRange(included, excluded, group);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        context.UserEntityAffinities.Add(new UserEntityAffinity { UserId = 7, HostType = AffinityHostType.Performer, HostId = favoritePerformer.Id, IsFavorite = true });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var resolver = CreateResolver(context, principalAccessor, includeFilterSource: true);

@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Cove.Core.Entities;
 
 public class Studio : BaseEntity
@@ -6,6 +8,11 @@ public class Studio : BaseEntity
     [System.Text.Json.Serialization.JsonIgnore]
     public string NameKey { get; set; } = string.Empty;
     public int? ParentId { get; set; }
+    // Binary-compatibility shim for extensions built while a shared favorite flag was stored here.
+    // Favorites are per-user, so Cove no longer stores or reads this: it loads as false.
+    [Obsolete("Favorites are per-user. Read IUserEngagementService.GetSnapshotAsync(AffinityHostType.Studio, id) and use IsFavorite.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool Favorite { get; set; }
     public string? Details { get; set; }
     public bool Organized { get; set; }

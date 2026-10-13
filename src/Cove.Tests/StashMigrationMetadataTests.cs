@@ -735,7 +735,7 @@ INSERT INTO tag_stash_ids (tag_id, endpoint, stash_id) VALUES
             .SingleAsync(tag => tag.Id == existing.Id, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("Existing import sort", mergedExisting.SortName);
         Assert.Equal("Existing import description", mergedExisting.Description);
-        Assert.True(mergedExisting.Favorite);
+        Assert.True(await IsImportedFavoriteAsync(context, AffinityHostType.Tag, existing.Id));
         Assert.Equal("existing-import-artwork", mergedExisting.ImageBlobId);
         Assert.Contains(mergedExisting.Aliases, alias => alias.Alias == "Existing imported alias");
         Assert.Contains(mergedExisting.RemoteIds, remote => remote.Endpoint == "fixture" && remote.RemoteId == "existing-remote");
@@ -747,7 +747,7 @@ INSERT INTO tag_stash_ids (tag_id, endpoint, stash_id) VALUES
         Assert.Equal("New", imported.Name);
         Assert.Equal("New import sort", imported.SortName);
         Assert.Equal("New import description", imported.Description);
-        Assert.True(imported.Favorite);
+        Assert.True(await IsImportedFavoriteAsync(context, AffinityHostType.Tag, imported.Id));
         Assert.Equal("new-import-artwork", imported.ImageBlobId);
         Assert.Contains(imported.Aliases, alias => alias.Alias == "New imported alias");
         Assert.Contains(imported.RemoteIds, remote => remote.Endpoint == "fixture" && remote.RemoteId == "new-remote");
@@ -1855,7 +1855,7 @@ INSERT INTO scenes_galleries (scene_id, gallery_id) VALUES
                 .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal("Imported Studio", studio.Name);
             Assert.Equal("Metadata from collapsed studio", studio.Details);
-            Assert.True(studio.Favorite);
+            Assert.True(await IsImportedFavoriteAsync(context, AffinityHostType.Studio, studio.Id));
             Assert.Contains(studio.Urls, item => item.Url == "https://collapsed-studio.local");
             Assert.Contains(studio.Aliases, item => item.Alias == "Collapsed studio alias");
             Assert.Contains(studio.RemoteIds, item => item.Endpoint == "fixture" && item.RemoteId == "collapsed-studio");
@@ -1867,7 +1867,7 @@ INSERT INTO scenes_galleries (scene_id, gallery_id) VALUES
             Assert.Equal("Imported Performer", performer.Name);
             Assert.Equal("Same identity", performer.Disambiguation);
             Assert.Equal("Metadata from collapsed performer", performer.Details);
-            Assert.True(performer.Favorite);
+            Assert.True(await IsImportedFavoriteAsync(context, AffinityHostType.Performer, performer.Id));
             Assert.Contains(performer.Urls, item => item.Url == "https://collapsed-performer.local");
             Assert.Contains(performer.Aliases, item => item.Alias == "Collapsed performer alias");
             Assert.Contains(performer.RemoteIds, item => item.Endpoint == "fixture" && item.RemoteId == "collapsed-performer");
@@ -2684,6 +2684,14 @@ INSERT INTO files_fingerprints SELECT id,'md5','fingerprint-'||id FROM scenes;
         {
         }
     }
+
+    private static Task<bool> IsImportedFavoriteAsync(CoveContext context, AffinityHostType hostType, int hostId)
+        => context.UserEntityAffinities.AnyAsync(
+            affinity => affinity.HostType == hostType
+                && affinity.HostId == hostId
+                && affinity.IsFavorite
+                && context.Users.Any(user => user.Id == affinity.UserId && user.IsSystem),
+            TestContext.Current.CancellationToken);
 
     private static CoveContext CreateContext(bool includeOwner = true)
     {

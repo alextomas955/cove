@@ -3,6 +3,7 @@ using Cove.Core.Common;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Data;
+using Cove.Data.Repositories;
 using Cove.Data.Services;
 
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,8 @@ internal static class EffectiveTagDtoLoader
             .Include(tag => tag.TagGroup)
             .Where(tag => tagIds.Contains(tag.Id))
             .ToDictionaryAsync(tag => tag.Id, cancellationToken);
+        var favoriteTagIds = await EngagementQueryHelpers.GetFavoriteHostIdsAsync(db, AffinityHostType.Tag, tagIds, cancellationToken);
+        var favorites = CatalogFavorites.None with { TagIds = favoriteTagIds };
 
         // Project to just the provenance fields rather than materializing whole TagApplication rows:
         // tag_applications is one of the largest tables in the database and carries a payload column
@@ -97,7 +100,7 @@ internal static class EffectiveTagDtoLoader
                         .DefaultIfEmpty()
                         .Max();
 
-                    return TagDtoMapping.MapTagDto(tag, provenance) with
+                    return TagDtoMapping.MapTagDto(tag, favorites, provenance) with
                     {
                         IsDerived = isDerived && !canRemove,
                         CanRemove = canRemove,

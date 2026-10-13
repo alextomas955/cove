@@ -3,6 +3,7 @@ using Cove.Core.Auth;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Data;
+using Cove.Data.Repositories;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/tagapplications")]
 [RequiresPermission(Permissions.TagsRead)]
-public sealed class TagApplicationsController(TagApplicationService service) : ControllerBase
+public sealed class TagApplicationsController(TagApplicationService service, CoveContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<TagApplicationDto>>> List(
@@ -32,7 +33,8 @@ public sealed class TagApplicationsController(TagApplicationService service) : C
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 
-        return Ok(applications.Select(Map).ToList());
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return Ok(applications.Select(application => Map(application, favorites)).ToList());
     }
 
     [HttpPost]
@@ -42,7 +44,8 @@ public sealed class TagApplicationsController(TagApplicationService service) : C
         try
         {
             var application = await service.AddAsync(dto, ct);
-            return CreatedAtAction(nameof(List), new { hostType = application.HostType.ToString(), hostId = application.HostId }, Map(application));
+            var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+            return CreatedAtAction(nameof(List), new { hostType = application.HostType.ToString(), hostId = application.HostId }, Map(application, favorites));
         }
         catch (TagApplicationValidationException ex)
         {
@@ -79,7 +82,7 @@ public sealed class TagApplicationsController(TagApplicationService service) : C
         }
     }
 
-    public static TagApplicationDto Map(TagApplication application)
+    public static TagApplicationDto Map(TagApplication application, CatalogFavorites favorites)
     {
         var tag = application.Tag ?? new Tag { Id = application.TagId, Name = $"Tag #{application.TagId}" };
         return new TagApplicationDto(
@@ -88,7 +91,7 @@ public sealed class TagApplicationsController(TagApplicationService service) : C
             application.HostId,
             application.ContextType,
             application.ContextId,
-            MapTag(tag),
+            MapTag(tag, favorites),
             application.SourceKey,
             string.IsNullOrWhiteSpace(application.SourceRunId) ? null : application.SourceRunId,
             string.IsNullOrWhiteSpace(application.ModelKey) ? null : application.ModelKey,
@@ -98,12 +101,12 @@ public sealed class TagApplicationsController(TagApplicationService service) : C
             application.CreatedAt.ToString("o"));
     }
 
-    private static TagDto MapTag(Tag tag)
+    private static TagDto MapTag(Tag tag, CatalogFavorites favorites)
         => new(
             tag.Id,
             tag.Name,
             tag.Description,
-            tag.Favorite,
+            favorites.IsTag(tag.Id),
             tag.Aliases.Select(alias => alias.Alias).ToList(),
             tag.ShowAsSegment,
             tag.SegmentColorOverride,

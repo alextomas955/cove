@@ -80,7 +80,7 @@ public class RelatedEntityFilterTests
     {
         await using var fixture = await EntityListSortBehaviorHarnessTests.SortHarnessFixture.CreateAsync();
         fixture.ActivatePrincipal();
-        fixture.Performers[1].Favorite = true;
+        fixture.AddFavorite(AffinityHostType.Performer, fixture.Performers[1].Id);
         await fixture.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var actualIds = await QueryMediaIdsAsync(fixture, "audios", new RelatedFilterCriterion<PerformerFilter>
