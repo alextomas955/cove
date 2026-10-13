@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -696,5 +696,156 @@ describe("searching again after creating", () => {
 
     expect(await screen.findByRole("option", { name: "Fresh Tag" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("tag descriptions in the selectors", () => {
+  const description = "Scenes that start the action within a few minutes.";
+
+  it("shows a selected tag chip's description on hover", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="tag"
+          values={[10]}
+          onChange={vi.fn()}
+          seedOptions={[
+            toTagOption({
+              id: 10,
+              name: "Described",
+              description,
+              color: null,
+              tagGroupColor: null,
+              tagGroupName: null,
+            }),
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.mouseEnter(screen.getByText("Described"));
+
+    expect(screen.getByRole("tooltip", { name: "About Described" })).toHaveTextContent(description);
+  });
+
+  it("shows the selected tag's description on hover in the single selector", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(
+      ["entity-reference-selector", "tag", "selected", 10],
+      toTagOption({
+        id: 10,
+        name: "Described",
+        description,
+        color: null,
+        tagGroupColor: null,
+        tagGroupName: null,
+      }),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceSelector entityType="tag" value={10} onChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.mouseEnter(screen.getByText("Described"));
+
+    expect(screen.getByRole("tooltip", { name: "About Described" })).toHaveTextContent(description);
+  });
+
+  it("shows a search result's image and description in the chip hover popup, and still selects it on click", async () => {
+    const onChange = vi.fn();
+    mocks.tagsFind.mockResolvedValue({
+      items: [
+        { id: 1, name: "Described", description, imagePath: "/described.jpg" },
+        { id: 2, name: "Undescribed" },
+      ],
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector entityType="tag" values={[]} onChange={onChange} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "scrib");
+    const option = await screen.findByRole("option", { name: /Described/ });
+
+    // Only screen readers get the description in the row; sighted users see it on hover.
+    expect(within(option).getByText(description).closest(".sr-only")).not.toBeNull();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(within(option).getByText("Described"));
+
+    const popup = screen.getByRole("tooltip", { name: "Media for Described" });
+    expect(popup).toHaveTextContent(description);
+    expect(within(popup).getByRole("img", { name: "Described" })).toHaveAttribute("src", "/described.jpg");
+
+    fireEvent.mouseEnter(within(screen.getByRole("option", { name: "Undescribed" })).getByText("Undescribed"));
+    expect(screen.queryByRole("tooltip", { name: /Undescribed/ })).not.toBeInTheDocument();
+
+    await userEvent.click(within(screen.getByRole("option", { name: /Described/ })).getByText("Described"));
+    expect(onChange).toHaveBeenCalledWith([1]);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("shows the hover popup on the single selector's results", async () => {
+    mocks.tagsFind.mockResolvedValue({ items: [{ id: 1, name: "Described", description }] });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceSelector entityType="tag" onChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "scrib");
+    fireEvent.mouseEnter(within(await screen.findByRole("option", { name: /Described/ })).getByText("Described"));
+
+    expect(screen.getByRole("tooltip", { name: "About Described" })).toHaveTextContent(description);
+  });
+
+  it("shows a selected chip's image like the Details tab badge", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="tag"
+          values={[10]}
+          onChange={vi.fn()}
+          seedOptions={[
+            toTagOption({
+              id: 10,
+              name: "Pictured",
+              imagePath: "/pictured.jpg",
+              color: null,
+              tagGroupColor: null,
+              tagGroupName: null,
+            }),
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.mouseEnter(screen.getByText("Pictured"));
+
+    expect(screen.getByRole("img", { name: "Pictured" })).toHaveAttribute("src", "/pictured.jpg");
+  });
+
+  it("does not describe non-tag chips", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="performer"
+          values={[10]}
+          onChange={vi.fn()}
+          seedOptions={[{ id: 10, label: "Someone", tagDescription: description }]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.mouseEnter(screen.getByText("Someone"));
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });

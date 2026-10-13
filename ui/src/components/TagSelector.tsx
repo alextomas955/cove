@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Tag, TagProvenance } from "../api/types";
-import { TagProvenanceHover } from "./TagProvenanceHover";
+import { TagChipHover } from "./TagProvenanceHover";
 import { TagGroupMarker, getTagChipColorStyle } from "./TagChipAppearance";
 import { rankByLabel } from "../utils/searchRanking";
 import { compareNatural } from "../utils/naturalCompare";
@@ -9,7 +9,8 @@ import { compareNatural } from "../utils/naturalCompare";
 export type SelectableTag = Pick<
   Tag,
   "id" | "name" | "sortName" | "color" | "tagGroupId" | "tagGroupName" | "tagGroupColor" | "tagGroupSortOrder"
->;
+> &
+  Partial<Pick<Tag, "description" | "imagePath" | "hasImage">>;
 
 export interface TagSelectorGroup<TTag extends SelectableTag = SelectableTag> {
   key: string;
@@ -98,7 +99,6 @@ export function SelectedTagChips({
         const style = getTagChipColorStyle(tag.color ?? tag.tagGroupColor);
         const chip = (
           <span
-            key={tag.id}
             style={style}
             className="inline-flex max-w-full items-center gap-1.5 rounded border border-border bg-card px-2 py-0.5 text-xs font-medium text-secondary"
           >
@@ -116,13 +116,22 @@ export function SelectedTagChips({
             ) : null}
           </span>
         );
-        const provenance = provenanceById?.[tag.id];
-        return provenance?.length ? (
-          <TagProvenanceHover key={tag.id} provenance={provenance}>
+        return (
+          <TagChipHover
+            key={tag.id}
+            tag={{
+              id: tag.id,
+              name: tag.name,
+              description: tag.description,
+              imagePath: tag.imagePath,
+              hasImage: tag.hasImage,
+              tagGroupName: tag.tagGroupName,
+              tagGroupColor: tag.tagGroupColor,
+            }}
+            provenance={provenanceById?.[tag.id]}
+          >
             {chip}
-          </TagProvenanceHover>
-        ) : (
-          chip
+          </TagChipHover>
         );
       })}
     </div>

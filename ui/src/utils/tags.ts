@@ -15,7 +15,8 @@ export function mergeTagIds(...groups: number[][]): number[] {
 
 /** A tag as a selector option, carrying its colors so its chip matches its badge elsewhere. */
 export function toTagOption(
-  tag: Pick<Tag, "id" | "name" | "color" | "tagGroupColor" | "tagGroupName"> & Partial<Pick<Tag, "favorite">>,
+  tag: Pick<Tag, "id" | "name" | "color" | "tagGroupColor" | "tagGroupName"> &
+    Partial<Pick<Tag, "favorite" | "description" | "imagePath" | "hasImage">>,
 ): EntityReferenceOption {
   return {
     id: tag.id,
@@ -24,5 +25,8 @@ export function toTagOption(
     tagColor: tag.color,
     tagGroupColor: tag.tagGroupColor,
     tagGroupName: tag.tagGroupName,
+    tagDescription: tag.description,
+    tagImagePath: tag.imagePath,
+    tagHasImage: tag.hasImage,
   };
 }

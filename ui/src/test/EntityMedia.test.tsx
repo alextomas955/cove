@@ -31,6 +31,7 @@ vi.mock("../extensions/ExtensionLoader", () => ({
 
 import { EntityMedia, EntityMediaHover, TagMediaHover } from "../components/EntityMedia";
 import { TagBadge } from "../components/shared";
+import { TagChipHover } from "../components/TagProvenanceHover";
 
 describe("EntityMedia", () => {
   beforeEach(() => {
@@ -509,5 +510,145 @@ describe("tag hover popups name the tag's group", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("tag hover popups say what the tag means", () => {
+  beforeEach(() => {
+    overrideRendererCalls.length = 0;
+    overrideRenderState.replace = false;
+    overrideRenderState.active = false;
+    overrideRenderState.aspectRatio = null;
+  });
+
+  const description = "Scenes that start the action within a few minutes.";
+
+  it("shows a described tag's description even without an image", () => {
+    render(
+      <TagBadge
+        name="Described tag"
+        tag={{
+          id: 17,
+          name: "Described tag",
+          description,
+          color: null,
+          tagGroupColor: null,
+        }}
+        onClick={() => {}}
+      />,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Described tag" }));
+
+    const popup = screen.getByRole("tooltip", { name: "About Described tag" });
+    expect(popup).toHaveTextContent(description);
+    expect(popup.querySelector("[data-media-frame]")).toBeEmptyDOMElement();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("shows the description under the image and group", () => {
+    render(
+      <TagBadge
+        name="Described tag"
+        tag={{
+          id: 17,
+          name: "Described tag",
+          description,
+          imagePath: "/tag.jpg",
+          color: null,
+          tagGroupName: "Example group",
+          tagGroupColor: "#5f95ce",
+        }}
+        onClick={() => {}}
+      />,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Described tag" }));
+
+    const popup = screen.getByRole("tooltip", {
+      name: "Media for Described tag",
+    });
+    expect(popup).toContainElement(screen.getByRole("img", { name: "Described tag" }));
+    expect(popup).toHaveTextContent("Example group");
+    expect(popup).toHaveTextContent(description);
+  });
+
+  it("still shows no popup for an undescribed tag with only a group and no image", () => {
+    render(
+      <TagBadge
+        name="Grouped tag"
+        tag={{
+          id: 17,
+          name: "Grouped tag",
+          color: null,
+          tagGroupName: "Example group",
+          tagGroupColor: "#5f95ce",
+        }}
+        onClick={() => {}}
+      />,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Grouped tag" }));
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("shows the description in a sourced tag chip's provenance popup and its screen-reader copy", () => {
+    render(
+      <TagBadge
+        name="Described tag"
+        tag={{
+          id: 17,
+          name: "Described tag",
+          description,
+          color: null,
+          tagGroupColor: null,
+        }}
+        provenance={[{ sourceKey: "ext:tagger", appliedAt: "2026-07-19T00:00:00Z" }]}
+        onClick={() => {}}
+      />,
+    );
+
+    fireEvent.focus(screen.getByRole("button", { name: "Described tag" }));
+
+    const copies = screen.getAllByText(description);
+    expect(copies.some((element) => !element.closest(".sr-only"))).toBe(true);
+    expect(copies.some((element) => element.closest(".sr-only"))).toBe(true);
+  });
+
+  it("shows the description alone when an extension's media renders nothing", () => {
+    overrideRenderState.active = true;
+    overrideRenderState.replace = false;
+    render(
+      <TagMediaHover tag={{ id: 21, name: "Described tag", description }}>
+        <button type="button">Tag reference</button>
+      </TagMediaHover>,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Tag reference" }));
+
+    const popup = screen.getByRole("tooltip");
+    expect(popup).toHaveTextContent(description);
+    expect(popup.querySelector("[data-media-frame]")).toBeEmptyDOMElement();
+  });
+
+  it("gives screen readers the description without the hover", () => {
+    render(
+      <TagMediaHover tag={{ id: 21, name: "Described tag", description }}>
+        <button type="button">Tag reference</button>
+      </TagMediaHover>,
+    );
+
+    expect(screen.getByText(description).closest(".sr-only")).not.toBeNull();
+  });
+
+  it("lets a long chip shrink inside its hover wrapper", () => {
+    render(
+      <TagChipHover tag={{ id: 21, name: "Described tag", description }}>
+        <span>Chip</span>
+      </TagChipHover>,
+    );
+
+    expect(screen.getByText("Chip").parentElement).toHaveClass("min-w-0", "max-w-full");
   });
 });

@@ -2,7 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import type { TagProvenance } from "../api/types";
 import { formatDateTime } from "../utils/dateFormat";
-import { TagGroupCaption, TagMediaPreview, type TagMediaReference } from "./EntityMedia";
+import {
+  TagDescriptionCaption,
+  TagGroupCaption,
+  TagMediaHover,
+  TagMediaPreview,
+  type TagMediaReference,
+} from "./EntityMedia";
 
 // Hover-intent timings: the popup opens only after a deliberate pause (sweeping the cursor across a
 // tag list must not flash popups) and closes shortly after the pointer settles outside both the chip
@@ -198,7 +204,8 @@ export function TagProvenanceHover({
     >
       {children}
       <span className="sr-only">
-        {mediaTag?.tagGroupName?.trim() ? <span>Tag group: {mediaTag.tagGroupName.trim()}</span> : null}
+        {mediaTag?.tagGroupName?.trim() ? <span>Tag group: {mediaTag.tagGroupName.trim()}</span> : null}{" "}
+        {mediaTag?.description?.trim() ? <span>{mediaTag.description.trim()}</span> : null}{" "}
         <TagProvenancePopupContent provenance={provenance} title={`${sourceLabel} Sources`} />
       </span>
       {showProvenance && typeof document !== "undefined"
@@ -218,12 +225,49 @@ export function TagProvenanceHover({
                 />
               ) : null}
               {mediaTag ? <TagGroupCaption tag={mediaTag} className="mb-3" /> : null}
+              {mediaTag ? <TagDescriptionCaption tag={mediaTag} className="mb-3" /> : null}
               <TagProvenancePopupContent provenance={provenance} title={`${sourceLabel} Sources`} />
             </div>,
             document.body,
           )
         : null}
     </span>
+  );
+}
+
+// The hover wrapper sits between a chip and its row, so it must let a long chip shrink and truncate.
+const CHIP_HOVER_WRAPPER = "inline-flex min-w-0 max-w-full";
+
+/**
+ * A tag chip's hover: the tag's sources alongside its media, group and description when it has sources,
+ * otherwise those tag details alone. Edit-form chips and tag search results use it so they say what the
+ * Details tab's badge says.
+ */
+export function TagChipHover({
+  tag,
+  provenance,
+  children,
+  wrapperClassName = CHIP_HOVER_WRAPPER,
+}: {
+  tag?: TagMediaReference;
+  provenance?: TagProvenance[];
+  children: ReactNode;
+  /** The hover area around the chip; a result row passes one that fills the row. */
+  wrapperClassName?: string;
+}) {
+  if (provenance?.length) {
+    return (
+      <TagProvenanceHover provenance={provenance} mediaTag={tag} className={wrapperClassName}>
+        {children}
+      </TagProvenanceHover>
+    );
+  }
+  return tag ? (
+    <TagMediaHover tag={tag} wrapperClassName={wrapperClassName}>
+      {children}
+    </TagMediaHover>
+  ) : (
+    <>{children}</>
   );
 }
 

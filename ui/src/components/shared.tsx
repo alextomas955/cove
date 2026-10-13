@@ -14,7 +14,7 @@ export { TagProvenanceHover } from "./TagProvenanceHover";
 import { getResolutionBucketLabel } from "../utils/resolutionBuckets";
 
 type TagBadgeData = Pick<Tag, "color" | "tagGroupColor"> &
-  Partial<Pick<Tag, "id" | "name" | "imagePath" | "hasImage" | "tagGroupName">>;
+  Partial<Pick<Tag, "id" | "name" | "description" | "imagePath" | "hasImage" | "tagGroupName">>;
 export function TagBadge({
   name,
   tag,
@@ -52,6 +52,7 @@ export function TagBadge({
     ? {
         id: tag.id,
         name: tag.name ?? name,
+        description: tag.description,
         imagePath: tag.imagePath,
         hasImage: tag.hasImage,
         tagGroupName: resolvedGroupName,

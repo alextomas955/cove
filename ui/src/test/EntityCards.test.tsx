@@ -235,8 +235,10 @@ describe("VideoCard navigation", () => {
     fireEvent.mouseEnter(screen.getByRole("link", { name: "Featured" }));
 
     expect(screen.getByRole("link", { name: "Featured" })).toHaveAttribute("href", "/tag/9");
-    expect(screen.getByRole("link", { name: "Featured" }).parentElement).toHaveClass("space-y-1");
+    expect(screen.getByRole("link", { name: "Featured" }).closest(".space-y-1")).not.toBeNull();
     expect(screen.queryByRole("tooltip", { name: "Media for Featured" })).not.toBeInTheDocument();
+    // The description still gets a popup, without media.
+    expect(screen.getByRole("tooltip", { name: "About Featured" })).toHaveTextContent("List preview");
     expect(screen.queryByRole("img", { name: "Featured" })).not.toBeInTheDocument();
     fireEvent.mouseEnter(screen.getByRole("link", { name: "Second tag" }));
     expect(screen.getByRole("img", { name: "Second tag" })).toHaveAttribute("src", "/api/tags/10/image?max=640");
