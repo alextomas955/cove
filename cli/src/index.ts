@@ -284,6 +284,38 @@ function groupItemMove(items: GroupItem[], movingIds: number[], options: GroupIt
   return { ids: movingIds, startIndex };
 }
 
+/** Group item kinds that a single host ID identifies, mapped to the API resource that resolves the host. */
+const GROUP_ITEM_HOSTS: Record<string, string> = {
+  video: "videos", image: "images", audio: "audios", text: "texts", gallery: "galleries", group: "groups",
+  performer: "performers", studio: "studios", tag: "tags", face: "faces", segment: "segments",
+};
+
+function groupItemHostType(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const hostType = Object.entries(GROUP_ITEM_HOSTS).find(([singular, plural]) => normalized === singular || normalized === plural)?.[0];
+  if (!hostType) throw new CliError("INVALID_ARGUMENT", `Unsupported group item type “${value}”. Use one of: ${Object.keys(GROUP_ITEM_HOSTS).join(", ")}.`);
+  return hostType;
+}
+
+function groupItemDestinationIndex(options: GroupItemMoveOptions): number {
+  const destinations = [options.first === true, options.last === true, options.toPosition !== undefined].filter(Boolean).length;
+  if (destinations > 1) throw new CliError("INVALID_ARGUMENT", "Choose at most one destination: --first, --last, or --to-position.");
+  return options.first ? 0 : options.toPosition !== undefined ? options.toPosition - 1 : 2_147_483_647;
+}
+
+async function staticGroupForItemWrite(client: CoveClient, groupId: number, action: string): Promise<GroupRecord> {
+  const group = await client.get<unknown>(`groups/${groupId}`);
+  if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group.");
+  if (group.kind === "dynamic" || group.kind === 2) throw new CliError("FEATURE_UNAVAILABLE", `Dynamic groups resolve their items from a query, so items cannot be ${action}.`);
+  return group;
+}
+
+async function groupItems(client: CoveClient, groupId: number): Promise<GroupItem[]> {
+  const items = await client.get<unknown>(`groups/${groupId}/items`);
+  if (!isGroupItemList(items, groupId)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group item list.");
+  return items;
+}
+
 function mutationBody(value: string): Record<string, unknown> {
   return objectFilter(value);
 }
@@ -1498,7 +1530,7 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
     await client.delete(`groups/${id}`);
     print({ id, name: group.name, deleted: true }, global, () => renderGroupDeleted(group, renderFor(global)));
   });
-  const groupItemCommands = groupCommands.command("items").description("List and reorder items in a group");
+  const groupItemCommands = groupCommands.command("items").description("List, add, remove, and reorder items in a group");
   withExamples(groupItemCommands.command("list <group-id>").description("List a group's items in their current order"), [
     "cove-cli groups items list 42 --profile personal",
     "cove-cli groups items list 42 --json",
@@ -1538,6 +1570,64 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       const items = refreshed;
       print({ groupId, items }, global, () => renderGroupItems(items, presentationFor(global, accent, { server: client.server })), items);
     });
+  withExamples(groupItemCommands.command("add <group-id> <type> <id...>").description(`Add records to a group as items, at the end unless a destination is given; type is one of ${Object.keys(GROUP_ITEM_HOSTS).join(", ")}`)
+    .option("--first", "place the new items at the beginning")
+    .option("--last", "place the new items at the end (default)")
+    .option("--to-position <number>", "place the new items starting at this 1-based position", singlePositiveInteger("--to-position", 2_147_483_647)), [
+      "cove-cli groups items add 42 video 7 8 9",
+      "cove-cli groups items add 42 image 15 --first",
+      "cove-cli groups items add 42 performer 3 --to-position 2 --json",
+    ]).action(async (groupReference: string, typeValue: string, hostReferences: string[], options: GroupItemMoveOptions, command: Command) => {
+      const global = globals(command);
+      const groupId = entityId(groupReference);
+      const hostType = groupItemHostType(typeValue);
+      rejectRepeatedOptions(command, ["--first", "--last", "--to-position"]);
+      const startIndex = groupItemDestinationIndex(options);
+      const hostIds = hostReferences.map(entityId);
+      if (new Set(hostIds).size !== hostIds.length) throw new CliError("INVALID_ARGUMENT", "Each ID may only be added once per command.");
+      if (hostType === "group" && hostIds.includes(groupId)) throw new CliError("INVALID_ARGUMENT", "A group cannot contain itself.");
+      const { client } = await clientFor(store, global);
+      const group = await staticGroupForItemWrite(client, groupId, "added");
+      const allowed = group.allowedHostTypes?.length ? group.allowedHostTypes : ["video"];
+      if (!allowed.some(value => value.toLowerCase() === hostType)) throw new CliError("INVALID_ARGUMENT", `This group does not allow ${hostType} items. It allows: ${allowed.join(", ")}.`);
+      // Resolve every host before adding any, so an unknown ID leaves the group untouched.
+      for (const hostId of hostIds) {
+        try {
+          await client.get<unknown>(`${GROUP_ITEM_HOSTS[hostType]}/${hostId}`);
+        } catch (error) {
+          if (error instanceof CliError && error.status === 404) throw new CliError("NOT_FOUND", `No ${hostType} has ID ${hostId}.`, { status: 404 });
+          throw error;
+        }
+      }
+      const added: GroupItem[] = [];
+      for (const hostId of hostIds) {
+        const item = await client.post<unknown>(`groups/${groupId}/items`, { orderIndex: 2_147_483_647, kind: hostType, hostType, hostId });
+        if (!isGroupItem(item, groupId)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group item.");
+        added.push(item);
+      }
+      // Create inserts by stored order index, which can have gaps (for example after a migration), so
+      // place the new items by list position the way `move` does; this also renumbers the group.
+      await client.put(`groups/${groupId}/items/reorder`, { ids: added.map(item => item.id), startIndex });
+      const items = await groupItems(client, groupId);
+      print({ groupId, added, items }, global, () => renderGroupItems(items, presentationFor(global, accent, { server: client.server })), items);
+    });
+  withExamples(groupItemCommands.command("remove <group-id> <item-id...>").description("Remove items from a group by group item ID; the records themselves stay in the library"), [
+    "cove-cli groups items remove 42 103",
+    "cove-cli groups items remove 42 103 107 --json",
+  ]).action(async (groupReference: string, itemReferences: string[], _options, command: Command) => {
+    const global = globals(command);
+    const groupId = entityId(groupReference);
+    const itemIds = itemReferences.map(entityId);
+    if (new Set(itemIds).size !== itemIds.length) throw new CliError("INVALID_ARGUMENT", "Each group item ID may only be removed once.");
+    const { client } = await clientFor(store, global);
+    await staticGroupForItemWrite(client, groupId, "removed");
+    const current = new Set((await groupItems(client, groupId)).map(item => item.id));
+    const missing = itemIds.filter(id => !current.has(id));
+    if (missing.length) throw new CliError("INVALID_ARGUMENT", `Group item ${missing.length === 1 ? "ID" : "IDs"} ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not in this group.`);
+    for (const id of itemIds) await client.delete(`groups/${groupId}/items/${id}`);
+    const items = await groupItems(client, groupId);
+    print({ groupId, removed: itemIds, items }, global, () => renderGroupItems(items, presentationFor(global, accent, { server: client.server })), items);
+  });
   addSavedFilterCommands(groupCommands, "groups", "group");
 
   const textCommands = program.command("texts").description("Browse Cove texts").helpGroup("Explore:");

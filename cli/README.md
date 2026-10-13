@@ -73,6 +73,18 @@ cove-cli groups delete 42 --yes
 
 Deleting a group keeps the videos and other records it held.
 
+Add records to a static group by type and ID, then reorder or remove them by their group item ID:
+
+```sh
+cove-cli groups items add 42 video 7 8 9
+cove-cli groups items add 42 image 15 --first
+cove-cli groups items list 42
+cove-cli groups items move 42 103 --to-position 2
+cove-cli groups items remove 42 103
+```
+
+New items go at the end unless `--first` or `--to-position` is given. Every ID is checked before anything is added or removed, so an unknown ID leaves the group unchanged. Removing an item keeps the record itself in the library.
+
 Authenticate interactively with a Cove server:
 
 ```sh

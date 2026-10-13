@@ -1063,6 +1063,148 @@ test("group items move clearly rejects an empty dynamic group", async () => {
   expect(JSON.parse(stderr)).toMatchObject({ error: { code: "FEATURE_UNAVAILABLE", message: "Dynamic groups cannot be reordered." } });
 });
 
+function groupItemRecord(id: number, orderIndex: number, hostType = "video", hostId = id) {
+  return { id, groupId: 42, orderIndex, kind: hostType, hostType, hostId, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" };
+}
+
+test("group items add resolves every host first, then inserts them in order at the destination", async () => {
+  const cases = [
+    { args: ["video", "7", "8"], startIndex: 2_147_483_647 },
+    { args: ["video", "7", "8", "--last"], startIndex: 2_147_483_647 },
+    { args: ["videos", "7", "8", "--first"], startIndex: 0 },
+    { args: ["video", "7", "8", "--to-position", "3"], startIndex: 2 },
+  ];
+  for (const testCase of cases) {
+    const requests: string[] = [];
+    const posted: unknown[] = [];
+    let nextId = 200;
+    let reorder: unknown;
+    const refreshed = [groupItemRecord(1, 0), groupItemRecord(200, 1, "video", 7), groupItemRecord(201, 2, "video", 8)];
+    const running = startServer(async request => {
+      const url = new URL(request.url);
+      requests.push(`${request.method} ${url.pathname}`);
+      if (url.pathname === "/api/groups/42") return json({ id: 42, name: "Static", kind: "static", allowedHostTypes: ["video", "image"], tags: [] });
+      if (url.pathname.startsWith("/api/videos/")) return json({ id: Number(url.pathname.split("/").at(-1)) });
+      if (request.method === "POST") {
+        const body = await request.json() as { orderIndex: number; hostId: number };
+        posted.push(body);
+        return json({ ...groupItemRecord(nextId++, 0, "video", body.hostId) }, 201);
+      }
+      if (request.method === "PUT") {
+        reorder = await request.json();
+        return json(null);
+      }
+      return json(refreshed);
+    });
+    servers.push(running.server);
+    const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+    directories.push(directory);
+    const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "items", "add", "42", ...testCase.args, "--json"], {
+      cwd: join(import.meta.dir, ".."), env: { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory }, stdout: "pipe", stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(requests).toEqual(["GET /api/groups/42", "GET /api/videos/7", "GET /api/videos/8", "POST /api/groups/42/items", "POST /api/groups/42/items", "PUT /api/groups/42/items/reorder", "GET /api/groups/42/items"]);
+    expect(posted).toEqual([
+      { orderIndex: 2_147_483_647, kind: "video", hostType: "video", hostId: 7 },
+      { orderIndex: 2_147_483_647, kind: "video", hostType: "video", hostId: 8 },
+    ]);
+    expect(reorder).toEqual({ ids: [200, 201], startIndex: testCase.startIndex });
+    const output = JSON.parse(stdout);
+    expect(output.added.map((item: { id: number }) => item.id)).toEqual([200, 201]);
+    expect(output).toMatchObject({ groupId: 42, items: refreshed });
+  }
+});
+
+test("group items add changes nothing when a host, type, or destination is invalid", async () => {
+  let postCount = 0;
+  const running = startServer(request => {
+    const url = new URL(request.url);
+    if (request.method === "POST") postCount += 1;
+    if (url.pathname === "/api/groups/42") return json({ id: 42, name: "Static", kind: "static", allowedHostTypes: ["video"], tags: [] });
+    if (url.pathname === "/api/groups/43") return json({ id: 43, name: "Dynamic", kind: "dynamic", tags: [] });
+    if (url.pathname === "/api/groups/44") return json({ id: 44, name: "Legacy", kind: "static", allowedHostTypes: [], tags: [] });
+    if (url.pathname === "/api/videos/7") return json({ id: 7 });
+    return json({ title: "Not Found", status: 404 }, 404);
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const environment = { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory };
+  const cases = [
+    { args: ["42", "video", "7", "9"], code: "NOT_FOUND", message: "No video has ID 9." },
+    { args: ["42", "image", "7"], code: "INVALID_ARGUMENT", message: "This group does not allow image items. It allows: video." },
+    { args: ["42", "widget", "7"], code: "INVALID_ARGUMENT", message: "Unsupported group item type “widget”. Use one of: video, image, audio, text, gallery, group, performer, studio, tag, face, segment." },
+    { args: ["42", "video", "7", "7"], code: "INVALID_ARGUMENT", message: "Each ID may only be added once per command." },
+    { args: ["42", "group", "5", "42"], code: "INVALID_ARGUMENT", message: "A group cannot contain itself." },
+    { args: ["44", "image", "7"], code: "INVALID_ARGUMENT", message: "This group does not allow image items. It allows: video." },
+    { args: ["42", "video", "7", "--first", "--last"], code: "INVALID_ARGUMENT", message: "Choose at most one destination: --first, --last, or --to-position." },
+    { args: ["43", "video", "7"], code: "FEATURE_UNAVAILABLE", message: "Dynamic groups resolve their items from a query, so items cannot be added." },
+  ];
+  for (const testCase of cases) {
+    const attempt = Bun.spawn([process.execPath, "src/index.ts", "groups", "items", "add", ...testCase.args, "--json"], { cwd: join(import.meta.dir, ".."), env: environment, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([new Response(attempt.stdout).text(), new Response(attempt.stderr).text(), attempt.exited]);
+    expect(exitCode).not.toBe(0);
+    expect(stdout).toBe("");
+    expect(JSON.parse(stderr)).toMatchObject({ error: { code: testCase.code, message: testCase.message } });
+  }
+  expect(postCount).toBe(0);
+});
+
+test("group items remove deletes each member and renders the refreshed order", async () => {
+  const requests: string[] = [];
+  const initial = [groupItemRecord(101, 0), groupItemRecord(103, 1), groupItemRecord(107, 2)];
+  const refreshed = [groupItemRecord(103, 0)];
+  let itemGets = 0;
+  const running = startServer(request => {
+    const url = new URL(request.url);
+    requests.push(`${request.method} ${url.pathname}`);
+    if (url.pathname === "/api/groups/42") return json({ id: 42, name: "Static", kind: "static", tags: [] });
+    if (request.method === "DELETE") return new Response(null, { status: 204 });
+    return json(itemGets++ === 0 ? initial : refreshed);
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "items", "remove", "42", "107", "101", "--json"], {
+    cwd: join(import.meta.dir, ".."), env: { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory }, stdout: "pipe", stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(requests).toEqual(["GET /api/groups/42", "GET /api/groups/42/items", "DELETE /api/groups/42/items/107", "DELETE /api/groups/42/items/101", "GET /api/groups/42/items"]);
+  expect(JSON.parse(stdout)).toEqual({ groupId: 42, removed: [107, 101], items: refreshed });
+});
+
+test("group items remove changes nothing when an ID is not a member or the group is dynamic", async () => {
+  let deleteCount = 0;
+  const running = startServer(request => {
+    const url = new URL(request.url);
+    if (request.method === "DELETE") deleteCount += 1;
+    if (url.pathname === "/api/groups/42") return json({ id: 42, name: "Static", kind: "static", tags: [] });
+    if (url.pathname === "/api/groups/43") return json({ id: 43, name: "Dynamic", kind: "dynamic", tags: [] });
+    return json([groupItemRecord(101, 0)]);
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const environment = { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory };
+  const cases = [
+    { args: ["42", "101", "9"], code: "INVALID_ARGUMENT", message: "Group item ID 9 is not in this group." },
+    { args: ["42", "101", "101"], code: "INVALID_ARGUMENT", message: "Each group item ID may only be removed once." },
+    { args: ["43", "101"], code: "FEATURE_UNAVAILABLE", message: "Dynamic groups resolve their items from a query, so items cannot be removed." },
+  ];
+  for (const testCase of cases) {
+    const attempt = Bun.spawn([process.execPath, "src/index.ts", "groups", "items", "remove", ...testCase.args, "--json"], { cwd: join(import.meta.dir, ".."), env: environment, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([new Response(attempt.stdout).text(), new Response(attempt.stderr).text(), attempt.exited]);
+    expect(exitCode).not.toBe(0);
+    expect(stdout).toBe("");
+    expect(JSON.parse(stderr)).toMatchObject({ error: { code: testCase.code, message: testCase.message } });
+  }
+  expect(deleteCount).toBe(0);
+});
+
 test("segments list sends filters and preserves the JSON envelope", async () => {
   const running = startServer(request => {
     const url = new URL(request.url);
@@ -1712,6 +1854,8 @@ test("every actionable command shows inherited options and generic examples", as
     { command: ["groups", "delete"], example: "cove-cli groups delete 42 --yes" },
     { command: ["groups", "items", "list"], example: "cove-cli groups items list 42 --profile personal" },
     { command: ["groups", "items", "move"], example: "cove-cli groups items move 42 103 --first" },
+    { command: ["groups", "items", "add"], example: "cove-cli groups items add 42 video 7 8 9" },
+    { command: ["groups", "items", "remove"], example: "cove-cli groups items remove 42 103" },
     { command: ["texts", "list"], example: "cove-cli texts list --query \"Example\"" },
     { command: ["texts", "show"], example: "cove-cli texts show 42 --profile personal" },
     { command: ["segments", "list"], example: "cove-cli segments list --video 42" },

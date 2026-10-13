@@ -231,6 +231,7 @@ export interface GroupRecord extends CoveRecord {
   studioName?: string | null;
   description?: string | null;
   kind?: string | number;
+  allowedHostTypes?: string[] | null;
   itemCount?: number;
   videoCount?: number;
   imageCount?: number;
