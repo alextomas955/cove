@@ -2043,6 +2043,9 @@ describe("VideoTagger", () => {
     await userEvent.click(screen.getByRole("button", { name: "Pick Library Studio" }));
     if (!rememberAlias) await userEvent.click(screen.getByLabelText(/Remember “Scraped Studio” as an alias/));
     await userEvent.click(screen.getByRole("button", { name: "Link" }));
+    // Linking moves focus to the studio's incoming side on the next frame; wait for it so a following click or
+    // keystroke is not sent to the control that frame focuses instead.
+    await waitFor(() => expect(screen.getByLabelText("Studio from source")).toHaveFocus());
   }
 
   it("uses a library studio linked for this video alone, without saving an alias", async () => {
