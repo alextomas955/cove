@@ -107,6 +107,8 @@ public class VideoPlayHistory
 {
     public int Id { get; set; }
     public int VideoId { get; set; }
+    // The user who played the video: each user sees and removes only their own play dates.
+    public int UserId { get; set; }
     public DateTime PlayedAt { get; set; }
     public Video? Video { get; set; }
 }

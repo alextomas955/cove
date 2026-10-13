@@ -34,11 +34,13 @@ public partial class StashMigrationService
         var total = await CountAsync(conn, "scenes", ct);
         await using var claims = await FileClaimsFactory(_db, StringComparer.Ordinal, ct);
         await SeedImportFileClaimsAsync(claims, ct);
+        // Stash play dates are the owner's, like the view counts and ratings imported with them.
+        var playHistoryUserId = await GetRequiredImportEngagementUserIdAsync(ct);
         progress.Report(startProgress, "Importing scenes...");
         await foreach (var sourceIds in ReadSourceBatchesAsync(conn, "scenes", ct))
         {
             var batch = await ImportScenesBatchAsync(conn, blobMap, folderIdMap, studioIdMap, tagIdMap,
-                performerIdMap, groupIdMap, progress, startProgress, endProgress, ct, sourceIds, claims);
+                performerIdMap, groupIdMap, progress, startProgress, endProgress, ct, sourceIds, claims, playHistoryUserId);
             count += batch.count;
             foreach (var pair in batch.sceneIdMap) ids[pair.Key] = pair.Value;
             foreach (var pair in batch.generatedMap) generated[pair.Key] = pair.Value;
@@ -59,7 +61,7 @@ public partial class StashMigrationService
         IJobProgress progress,
         double startProgress,
         double endProgress,
-        CancellationToken ct, string sourceIds, IStashFileClaims claims)
+        CancellationToken ct, string sourceIds, IStashFileClaims claims, int playHistoryUserId)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var sceneRows = new List<(int Id, string? Title, string? Details, string? Date, int? Rating,
@@ -288,7 +290,7 @@ public partial class StashMigrationService
                         OrderIndex = g.Index,
                         Kind = GroupItemKind.Video,
                     }).ToList(),
-                PlayHistory = viewHistory.Select(d => new ScenePlayHistory { PlayedAt = d }).ToList(),
+                PlayHistory = viewHistory.Select(d => new ScenePlayHistory { UserId = playHistoryUserId, PlayedAt = d }).ToList(),
                 RemoteIds = sceneStashIds.GetValueOrDefault(row.Id, [])
                     .Select(s => new SceneRemoteId { Endpoint = s.Ep, RemoteId = s.Rid }).ToList(),
             };

@@ -377,6 +377,21 @@ public sealed partial class CoveClient
         CancellationToken cancellationToken = default)
         => SendForNoContentAsync(HttpMethod.Post, $"/api/videos/{video.Id}/like/reset", new { }, cancellationToken);
 
+    public Task RecordVideoPlayAsync(
+        VideoDto video,
+        CancellationToken cancellationToken = default)
+        => SendForNoContentAsync(HttpMethod.Post, $"/api/videos/{video.Id}/play", new { }, cancellationToken);
+
+    public Task DeleteVideoPlayAsync(
+        VideoDto video,
+        CancellationToken cancellationToken = default)
+        => SendForNoContentAsync(HttpMethod.Delete, $"/api/videos/{video.Id}/play", new { }, cancellationToken);
+
+    public Task ResetVideoPlayAsync(
+        VideoDto video,
+        CancellationToken cancellationToken = default)
+        => SendForNoContentAsync(HttpMethod.Post, $"/api/videos/{video.Id}/play/reset", new { }, cancellationToken);
+
     public Task<int?> SetVideoRatingViaVideoAsync(
         VideoDto video,
         int? rating,
