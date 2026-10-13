@@ -64,6 +64,15 @@ cove-cli tag-groups delete Seasons --yes
 
 An empty `--description` or `--color` clears it. Deleting a tag group keeps its tags and leaves them ungrouped.
 
+Create a group by name and delete it by ID:
+
+```sh
+cove-cli groups create "Road Trip" --description "Summer drive" --date 2026-07
+cove-cli groups delete 42 --yes
+```
+
+Deleting a group keeps the videos and other records it held.
+
 Authenticate interactively with a Cove server:
 
 ```sh

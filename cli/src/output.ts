@@ -885,6 +885,10 @@ export function renderGroupItems(items: GroupItem[], context: RenderContext = {}
   return renderCompactList("Group items", ["item", "items"], positioned, positioned.length, columns, resolved, "This group has no items.");
 }
 
+export function renderGroupDeleted(item: GroupRecord, context: RenderContext = {}): string {
+  return renderStatusCard("Group deleted", [["ID", String(item.id)], ["Name", clean(item.name)]], "success", resolveRenderContext(context));
+}
+
 export function renderTexts(items: TextRecord[], context: RenderContext = {}): string {
   return renderSimpleCatalog("Texts", ["text", "texts"], items, item => item.title || item.files[0]?.basename || `Text ${item.id}`, item => String(item.maxWordCount ?? 0), "Words", "text", context);
 }

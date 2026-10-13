@@ -788,6 +788,65 @@ test("groups list keeps random sorting singular", async () => {
   expect(JSON.parse(stdout).totalCount).toBe(1);
 });
 
+test("groups create posts a trimmed static group and returns the created record", async () => {
+  const created = { id: 42, name: "Road Trip", description: "Summer drive", date: "2026-07", kind: "static", tags: [] };
+  const running = startServer(async request => {
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe("/api/groups");
+    expect(await request.json()).toEqual({ name: "Road Trip", description: "Summer drive", date: "2026-07" });
+    return json(created, 201);
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "create", " Road Trip ", "--description", "Summer drive", "--date", "2026-07", "--json"], {
+    cwd: join(import.meta.dir, ".."), env: { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory }, stdout: "pipe", stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+  expect(exitCode).toBe(0);
+  expect(stderr).toBe("");
+  expect(JSON.parse(stdout)).toEqual(created);
+});
+
+test("groups create rejects an empty name before contacting Cove", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "create", "  ", "--json"], {
+    cwd: join(import.meta.dir, ".."), env: { ...process.env, COVE_SERVER: "https://unused.example", COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory }, stdout: "pipe", stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+  expect(exitCode).toBe(2);
+  expect(stdout).toBe("");
+  expect(JSON.parse(stderr)).toMatchObject({ error: { code: "INVALID_ARGUMENT", message: "The group name cannot be empty." } });
+});
+
+test("groups delete requires confirmation and deletes the named group", async () => {
+  const requests: string[] = [];
+  const running = startServer(request => {
+    const url = new URL(request.url);
+    requests.push(`${request.method} ${url.pathname}`);
+    if (request.method === "GET") return json({ id: 42, name: "Road Trip", kind: "static", tags: [] });
+    return new Response(null, { status: 204 });
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const environment = { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory };
+
+  const unconfirmed = Bun.spawn([process.execPath, "src/index.ts", "groups", "delete", "42", "--json"], { cwd: join(import.meta.dir, ".."), env: environment, stdout: "pipe", stderr: "pipe" });
+  const [unconfirmedStdout, , unconfirmedExit] = await Promise.all([new Response(unconfirmed.stdout).text(), new Response(unconfirmed.stderr).text(), unconfirmed.exited]);
+  expect(unconfirmedExit).not.toBe(0);
+  expect(unconfirmedStdout).toBe("");
+  expect(requests).toEqual([]);
+
+  const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "delete", "42", "--yes", "--json"], { cwd: join(import.meta.dir, ".."), env: environment, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+  expect(exitCode).toBe(0);
+  expect(stderr).toBe("");
+  expect(requests).toEqual(["GET /api/groups/42", "DELETE /api/groups/42"]);
+  expect(JSON.parse(stdout)).toEqual({ id: 42, name: "Road Trip", deleted: true });
+});
+
 test("group items list preserves membership identities in machine output", async () => {
   const items = [
     { id: 103, groupId: 42, orderIndex: 0, kind: "video", videoId: 7, videoTitle: "First", hostType: "video", hostId: 7, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
@@ -1649,6 +1708,8 @@ test("every actionable command shows inherited options and generic examples", as
     { command: ["studios", "show"], example: "cove-cli studios show 42 --profile personal" },
     { command: ["groups", "list"], example: "cove-cli groups list --query \"Example\"" },
     { command: ["groups", "show"], example: "cove-cli groups show 42 --profile personal" },
+    { command: ["groups", "create"], example: "cove-cli groups create \"Road Trip\"" },
+    { command: ["groups", "delete"], example: "cove-cli groups delete 42 --yes" },
     { command: ["groups", "items", "list"], example: "cove-cli groups items list 42 --profile personal" },
     { command: ["groups", "items", "move"], example: "cove-cli groups items move 42 103 --first" },
     { command: ["texts", "list"], example: "cove-cli texts list --query \"Example\"" },

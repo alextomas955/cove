@@ -13,7 +13,7 @@ import { CliError, toCliError } from "./errors";
 import { listEntities, mergeObjectFilters } from "./entity-list";
 import { filterByCompletionValues, filterByObjectFilter } from "./filter-by";
 import type { FilterByResource } from "./filter-by";
-import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTagGroup, renderTagGroupAssignment, renderTagGroupDeleted, renderTagGroups, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
+import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupDeleted, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTagGroup, renderTagGroupAssignment, renderTagGroupDeleted, renderTagGroups, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
 import type { CatalogEntityKind, RenderContext } from "./output";
 import { resolveResultWindow } from "./pagination";
 import type { ResultWindowOptions } from "./pagination";
@@ -1459,7 +1459,7 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
   addIdShowCommand<StudioRecord>(store, studioCommands, "studio", isStudioRecord, renderCatalogDetail, accent);
   addSavedFilterCommands(studioCommands, "studios", "studio");
 
-  const groupCommands = program.command("groups").description("Browse Cove groups").helpGroup("Explore:");
+  const groupCommands = program.command("groups").description("Browse and manage Cove groups").helpGroup("Explore:");
   const groupList = withPagingSortOptions(groupCommands.command("list").description("List groups").option("--query <text>", "search groups"), "groups");
   withExamples(groupList, ["cove-cli groups list --query \"Example\"", "cove-cli groups list --page 2 --per-page 50 --json"])
   withSortFields(groupList, ["name", "rating", "duration", "item_count", "created_at", "updated_at", "random"])
@@ -1472,6 +1472,32 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       print({ groups: result.items, totalCount: result.totalCount }, global, () => renderGroups(result.items, renderFor(global, listRenderContext(client.server, result.totalCount, options, 25, queryOptions.defaultFilterApplied, queryOptions.appliedFilterSummary))), result.items);
     });
   addIdShowCommand<GroupRecord>(store, groupCommands, "group", isGroupRecord, renderCatalogDetail, accent);
+  withExamples(groupCommands.command("create <name>").description("Create an empty static group")
+    .option("--description <text>", "describe what the group holds")
+    .option("--director <name>", "director credit")
+    .option("--date <date>", "release date as YYYY, YYYY-MM, or YYYY-MM-DD"), [
+    "cove-cli groups create \"Road Trip\"",
+    "cove-cli groups create \"Road Trip\" --description \"Summer drive\" --date 2026-07 --json",
+  ]).action(async (name: string, options: { description?: string; director?: string; date?: string }, command: Command) => {
+    const global = globals(command);
+    if (!name.trim()) throw new CliError("INVALID_ARGUMENT", "The group name cannot be empty.");
+    const { client } = await clientFor(store, global);
+    const group = await client.post<unknown>("groups", { name: name.trim(), description: options.description, director: options.director, date: options.date });
+    if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group object.");
+    print(group, global, () => renderCatalogDetail(group, "group", presentationFor(global, accent, { server: client.server })));
+  });
+  withExamples(groupCommands.command("delete <id>").description("Delete a group; the videos and other records it holds stay in the library").requiredOption("--yes", "confirm deletion"), [
+    "cove-cli groups delete 42 --yes",
+    "cove-cli groups delete 42 --yes --json",
+  ]).action(async (reference: string, _options, command: Command) => {
+    const global = globals(command);
+    const id = entityId(reference);
+    const { client } = await clientFor(store, global);
+    const group = await client.get<unknown>(`groups/${id}`);
+    if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group object.");
+    await client.delete(`groups/${id}`);
+    print({ id, name: group.name, deleted: true }, global, () => renderGroupDeleted(group, renderFor(global)));
+  });
   const groupItemCommands = groupCommands.command("items").description("List and reorder items in a group");
   withExamples(groupItemCommands.command("list <group-id>").description("List a group's items in their current order"), [
     "cove-cli groups items list 42 --profile personal",
