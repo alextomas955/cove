@@ -324,6 +324,59 @@ public sealed class EntityMergeServiceTests
         Assert.Equal(source.Id, filter.RootElement.GetProperty("unrelated").GetProperty("parentId").GetInt32());
     }
 
+    [Fact]
+    public async Task PerformerMerge_TracksOnlyFacePropagationAssignmentsOfMergedPerformers()
+    {
+        await using var db = CreateContext();
+        var target = new Performer { Name = "Target" };
+        var source = new Performer { Name = "Source" };
+        var unrelated = new Performer { Name = "Unrelated" };
+        db.AddRange(target, source, unrelated);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var sourceAssignmentKey = FacePerformerAssignmentData.BuildKey(
+            new FacePerformerAssignmentData.Assignment(71, source.Id, "video", 81));
+        // Face and host ids that equal a merged performer id must not be mistaken for its assignments.
+        var unrelatedAssignmentKeys = Enumerable.Range(1, 50)
+            .Select(hostId => FacePerformerAssignmentData.BuildKey(
+                new FacePerformerAssignmentData.Assignment(source.Id, unrelated.Id, "video", hostId)))
+            .ToArray();
+        db.ExtensionData.Add(new ExtensionData
+        {
+            ExtensionId = FacePerformerAssignmentData.ExtensionId,
+            Key = sourceAssignmentKey,
+            Value = JsonSerializer.Serialize(new { faceId = 71, performerId = source.Id, hostType = "video", hostId = 81 }),
+            UpdatedAt = DateTime.UtcNow,
+        });
+        db.ExtensionData.AddRange(unrelatedAssignmentKeys.Select(key => new ExtensionData
+        {
+            ExtensionId = FacePerformerAssignmentData.ExtensionId,
+            Key = key,
+            Value = JsonSerializer.Serialize(new { faceId = source.Id, performerId = unrelated.Id }),
+            UpdatedAt = DateTime.UtcNow,
+        }));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        await new PerformerMergeService(db).MergeAsync(target.Id, [source.Id], TestContext.Current.CancellationToken);
+
+        // Every save in the merge rescans the tracked entities, so loading the library's assignments
+        // makes the merge's cost grow with the library instead of with the merged performers.
+        Assert.DoesNotContain(
+            db.ChangeTracker.Entries<ExtensionData>(),
+            entry => unrelatedAssignmentKeys.Contains(entry.Entity.Key));
+        var keys = await db.ExtensionData.AsNoTracking()
+            .Where(row => row.ExtensionId == FacePerformerAssignmentData.ExtensionId)
+            .Select(row => row.Key)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(
+            unrelatedAssignmentKeys
+                .Append(FacePerformerAssignmentData.BuildKey(
+                    new FacePerformerAssignmentData.Assignment(71, target.Id, "video", 81)))
+                .Order(StringComparer.Ordinal),
+            keys.Order(StringComparer.Ordinal));
+    }
+
     private static CoveContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<CoveContext>()
