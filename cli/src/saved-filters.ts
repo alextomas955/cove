@@ -227,7 +227,7 @@ async function formatEntityCriterion(client: CoveClient, path: string, value: un
     ? `not all of ${naturalList(excludedValues, "and")}`
     : excludedValues.length === 1 ? `not ${excludedValues[0]}` : excludedValues.length === 2 ? `neither ${naturalList(excludedValues, "nor")}` : excludedValues.length > 2 ? `none of ${naturalList(excludedValues, "or")}` : "";
   const selection = includedText && excludedText ? `${includedText} but ${excludedText}` : includedText || excludedText || formatCriterionValue(value);
-  return value.depth === -1 ? `${selection} with sub-tags` : selection;
+  return value.depth === -1 ? `${selection} with ${path === "studios" ? "sub-studios" : "sub-tags"}` : selection;
 }
 
 async function formatTagDurationCriterion(client: CoveClient, value: unknown): Promise<string> {

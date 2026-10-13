@@ -223,16 +223,21 @@ function formatExcludedValues(values: string[]): string {
   return `none of ${formatNaturalList(values, "or")}`;
 }
 
+function formatHierarchySuffix(entityType: CriterionDefinition["entityType"]): string {
+  return entityType === "studios" ? "with sub-studios" : "with sub-tags";
+}
+
 function formatMultiIdSummary(
   includedValues: string[],
   excludedValues: string[],
   modifier: string | undefined,
   depth: number | undefined,
+  hierarchySuffix: string,
 ): string {
   const included = formatNaturalList(includedValues, modifier === "INCLUDES_ALL" ? "and" : "or");
   const excluded = formatExcludedValues(excludedValues);
   const selection = included && excluded ? `${included} but ${excluded}` : included || excluded;
-  return [selection, depth === -1 ? "with sub-tags" : ""].filter(Boolean).join(" ");
+  return [selection, depth === -1 ? hierarchySuffix : ""].filter(Boolean).join(" ");
 }
 
 export function formatFilterChipValue(
@@ -322,6 +327,7 @@ export function formatFilterChipValue(
   }
 
   if (def?.type === "multiId") {
+    const hierarchySuffix = formatHierarchySuffix(def.entityType);
     if (criterion.modifier === "IS_NULL" || criterion.modifier === "NOT_NULL") {
       return getMultiIdModifierLabel(criterion.modifier, def.entityType, modifier);
     }
@@ -330,19 +336,25 @@ export function formatFilterChipValue(
       ? criterion.excludes.map(resolveEntityName).filter(Boolean)
       : [];
     if (criterion.modifier === "INCLUDES" || criterion.modifier === "INCLUDES_ALL") {
-      return formatMultiIdSummary(includedValues, excludedValues, criterion.modifier, criterion.depth);
+      return formatMultiIdSummary(includedValues, excludedValues, criterion.modifier, criterion.depth, hierarchySuffix);
     }
     if (criterion.modifier === "EXCLUDES") {
-      return formatMultiIdSummary([], [...includedValues, ...excludedValues], criterion.modifier, criterion.depth);
+      return formatMultiIdSummary(
+        [],
+        [...includedValues, ...excludedValues],
+        criterion.modifier,
+        criterion.depth,
+        hierarchySuffix,
+      );
     }
     if (criterion.modifier === "EXCLUDES_ALL") {
       const values = [...includedValues, ...excludedValues];
-      return [`not all of ${formatNaturalList(values, "and")}`, criterion.depth === -1 ? "with sub-tags" : ""]
+      return [`not all of ${formatNaturalList(values, "and")}`, criterion.depth === -1 ? hierarchySuffix : ""]
         .filter(Boolean)
         .join(" ");
     }
     const included = includedValues.join(", ");
-    return [included ? `${modifier} ${included}`.trim() : "", criterion.depth === -1 ? "with sub-tags" : ""]
+    return [included ? `${modifier} ${included}`.trim() : "", criterion.depth === -1 ? hierarchySuffix : ""]
       .filter(Boolean)
       .join(" · ");
   }
@@ -414,6 +426,7 @@ export function formatFilterChipValue(
 }
 
 function MultiIdFilterChipDisplay({
+  def,
   value,
   nameMap,
   fallback,
@@ -477,7 +490,7 @@ function MultiIdFilterChipDisplay({
       {includedValues.length > 0 && excludedValues.length > 0 ? <span>&nbsp;but&nbsp;</span> : null}
       {excludedValues.length > 0 ? <span data-filter-excluded-prefix>{excludedPrefix.trim()} </span> : null}
       {excludedValues.length > 0 ? renderValues(excludedValues, "excluded", excludedConjunction) : null}
-      {criterion.depth === -1 ? <span>&nbsp;with sub-tags</span> : null}
+      {criterion.depth === -1 ? <span>&nbsp;{formatHierarchySuffix(def.entityType)}</span> : null}
     </span>
   );
 }
