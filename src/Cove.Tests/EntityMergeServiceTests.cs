@@ -377,6 +377,172 @@ public sealed class EntityMergeServiceTests
             keys.Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public async Task PerformerMerge_RewritesStoredJsonWithoutTrackingRowsItLeavesUnchanged()
+    {
+        await using var db = CreateContext();
+        var target = new Performer { Name = "Target" };
+        var source = new Performer { Name = "Source" };
+        var user = new User { Username = "json-rewrite-fixture", PasswordHash = "fixture" };
+        db.AddRange(target, source, user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var userSession = new UserSession { UserId = user.Id };
+        db.UserSessions.Add(userSession);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // The id's digits also occur inside unrelated numbers, which the text prefilter cannot tell apart.
+        var digitsContainingSourceId = int.Parse($"9{source.Id}9");
+        var referencingInteraction = new Interaction
+        {
+            UserId = user.Id,
+            HostType = InteractionHostType.Video,
+            HostId = 1,
+            Kind = InteractionKind.OpenDetail,
+            Meta = JsonDocument.Parse(JsonSerializer.Serialize(new { performerId = source.Id })),
+        };
+        var mentioningInteraction = new Interaction
+        {
+            UserId = user.Id,
+            HostType = InteractionHostType.Video,
+            HostId = 2,
+            Kind = InteractionKind.OpenDetail,
+            Meta = JsonDocument.Parse(JsonSerializer.Serialize(new { page = "performer", elapsedMs = digitsContainingSourceId })),
+        };
+        var referencingSegment = new Segment
+        {
+            HostType = SegmentHostType.Video,
+            HostId = 3,
+            StartSec = 1,
+            Payload = JsonDocument.Parse(JsonSerializer.Serialize(new
+            {
+                filter = new { performersCriterion = new { value = new[] { source.Id }, modifier = "INCLUDES" } },
+            })),
+        };
+        var unrelatedSegment = new Segment
+        {
+            HostType = SegmentHostType.Video,
+            HostId = 4,
+            StartSec = 1,
+            Payload = JsonDocument.Parse(JsonSerializer.Serialize(new { frame = digitsContainingSourceId })),
+        };
+        // Merging these sessions copies the latest session's context onto the surviving target session
+        // before the JSON rewrite, so the rewrite must also reach that pending in-memory edit.
+        var targetPlayback = new PlaybackSession
+        {
+            UserId = user.Id,
+            HostType = InteractionHostType.Performer,
+            HostId = target.Id,
+            SessionId = Guid.NewGuid(),
+            UserSessionId = userSession.Id,
+            StartedAt = DateTime.UtcNow.AddMinutes(-10),
+            LastSeenAt = DateTime.UtcNow.AddMinutes(-10),
+        };
+        var sourcePlayback = new PlaybackSession
+        {
+            UserId = user.Id,
+            HostType = InteractionHostType.Performer,
+            HostId = source.Id,
+            SessionId = Guid.NewGuid(),
+            UserSessionId = userSession.Id,
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            LastSeenAt = DateTime.UtcNow.AddMinutes(-5),
+            Context = JsonDocument.Parse(JsonSerializer.Serialize(new { performerId = source.Id })),
+        };
+        db.AddRange(referencingInteraction, mentioningInteraction, referencingSegment, unrelatedSegment, targetPlayback, sourcePlayback);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        await new PerformerMergeService(db).MergeAsync(target.Id, [source.Id], TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(db.ChangeTracker.Entries<Interaction>(), entry => entry.Entity.Id == mentioningInteraction.Id);
+        Assert.DoesNotContain(db.ChangeTracker.Entries<Segment>(), entry => entry.Entity.Id == unrelatedSegment.Id);
+        db.ChangeTracker.Clear();
+        var interactions = await db.Interactions.ToDictionaryAsync(row => row.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(target.Id, interactions[referencingInteraction.Id].Meta!.RootElement.GetProperty("performerId").GetInt32());
+        Assert.Equal(digitsContainingSourceId, interactions[mentioningInteraction.Id].Meta!.RootElement.GetProperty("elapsedMs").GetInt32());
+        var segments = await db.Segments.ToDictionaryAsync(row => row.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(
+            [target.Id],
+            segments[referencingSegment.Id].Payload!.RootElement.GetProperty("filter").GetProperty("performersCriterion")
+                .GetProperty("value").EnumerateArray().Select(value => value.GetInt32()).ToArray());
+        Assert.Equal(digitsContainingSourceId, segments[unrelatedSegment.Id].Payload!.RootElement.GetProperty("frame").GetInt32());
+        var playback = await db.PlaybackSessions.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(targetPlayback.Id, playback.Id);
+        Assert.Equal(target.Id, playback.Context!.RootElement.GetProperty("performerId").GetInt32());
+    }
+
+    [Fact]
+    public async Task StudioMerge_RewritesStudioFiltersThatOnlyNameTheEntityOutsideTheirIdProperty()
+    {
+        await using var db = CreateContext();
+        var target = new Studio { Name = "Target" };
+        var source = new Studio { Name = "Source" };
+        var user = new User { Username = "studio-json-fixture", PasswordHash = "fixture" };
+        db.AddRange(target, source, user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var interaction = new Interaction
+        {
+            UserId = user.Id,
+            HostType = InteractionHostType.Video,
+            HostId = 1,
+            Kind = InteractionKind.SearchQuery,
+            Meta = JsonDocument.Parse(JsonSerializer.Serialize(new { mode = "studios", parentId = source.Id })),
+        };
+        var group = new Group
+        {
+            Name = "Child studios",
+            QueryJson = JsonSerializer.Serialize(new { objectFilters = new { studios = new { parentId = source.Id } } }),
+        };
+        db.AddRange(interaction, group);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        await new StudioMergeService(db).MergeAsync(target.Id, [source.Id], TestContext.Current.CancellationToken);
+
+        db.ChangeTracker.Clear();
+        var meta = (await db.Interactions.SingleAsync(TestContext.Current.CancellationToken)).Meta!;
+        Assert.Equal(target.Id, meta.RootElement.GetProperty("parentId").GetInt32());
+        using var query = JsonDocument.Parse((await db.Groups.SingleAsync(TestContext.Current.CancellationToken)).QueryJson!);
+        Assert.Equal(
+            target.Id,
+            query.RootElement.GetProperty("objectFilters").GetProperty("studios").GetProperty("parentId").GetInt32());
+    }
+
+    [Fact]
+    public async Task StudioMerge_RewritesStudioShareLinksButNotTrackedLinksOfOtherKinds()
+    {
+        await using var db = CreateContext();
+        var target = new Studio { Name = "Target" };
+        var source = new Studio { Name = "Source" };
+        db.AddRange(target, source);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var studioLink = new ShareLink
+        {
+            TokenHash = "studio-link",
+            EntityKind = EntityKinds.Studio,
+            EntityIds = $"[{source.Id}]",
+        };
+        var videoLink = new ShareLink
+        {
+            TokenHash = "video-link",
+            EntityKind = "video",
+            EntityIds = $"[{source.Id}]",
+        };
+        db.ShareLinks.AddRange(studioLink, videoLink);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        // A caller's context may already track rows of a rewritten type that the merge must not touch.
+        var trackedVideoLink = await db.ShareLinks.SingleAsync(link => link.Id == videoLink.Id, TestContext.Current.CancellationToken);
+
+        await new StudioMergeService(db).MergeAsync(target.Id, [source.Id], TestContext.Current.CancellationToken);
+
+        Assert.Equal($"[{source.Id}]", trackedVideoLink.EntityIds);
+        db.ChangeTracker.Clear();
+        var links = await db.ShareLinks.ToDictionaryAsync(link => link.Id, TestContext.Current.CancellationToken);
+        Assert.Equal($"[{target.Id}]", links[studioLink.Id].EntityIds);
+        Assert.Equal($"[{source.Id}]", links[videoLink.Id].EntityIds);
+    }
+
     private static CoveContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<CoveContext>()
