@@ -17,6 +17,14 @@ internal static class FacePerformerAssignmentData
             CultureInfo.InvariantCulture,
             $"{KeyPrefix}{assignment.FaceId}:{assignment.PerformerId}:{assignment.HostType}:{assignment.HostId}");
 
+    /// <summary>
+    /// A LIKE pattern matching every key <see cref="BuildKey"/> produces for <paramref name="performerId"/>. Only
+    /// the performer id is numeric and enclosed in colons, so face and host ids cannot match; callers still parse
+    /// each candidate with <see cref="TryParseKey"/>.
+    /// </summary>
+    public static string PerformerKeyPattern(int performerId)
+        => string.Create(CultureInfo.InvariantCulture, $"{KeyPrefix}%:{performerId}:%");
+
     public static bool TryParseKey(string key, out Assignment assignment)
     {
         assignment = default;

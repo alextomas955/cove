@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Cove.ApiTests.Builders;
 using Cove.ApiTests.Infrastructure;
 using Cove.Core.DTOs;
@@ -108,6 +109,48 @@ public sealed class PerformerMergeApiTests(
         controlAfter.Details.Should().Be("Control details");
         controlAfter.Aliases.Should().Equal("Control alias");
         (await AsUser().GetVideoByIdAsync(controlVideo.Id, TestContext.Current.CancellationToken)).Performers.Select(performer => performer.Id).Should().Equal(control.Id);
+    }
+
+    [Fact]
+    [CoversEndpoint("POST", "/api/performers/merge")]
+    public async Task GivenStoredJsonReferencingSourceInAnyLetterCase_WhenOwnerMergesPerformers_ThenReferencesMoveAndUnrelatedNumbersStay()
+    {
+        // The merge narrows its JSON scans with a case-folded SQL match on the entity name, while the
+        // rewriter matches property names case-insensitively. SQLite LIKE ignores case on its own, so only
+        // PostgreSQL shows whether mixed-case keys in jsonb and text columns still reach the rewriter.
+        var suffix = Guid.NewGuid().ToString("N");
+        var target = await AsUser().CreatePerformerAsync(new PerformerBuilder()
+            .WithName($"JSON merge target {suffix}")
+            .Build(), TestContext.Current.CancellationToken);
+        var source = await AsUser().CreatePerformerAsync(new PerformerBuilder()
+            .WithName($"JSON merge source {suffix}")
+            .Build(), TestContext.Current.CancellationToken);
+        var video = await AsUser().CreateVideoAsync(new VideoBuilder()
+            .WithTitle($"JSON merge segment host {suffix}")
+            .Build(), TestContext.Current.CancellationToken);
+        var referencingSegmentId = await AsDbUser().CreateVideoSegmentWithPayloadAsync(
+            video.Id,
+            $$"""{"PerformerIds": [{{source.Id}}]}""",
+            TestContext.Current.CancellationToken);
+        var unrelatedSegmentId = await AsDbUser().CreateVideoSegmentWithPayloadAsync(
+            video.Id,
+            $$"""{"Frame": {{source.Id}}}""",
+            TestContext.Current.CancellationToken);
+        var referencingGroupId = await AsDbUser().CreateGroupWithQueryJsonAsync(
+            $"JSON merge group {suffix}",
+            $$$"""{"PerformersCriterion": {"value": [{{{source.Id}}}], "modifier": "INCLUDES"}}""",
+            TestContext.Current.CancellationToken);
+
+        await AsUser().MergePerformersAsync(target.Id, [source.Id], TestContext.Current.CancellationToken);
+
+        using (var payload = JsonDocument.Parse(await AsDbUser().GetSegmentPayloadJsonAsync(referencingSegmentId, TestContext.Current.CancellationToken)))
+            payload.RootElement.GetProperty("PerformerIds").EnumerateArray().Select(id => id.GetInt32())
+                .Should().Equal(target.Id);
+        using (var payload = JsonDocument.Parse(await AsDbUser().GetSegmentPayloadJsonAsync(unrelatedSegmentId, TestContext.Current.CancellationToken)))
+            payload.RootElement.GetProperty("Frame").GetInt32().Should().Be(source.Id);
+        using var query = JsonDocument.Parse((await AsDbUser().GetGroupQueryJsonAsync(referencingGroupId, TestContext.Current.CancellationToken))!);
+        query.RootElement.GetProperty("PerformersCriterion").GetProperty("value").EnumerateArray().Select(id => id.GetInt32())
+            .Should().Equal(target.Id);
     }
 
     private static void AssertUnmerged(

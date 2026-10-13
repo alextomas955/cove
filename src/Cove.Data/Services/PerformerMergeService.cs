@@ -331,9 +331,12 @@ public sealed class PerformerMergeService(
 
     private async Task TransferFacePerformerAssignmentsAsync(int targetId, int[] allIds, CancellationToken ct)
     {
+        // Load only the merged performers' assignments: every later save rescans each tracked entity, so
+        // loading the library's assignments would make the merge cost grow with the library.
+        var keyPatterns = allIds.Select(FacePerformerAssignmentData.PerformerKeyPattern).ToArray();
         var rows = await db.ExtensionData
             .Where(row => row.ExtensionId == FacePerformerAssignmentData.ExtensionId
-                && row.Key.StartsWith(FacePerformerAssignmentData.KeyPrefix))
+                && keyPatterns.Any(pattern => EF.Functions.Like(row.Key, pattern)))
             .ToListAsync(ct);
         var parsed = rows
             .Select(row => FacePerformerAssignmentData.TryParseKey(row.Key, out var assignment)

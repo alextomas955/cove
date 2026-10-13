@@ -588,83 +588,130 @@ internal sealed class EntityMergeMetadataService(CoveContext db)
 
         // The rewriters below are no-ops for rows whose JSON never mentions a merged source id,
         // so each load is prefiltered to a superset of affected rows instead of the whole table.
-        var fieldProvenance = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.FieldProvenance, "field_provenance", "ValueJson", sourceIds).ToListAsync(ct);
-        foreach (var row in fieldProvenance)
-            row.ValueJson = EntityReferenceJsonRewriter.RewriteFieldProvenanceValue(
+        // The generic rewriter only recognizes shapes that name the entity (performerId,
+        // studiosCriterion, "mode": "studios", ...), so those scans also require the entity name.
+        var entityName = descriptor.EntityType;
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.FieldProvenance, "field_provenance", "ValueJson", sourceIds),
+            row => row.Id,
+            row => Replace(row.ValueJson, EntityReferenceJsonRewriter.RewriteFieldProvenanceValue(
                 descriptor.EntityType,
                 row.FieldKey,
                 row.ValueJson,
-                idMap);
-
-        var interactions = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.Interactions, "interactions", "Meta", sourceIds).ToListAsync(ct);
-        foreach (var interaction in interactions)
-            interaction.Meta = EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, interaction.Meta, idMap);
-
-        var playbackSessions = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.PlaybackSessions, "playback_sessions", "Context", sourceIds).ToListAsync(ct);
-        foreach (var session in playbackSessions)
-            session.Context = EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, session.Context, idMap);
-
-        var playbackIntervals = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.PlaybackIntervals, "playback_intervals", "Context", sourceIds).ToListAsync(ct);
-        foreach (var interval in playbackIntervals)
-            interval.Context = EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, interval.Context, idMap);
-
-        var payloadSegments = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.Segments, "segments", "Payload", sourceIds).ToListAsync(ct);
-        foreach (var segment in payloadSegments)
-            segment.Payload = EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, segment.Payload, idMap);
-
-        var savedFilters = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.SavedFilters, "saved_filters", "ObjectFilter", sourceIds).ToListAsync(ct);
-        foreach (var filter in savedFilters)
-            filter.ObjectFilter = EntityReferenceJsonRewriter.Rewrite(
+                idMap), value => row.ValueJson = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.Interactions, "interactions", "Meta", sourceIds, entityName),
+            row => row.Id,
+            row => Replace(row.Meta, EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, row.Meta, idMap), value => row.Meta = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.PlaybackSessions, "playback_sessions", "Context", sourceIds, entityName),
+            row => row.Id,
+            row => Replace(row.Context, EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, row.Context, idMap), value => row.Context = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.PlaybackIntervals, "playback_intervals", "Context", sourceIds, entityName),
+            row => row.Id,
+            row => Replace(row.Context, EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, row.Context, idMap), value => row.Context = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.Segments, "segments", "Payload", sourceIds, entityName),
+            row => row.Id,
+            row => Replace(row.Payload, EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, row.Payload, idMap), value => row.Payload = value),
+            ct);
+        // A saved filter's mode can make it an entity filter without naming the entity in its JSON.
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.SavedFilters, "saved_filters", "ObjectFilter", sourceIds),
+            row => row.Id,
+            row => Replace(row.ObjectFilter, EntityReferenceJsonRewriter.Rewrite(
                 descriptor.EntityType,
-                filter.ObjectFilter,
+                row.ObjectFilter,
                 idMap,
-                filter.Mode.Equals(descriptor.EntityKind, StringComparison.OrdinalIgnoreCase)
-                    || filter.Mode.Equals($"{descriptor.EntityKind}s", StringComparison.OrdinalIgnoreCase));
-
-        var users = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.Users, "users", "UiPreferencesJson", sourceIds).ToListAsync(ct);
-        foreach (var user in users)
-            user.UiPreferencesJson = EntityReferenceJsonRewriter.RewriteUserUiPreferences(
+                row.Mode.Equals(descriptor.EntityKind, StringComparison.OrdinalIgnoreCase)
+                    || row.Mode.Equals($"{descriptor.EntityKind}s", StringComparison.OrdinalIgnoreCase)), value => row.ObjectFilter = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.Users, "users", "UiPreferencesJson", sourceIds),
+            row => row.Id,
+            row => Replace(row.UiPreferencesJson, EntityReferenceJsonRewriter.RewriteUserUiPreferences(
                 descriptor.EntityType,
-                user.UiPreferencesJson,
-                idMap);
-
-        var groups = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.Groups, "groups", "QueryJson", sourceIds).ToListAsync(ct);
-        foreach (var group in groups)
-            group.QueryJson = EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, group.QueryJson, idMap);
-
-        var groupItems = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.GroupItems, "group_items", "SourceQueryJson", sourceIds).ToListAsync(ct);
-        foreach (var item in groupItems)
-            item.SourceQueryJson = EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, item.SourceQueryJson, idMap);
-
-        var contentRules = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.RoleContentRules, "role_content_rules", "ScopeValue", sourceIds).ToListAsync(ct);
-        foreach (var rule in contentRules)
-            rule.ScopeValue = EntityReferenceJsonRewriter.RewriteRoleContentScope(
+                row.UiPreferencesJson,
+                idMap), value => row.UiPreferencesJson = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.Groups, "groups", "QueryJson", sourceIds, entityName),
+            row => row.Id,
+            row => Replace(row.QueryJson, EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, row.QueryJson, idMap), value => row.QueryJson = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.GroupItems, "group_items", "SourceQueryJson", sourceIds, entityName),
+            row => row.Id,
+            row => Replace(row.SourceQueryJson, EntityReferenceJsonRewriter.Rewrite(descriptor.EntityType, row.SourceQueryJson, idMap), value => row.SourceQueryJson = value),
+            ct);
+        // An attribute scope on an entity rule ({"path": "id", ...}) names the entity only in its row.
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.RoleContentRules, "role_content_rules", "ScopeValue", sourceIds),
+            row => row.Id,
+            row => Replace(row.ScopeValue, EntityReferenceJsonRewriter.RewriteRoleContentScope(
                 descriptor.EntityType,
-                rule.EntityKind,
-                rule.ScopeKind,
-                rule.ScopeValue,
-                idMap) ?? rule.ScopeValue;
-
-        var shareLinks = await StoredJsonReferenceScan.PrefilterBySourceIds(
-            db.ShareLinks, "share_links", "EntityIds", sourceIds)
-            .Where(link => link.EntityKind.ToLower() == descriptor.EntityKind)
-            .ToListAsync(ct);
-        foreach (var link in shareLinks)
-            link.EntityIds = RewriteShareLinkIds(descriptor.EntityType, link.EntityIds, idMap);
+                row.EntityKind,
+                row.ScopeKind,
+                row.ScopeValue,
+                idMap) ?? row.ScopeValue, value => row.ScopeValue = value),
+            ct);
+        await RewriteJsonReferencesAsync(
+            StoredJsonReferenceScan.PrefilterBySourceIds(db.ShareLinks, "share_links", "EntityIds", sourceIds)
+                .Where(link => link.EntityKind.ToLower() == descriptor.EntityKind),
+            row => row.Id,
+            row => row.EntityKind.Equals(descriptor.EntityKind, StringComparison.OrdinalIgnoreCase)
+                && Replace(row.EntityIds, RewriteShareLinkIds(descriptor.EntityType, row.EntityIds, idMap), value => row.EntityIds = value),
+            ct);
 
         // Scrape attempt payloads and AI/model metadata are provider- or extension-defined immutable
         // history. Their numeric fields are opaque; only the typed EntityId/HostId/TargetId columns
         // transferred above are known to contain Cove-local identifiers.
+    }
+
+    /// <summary>
+    /// Applies <paramref name="rewrite"/> (which returns whether it changed the row) to every candidate row
+    /// while tracking only the rows it changes. The prefilters still over-match, and every row tracked here
+    /// is rescanned by each later save in the merge, so candidates are scanned untracked and only changed
+    /// rows are reloaded for update. Rows this merge already tracks may carry pending JSON edits, such as
+    /// a merged playback session's copied context, so they are rewritten in place first. Those tracked rows
+    /// bypass <paramref name="candidates"/>, so <paramref name="rewrite"/> must itself check every condition
+    /// that decides whether a row may be rewritten; the query only narrows the scan.
+    /// </summary>
+    private async Task RewriteJsonReferencesAsync<TEntity, TKey>(
+        IQueryable<TEntity> candidates,
+        Func<TEntity, TKey> getKey,
+        Func<TEntity, bool> rewrite,
+        CancellationToken ct)
+        where TEntity : class
+    {
+        foreach (var entry in db.ChangeTracker.Entries<TEntity>().ToArray())
+            if (entry.State != EntityState.Deleted)
+                rewrite(entry.Entity);
+
+        var changedKeys = (await candidates.AsNoTracking().ToListAsync(ct))
+            .Where(rewrite)
+            .Select(getKey)
+            .ToArray();
+        if (changedKeys.Length == 0)
+            return;
+        var rows = await db.Set<TEntity>()
+            .Where(row => changedKeys.Contains(EF.Property<TKey>(row, "Id")))
+            .ToListAsync(ct);
+        foreach (var row in rows)
+            rewrite(row);
+    }
+
+    private static bool Replace<TValue>(TValue current, TValue rewritten, Action<TValue> assign)
+    {
+        if (EqualityComparer<TValue>.Default.Equals(current, rewritten))
+            return false;
+        assign(rewritten);
+        return true;
     }
 
     private static string RewriteShareLinkIds(
