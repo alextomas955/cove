@@ -47,6 +47,7 @@ import { MutationFailureNotice } from "./components/MutationFailureNotice";
 import { StartupGate } from "./components/StartupGate";
 import { getApiValidationFailureDetail } from "./utils/requestFailure";
 import { ExtensionKeyboardActions } from "./extensions/ExtensionKeyboardActions";
+import { DocumentTitleScope } from "./hooks/useDocumentTitle";
 import { ThemeGate } from "./components/ThemeGate";
 import { DashboardSkeleton } from "./components/DashboardSkeleton";
 
@@ -704,8 +705,12 @@ export function AppRoutes({ route, navigate }: { route: Route; navigate: (r: Rou
       if (route.slug !== undefined) {
         props.slug = route.slug;
       }
-      // oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference
-      return <Component {...props} />;
+      return (
+        <DocumentTitleScope title={extPage.label}>
+          {/* oxlint-disable-next-line react/static-components -- resolved from the extension component registry, which returns a stable reference */}
+          <Component {...props} />
+        </DocumentTitleScope>
+      );
     }
   }
 

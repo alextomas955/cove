@@ -131,7 +131,7 @@ The `v1` barrel groups these exports:
 | Forms and dialogs | `ConfirmDialog`, `EditModal`, `Field`, `TextInput`, `TextArea`, `NumberInput`, `SelectInput`, `SaveButton`, `ImageInput` |
 | Ratings | `InteractiveRating`, `RatingBadge`, `RatingBanner`, `RatingField`, `getRatingBannerColor`, `convertToRatingFormat`, `convertFromRatingFormat`, `formatDisplayRating`, `getRatingMax`, `getRatingStep`, `getRatingInputLabel`, `normalizeRatingOptions`, `defaultRatingSystemOptions` |
 | Utilities and custom fields | `TagBadge`, `NarrativeText`, `useMarkdownRenderingEnabled`, `formatDuration`, `formatFileSize`, `formatDate`, `getResolutionLabel`, `CustomFieldsDisplay`, `CustomFieldsEditor` |
-| Host integration | `openTutorialStoryboard`, `registerManualContext`, `useManualContext`, `useMultiSelect`, `useKeySequence`, `useListUrlState`, `useAppConfig`, `APP_FLOATING_UI_SLOT`, `MEDIA_PLAYER_ACTIONS_SLOT`, `MEDIA_PLAYER_OVERLAY_SLOT` |
+| Host integration | `openTutorialStoryboard`, `registerManualContext`, `useManualContext`, `useMultiSelect`, `useKeySequence`, `useListUrlState`, `useAppConfig`, `useDocumentTitle`, `APP_FLOATING_UI_SLOT`, `MEDIA_PLAYER_ACTIONS_SLOT`, `MEDIA_PLAYER_OVERLAY_SLOT` |
 | Types | `MediaDetailLayoutProps`, `MediaDetailTab`, `MediaDetailSectionProps`, `LightboxImage`, `DisplayMode`, `CriterionDefinition`, `TutorialOpenRequest`, `FindFilter`, `EntityMediaFit`, `EntityMediaRenderProps`, `EntityMediaSurface`, `EntityReferenceOption`, `EntityReferenceType`, `MediaPlayerContentRect`, `MediaPlayerExtensionContext`, `MediaPlayerInteractionModeOptions`, `MediaPlayerSurface`, `VideoPlayerSeek`, `VideoPlayerPlaybackControls`, `DetailListPaginationProps` |
 
 The `@cove/extension-sdk` package also publishes `DashboardWidgetProps`, `DashboardWidgetEditorProps`, `DashboardWidgetContribution`, `DashboardWidgetPresentation`, and `JsonValue` for typing dashboard bundles. Render and editor props include the saved `flow` or `canvas` presentation. These are compile-time contracts; widget bundles still import React and request helpers from the versioned `@cove/runtime/*` modules.
@@ -185,6 +185,21 @@ export function Summary({ details }: { details: string }) {
 ```
 
 The component renders literal whitespace-preserving text by default. When the user enables Markdown rendering, it applies Cove's safe textual Markdown rules and theme-aware styles. Raw HTML and images are not rendered. Safe links open in a new tab. Use `useMarkdownRenderingEnabled()` only when surrounding extension UI must also change; prefer `NarrativeText` when only the text rendering differs.
+
+### Browser title
+
+A page an extension contributes is titled with its label, such as "Segment Studio | Cove". Call `useDocumentTitle` to name the view more specifically; on the extension's page the title goes in front of the label:
+
+```tsx
+import { useDocumentTitle } from "@cove/runtime/components";
+
+export function Editor({ video }: { video: { title: string } }) {
+  useDocumentTitle(video.title); // "<video title> | Segment Studio | Cove"
+  return null;
+}
+```
+
+The title applies while the component is mounted. When several components set one, the innermost wins, and between siblings the one mounted last. An empty title, or `false` as the second argument, leaves the title to the enclosing page. Outside the extension's own pages, such as in a tab on a video's page, the call replaces that page's title rather than adding to it. The hook is new in Cove 1.6, so an extension that supports older versions should look it up on the module namespace (`import * as components from "@cove/runtime/components"`) instead of importing it by name, which would stop the bundle loading on those versions.
 
 ### Reusable video player controls
 
