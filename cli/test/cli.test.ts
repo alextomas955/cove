@@ -847,12 +847,153 @@ test("groups delete requires confirmation and deletes the named group", async ()
   expect(JSON.parse(stdout)).toEqual({ id: 42, name: "Road Trip", deleted: true });
 });
 
+test("group commands resolve a group by ID first, then by exact name, and refuse to guess", async () => {
+  const groups = [
+    { id: 7, name: "Road Trip", kind: "static", tags: [] },
+    { id: 8, name: "road trip", kind: "static", tags: [] },
+    { id: 9, name: "Road Trip 2", kind: "static", tags: [] },
+    { id: 10, name: "2024", kind: "static", tags: [] },
+    { id: 11, name: "7", kind: "static", tags: [] },
+    { id: 12, name: "Twins", kind: "static", tags: [] },
+    { id: 13, name: "Twins", kind: "static", tags: [] },
+    { id: 14, name: "Solo", kind: "static", tags: [] },
+    { id: 15, name: "Spaced ", kind: "static", tags: [] },
+    { id: 16, name: "Spaced", kind: "static", tags: [] },
+    { id: 17, name: "Café", kind: "static", tags: [] },
+    { id: 18, name: "CAFÉ", kind: "static", tags: [] },
+    { id: 19, name: "Secret", kind: "static", tags: [] },
+  ];
+  const deleted: string[] = [];
+  const running = startServer(async request => {
+    const url = new URL(request.url);
+    const byId = /^\/api\/groups\/(\d+)$/.exec(url.pathname);
+    if (byId && request.method === "DELETE") {
+      deleted.push(byId[1]!);
+      return new Response(null, { status: 204 });
+    }
+    if (byId) {
+      if (byId[1] === "19") return json({ title: "Forbidden", status: 403 }, 403);
+      const group = groups.find(candidate => candidate.id === Number(byId[1]));
+      return group ? json(group) : json({ title: "Not Found", status: 404 }, 404);
+    }
+    expect(`${request.method} ${url.pathname}`).toBe("POST /api/groups/find");
+    const body = await request.json() as { findFilter: Record<string, unknown>; objectFilter: { name: string } };
+    expect(body.findFilter).toEqual({ page: 1, perPage: 250, sort: "name", direction: "asc" });
+    // Like ILIKE under the C locale: only ASCII letters fold.
+    const fold = (value: string) => value.replace(/[A-Z]/g, letter => letter.toLowerCase());
+    const items = groups.filter(group => fold(group.name).includes(fold(body.objectFilter.name)));
+    return json({ items, totalCount: items.length, page: 1, perPage: 250 });
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const environment = { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory };
+  const run = async (...args: string[]) => {
+    const attempt = Bun.spawn([process.execPath, "src/index.ts", "groups", ...args, "--json"], { cwd: join(import.meta.dir, ".."), env: environment, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([new Response(attempt.stdout).text(), new Response(attempt.stderr).text(), attempt.exited]);
+    return exitCode === 0 ? JSON.parse(stdout) : JSON.parse(stderr);
+  };
+  const show = (reference: string) => run("show", reference);
+
+  expect((await show("Road Trip")).id).toBe(7);
+  expect((await show("road trip")).id).toBe(8);
+  expect((await show("ROAD TRIP")).error.code).toBe("GROUP_AMBIGUOUS");
+  expect((await show("solo")).id).toBe(14);
+  expect((await show("2024")).id).toBe(10);
+  expect((await show("7")).id).toBe(7);
+  expect((await show("Spaced ")).id).toBe(15);
+  expect((await show("Spaced")).id).toBe(16);
+  expect((await show("Café")).id).toBe(17);
+  expect((await show("café")).id).toBe(17);
+  expect((await show("Twins")).error).toMatchObject({ code: "GROUP_AMBIGUOUS", message: "More than one group matches the name “Twins”: #12 “Twins”, #13 “Twins”. Use a group ID." });
+  expect((await show("Road")).error.code).toBe("GROUP_NOT_FOUND");
+  expect((await show("19")).error.status).toBe(403);
+
+  expect((await run("delete", "2024", "--yes")).error).toMatchObject({ code: "GROUP_NOT_FOUND", status: 404 });
+  expect((await run("delete", "Twins", "--yes")).error.code).toBe("GROUP_AMBIGUOUS");
+  expect(deleted).toEqual([]);
+  expect(await run("delete", "Solo", "--yes")).toEqual({ id: 14, name: "Solo", deleted: true });
+  expect(await run("delete", "10", "--yes")).toEqual({ id: 10, name: "2024", deleted: true });
+  expect(deleted).toEqual(["14", "10"]);
+});
+
+test("group name lookup reads every page and counts a group repeated across pages once", async () => {
+  const group = (id: number, name: string) => ({ id, name, kind: "static", tags: [] });
+  const pages: Record<number, unknown[]> = {
+    1: [group(1, "Target practice"), group(2, "Target")],
+    2: [group(2, "Target"), group(3, "Target range")],
+    3: [group(4, "Targets")],
+  };
+  const requestedPages: number[] = [];
+  const running = startServer(async request => {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/groups/2") return json(group(2, "Target"));
+    expect(`${request.method} ${url.pathname}`).toBe("POST /api/groups/find");
+    const body = await request.json() as { findFilter: { page: number } };
+    requestedPages.push(body.findFilter.page);
+    return json({ items: pages[body.findFilter.page] ?? [], totalCount: 5, page: body.findFilter.page, perPage: 250 });
+  });
+  servers.push(running.server);
+  const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+  directories.push(directory);
+  const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "show", "Target", "--json"], {
+    cwd: join(import.meta.dir, ".."), env: { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory }, stdout: "pipe", stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(JSON.parse(stdout).id).toBe(2);
+  expect(requestedPages).toEqual([1, 2, 3]);
+});
+
+test("group item commands accept a group name and act on the group it resolves to", async () => {
+  const items = [groupItemRecord(101, 0), groupItemRecord(103, 1)];
+  const cases = [
+    { args: ["list", "Road Trip"], writes: [] },
+    { args: ["add", "Road Trip", "video", "7"], writes: ["POST /api/groups/42/items", "PUT /api/groups/42/items/reorder"] },
+    { args: ["remove", "Road Trip", "103"], writes: ["DELETE /api/groups/42/items/103"] },
+    { args: ["move", "Road Trip", "103", "--first"], writes: ["PUT /api/groups/42/items/reorder"] },
+  ];
+  for (const testCase of cases) {
+    const writes: string[] = [];
+    const running = startServer(async request => {
+      const url = new URL(request.url);
+      if (request.method === "POST" && url.pathname === "/api/groups/find") {
+        const body = await request.json() as { objectFilter: { name: string } };
+        expect(body.objectFilter.name).toBe("Road Trip");
+        return json({ items: [{ id: 42, name: "Road Trip", kind: "static", tags: [] }], totalCount: 1, page: 1, perPage: 250 });
+      }
+      if (url.pathname === "/api/groups/42") return json({ id: 42, name: "Road Trip", kind: "static", allowedHostTypes: ["video"], tags: [] });
+      if (url.pathname === "/api/videos/7") return json({ id: 7 });
+      if (request.method !== "GET") {
+        writes.push(`${request.method} ${url.pathname}`);
+        if (request.method === "POST") return json(groupItemRecord(200, 2, "video", 7), 201);
+        return request.method === "DELETE" ? new Response(null, { status: 204 }) : json(null);
+      }
+      expect(url.pathname).toBe("/api/groups/42/items");
+      return json(items);
+    });
+    servers.push(running.server);
+    const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));
+    directories.push(directory);
+    const processResult = Bun.spawn([process.execPath, "src/index.ts", "groups", "items", ...testCase.args, "--json"], {
+      cwd: join(import.meta.dir, ".."), env: { ...process.env, COVE_SERVER: running.url, COVE_TOKEN: "test-token", COVE_CONFIG_DIR: directory }, stdout: "pipe", stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([new Response(processResult.stdout).text(), new Response(processResult.stderr).text(), processResult.exited]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout).groupId).toBe(42);
+    expect(writes).toEqual(testCase.writes);
+  }
+});
+
 test("group items list preserves membership identities in machine output", async () => {
   const items = [
     { id: 103, groupId: 42, orderIndex: 0, kind: "video", videoId: 7, videoTitle: "First", hostType: "video", hostId: 7, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
     { id: 107, groupId: 42, orderIndex: 1, kind: "image", imageId: 8, imageTitle: "Second", hostType: "image", hostId: 8, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
   ];
   const running = startServer(request => {
+    if (new URL(request.url).pathname === "/api/groups/42") return json({ id: 42, name: "Static", kind: "static", tags: [] });
     expect(new URL(request.url).pathname).toBe("/api/groups/42/items");
     return json(items);
   });
@@ -1016,7 +1157,7 @@ test("group items move submits visible no-ops and validates membership IDs", asy
     expect(stdout).toBe("");
     expect(JSON.parse(stderr)).toMatchObject({ error: { code: "INVALID_ARGUMENT", message: testCase.message } });
   }
-  expect(requestCount).toBe(7);
+  expect(requestCount).toBe(6);
 });
 
 test("group items move uses the existing reorder contract without capability negotiation", async () => {
@@ -1851,7 +1992,7 @@ test("every actionable command shows inherited options and generic examples", as
     { command: ["groups", "list"], example: "cove-cli groups list --query \"Example\"" },
     { command: ["groups", "show"], example: "cove-cli groups show 42 --profile personal" },
     { command: ["groups", "create"], example: "cove-cli groups create \"Road Trip\"" },
-    { command: ["groups", "delete"], example: "cove-cli groups delete 42 --yes" },
+    { command: ["groups", "delete"], example: "cove-cli groups delete \"Road Trip\" --yes" },
     { command: ["groups", "items", "list"], example: "cove-cli groups items list 42 --profile personal" },
     { command: ["groups", "items", "move"], example: "cove-cli groups items move 42 103 --first" },
     { command: ["groups", "items", "add"], example: "cove-cli groups items add 42 video 7 8 9" },

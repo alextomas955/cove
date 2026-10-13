@@ -303,9 +303,72 @@ function groupItemDestinationIndex(options: GroupItemMoveOptions): number {
   return options.first ? 0 : options.toPosition !== undefined ? options.toPosition - 1 : 2_147_483_647;
 }
 
-async function staticGroupForItemWrite(client: CoveClient, groupId: number, action: string): Promise<GroupRecord> {
-  const group = await client.get<unknown>(`groups/${groupId}`);
+async function groupById(client: CoveClient, id: number): Promise<GroupRecord> {
+  const group = await client.get<unknown>(`groups/${id}`);
   if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group.");
+  return group;
+}
+
+/** Folds only A–Z, matching the bundled PostgreSQL's ILIKE under the C locale, so no match falls outside what the server returned. */
+function asciiLower(value: string): string {
+  return value.replace(/[A-Z]/g, letter => letter.toLowerCase());
+}
+
+/**
+ * Resolves a group by ID or by name. An all-digit reference is tried as an ID first and then as a
+ * name, so a group named "2024" stays reachable unless another group has that ID; with
+ * `digitsAreIds` it is an ID only, so a retried delete of a removed group cannot fall through to a
+ * group that happens to be named after that ID. Group names are not unique in Cove, so a name
+ * matching several groups is rejected rather than guessed; an exact match wins over one that
+ * differs only in ASCII letter case.
+ */
+async function resolveGroup(client: CoveClient, reference: string, options: { digitsAreIds?: boolean } = {}): Promise<GroupRecord> {
+  if (!reference.trim()) throw new CliError("INVALID_ARGUMENT", "The group reference cannot be empty.");
+  const digits = reference.trim();
+  if (/^\d+$/.test(digits)) {
+    const id = Number(digits);
+    if (options.digitsAreIds) {
+      try {
+        return await groupById(client, entityId(digits));
+      } catch (error) {
+        if (error instanceof CliError && error.status === 404) throw new CliError("GROUP_NOT_FOUND", `No group has ID ${id}. Groups with an all-digit name are deleted by their ID.`, { status: 404 });
+        throw error;
+      }
+    }
+    if (id >= 1 && id <= 2_147_483_647) {
+      try {
+        return await groupById(client, id);
+      } catch (error) {
+        if (!(error instanceof CliError && error.status === 404)) throw error;
+      }
+    }
+  }
+  // Names are matched as given, because Cove keeps leading and trailing spaces in group names. The
+  // name filter is a case-insensitive substring match, so it returns a superset of the matches.
+  // POST find is not output-cached, so a duplicate created moments ago is still seen.
+  const candidates = new Map<number, GroupRecord>();
+  for (let page = 1, received = 0; ; page += 1) {
+    const response = await client.post<unknown>("groups/find", { findFilter: { page, perPage: 250, sort: "name", direction: "asc" }, objectFilter: { name: reference } });
+    if (!isRecord(response) || !Array.isArray(response.items) || !response.items.every(isGroupRecord) || typeof response.totalCount !== "number") {
+      throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group list.");
+    }
+    for (const group of response.items) candidates.set(group.id, group);
+    received += response.items.length;
+    if (!response.items.length || received >= response.totalCount) break;
+  }
+  const exact = [...candidates.values()].filter(group => group.name === reference);
+  const matches = exact.length ? exact : [...candidates.values()].filter(group => asciiLower(group.name) === asciiLower(reference));
+  if (matches.length > 1) {
+    throw new CliError("GROUP_AMBIGUOUS", `More than one group matches the name “${reference}”: ${matches.map(group => `#${group.id} “${group.name}”`).join(", ")}. Use a group ID.`, {
+      details: { candidates: matches.map(group => ({ id: group.id, name: group.name })) },
+    });
+  }
+  if (!matches[0]) throw new CliError("GROUP_NOT_FOUND", `No group has the ID or name “${reference}”. Run \`cove-cli groups list --query <text>\` to find it.`);
+  return groupById(client, matches[0].id);
+}
+
+async function staticGroupForItemWrite(client: CoveClient, reference: string, action: string): Promise<GroupRecord> {
+  const group = await resolveGroup(client, reference);
   if (group.kind === "dynamic" || group.kind === 2) throw new CliError("FEATURE_UNAVAILABLE", `Dynamic groups resolve their items from a query, so items cannot be ${action}.`);
   return group;
 }
@@ -1503,7 +1566,15 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       const result = await listEntities<GroupRecord>(client, "groups", {}, queryOptions, "group", isGroupRecord);
       print({ groups: result.items, totalCount: result.totalCount }, global, () => renderGroups(result.items, renderFor(global, listRenderContext(client.server, result.totalCount, options, 25, queryOptions.defaultFilterApplied, queryOptions.appliedFilterSummary))), result.items);
     });
-  addIdShowCommand<GroupRecord>(store, groupCommands, "group", isGroupRecord, renderCatalogDetail, accent);
+  withExamples(groupCommands.command("show <id-or-name>").description("Show one group by ID or exact name"), [
+    "cove-cli groups show 42 --profile personal",
+    "cove-cli groups show \"Road Trip\" --json",
+  ]).action(async (reference: string, _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const group = await resolveGroup(client, reference);
+    print(group, global, () => renderCatalogDetail(group, "group", presentationFor(global, accent, { server: client.server })));
+  });
   withExamples(groupCommands.command("create <name>").description("Create an empty static group")
     .option("--description <text>", "describe what the group holds")
     .option("--director <name>", "director credit")
@@ -1518,49 +1589,45 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
     if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group object.");
     print(group, global, () => renderCatalogDetail(group, "group", presentationFor(global, accent, { server: client.server })));
   });
-  withExamples(groupCommands.command("delete <id>").description("Delete a group; the videos and other records it holds stay in the library").requiredOption("--yes", "confirm deletion"), [
-    "cove-cli groups delete 42 --yes",
+  withExamples(groupCommands.command("delete <id-or-name>").description("Delete a group; an all-digit reference is always an ID. The videos and other records the group holds stay in the library").requiredOption("--yes", "confirm deletion"), [
+    "cove-cli groups delete \"Road Trip\" --yes",
     "cove-cli groups delete 42 --yes --json",
   ]).action(async (reference: string, _options, command: Command) => {
     const global = globals(command);
-    const id = entityId(reference);
     const { client } = await clientFor(store, global);
-    const group = await client.get<unknown>(`groups/${id}`);
-    if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group object.");
-    await client.delete(`groups/${id}`);
-    print({ id, name: group.name, deleted: true }, global, () => renderGroupDeleted(group, renderFor(global)));
+    const group = await resolveGroup(client, reference, { digitsAreIds: true });
+    await client.delete(`groups/${group.id}`);
+    print({ id: group.id, name: group.name, deleted: true }, global, () => renderGroupDeleted(group, renderFor(global)));
   });
-  const groupItemCommands = groupCommands.command("items").description("List, add, remove, and reorder items in a group");
-  withExamples(groupItemCommands.command("list <group-id>").description("List a group's items in their current order"), [
+  const groupItemCommands = groupCommands.command("items").description("List, add, remove, and reorder items in a group, given by ID or exact name");
+  withExamples(groupItemCommands.command("list <group>").description("List a group's items in their current order"), [
     "cove-cli groups items list 42 --profile personal",
-    "cove-cli groups items list 42 --json",
+    "cove-cli groups items list \"Road Trip\" --json",
   ]).action(async (groupReference: string, _options, command: Command) => {
     const global = globals(command);
-    const groupId = entityId(groupReference);
     const { client } = await clientFor(store, global);
-    const items = await client.get<unknown>(`groups/${groupId}/items`);
-    if (!isGroupItemList(items, groupId)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group item list.");
+    const groupId = (await resolveGroup(client, groupReference)).id;
+    const items = await groupItems(client, groupId);
     print({ groupId, items }, global, () => renderGroupItems(items, presentationFor(global, accent, { server: client.server })), items);
   });
-  withExamples(groupItemCommands.command("move <group-id> <item-id...>").description("Move one or more group items as an ordered block")
+  withExamples(groupItemCommands.command("move <group> <item-id...>").description("Move one or more group items as an ordered block")
     .option("--first", "place the block at the beginning")
     .option("--last", "place the block at the end")
     .option("--to-position <number>", "place at this 1-based absolute position; positions past the final insertion slot place the block last", singlePositiveInteger("--to-position", 2_147_483_647)), [
       "cove-cli groups items move 42 103 --first",
       "cove-cli groups items move 42 103 107 109 --to-position 5",
-      "cove-cli groups items move 42 103 --to-position 3 --json",
+      "cove-cli groups items move \"Road Trip\" 103 --to-position 3 --json",
     ]).action(async (groupReference: string, itemReferences: string[], options: GroupItemMoveOptions, command: Command) => {
       const global = globals(command);
-      const groupId = entityId(groupReference);
       rejectRepeatedOptions(command, ["--first", "--last", "--to-position"]);
       const destinationCount = [options.first === true, options.last === true, options.toPosition !== undefined].filter(Boolean).length;
       if (destinationCount !== 1) throw new CliError("INVALID_ARGUMENT", "Choose exactly one destination: --first, --last, or --to-position.");
-      const { client } = await clientFor(store, global);
-      const group = await client.get<unknown>(`groups/${groupId}`);
-      if (!isGroupRecord(group)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group.");
-      if (group.kind === "dynamic" || group.kind === 2) throw new CliError("FEATURE_UNAVAILABLE", "Dynamic groups cannot be reordered.");
       const movingIds = itemReferences.map(entityId);
       if (new Set(movingIds).size !== movingIds.length) throw new CliError("INVALID_ARGUMENT", "Each group item ID may only be moved once.");
+      const { client } = await clientFor(store, global);
+      const group = await resolveGroup(client, groupReference);
+      const groupId = group.id;
+      if (group.kind === "dynamic" || group.kind === 2) throw new CliError("FEATURE_UNAVAILABLE", "Dynamic groups cannot be reordered.");
       const current = await client.get<unknown>(`groups/${groupId}/items`);
       if (!isGroupItemList(current, groupId)) throw new CliError("INVALID_RESPONSE", "Cove returned an invalid group item list.");
       const move = groupItemMove(current, movingIds, options);
@@ -1570,24 +1637,24 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       const items = refreshed;
       print({ groupId, items }, global, () => renderGroupItems(items, presentationFor(global, accent, { server: client.server })), items);
     });
-  withExamples(groupItemCommands.command("add <group-id> <type> <id...>").description(`Add records to a group as items, at the end unless a destination is given; type is one of ${Object.keys(GROUP_ITEM_HOSTS).join(", ")}`)
+  withExamples(groupItemCommands.command("add <group> <type> <id...>").description(`Add records to a group as items, at the end unless a destination is given; type is one of ${Object.keys(GROUP_ITEM_HOSTS).join(", ")}`)
     .option("--first", "place the new items at the beginning")
     .option("--last", "place the new items at the end (default)")
     .option("--to-position <number>", "place the new items starting at this 1-based position", singlePositiveInteger("--to-position", 2_147_483_647)), [
       "cove-cli groups items add 42 video 7 8 9",
       "cove-cli groups items add 42 image 15 --first",
-      "cove-cli groups items add 42 performer 3 --to-position 2 --json",
+      "cove-cli groups items add \"Road Trip\" performer 3 --to-position 2 --json",
     ]).action(async (groupReference: string, typeValue: string, hostReferences: string[], options: GroupItemMoveOptions, command: Command) => {
       const global = globals(command);
-      const groupId = entityId(groupReference);
       const hostType = groupItemHostType(typeValue);
       rejectRepeatedOptions(command, ["--first", "--last", "--to-position"]);
       const startIndex = groupItemDestinationIndex(options);
       const hostIds = hostReferences.map(entityId);
       if (new Set(hostIds).size !== hostIds.length) throw new CliError("INVALID_ARGUMENT", "Each ID may only be added once per command.");
-      if (hostType === "group" && hostIds.includes(groupId)) throw new CliError("INVALID_ARGUMENT", "A group cannot contain itself.");
       const { client } = await clientFor(store, global);
-      const group = await staticGroupForItemWrite(client, groupId, "added");
+      const group = await staticGroupForItemWrite(client, groupReference, "added");
+      const groupId = group.id;
+      if (hostType === "group" && hostIds.includes(groupId)) throw new CliError("INVALID_ARGUMENT", "A group cannot contain itself.");
       const allowed = group.allowedHostTypes?.length ? group.allowedHostTypes : ["video"];
       if (!allowed.some(value => value.toLowerCase() === hostType)) throw new CliError("INVALID_ARGUMENT", `This group does not allow ${hostType} items. It allows: ${allowed.join(", ")}.`);
       // Resolve every host before adding any, so an unknown ID leaves the group untouched.
@@ -1611,16 +1678,15 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       const items = await groupItems(client, groupId);
       print({ groupId, added, items }, global, () => renderGroupItems(items, presentationFor(global, accent, { server: client.server })), items);
     });
-  withExamples(groupItemCommands.command("remove <group-id> <item-id...>").description("Remove items from a group by group item ID; the records themselves stay in the library"), [
+  withExamples(groupItemCommands.command("remove <group> <item-id...>").description("Remove items from a group by group item ID; the records themselves stay in the library"), [
     "cove-cli groups items remove 42 103",
-    "cove-cli groups items remove 42 103 107 --json",
+    "cove-cli groups items remove \"Road Trip\" 103 107 --json",
   ]).action(async (groupReference: string, itemReferences: string[], _options, command: Command) => {
     const global = globals(command);
-    const groupId = entityId(groupReference);
     const itemIds = itemReferences.map(entityId);
     if (new Set(itemIds).size !== itemIds.length) throw new CliError("INVALID_ARGUMENT", "Each group item ID may only be removed once.");
     const { client } = await clientFor(store, global);
-    await staticGroupForItemWrite(client, groupId, "removed");
+    const groupId = (await staticGroupForItemWrite(client, groupReference, "removed")).id;
     const current = new Set((await groupItems(client, groupId)).map(item => item.id));
     const missing = itemIds.filter(id => !current.has(id));
     if (missing.length) throw new CliError("INVALID_ARGUMENT", `Group item ${missing.length === 1 ? "ID" : "IDs"} ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not in this group.`);
