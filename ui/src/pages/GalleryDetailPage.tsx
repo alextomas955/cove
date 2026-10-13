@@ -320,6 +320,7 @@ export function GalleryDetailPage({ id, onNavigate }: Props) {
       title: img.title,
       interactionSource: "galleryDetailPage",
       interactionMeta: { galleryId: id },
+      references: img,
     }),
     [id],
   );

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { entityImages } from "../api/client";
 import type { Tag } from "../api/types";
 import { ExtensionComponentOverrideRenderer, useExtensions } from "../extensions/ExtensionLoader";
+import { fullscreenContainerFor } from "../utils/fullscreenPortal";
 
 export const ENTITY_MEDIA_TARGET = "entity.media" as const;
 
@@ -225,6 +226,7 @@ export function EntityMediaHover({
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const [aspectRatio, setAspectRatio] = useState(DEFAULT_HOVER_ASPECT_RATIO);
   const preview = useEntityMediaPreview({ ...mediaProps, surface: "hover", className: "h-full w-full" });
@@ -296,9 +298,15 @@ export function EntityMediaHover({
     <span
       ref={anchorRef}
       className={`relative ${wrapperClassName}`}
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={() => {
+        setPortalTarget(fullscreenContainerFor(anchorRef.current));
+        setOpen(true);
+      }}
       onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onFocus={() => {
+        setPortalTarget(fullscreenContainerFor(anchorRef.current));
+        setOpen(true);
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
       }}
@@ -322,7 +330,7 @@ export function EntityMediaHover({
                 <div className="border-border/70 [[data-media-frame]:not(:empty)+&]:border-t">{footer}</div>
               ) : null}
             </div>,
-            document.body,
+            portalTarget ?? document.body,
           )
         : null}
     </span>

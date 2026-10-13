@@ -67,7 +67,12 @@ describe("Lightbox image engagement", () => {
     expect(await screen.findByRole("button", { name: "Like image (2 likes)" })).toBeInTheDocument();
 
     const controls = screen.getByRole("button", { name: "Rate image 60" }).parentElement;
-    expect(controls).toHaveClass("absolute", "bottom-[max(1rem,env(safe-area-inset-bottom))]", "left-4");
+    expect(controls?.parentElement).toHaveClass(
+      "absolute",
+      "bottom-[max(1rem,env(safe-area-inset-bottom))]",
+      "inset-x-4",
+    );
+    expect(controls?.parentElement?.firstElementChild).toBe(controls);
   });
 
   it("prevents engagement mutations without permission", () => {

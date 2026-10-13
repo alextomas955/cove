@@ -73,6 +73,7 @@ export function ContextualImageListView({
       title: getImageDisplayTitle(image),
       interactionSource,
       interactionMeta,
+      references: image,
     }),
     [interactionMeta, interactionSource],
   );
