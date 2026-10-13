@@ -355,9 +355,9 @@ public sealed partial class UserEngagementService(
         {
             affinity.ViewCount++;
             affinity.LastConsumedAt = now;
+            db.Set<VideoPlayHistory>().Add(new VideoPlayHistory { VideoId = videoId, UserId = affinity.UserId, PlayedAt = now });
         }
 
-        db.Set<VideoPlayHistory>().Add(new VideoPlayHistory { VideoId = videoId, PlayedAt = now });
         await db.SaveChangesAsync(cancellationToken);
 
         return await BuildVideoSnapshotAsync(videoId, video, affinity, cancellationToken);
@@ -389,13 +389,19 @@ public sealed partial class UserEngagementService(
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        // Remove the most recent global play history entry for this video
-        var lastPlayHistory = await db.Set<VideoPlayHistory>()
-            .Where(h => h.VideoId == videoId)
-            .OrderByDescending(h => h.PlayedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (lastPlayHistory != null)
-            db.Set<VideoPlayHistory>().Remove(lastPlayHistory);
+        // Remove this user's most recent play date for this video. Dates given to the owner on upgrade can exist
+        // without an affinity row.
+        var userId = principalAccessor.Current?.UserId;
+        if (userId.HasValue)
+        {
+            var lastPlayHistory = await db.Set<VideoPlayHistory>()
+                .Where(h => h.UserId == userId.Value && h.VideoId == videoId)
+                .OrderByDescending(h => h.PlayedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (lastPlayHistory != null)
+                db.Set<VideoPlayHistory>().Remove(lastPlayHistory);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         return await BuildVideoSnapshotAsync(videoId, video, affinity, cancellationToken);
@@ -420,12 +426,13 @@ public sealed partial class UserEngagementService(
                 .Where(session => session.UserId == affinity.UserId && session.HostType == InteractionHostType.Video && session.HostId == videoId)
                 .ToListAsync(cancellationToken);
             db.PlaybackSessions.RemoveRange(playbackSessions);
+
+            var allPlayHistory = await db.Set<VideoPlayHistory>()
+                .Where(h => h.UserId == affinity.UserId && h.VideoId == videoId)
+                .ToListAsync(cancellationToken);
+            db.Set<VideoPlayHistory>().RemoveRange(allPlayHistory);
         }
 
-        var allPlayHistory = await db.Set<VideoPlayHistory>()
-            .Where(h => h.VideoId == videoId)
-            .ToListAsync(cancellationToken);
-        db.Set<VideoPlayHistory>().RemoveRange(allPlayHistory);
         await db.SaveChangesAsync(cancellationToken);
 
         return await BuildVideoSnapshotAsync(videoId, video, affinity, cancellationToken);
@@ -1082,6 +1089,7 @@ public sealed partial class UserEngagementService(
         await db.Set<PlaybackInterval>().Where(i => i.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
         await db.PlaybackSessions.Where(s => s.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
         await db.UserSessions.Where(s => s.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
+        await db.Set<VideoPlayHistory>().IgnoreQueryFilters().Where(h => h.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
         // continued below: clear watch-derived affinity metrics (ratings/likes/favorites kept)
 
         // Clear watch-derived metrics on every affinity row. Ratings/likes/favorites/interactions are kept.
@@ -1112,6 +1120,7 @@ public sealed partial class UserEngagementService(
         await db.Set<PlaybackInterval>().Where(i => i.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
         await db.PlaybackSessions.Where(s => s.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
         await db.UserSessions.Where(s => s.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
+        await db.Set<VideoPlayHistory>().IgnoreQueryFilters().Where(h => h.UserId == userId.Value).ExecuteDeleteAsync(cancellationToken);
 
         // Delete every behavioral interaction except the explicit LikeCount ("orgasm count") events.
         await db.Interactions
@@ -1205,22 +1214,9 @@ public sealed partial class UserEngagementService(
         var interactionHostType = ToInteractionHostType(hostType);
 
         var userId = principalAccessor.Current?.UserId;
+        // Play dates, likes and sessions are each user's own, so a caller without a user has none.
         if (!userId.HasValue)
-        {
-            var playHistory = hostType == AffinityHostType.Video
-                ? await db.Set<VideoPlayHistory>()
-                    .Where(history => history.VideoId == hostId)
-                    .OrderByDescending(history => history.PlayedAt)
-                    .Select(history => history.PlayedAt.ToString("o"))
-                    .ToListAsync(cancellationToken)
-                : new List<string>();
-            // Anonymous callers have no per-user like history; the legacy global (Stash-imported) like log
-            // was removed, so only play history is available here.
-            var events = playHistory
-                .Select(date => new InteractionEventDto("playStart", date))
-                .ToList();
-            return new VideoHistoryDto(playHistory, [], events);
-        }
+            return new VideoHistoryDto([], [], []);
 
         var interactions = await db.Interactions
             .Where(interaction => interaction.UserId == userId.Value && interaction.HostType == interactionHostType && interaction.HostId == hostId)
@@ -1234,7 +1230,7 @@ public sealed partial class UserEngagementService(
 
         var playHistoryForUser = hostType == AffinityHostType.Video
             ? await db.Set<VideoPlayHistory>()
-                .Where(history => history.VideoId == hostId)
+                .Where(history => history.UserId == userId.Value && history.VideoId == hostId)
                 .OrderByDescending(history => history.PlayedAt)
                 .Select(history => history.PlayedAt.ToString("o"))
                 .ToListAsync(cancellationToken)

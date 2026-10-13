@@ -28,7 +28,7 @@ public sealed class VideoMergeServiceTests
                 new UserEntityAffinity { UserId = 1, HostType = AffinityHostType.Video, HostId = removed.Id, ViewCount = 3, IsFavorite = true },
                 new UserEntityAffinity { UserId = 1, HostType = AffinityHostType.Video, HostId = kept.Id, ViewCount = 2 },
                 new UserBookmark { UserId = 1, HostType = AffinityHostType.Video, HostId = removed.Id },
-                new VideoPlayHistory { VideoId = removed.Id, PlayedAt = DateTime.UtcNow });
+                new VideoPlayHistory { VideoId = removed.Id, UserId = 1, PlayedAt = DateTime.UtcNow });
             await db.SaveChangesAsync();
         }
 
@@ -45,7 +45,7 @@ public sealed class VideoMergeServiceTests
         Assert.Equal("Removed director", video.Director);
         Assert.True(video.Organized);
         Assert.Equal(["kept.mp4", "removed.mp4"], video.Files.Select(file => file.Basename).Order());
-        Assert.Single(video.PlayHistory);
+        Assert.Equal(1, Assert.Single(video.PlayHistory).UserId);
         var rating = Assert.Single(await verify.Ratings.ToListAsync());
         Assert.Equal(kept.Id, rating.HostId);
         var affinity = Assert.Single(await verify.UserEntityAffinities.ToListAsync());

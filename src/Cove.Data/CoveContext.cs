@@ -214,7 +214,12 @@ public partial class CoveContext : DbContext
             // Aliases are unbounded text, so a B-tree could reject a long one; see the tags index.
             entity.HasIndex(alias => alias.NamespaceKey).HasMethod("hash");
         });
-        modelBuilder.Entity<VideoPlayHistory>().ToTable("video_play_history");
+        modelBuilder.Entity<VideoPlayHistory>(entity =>
+        {
+            entity.ToTable("video_play_history");
+            entity.HasOne<User>().WithMany().HasForeignKey(entry => entry.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(entry => new { entry.UserId, entry.VideoId, entry.PlayedAt });
+        });
 
         modelBuilder.Entity<VideoFile>()
             .HasMany(v => v.Captions)

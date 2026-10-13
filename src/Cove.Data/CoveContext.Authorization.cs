@@ -275,12 +275,14 @@ public partial class CoveContext
                     ? CanReadVideos
                     : CanReadEntitySql(AuthorizationFiltersBypassed, CanReadVideos, CanReadVideosByRule, CurrentRoleNames, CurrentShareLinkId, EntityKinds.Video, link.VideoId));
 
+        // Play dates are each user's own, like the play counts beside them.
         modelBuilder.Entity<VideoPlayHistory>().HasQueryFilter(entry =>
             AuthorizationFiltersBypassed
                 ? true
-                : !RequiresVideoReadScopeEvaluation
-                    ? CanReadVideos
-                    : CanReadEntitySql(AuthorizationFiltersBypassed, CanReadVideos, CanReadVideosByRule, CurrentRoleNames, CurrentShareLinkId, EntityKinds.Video, entry.VideoId));
+                : CurrentUserId != null && entry.UserId == CurrentUserId
+                    && (!RequiresVideoReadScopeEvaluation
+                        ? CanReadVideos
+                        : CanReadEntitySql(AuthorizationFiltersBypassed, CanReadVideos, CanReadVideosByRule, CurrentRoleNames, CurrentShareLinkId, EntityKinds.Video, entry.VideoId)));
 
         modelBuilder.Entity<DuplicateSearchItem>().HasQueryFilter(item =>
             AuthorizationFiltersBypassed

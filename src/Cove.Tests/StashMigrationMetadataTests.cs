@@ -1251,6 +1251,8 @@ INSERT INTO video_captions (file_id, language_code, filename, caption_type) VALU
         var affinity = await context.UserEntityAffinities.SingleAsync(item => item.HostType == AffinityHostType.Video && item.HostId == scene.Id, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(new DateTime(2024, 3, 1, 0, 0, 0, DateTimeKind.Utc), affinity.LastConsumedAt);
         Assert.Equal(1, affinity.ViewCount);
+        var playDate = Assert.Single(await context.Set<VideoPlayHistory>().Where(entry => entry.VideoId == scene.Id).ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(affinity.UserId, playDate.UserId);
         Assert.Equal(2, affinity.LikeCount);
         Assert.Equal(15, affinity.LastPositionSec);
         Assert.Equal(45, affinity.TotalConsumedSec);
