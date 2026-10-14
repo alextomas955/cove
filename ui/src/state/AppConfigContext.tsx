@@ -1,3 +1,4 @@
+import { setServerScrapeApplyDefaults } from "../components/videoScrapeUtils";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { system } from "../api/client";
@@ -208,6 +209,12 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
 
     return normalizeConfig(configQuery.data, authUser?.uiPreferences?.keybindingOverrides);
   }, [authUser?.uiPreferences?.keybindingOverrides, configQuery.data]);
+
+  // Scrape and download dialogs read these through videoScrapeUtils, which has no access to React context.
+  const scrapeApplyDefaults = config?.scraping.scrapeApplyDefaults;
+  useEffect(() => {
+    setServerScrapeApplyDefaults(scrapeApplyDefaults ?? null);
+  }, [scrapeApplyDefaults]);
   useEffect(() => {
     const appTitle = config?.ui.title?.trim() || "Cove";
     const pageTitle = document.body.dataset.covePageTitle?.trim();

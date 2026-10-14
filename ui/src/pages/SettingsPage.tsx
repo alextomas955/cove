@@ -881,6 +881,14 @@ function emptyPath(): CovePathConfig {
   return { path: "", excludeVideo: false, excludeImage: false, excludeAudio: false, excludeText: false };
 }
 
+const MAX_DOWNLOAD_HEIGHT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "0", label: "Best available" },
+  { value: "720", label: "Up to 720p" },
+  { value: "1080", label: "Up to 1080p" },
+  { value: "1440", label: "Up to 1440p" },
+  { value: "2160", label: "Up to 4K (2160p)" },
+];
+
 function emptyDownloaderPathOverride(): DownloaderPathOverrideConfig {
   return { downloaderId: "", site: "", path: "" };
 }
@@ -2586,7 +2594,7 @@ export function SettingsPage() {
               <>
                 <SectionCard
                   title="Downloader Limits"
-                  description="Control how many downloader imports may run at the same time."
+                  description="Control how many downloader imports may run at the same time and how large a video they fetch."
                 >
                   <NumberField
                     label="Max concurrent downloads"
@@ -2597,6 +2605,18 @@ export function SettingsPage() {
                       updateDraft((current) => ({
                         ...current,
                         maxConcurrentDownloads: value ?? current.maxConcurrentDownloads,
+                      }))
+                    }
+                  />
+                  <SelectField
+                    label="Max download resolution"
+                    value={String(draft.maxDownloadHeight ?? 0)}
+                    options={MAX_DOWNLOAD_HEIGHT_OPTIONS}
+                    description="Applies when a download asks for the best available quality, including downloads started from the browser extension and the API. A download that names a specific resolution keeps it."
+                    onChange={(value) =>
+                      updateDraft((current) => ({
+                        ...current,
+                        maxDownloadHeight: Number(value) || 0,
                       }))
                     }
                   />

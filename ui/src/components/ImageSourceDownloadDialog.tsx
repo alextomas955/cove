@@ -5,7 +5,6 @@ import { Check, Download, FolderOpen, Image as ImageIcon, Layers3, Loader2, X } 
 import { galleries, groups, system } from "../api/client";
 import type { DownloaderMatch, ImageCreate } from "../api/types";
 import { formatBatchDownloadSummary, type BatchDownloadResult } from "../utils/batchDownloads";
-import { loadScrapeApplyPreferences } from "./videoScrapeUtils";
 
 type ContainerMode = "none" | "existing" | "create";
 
@@ -223,15 +222,9 @@ export function ImageSourceDownloadDialog({
 
       saveImageSourceDownloadPreferences({ galleryMode, groupMode, selectedGalleryId, selectedGroupId, parentGroupId });
 
-      const metadataPreferences = loadScrapeApplyPreferences();
-      const metadataApplyOptions = autoApplyMetadata
-        ? {
-            createMissingTags: metadataPreferences.createMissingTags,
-            createMissingPerformers: metadataPreferences.createMissingPerformers,
-            createMissingStudio: metadataPreferences.createMissingStudio,
-            markOrganized: metadataPreferences.markOrganized,
-          }
-        : {};
+      // This dialog offers no create-missing or mark-organized choices, so none are sent and the
+      // server applies the Scraping defaults from Settings.
+      const metadataApplyOptions = {};
 
       const response = await system.startBatchDownload({
         items: selectedMatches.map((match, index) => {

@@ -273,6 +273,7 @@ public partial class DownloaderService(
         if (!allowDuplicateDownload)
             await EnsureDownloadAllowedAsync(request, entityId, ct);
 
+        request = ApplyMaxDownloadHeight(request);
         var result = await DownloadAsync(request, progress, ct);
         if (result == null)
             return (null, null);
@@ -562,13 +563,13 @@ public partial class DownloaderService(
             }
 
             foreach (var match in matches)
-                expandedItems.Add(ApplyDownloaderMatch(item, match, useMatchLabel: matches.Count > 1 || !string.IsNullOrWhiteSpace(match.SourceUrl)));
+                expandedItems.Add(ApplyDownloaderMatch(item, match, useMatchLabel: matches.Count > 1 || !string.IsNullOrWhiteSpace(match.SourceUrl), config.MaxDownloadHeight));
         }
 
         return new DownloaderBatchPreflightResult(expandedItems, issues);
     }
 
-    private static DownloaderBatchItemDto ApplyDownloaderMatch(DownloaderBatchItemDto item, DownloaderMatchDto match, bool useMatchLabel)
+    private static DownloaderBatchItemDto ApplyDownloaderMatch(DownloaderBatchItemDto item, DownloaderMatchDto match, bool useMatchLabel, int maxDownloadHeight)
     {
         var label = string.IsNullOrWhiteSpace(match.Label) ? item.Label : match.Label;
         if (!useMatchLabel && !string.IsNullOrWhiteSpace(item.Title))
@@ -579,7 +580,7 @@ public partial class DownloaderService(
         {
             DownloaderId = match.DownloaderId,
             Url = string.IsNullOrWhiteSpace(match.NormalizedUrl) ? item.Url : match.NormalizedUrl,
-            QualityId = item.QualityId ?? match.QualityOptions.FirstOrDefault()?.Id,
+            QualityId = ResolveQualityId(item.QualityId, match.QualityOptions, maxDownloadHeight),
             SourceUrl = string.IsNullOrWhiteSpace(match.SourceUrl) ? item.SourceUrl : match.SourceUrl,
             Label = label,
             Title = title,
@@ -1091,14 +1092,15 @@ public partial class DownloaderService(
         }
     }
 
-    private static DownloaderMetadataApplyOptions BuildBatchGroupMetadataApplyOptions(int groupId, IReadOnlyList<DownloaderBatchItemDto> items, DownloaderBatchFollowUpDto followUp)
+    private DownloaderMetadataApplyOptions BuildBatchGroupMetadataApplyOptions(int groupId, IReadOnlyList<DownloaderBatchItemDto> items, DownloaderBatchFollowUpDto followUp)
     {
         var groupItems = items.Where(item => item.GroupIds?.Any(group => group.GroupId == groupId) == true).ToList();
-        return new DownloaderMetadataApplyOptions(
-            CreateMissingTags: groupItems.Any(item => item.CreateMissingTags) || followUp.CreateMissingTags,
-            CreateMissingPerformers: false,
-            CreateMissingStudio: groupItems.Any(item => item.CreateMissingStudio) || followUp.CreateMissingStudio,
-            MarkOrganized: groupItems.Any(item => item.MarkOrganized) || followUp.MarkOrganized);
+        var resolved = ResolveMetadataApplyOptions(
+            CombineApplyFlags(groupItems.Select(item => item.CreateMissingTags).Append(followUp.CreateMissingTags)),
+            createMissingPerformers: false,
+            CombineApplyFlags(groupItems.Select(item => item.CreateMissingStudio).Append(followUp.CreateMissingStudio)),
+            CombineApplyFlags(groupItems.Select(item => item.MarkOrganized).Append(followUp.MarkOrganized)));
+        return resolved;
     }
 
     internal async Task<bool> ApplyAudioMetadataAsync(int audioId, ScrapedAudioMetadata metadata, CancellationToken ct, DownloaderMetadataApplyOptions? options = null)
@@ -1931,6 +1933,47 @@ public partial class DownloaderService(
         }
     }
 
+    /// <summary>
+    /// The conventional quality id downloaders use for "whatever is highest". A request for it, or for
+    /// nothing in particular, is still subject to the server's maximum download height.
+    /// </summary>
+    internal const string BestQualityId = "best";
+
+    internal static bool WantsBestQuality(string? qualityId)
+    {
+        return string.IsNullOrWhiteSpace(qualityId) || string.Equals(qualityId, BestQualityId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The quality option a download should use. An explicit resolution is kept. A request for the best
+    /// quality becomes the largest option at or below <paramref name="maxDownloadHeight"/>; when every
+    /// option already fits, the first (best) option stays; when none fit, the smallest option is used
+    /// rather than exceeding the limit. Options without a height, or no limit, leave the request as is.
+    /// </summary>
+    internal static string? ResolveQualityId(string? requestedQualityId, IReadOnlyList<DownloaderQualityOptionDto> options, int maxDownloadHeight)
+    {
+        var fallback = requestedQualityId ?? options.FirstOrDefault()?.Id;
+        if (maxDownloadHeight <= 0 || options.Count == 0 || !WantsBestQuality(requestedQualityId))
+            return fallback;
+
+        var sized = options
+            .Where(option => option.Height is > 0 && !string.Equals(option.Id, BestQualityId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (sized.Count == 0 || sized.Max(option => option.Height!.Value) <= maxDownloadHeight)
+            return fallback;
+
+        var fitting = sized.Where(option => option.Height!.Value <= maxDownloadHeight).MaxBy(option => option.Height!.Value);
+        return (fitting ?? sized.MinBy(option => option.Height!.Value))?.Id ?? fallback;
+    }
+
+    /// <summary>Hand the configured limit to the downloader when the request asks for the best quality.</summary>
+    private DownloaderRequest ApplyMaxDownloadHeight(DownloaderRequest request)
+    {
+        if (config.MaxDownloadHeight <= 0 || request.MaxHeight.HasValue || !WantsBestQuality(request.QualityId))
+            return request;
+        return request with { MaxHeight = config.MaxDownloadHeight };
+    }
+
     private int ResolveMaxConcurrentDownloads()
     {
         var configured = config.MaxConcurrentDownloads;
@@ -2488,13 +2531,59 @@ public partial class DownloaderService(
             BuildMetadataApplyOptions(item, followUp));
     }
 
-    private static DownloaderMetadataApplyOptions BuildMetadataApplyOptions(DownloaderBatchItemDto item, DownloaderBatchFollowUpDto followUp)
+    private DownloaderMetadataApplyOptions BuildMetadataApplyOptions(DownloaderBatchItemDto item, DownloaderBatchFollowUpDto followUp)
+    {
+        return ResolveMetadataApplyOptions(
+            CombineApplyFlags([item.CreateMissingTags, followUp.CreateMissingTags]),
+            CombineApplyFlags([item.CreateMissingPerformers, followUp.CreateMissingPerformers]),
+            CombineApplyFlags([item.CreateMissingStudio, followUp.CreateMissingStudio]),
+            CombineApplyFlags([item.MarkOrganized, followUp.MarkOrganized]));
+    }
+
+    /// <summary>
+    /// What a download request said about one apply option across the places it can say it (an item and
+    /// its batch follow-up): true when any of them asked for it, false when some said no and none said
+    /// yes, and null when none of them said anything.
+    /// </summary>
+    internal static bool? CombineApplyFlags(IEnumerable<bool?> flags)
+    {
+        bool? combined = null;
+        foreach (var flag in flags)
+        {
+            if (flag == true)
+                return true;
+            if (flag == false)
+                combined = false;
+        }
+        return combined;
+    }
+
+    /// <summary>
+    /// The apply options for a download: what the request specified, and the Scraping → scrape apply
+    /// defaults from settings for anything it left unspecified. The same defaults the Cove UI's scrape
+    /// dialogs start from, so a download that says nothing behaves like a scrape the user did not adjust.
+    /// </summary>
+    public DownloaderMetadataApplyOptions ResolveMetadataApplyOptions(
+        bool? createMissingTags,
+        bool? createMissingPerformers,
+        bool? createMissingStudio,
+        bool? markOrganized)
+    {
+        return ResolveMetadataApplyOptions(config.Scraping.ScrapeApplyDefaults, createMissingTags, createMissingPerformers, createMissingStudio, markOrganized);
+    }
+
+    internal static DownloaderMetadataApplyOptions ResolveMetadataApplyOptions(
+        ScrapeApplyDefaultsConfig defaults,
+        bool? createMissingTags,
+        bool? createMissingPerformers,
+        bool? createMissingStudio,
+        bool? markOrganized)
     {
         return new DownloaderMetadataApplyOptions(
-            item.CreateMissingTags || followUp.CreateMissingTags,
-            item.CreateMissingPerformers || followUp.CreateMissingPerformers,
-            item.CreateMissingStudio || followUp.CreateMissingStudio,
-            item.MarkOrganized || followUp.MarkOrganized);
+            createMissingTags ?? defaults.CreateMissingTags,
+            createMissingPerformers ?? defaults.CreateMissingPerformers,
+            createMissingStudio ?? defaults.CreateMissingStudio,
+            markOrganized ?? defaults.MarkOrganized);
     }
 
     private async Task<ResolvedBatchMatch> ResolveBatchMatchAsync(DownloaderBatchItemDto item, DownloaderEntity entity, string url, CancellationToken ct)
@@ -2511,7 +2600,7 @@ public partial class DownloaderService(
         return new ResolvedBatchMatch(
             selectedMatch.DownloaderId,
             string.IsNullOrWhiteSpace(selectedMatch.NormalizedUrl) ? url : selectedMatch.NormalizedUrl,
-            item.QualityId ?? selectedMatch.QualityOptions.FirstOrDefault()?.Id,
+            ResolveQualityId(item.QualityId, selectedMatch.QualityOptions, config.MaxDownloadHeight),
             selectedMatch.Label,
             selectedMatch.SourceUrl);
     }

@@ -100,6 +100,26 @@ describe("batchDownloads", () => {
     });
   });
 
+  it("leaves create-missing choices to the server for imported URLs", async () => {
+    // A scrape dialog remembered "no performers" in this browser; the import page shows no such
+    // choice, so it must not send one.
+    localStorage.setItem(
+      "cove.videoScrapePreferences",
+      JSON.stringify({ createMissingTags: true, createMissingPerformers: false, createMissingStudio: false }),
+    );
+    try {
+      await queueImportedUrlDownloads("Video", ["https://example.com/watch/new"], { scrapeVideos: true });
+    } finally {
+      localStorage.removeItem("cove.videoScrapePreferences");
+    }
+
+    const request = mocks.systemStartBatchDownload.mock.calls[0]?.[0] as { followUp: Record<string, unknown> };
+    expect(request.followUp.autoApplyMetadata).toBe(true);
+    for (const key of ["createMissingTags", "createMissingPerformers", "createMissingStudio", "markOrganized"]) {
+      expect(request.followUp[key]).toBeUndefined();
+    }
+  });
+
   it("keeps duplicate imported URL lines for server-side skip logging", async () => {
     await queueImportedUrlDownloads(
       "Video",

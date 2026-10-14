@@ -1,6 +1,5 @@
 import { system } from "../api/client";
 import type { DownloaderMatch } from "../api/types";
-import { loadScrapeApplyPreferences } from "../components/videoScrapeUtils";
 
 export type UrlDownloadMode = "now" | "later";
 export type DownloadEntityName = "Audio" | "Image" | "Video" | "Text";
@@ -64,20 +63,11 @@ export async function createFromUrlWithOptionalDownload<
     entity,
     entityId: created.id,
     qualityId: match.qualityOptions[0]?.id,
+    // Create-missing and mark-organized are left unspecified: the server applies the Scraping
+    // defaults from Settings, since this flow offers no such choices.
     autoApplyMetadata: scrapeMetadata,
-    ...(scrapeMetadata ? buildMetadataApplyOptions() : {}),
     sourceUrl: match.sourceUrl ?? undefined,
   });
 
   return created;
-}
-
-function buildMetadataApplyOptions() {
-  const preferences = loadScrapeApplyPreferences();
-  return {
-    createMissingTags: preferences.createMissingTags,
-    createMissingPerformers: preferences.createMissingPerformers,
-    createMissingStudio: preferences.createMissingStudio,
-    markOrganized: preferences.markOrganized,
-  };
 }

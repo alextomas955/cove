@@ -2394,6 +2394,7 @@ export interface CoveConfig {
   port: number;
   maxParallelTasks: number;
   maxConcurrentDownloads: number;
+  maxDownloadHeight: number;
   calculateMd5: boolean;
   videoExtensions: string[];
   imageExtensions: string[];

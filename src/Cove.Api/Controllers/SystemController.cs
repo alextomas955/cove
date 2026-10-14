@@ -664,7 +664,7 @@ public class SystemController(
                     progress,
                     ct,
                     autoApplyMetadata: dto.AutoApplyMetadata,
-                    metadataApplyOptions: new DownloaderMetadataApplyOptions(
+                    metadataApplyOptions: downloaderService.ResolveMetadataApplyOptions(
                         dto.CreateMissingTags,
                         dto.CreateMissingPerformers,
                         dto.CreateMissingStudio,
