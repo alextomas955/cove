@@ -76,4 +76,62 @@
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Cove.Core.DTOs.GenerateOptionsDto.set_SegmentPreviews(System.Boolean)</Target>
   </Suppression>
+
+  <!--
+    Deliberately accepted break, listed as a breaking change in CHANGELOG.md under the release that
+    follows 1.5.1. The create-missing-tags/performers/studio and mark-organized flags on the download
+    request DTOs (DownloaderStartRequestDto, DownloaderBatchItemDto, DownloaderBatchFollowUpDto) became
+    nullable so that a request that does not mention them takes the Scraping → scrape apply defaults
+    from settings instead of a hard-coded value. An extension compiled against 1.5.x that reads or sets
+    these properties must be rebuilt. Remove these entries when CoveExtensionAbiBaselineVersion is
+    bumped past that release.
+  -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderStartRequestDto.get_CreateMissingTags</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderStartRequestDto.get_CreateMissingPerformers</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderStartRequestDto.get_CreateMissingStudio</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderStartRequestDto.get_MarkOrganized</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchItemDto.get_CreateMissingTags</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchItemDto.get_CreateMissingPerformers</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchItemDto.get_CreateMissingStudio</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchItemDto.get_MarkOrganized</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchFollowUpDto.get_CreateMissingTags</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchFollowUpDto.get_CreateMissingPerformers</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchFollowUpDto.get_CreateMissingStudio</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Cove.Core.DTOs.DownloaderBatchFollowUpDto.get_MarkOrganized</Target>
+  </Suppression>
 </Suppressions>

@@ -253,7 +253,18 @@ public sealed record DownloaderRequest(
     DownloaderEntity Entity,
     DownloaderPermissions Permissions,
     string? QualityId = null,
-    string? SourceUrl = null);
+    string? SourceUrl = null)
+{
+    // Init property rather than a positional parameter so downloaders compiled against the original
+    // record keep the same constructor ABI.
+
+    /// <summary>
+    /// Highest frame height to download, from the server's download settings. Set only when
+    /// <see cref="QualityId"/> does not already name a specific resolution. Downloaders that offer
+    /// several resolutions should pick the best stream at or below it; others may ignore it.
+    /// </summary>
+    public int? MaxHeight { get; init; }
+}
 
 public sealed record DownloaderResult(
     string LocalPath,

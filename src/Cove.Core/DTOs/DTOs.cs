@@ -1384,6 +1384,8 @@ public record CoveConfigDto
     // Mirrors CoveConfiguration: fresh-install default leaves ~3 logical processors free.
     public int MaxParallelTasks { get; init; } = System.Math.Max(1, System.Environment.ProcessorCount - 3);
     public int MaxConcurrentDownloads { get; init; } = 3;
+    /// <summary>Highest frame height a download may ask for when a request wants the best available quality. 0 means no limit.</summary>
+    public int MaxDownloadHeight { get; init; }
     public List<DownloaderPathOverrideDto> DownloaderPathOverrides { get; init; } = [];
     public List<DownloaderSiteCredentialDto> DownloaderSiteCredentials { get; init; } = [];
     public bool CalculateMd5 { get; init; }
@@ -2047,10 +2049,14 @@ public record DownloaderStartRequestDto
     public string? QualityId { get; init; }
     public bool AutoApplyMetadata { get; init; }
     public bool AllowDuplicateDownload { get; init; }
-    public bool CreateMissingTags { get; init; } = true;
-    public bool CreateMissingPerformers { get; init; } = true;
-    public bool CreateMissingStudio { get; init; } = true;
-    public bool MarkOrganized { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingTags { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingPerformers { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingStudio { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? MarkOrganized { get; init; }
 }
 
 public record DownloaderBatchItemDto
@@ -2065,10 +2071,14 @@ public record DownloaderBatchItemDto
     public string? Title { get; init; }
     public bool CreateEntityIfMissing { get; init; }
     public bool AutoApplyMetadata { get; init; }
-    public bool CreateMissingTags { get; init; }
-    public bool CreateMissingPerformers { get; init; }
-    public bool CreateMissingStudio { get; init; }
-    public bool MarkOrganized { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingTags { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingPerformers { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingStudio { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? MarkOrganized { get; init; }
     public List<int>? GalleryIds { get; init; }
     public List<VideoGroupInputDto>? GroupIds { get; init; }
 }
@@ -2080,10 +2090,14 @@ public record DownloaderBatchFollowUpDto
     public bool ScrapeVideos { get; init; }
     public bool AutoApplyMetadata { get; init; }
     public bool AllowDuplicateDownloads { get; init; }
-    public bool CreateMissingTags { get; init; }
-    public bool CreateMissingPerformers { get; init; }
-    public bool CreateMissingStudio { get; init; }
-    public bool MarkOrganized { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingTags { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingPerformers { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? CreateMissingStudio { get; init; }
+    /// <summary>Null means the Scraping → scrape apply defaults from Cove's settings.</summary>
+    public bool? MarkOrganized { get; init; }
     public GenerateOptionsDto? Generate { get; init; }
 }
 

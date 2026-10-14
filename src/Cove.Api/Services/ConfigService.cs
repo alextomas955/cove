@@ -124,6 +124,7 @@ public class ConfigService
             Port = cfg.Port,
             MaxParallelTasks = cfg.MaxParallelTasks,
             MaxConcurrentDownloads = cfg.MaxConcurrentDownloads,
+            MaxDownloadHeight = cfg.MaxDownloadHeight,
             DownloaderPathOverrides = cfg.DownloaderPathOverrides
                 .Select(overridePath => new DownloaderPathOverrideDto
                 {
@@ -354,6 +355,7 @@ public class ConfigService
         cfg.Port = dto.Port;
         cfg.MaxParallelTasks = dto.MaxParallelTasks;
         cfg.MaxConcurrentDownloads = dto.MaxConcurrentDownloads > 0 ? dto.MaxConcurrentDownloads : cfg.MaxConcurrentDownloads;
+        cfg.MaxDownloadHeight = Math.Max(0, dto.MaxDownloadHeight);
         cfg.DownloaderPathOverrides = dto.DownloaderPathOverrides
             .Where(overridePath => !string.IsNullOrWhiteSpace(overridePath.DownloaderId) && !string.IsNullOrWhiteSpace(overridePath.Path))
             .Select(overridePath => new DownloaderPathOverride

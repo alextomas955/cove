@@ -172,10 +172,19 @@ export async function queueImportedUrlDownloads(
     createEntityIfMissing: boolean;
   }> = [];
 
-  const normalizedOptions = normalizeBatchDownloadOptions({
-    ...options,
-    scrapeMetadata: options.scrapeMetadata ?? options.scrapeVideos ?? options.autoApplyMetadata,
-  });
+  // The import page offers no create-missing or mark-organized choices, so those stay unspecified
+  // (not filled from this browser's remembered dialog choices) and the server applies the Scraping
+  // defaults from Settings.
+  const normalizedOptions: BatchDownloadOptions = {
+    ...normalizeBatchDownloadOptions({
+      ...options,
+      scrapeMetadata: options.scrapeMetadata ?? options.scrapeVideos ?? options.autoApplyMetadata,
+    }),
+    createMissingTags: options.createMissingTags,
+    createMissingPerformers: options.createMissingPerformers,
+    createMissingStudio: options.createMissingStudio,
+    markOrganized: options.markOrganized,
+  };
 
   for (const sourceUrl of normalizeUrlLines(urls)) {
     const label = deriveImportedItemTitle(sourceUrl);
@@ -290,10 +299,12 @@ function buildBatchFollowUp(entity: DownloadSelectionEntity, options: BatchDownl
   return {
     scrapeVideos: entity === "Video" ? applyMetadata : false,
     autoApplyMetadata: applyMetadata,
-    createMissingTags: !!options.createMissingTags,
-    createMissingPerformers: !!options.createMissingPerformers,
-    createMissingStudio: !!options.createMissingStudio,
-    markOrganized: !!options.markOrganized,
+    // A choice the user made is sent as is. An unspecified one is left out so the server applies
+    // the Scraping defaults from Settings instead of a hard-coded value.
+    createMissingTags: options.createMissingTags,
+    createMissingPerformers: options.createMissingPerformers,
+    createMissingStudio: options.createMissingStudio,
+    markOrganized: options.markOrganized,
     allowDuplicateDownloads: !!options.allowDuplicateDownloads,
     generate: options.generate,
   };

@@ -4,7 +4,6 @@ import { Check, Download, FileText, Headphones, Image as ImageIcon, Layers3, Loa
 import { groups, system } from "../api/client";
 import type { DownloaderMatch } from "../api/types";
 import { formatBatchDownloadSummary, type BatchDownloadResult } from "../utils/batchDownloads";
-import { loadScrapeApplyPreferences } from "./videoScrapeUtils";
 
 type SourceDownloadEntity = "Audio" | "Image" | "Text";
 type GroupMode = "none" | "existing" | "create";
@@ -192,15 +191,9 @@ export function SourceDownloadDialog({
 
       saveSourceDownloadPreferences(entity, { groupMode, selectedGroupId, parentGroupId });
 
-      const metadataPreferences = loadScrapeApplyPreferences();
-      const metadataApplyOptions = autoApplyMetadata
-        ? {
-            createMissingTags: metadataPreferences.createMissingTags,
-            createMissingPerformers: metadataPreferences.createMissingPerformers,
-            createMissingStudio: metadataPreferences.createMissingStudio,
-            markOrganized: metadataPreferences.markOrganized,
-          }
-        : {};
+      // This dialog offers no create-missing or mark-organized choices, so none are sent and the
+      // server applies the Scraping defaults from Settings.
+      const metadataApplyOptions = {};
 
       const response = await system.startBatchDownload({
         items: selectedMatches.map((match, index) => {

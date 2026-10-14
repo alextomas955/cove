@@ -18,6 +18,8 @@ public class CoveConfiguration
     // is 13; floored at 1 so low-core machines still work. Users can override this.
     public int MaxParallelTasks { get; set; } = System.Math.Max(1, System.Environment.ProcessorCount - 3);
     public int MaxConcurrentDownloads { get; set; } = 3;
+    /// <summary>Highest frame height a download may ask for when a request wants the best available quality. 0 means no limit.</summary>
+    public int MaxDownloadHeight { get; set; }
     public List<DownloaderPathOverride> DownloaderPathOverrides { get; set; } = [];
     // Site logins downloaders use for content that requires a signed-in account (e.g. higher resolutions).
     public List<DownloaderSiteCredential> DownloaderSiteCredentials { get; set; } = [];

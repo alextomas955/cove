@@ -74,14 +74,32 @@ export const DEFAULT_SCRAPE_APPLY_PREFERENCES: ScrapeApplyPreferences = {
 
 const SCRAPE_PREFERENCES_STORAGE_KEY = "cove.videoScrapePreferences";
 
+/**
+ * The Scraping → scrape apply defaults from Settings. AppConfigContext publishes them once the config
+ * loads, so every scrape and download dialog starts from the user's defaults rather than all-off.
+ */
+let serverScrapeApplyDefaults: Partial<ScrapeApplyPreferences> | null = null;
+
+export function setServerScrapeApplyDefaults(defaults: Partial<ScrapeApplyPreferences> | null) {
+  serverScrapeApplyDefaults = defaults;
+}
+
 export function resolveScrapeApplyDefaults(defaults?: Partial<ScrapeApplyPreferences> | null): ScrapeApplyPreferences {
-  return {
-    createMissingStudio: defaults?.createMissingStudio ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.createMissingStudio,
-    createMissingTags: defaults?.createMissingTags ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.createMissingTags,
+  const server = serverScrapeApplyDefaults;
+  const base: ScrapeApplyPreferences = {
+    createMissingStudio: server?.createMissingStudio ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.createMissingStudio,
+    createMissingTags: server?.createMissingTags ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.createMissingTags,
     createMissingPerformers:
-      defaults?.createMissingPerformers ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.createMissingPerformers,
-    markOrganized: defaults?.markOrganized ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.markOrganized,
-    hydratePerformers: defaults?.hydratePerformers ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.hydratePerformers,
+      server?.createMissingPerformers ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.createMissingPerformers,
+    markOrganized: server?.markOrganized ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.markOrganized,
+    hydratePerformers: server?.hydratePerformers ?? DEFAULT_SCRAPE_APPLY_PREFERENCES.hydratePerformers,
+  };
+  return {
+    createMissingStudio: defaults?.createMissingStudio ?? base.createMissingStudio,
+    createMissingTags: defaults?.createMissingTags ?? base.createMissingTags,
+    createMissingPerformers: defaults?.createMissingPerformers ?? base.createMissingPerformers,
+    markOrganized: defaults?.markOrganized ?? base.markOrganized,
+    hydratePerformers: defaults?.hydratePerformers ?? base.hydratePerformers,
   };
 }
 
