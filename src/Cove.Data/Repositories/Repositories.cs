@@ -371,7 +371,7 @@ public class PerformerRepository : IPerformerRepository
             if (!string.IsNullOrEmpty(filter.Name))
                 query = query.Where(p => EF.Functions.ILike(p.Name, $"%{filter.Name}%"));
             if (filter.Favorite.HasValue)
-                query = query.Where(p => p.Favorite == filter.Favorite.Value);
+                query = EngagementQueryHelpers.ApplyFavoriteCriterion(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer, new BoolCriterion { Value = filter.Favorite.Value });
             if (filter.Rating.HasValue)
                 query = EngagementQueryHelpers.ApplyRatingMinimum(_db, query, currentUserId, RatingHostType.Performer, filter.Rating.Value);
             if (filter.TagIds?.Count > 0)
@@ -539,7 +539,7 @@ public class PerformerRepository : IPerformerRepository
             query = FilterHelpers.ApplyStringCollection(query, filter.UrlCriterion, p => p.Urls.Select(u => u.Url));
 
             if (filter.FavoriteCriterion != null)
-                query = query.Where(p => p.Favorite == filter.FavoriteCriterion.Value);
+                query = EngagementQueryHelpers.ApplyFavoriteCriterion(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer, filter.FavoriteCriterion);
 
             // Multi-ID criteria
             query = FilterHelpers.ApplyMultiId(query, filter.TagsCriterion, p => p.PerformerTags.Select(pt => pt.TagId), expandedTags?.ValueGroups, expandedTags?.RequiredIdGroups);
@@ -754,7 +754,7 @@ public class PerformerRepository : IPerformerRepository
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
             query = NameMatchOrdering.Apply(query, findFilter?.Q,
                 performer => performer.Name,
-                performer => performer.Favorite,
+                performer => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(performer.Id),
                 performer => performer.Aliases.Select(alias => alias.Alias));
 
         var page = findFilter?.Page ?? 1;
@@ -984,7 +984,7 @@ public class TagRepository : ITagRepository
             if (!string.IsNullOrEmpty(filter.Name))
                 query = query.Where(t => EF.Functions.ILike(t.Name, $"%{filter.Name}%"));
             if (filter.Favorite.HasValue)
-                query = query.Where(t => t.Favorite == filter.Favorite.Value);
+                query = EngagementQueryHelpers.ApplyFavoriteCriterion(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Tag, new BoolCriterion { Value = filter.Favorite.Value });
 
             // Rating (overall) — minimum + advanced criterion, joined from the per-user Rating table.
             var currentUserId = EngagementQueryHelpers.CurrentUserId(_db);
@@ -994,7 +994,7 @@ public class TagRepository : ITagRepository
 
             // Advanced criteria
             if (filter.FavoriteCriterion != null)
-                query = query.Where(t => t.Favorite == filter.FavoriteCriterion.Value);
+                query = EngagementQueryHelpers.ApplyFavoriteCriterion(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Tag, filter.FavoriteCriterion);
 
             // Multi-ID criteria
             query = FilterHelpers.ApplyMultiId(query, parentsCriterion, t => t.ParentRelations.Select(tp => tp.ParentId), expandedParents?.ValueGroups, expandedParents?.RequiredIdGroups);
@@ -1068,7 +1068,7 @@ public class TagRepository : ITagRepository
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
             query = NameMatchOrdering.Apply(query, findFilter?.Q,
                 tag => tag.Name,
-                tag => tag.Favorite,
+                tag => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Tag).Contains(tag.Id),
                 tag => tag.Aliases.Select(alias => alias.Alias));
 
         var page = findFilter?.Page ?? 1;
@@ -1554,7 +1554,7 @@ public class StudioRepository : IStudioRepository
         if (filter != null)
         {
             if (!string.IsNullOrEmpty(filter.Name)) query = query.Where(s => EF.Functions.ILike(s.Name, $"%{filter.Name}%"));
-            if (filter.Favorite.HasValue) query = query.Where(s => s.Favorite == filter.Favorite.Value);
+            if (filter.Favorite.HasValue) query = EngagementQueryHelpers.ApplyFavoriteCriterion(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Studio, new BoolCriterion { Value = filter.Favorite.Value });
             if (filter.ParentId.HasValue) query = query.Where(s => s.ParentId == filter.ParentId.Value);
             if (filter.TagIds?.Count > 0) query = query.Where(s => s.StudioTags.Any(st => filter.TagIds.Contains(st.TagId)));
 
@@ -1565,7 +1565,7 @@ public class StudioRepository : IStudioRepository
             query = FilterHelpers.ApplyInt(query, filter.ImageCountCriterion, s => s.ImageCount);
 
             if (filter.FavoriteCriterion != null)
-                query = query.Where(s => s.Favorite == filter.FavoriteCriterion.Value);
+                query = EngagementQueryHelpers.ApplyFavoriteCriterion(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Studio, filter.FavoriteCriterion);
 
             // Multi-ID criteria
             query = FilterHelpers.ApplyMultiId(query, filter.TagsCriterion, s => s.StudioTags.Select(st => st.TagId), expandedTags?.ValueGroups, expandedTags?.RequiredIdGroups);
@@ -1644,7 +1644,7 @@ public class StudioRepository : IStudioRepository
         if (!hasExplicitSort || FullTextSearchHelpers.IsRelevanceSort(sort))
             query = NameMatchOrdering.Apply(query, findFilter?.Q,
                 studio => studio.Name,
-                studio => studio.Favorite,
+                studio => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Studio).Contains(studio.Id),
                 studio => studio.Aliases.Select(alias => alias.Alias));
         var page = findFilter?.Page ?? 1;
         var pagedIds = await query
@@ -1818,8 +1818,8 @@ public class GalleryRepository : IGalleryRepository
 
             if (filter.PerformerFavoriteCriterion != null)
                 query = filter.PerformerFavoriteCriterion.Value
-                    ? query.Where(g => g.GalleryPerformers.Any(gp => gp.Performer!.Favorite))
-                    : query.Where(g => !g.GalleryPerformers.Any(gp => gp.Performer!.Favorite));
+                    ? query.Where(g => g.GalleryPerformers.Any(gp => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(gp.PerformerId)))
+                    : query.Where(g => !g.GalleryPerformers.Any(gp => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(gp.PerformerId)));
 
             // Multi-ID criteria
             query = FilterHelpers.ApplyMultiId(query, filter.TagsCriterion, g => g.TagIds, expandedTags?.ValueGroups, expandedTags?.RequiredIdGroups);
@@ -2703,8 +2703,8 @@ public class ImageRepository : IImageRepository
 
         if (filter.PerformerFavoriteCriterion != null)
             query = filter.PerformerFavoriteCriterion.Value
-                ? query.Where(i => i.ImagePerformers.Any(ip => ip.Performer!.Favorite))
-                : query.Where(i => !i.ImagePerformers.Any(ip => ip.Performer!.Favorite));
+                ? query.Where(i => i.ImagePerformers.Any(ip => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(ip.PerformerId)))
+                : query.Where(i => !i.ImagePerformers.Any(ip => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(ip.PerformerId)));
 
         query = FilterHelpers.ApplyTimestamp(query, filter.CreatedAtCriterion, i => i.CreatedAt);
         query = FilterHelpers.ApplyTimestamp(query, filter.UpdatedAtCriterion, i => i.UpdatedAt);

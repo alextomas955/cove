@@ -20,14 +20,15 @@ public class NameMatchOrderingTests
             new Tag { Name = "Piano Solo" },
             new Tag { Name = "Piano" },
             new Tag { Name = "Piano Coda" },
-            new Tag { Name = "Upright Piano", Favorite = true },
+            new Tag { Name = "Upright Piano" },
             new Tag { Name = "Toy Piano" },
             new Tag { Name = "Electropiano" },
             new Tag { Name = "Keyboard", Aliases = { new TagAlias { Alias = "Digital Piano" } } },
-            new Tag { Name = "Music Lesson", Favorite = true, Aliases = { new TagAlias { Alias = "Piano Lesson" } } },
+            new Tag { Name = "Music Lesson", Aliases = { new TagAlias { Alias = "Piano Lesson" } } },
             new Tag { Name = "Ivory Keys", Description = "Played on a piano." },
             new Tag { Name = "Unrelated" });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoriteTagsAsync(context, "Upright Piano", "Music Lesson");
 
         var repository = new TagRepository(context);
         var (items, totalCount) = await repository.FindAsync(
@@ -76,13 +77,14 @@ public class NameMatchOrderingTests
         context.Performers.AddRange(
             new Performer { Name = "Golden Needle" },
             new Performer { Name = "Needle Baker" },
-            new Performer { Name = "Needle Artist", Favorite = true },
+            new Performer { Name = "Needle Artist" },
             new Performer { Name = "Needle Actor" },
             new Performer { Name = "Needle" },
-            new Performer { Name = "Jane Doe", Favorite = true, Aliases = { new PerformerAlias { Alias = "Needle Stage Name" } } },
+            new Performer { Name = "Jane Doe", Aliases = { new PerformerAlias { Alias = "Needle Stage Name" } } },
             new Performer { Name = "Sample Performer", Aliases = { new PerformerAlias { Alias = "The Needle" } } },
             new Performer { Name = "Other" });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoritePerformersAsync(context, "Needle Artist", "Jane Doe");
 
         var repository = new PerformerRepository(context);
         var (items, totalCount) = await repository.FindAsync(
@@ -110,9 +112,10 @@ public class NameMatchOrderingTests
         await using var context = CreateContext();
         context.Performers.AddRange(
             new Performer { Name = "Needle Baker" },
-            new Performer { Name = "Needle Artist", Favorite = true },
+            new Performer { Name = "Needle Artist" },
             new Performer { Name = "Needle" });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoritePerformersAsync(context, "Needle Artist");
 
         var repository = new PerformerRepository(context);
         var (items, _) = await repository.FindAsync(
@@ -131,10 +134,11 @@ public class NameMatchOrderingTests
             new Studio { Name = "Needle Films" },
             new Studio { Name = "Golden Needle" },
             new Studio { Name = "Needle" },
-            new Studio { Name = "Needle Cinema", Favorite = true },
+            new Studio { Name = "Needle Cinema" },
             new Studio { Name = "Sample Studio", Aliases = { new StudioAlias { Alias = "The Needle" } } },
             new Studio { Name = "Other" });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoriteStudiosAsync(context, "Needle Cinema");
 
         var repository = new StudioRepository(context);
         var (items, totalCount) = await repository.FindAsync(
@@ -177,9 +181,10 @@ public class NameMatchOrderingTests
     {
         await using var context = CreateContext();
         context.Tags.AddRange(
-            new Tag { Name = "Piano", Favorite = true, UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Tag { Name = "Piano", UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
             new Tag { Name = "Keyboard", UpdatedAt = new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc) });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoriteTagsAsync(context, "Piano");
 
         var repository = new TagRepository(context);
         var (items, _) = await repository.FindAsync(
@@ -194,11 +199,12 @@ public class NameMatchOrderingTests
     public void NameMatchOrdering_TranslatesToPostgresCaseExpression()
     {
         using var db = CreatePostgresContext();
-        var query = NameMatchOrdering.Apply(db.Tags, " Piano ", tag => tag.Name, tag => tag.Favorite, tag => tag.Aliases.Select(alias => alias.Alias));
+        var query = NameMatchOrdering.Apply(db.Tags, " Piano ", tag => tag.Name, tag => EngagementQueryHelpers.FavoriteHostIds(db, TestUserId, AffinityHostType.Tag).Contains(tag.Id), tag => tag.Aliases.Select(alias => alias.Alias));
 
         var sql = query.Select(tag => tag.Id).ToQueryString();
 
-        Assert.Contains("ORDER BY t.\"Favorite\" DESC", sql, StringComparison.Ordinal);
+        Assert.Contains("FROM user_entity_affinities AS", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("t.\"Favorite\"", sql, StringComparison.Ordinal);
         Assert.Contains("CASE", sql, StringComparison.Ordinal);
         Assert.Contains("lower(t.\"Name\") = 'piano'", sql, StringComparison.Ordinal);
         Assert.Contains("LIKE 'piano%'", sql, StringComparison.Ordinal);
@@ -230,6 +236,21 @@ public class NameMatchOrderingTests
             .Options;
 
         return new CoveContext(options);
+    }
+
+    private static Task FavoriteTagsAsync(CoveContext context, params string[] names)
+        => FavoriteAsync(context, AffinityHostType.Tag, context.Tags.Where(tag => names.Contains(tag.Name)).Select(tag => tag.Id).ToArray());
+
+    private static Task FavoritePerformersAsync(CoveContext context, params string[] names)
+        => FavoriteAsync(context, AffinityHostType.Performer, context.Performers.Where(performer => names.Contains(performer.Name)).Select(performer => performer.Id).ToArray());
+
+    private static Task FavoriteStudiosAsync(CoveContext context, params string[] names)
+        => FavoriteAsync(context, AffinityHostType.Studio, context.Studios.Where(studio => names.Contains(studio.Name)).Select(studio => studio.Id).ToArray());
+
+    private static async Task FavoriteAsync(CoveContext context, AffinityHostType hostType, int[] hostIds)
+    {
+        context.UserEntityAffinities.AddRange(hostIds.Select(hostId => new UserEntityAffinity { UserId = TestUserId, HostType = hostType, HostId = hostId, IsFavorite = true }));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private static CoveContext CreateContext()

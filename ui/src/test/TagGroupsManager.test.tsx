@@ -119,6 +119,43 @@ describe("TagGroupsManager color suggestions", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Suggest distinct colors" })).toHaveFocus());
   });
 
+  it("selects every group at once, including ones with a chosen color, and clears them again", async () => {
+    const user = userEvent.setup();
+    renderManager();
+
+    await openSuggestions(user);
+    const selectAll = screen.getByRole("checkbox", { name: "Select all groups" });
+    // Three of four are preselected, so the box shows a partial selection.
+    expect(selectAll).not.toBeChecked();
+    expect(selectAll).toBePartiallyChecked();
+
+    // Checking the last unchecked group by hand fills the box; unchecking one makes it partial again.
+    await user.click(screen.getByRole("checkbox", { name: "Custom red" }));
+    expect(selectAll).toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Custom red" }));
+    expect(selectAll).toBePartiallyChecked();
+
+    await user.click(selectAll);
+    expect(selectAll).toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+    expect(screen.getByRole("checkbox", { name: "Custom red" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Apply to 4 groups" })).toBeEnabled();
+
+    await user.click(selectAll);
+    expect(selectAll).not.toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+    for (const group of INITIAL_GROUPS) expect(screen.getByRole("checkbox", { name: group.name })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Apply to 0 groups" })).toBeDisabled();
+
+    await user.click(selectAll);
+    await user.click(screen.getByRole("button", { name: "Apply to 4 groups" }));
+    expect(await screen.findByText("Updated the colors of 4 tag groups.")).toBeInTheDocument();
+    expect(mocks.update).toHaveBeenCalledWith(3, { color: hexColor });
+    expect(colorOf(3)).not.toBe("#a43737");
+    expect(new Set(store.map((group) => group.color)).size).toBe(4);
+  });
+
   it("undo restores the previous colors, clearing groups that had none", async () => {
     const user = userEvent.setup();
     renderManager();

@@ -42,6 +42,8 @@ export interface CriterionDefinition<TFilterKey extends string = string> {
   relatedCriteria?: () => CriterionDefinition[];
   /** Criteria evaluated against the relationship host rather than the related entity itself. */
   relatedContextCriteria?: CriterionDefinition[];
+  /** Plural name of the listed items a related criterion filters, such as "segments"; defaults by related entity type. */
+  relatedResultLabel?: string;
   /** Enables distinct sibling matching for repeated instances of this related criterion. */
   supportsDistinctSiblingMatches?: boolean;
   customFieldKey?: string;

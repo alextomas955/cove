@@ -1,13 +1,63 @@
 import { describe, expect, it } from "vitest";
 import {
   collapseExtensionCriteria,
+  createExtensionCriterionDefinition,
   executableExtensionFilterKey,
   expandExtensionCriteria,
   extensionFilterKey,
   unavailableExtensionCriterionDefinitions,
 } from "../extensions/extensionListFilters";
+import {
+  expressionPassthroughFilter,
+  filterToExpression,
+  isCriterionValueValid,
+} from "../components/filterCriterionState";
 
 describe("extension list filter object representation", () => {
+  it("keeps extension-run filters out of advanced filter groups but not custom-field filters", () => {
+    const executable = createExtensionCriterionDefinition({
+      extensionId: "owner.segments",
+      id: "segment-tags",
+      label: "Segment tags",
+      entityType: "videos",
+      filterId: "segment-tags",
+      criterionType: "multiid",
+      entityReferenceType: "tags",
+    } as Parameters<typeof createExtensionCriterionDefinition>[0]);
+    expect(executable).toMatchObject({
+      filterKey: extensionFilterKey("owner.segments", "segment-tags"),
+      type: "multiId",
+      entityType: "tags",
+      expressionSupported: false,
+    });
+
+    const customField = createExtensionCriterionDefinition({
+      extensionId: "owner.fields",
+      id: "mood",
+      label: "Mood",
+      entityType: "videos",
+      customFieldKey: "mood",
+      customFieldType: "text",
+    } as Parameters<typeof createExtensionCriterionDefinition>[0]);
+    expect(customField?.expressionSupported).toBeUndefined();
+
+    const filter = {
+      [executable!.filterKey]: { modifier: "INCLUDES", value: [3] },
+      ratingCriterion: { modifier: "EQUALS", value: 80 },
+    };
+    const criteria = [
+      executable!,
+      { id: "rating", label: "Rating", type: "rating" as const, filterKey: "ratingCriterion" },
+    ];
+    expect(filterToExpression(filter, criteria)).toEqual({
+      operator: "AND",
+      children: [{ filter: { ratingCriterion: { modifier: "EQUALS", value: 80 } } }],
+    });
+    expect(expressionPassthroughFilter(filter, criteria)).toEqual({
+      [executable!.filterKey]: { modifier: "INCLUDES", value: [3] },
+    });
+  });
+
   it("round-trips namespaced criteria without changing core filters", () => {
     const saved = {
       favoriteCriterion: { value: true },
@@ -27,6 +77,76 @@ describe("extension list filter object representation", () => {
       value: false,
     });
     expect(collapseExtensionCriteria(expanded)).toEqual(saved);
+  });
+
+  it("carries an entity picker's excludes and depth inside one multi-ID value", () => {
+    const key = extensionFilterKey("owner.segments", "segment-tags");
+    const saved = {
+      extensionCriteria: [
+        {
+          extensionId: "owner.segments",
+          filterId: "segment-tags",
+          modifier: "includes",
+          value: { value: [3, 4], excludes: [9], depth: -1 },
+        },
+      ],
+    };
+
+    const expanded = expandExtensionCriteria(saved);
+    expect(expanded[key]).toEqual({ modifier: "INCLUDES", value: [3, 4], excludes: [9], depth: -1 });
+    expect(collapseExtensionCriteria(expanded, undefined, new Set([key]))).toEqual(saved);
+  });
+
+  it("drops picker display names and packs null modifiers as an empty multi-ID value", () => {
+    const tagsKey = extensionFilterKey("owner.segments", "segment-tags");
+    const emptyKey = extensionFilterKey("owner.segments", "slot-performers");
+
+    const collapsed = collapseExtensionCriteria(
+      {
+        [tagsKey]: { modifier: "INCLUDES_ALL", value: [3], _names: { 3: "Kissing" } },
+        [emptyKey]: { modifier: "IS_NULL" },
+      },
+      undefined,
+      new Set([tagsKey, emptyKey]),
+    );
+
+    expect(collapsed.extensionCriteria).toEqual([
+      { extensionId: "owner.segments", filterId: "segment-tags", modifier: "includesall", value: { value: [3] } },
+      { extensionId: "owner.segments", filterId: "slot-performers", modifier: "isnull", value: {} },
+    ]);
+    expect(expandExtensionCriteria(collapsed)[emptyKey]).toEqual({ modifier: "IS_NULL", value: [] });
+  });
+
+  it("describes an unavailable multi-ID criterion so the filter dialog can validate it", () => {
+    const saved = {
+      extensionCriteria: [
+        { extensionId: "missing.extension", filterId: "segment-tags", modifier: "includes", value: { value: [7] } },
+      ],
+    };
+
+    const [definition] = unavailableExtensionCriterionDefinitions(saved, []);
+    const expanded = expandExtensionCriteria(saved);
+
+    expect(definition.type).toBe("multiId");
+    expect(definition.expressionSupported).toBe(false);
+    expect(() => isCriterionValueValid(expanded[definition.filterKey], definition)).not.toThrow();
+    expect(isCriterionValueValid(expanded[definition.filterKey], definition)).toBe(true);
+    expect(isCriterionValueValid({ modifier: "EQUALS", value: [7] }, { ...definition, type: "string" })).toBe(false);
+  });
+
+  it("keeps a saved multi-ID criterion intact while its owner is unavailable", () => {
+    const saved = {
+      extensionCriteria: [
+        {
+          extensionId: "missing.extension",
+          filterId: "segment-tags",
+          modifier: "excludes",
+          value: { value: [7], depth: -1 },
+        },
+      ],
+    };
+
+    expect(collapseExtensionCriteria(expandExtensionCriteria(saved))).toEqual(saved);
   });
 
   it("marks a saved criterion unavailable without discarding it", () => {

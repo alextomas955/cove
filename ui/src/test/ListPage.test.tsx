@@ -1493,6 +1493,48 @@ describe("ListPage active filter chips", () => {
     expect(screen.getByRole("button", { name: "Edit filter: Duration" })).toHaveTextContent("< 10 min");
   });
 
+  it("labels hierarchical studio chips with sub-studios rather than sub-tags", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["tags", "all"], []);
+    queryClient.setQueryData(["performers", "all"], []);
+    queryClient.setQueryData(["studios", "all"], [{ id: 7, name: "Studio One" }]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={0}
+            isLoading={false}
+            criteriaDefinitions={VIDEO_CRITERIA}
+            objectFilter={{ studiosCriterion: { value: [7], modifier: "INCLUDES_ALL", depth: -1 } }}
+            onObjectFilterChange={vi.fn()}
+          >
+            <div>content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    const studiosChip = screen.getByRole("button", { name: "Edit filter: Studios" });
+    expect(studiosChip).toHaveTextContent("Studio One with sub-studios");
+    expect(studiosChip).toHaveAttribute("title", "Studios: Studio One with sub-studios");
+    expect(studiosChip).not.toHaveTextContent("sub-tags");
+  });
+
+  it.each([
+    ["EXCLUDES", "not Studio One with sub-studios"],
+    ["EXCLUDES_ALL", "not all of Studio One with sub-studios"],
+    ["EQUALS", "= Studio One · with sub-studios"],
+  ])("labels %s studio chip summaries with sub-studios", (modifier, expected) => {
+    const definition = VIDEO_CRITERIA.find((criterion) => criterion.id === "studios");
+    expect(formatFilterChipValue(definition, { value: [7], modifier, depth: -1, _names: { 7: "Studio One" } })).toBe(
+      expected,
+    );
+  });
+
   it("renders empty and non-empty entity relations as None and Any", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     queryClient.setQueryData(["tags", "all"], []);

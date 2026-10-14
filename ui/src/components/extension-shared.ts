@@ -135,6 +135,9 @@ export {
 export type { ExtensionKeyboardActionRegistration } from "../hooks/useRegisterKeyboardActionHandler";
 export type { KeyboardActionInvocation } from "../keyboard/KeyboardShortcutProvider";
 export { useListUrlState } from "../hooks/useListUrlState";
+// Extension pages sit in a DocumentTitleScope named after their label, so a title set here reads
+// "<title> | <page label> | <app>".
+export { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 // ─── App Config (extensions run in the same React tree) ───────────────────
 export { useAppConfig } from "../state/AppConfigContext";

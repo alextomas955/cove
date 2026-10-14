@@ -84,6 +84,7 @@ describe("VideoSelectionActions bulk edit", () => {
       customFieldMode: "SET",
     });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["videos"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["engagement", "video"] });
   });
 
   it("forgets a cleared field when the dialog is cancelled and reopened", async () => {

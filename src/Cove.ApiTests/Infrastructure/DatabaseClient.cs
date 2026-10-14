@@ -634,6 +634,52 @@ public sealed class DatabaseClient
         }
     }
 
+    public async Task<int> CreateVideoSegmentWithPayloadAsync(
+        int videoId,
+        string payloadJson,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateCoveContext();
+        var segment = new Segment
+        {
+            HostType = SegmentHostType.Video,
+            HostId = videoId,
+            StartSec = 1,
+            Payload = JsonDocument.Parse(payloadJson),
+        };
+        db.Segments.Add(segment);
+        await db.SaveChangesAsync(cancellationToken);
+        return segment.Id;
+    }
+
+    public async Task<string> GetSegmentPayloadJsonAsync(int segmentId, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateCoveContext();
+        var segment = await db.Segments.IgnoreQueryFilters().AsNoTracking().SingleAsync(row => row.Id == segmentId, cancellationToken);
+        return segment.Payload!.RootElement.GetRawText();
+    }
+
+    public async Task<int> CreateGroupWithQueryJsonAsync(
+        string name,
+        string queryJson,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateCoveContext();
+        var group = new Group { Name = name, QueryJson = queryJson };
+        db.Groups.Add(group);
+        await db.SaveChangesAsync(cancellationToken);
+        return group.Id;
+    }
+
+    public async Task<string?> GetGroupQueryJsonAsync(int groupId, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateCoveContext();
+        return await db.Groups.IgnoreQueryFilters().AsNoTracking()
+            .Where(group => group.Id == groupId)
+            .Select(group => group.QueryJson)
+            .SingleAsync(cancellationToken);
+    }
+
     private CoveContext CreateCoveContext()
         => new(new DbContextOptionsBuilder<CoveContext>()
             .UseNpgsql(_connectionString, npgsql =>

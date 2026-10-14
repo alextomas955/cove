@@ -503,6 +503,49 @@ public class UIManifestBuilder
         int order = 100,
         IEnumerable<string>? modifiers = null,
         IEnumerable<UIListFilterOption>? options = null)
+        => AddExecutableListFilter(entityType, id, label, criterionType, filterId, entityReferenceType: null, order, modifiers, options);
+
+    /// <summary>
+    /// Add an entity-picker filter (for example tags or performers) resolved by this extension's
+    /// backend provider. The provider receives the criterion's value as one JSON object:
+    /// <c>{"value":[ids],"excludes":[ids],"depth":-1}</c>, where <c>excludes</c> and <c>depth</c>
+    /// are optional and <c>depth</c> -1 asks for every descendant. Null modifiers carry no IDs.
+    /// Omitting <paramref name="modifiers"/> offers includes, includes all, excludes, is null and
+    /// not null. Requires a Cove host that executes multi-ID extension filters.
+    /// </summary>
+    public UIManifestBuilder AddExtensionEntityListFilter(
+        string entityType,
+        string id,
+        string label,
+        string entityReferenceType,
+        string filterId,
+        int order = 100,
+        IEnumerable<string>? modifiers = null)
+    {
+        if (string.IsNullOrWhiteSpace(entityReferenceType))
+            throw new ArgumentException("Entity filter reference type is required.", nameof(entityReferenceType));
+        return AddExecutableListFilter(
+            entityType,
+            id,
+            label,
+            "multiid",
+            filterId,
+            entityReferenceType.Trim().ToLowerInvariant(),
+            order,
+            modifiers ?? ["INCLUDES", "INCLUDES_ALL", "EXCLUDES", "IS_NULL", "NOT_NULL"],
+            options: null);
+    }
+
+    private UIManifestBuilder AddExecutableListFilter(
+        string entityType,
+        string id,
+        string label,
+        string criterionType,
+        string filterId,
+        string? entityReferenceType,
+        int order,
+        IEnumerable<string>? modifiers,
+        IEnumerable<UIListFilterOption>? options)
     {
         if (string.IsNullOrWhiteSpace(entityType))
             throw new ArgumentException("Executable extension filter entity type is required.", nameof(entityType));
@@ -528,6 +571,7 @@ public class UIManifestBuilder
             label.Trim(),
             criterionType.Trim().ToLowerInvariant(),
             _extensionId,
+            EntityReferenceType: entityReferenceType,
             Modifiers: normalizedModifiers,
             Options: options?.ToList(),
             Order: order)

@@ -5,6 +5,7 @@ import type { FieldProvenance, Tag, TagProvenance } from "../api/types";
 import { getFieldProvenanceEntries } from "./FieldProvenanceHover";
 import { TagProvenanceHover } from "./TagProvenanceHover";
 import { TagMediaHover, type TagMediaReference } from "./EntityMedia";
+import { TagGroupMarker, getTagChipColorStyle, normalizeTagColor } from "./TagChipAppearance";
 
 export { RatingBadge } from "./Rating";
 export { CustomFieldsDisplay, CustomFieldsEditor } from "./CustomFields";
@@ -13,7 +14,7 @@ export { TagProvenanceHover } from "./TagProvenanceHover";
 import { getResolutionBucketLabel } from "../utils/resolutionBuckets";
 
 type TagBadgeData = Pick<Tag, "color" | "tagGroupColor"> &
-  Partial<Pick<Tag, "id" | "name" | "imagePath" | "hasImage" | "tagGroupName">>;
+  Partial<Pick<Tag, "id" | "name" | "description" | "imagePath" | "hasImage" | "tagGroupName">>;
 export function TagBadge({
   name,
   tag,
@@ -46,12 +47,12 @@ export function TagBadge({
     groupColor == null ||
     normalizeTagColor(groupColor)?.toLowerCase() === normalizeTagColor(tag?.tagGroupColor)?.toLowerCase();
   const resolvedGroupName = (groupName ?? (ownGroupColor ? tag?.tagGroupName : null))?.trim();
-  const resolvedColor = normalizeTagColor(color ?? tag?.color ?? groupColor ?? tag?.tagGroupColor);
-  const colorStyle = resolvedColor ? getTagColorStyle(resolvedColor) : undefined;
+  const colorStyle = getTagChipColorStyle(color ?? tag?.color ?? groupColor ?? tag?.tagGroupColor);
   const mediaTag = tag?.id
     ? {
         id: tag.id,
         name: tag.name ?? name,
+        description: tag.description,
         imagePath: tag.imagePath,
         hasImage: tag.hasImage,
         tagGroupName: resolvedGroupName,
@@ -61,14 +62,7 @@ export function TagBadge({
 
   const badgeContent = (
     <>
-      {resolvedGroupColor ? (
-        <span
-          className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-current/30"
-          title={resolvedGroupName ? `Tag group: ${resolvedGroupName}` : "Tag group"}
-        >
-          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: resolvedGroupColor }} />
-        </span>
-      ) : null}
+      <TagGroupMarker color={resolvedGroupColor} name={resolvedGroupName} />
       <span>{name}</span>
     </>
   );
@@ -412,30 +406,6 @@ export function ProvenanceBadge({
       {badge}
     </TagProvenanceHover>
   );
-}
-
-function normalizeTagColor(value?: string | null) {
-  const trimmed = value?.trim();
-  if (!trimmed || !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(trimmed)) {
-    return null;
-  }
-  return trimmed;
-}
-
-function getTagColorStyle(color: string): CSSProperties {
-  return {
-    borderColor: hexToRgba(color, 0.58),
-    backgroundColor: hexToRgba(color, 0.14),
-    color: hexToRgba(color, 0.96),
-  };
-}
-
-function hexToRgba(hex: string, alpha: number) {
-  const value = hex.slice(1, 7);
-  const r = Number.parseInt(value.slice(0, 2), 16);
-  const g = Number.parseInt(value.slice(2, 4), 16);
-  const b = Number.parseInt(value.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function formatDuration(seconds: number): string {

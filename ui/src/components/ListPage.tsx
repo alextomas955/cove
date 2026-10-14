@@ -24,13 +24,13 @@ import {
   Play,
   Pause,
 } from "lucide-react";
-import type { ExtensionListFilterContribution, ExtensionListSortContribution, FindFilter } from "../api/types";
+import type { ExtensionListSortContribution, FindFilter } from "../api/types";
 import { ExtensionSlot } from "../router/RouteRegistry";
 import { getDefaultFilter, SavedFilterMenu } from "./SavedFilterMenu";
 import { InfiniteScrollSentinel } from "./InfiniteScrollSentinel";
 import { FilterDialog, type FilterDialogPreselection } from "./FilterDialog";
 import { FilterButton } from "./FilterButton";
-import type { CriterionDefinition, CriterionType, EntityType, FilterDialogCustomSection } from "./filterCriteriaTypes";
+import type { CriterionDefinition, FilterDialogCustomSection } from "./filterCriteriaTypes";
 import { migrateLegacyPerformerFavoriteCriterion } from "./filterCriterionState";
 import { useResolvedKeybindingOverrides } from "../hooks/useResolvedKeybindingOverrides";
 import { useKeySequence } from "../hooks/useKeySequence";
@@ -69,8 +69,8 @@ import {
   removeObjectFilterChipTarget,
 } from "./ActiveObjectFilterChips";
 import {
+  createExtensionCriterionDefinition,
   collapseExtensionCriteria,
-  executableExtensionFilterKey,
   expandExtensionCriteria,
   unavailableExtensionCriterionDefinitions,
 } from "../extensions/extensionListFilters";
@@ -164,85 +164,6 @@ export interface ListPageProps {
   supportsFilterExpressions?: boolean;
 }
 const DEFAULT_ZOOM_LEVEL = 1;
-const REFERENCE_ENTITY_TYPE_BY_EXTENSION_VALUE: Record<string, EntityType> = {
-  tag: "tags",
-  tags: "tags",
-  taggroup: "tagGroups",
-  taggroups: "tagGroups",
-  tag_group: "tagGroups",
-  performer: "performers",
-  performers: "performers",
-  studio: "studios",
-  studios: "studios",
-  group: "groups",
-  groups: "groups",
-  gallery: "galleries",
-  galleries: "galleries",
-  video: "videos",
-  videos: "videos",
-  face: "faces",
-  faces: "faces",
-};
-
-function normalizeCriterionType(value: string | undefined): CriterionType {
-  const normalized = (value ?? "string").trim().toLowerCase();
-  switch (normalized) {
-    case "bool":
-    case "boolean":
-      return "bool";
-    case "int":
-    case "integer":
-    case "number":
-      return "number";
-    case "date":
-      return "date";
-    case "datetime":
-    case "timestamp":
-      return "timestamp";
-    case "duration":
-      return "duration";
-    case "percent":
-      return "number";
-    case "rating":
-      return "rating";
-    case "multiid":
-    case "reference":
-      return "multiId";
-    case "enum":
-      return "enum";
-    default:
-      return "string";
-  }
-}
-
-function normalizeReferenceEntityType(value?: string): EntityType | undefined {
-  if (!value) return undefined;
-  return REFERENCE_ENTITY_TYPE_BY_EXTENSION_VALUE[value.trim().toLowerCase()];
-}
-
-function createExtensionCriterionDefinition(contribution: ExtensionListFilterContribution): CriterionDefinition | null {
-  const criterionType = normalizeCriterionType(contribution.criterionType || contribution.customFieldType);
-  const executableFilterKey = executableExtensionFilterKey(contribution);
-  if (contribution.filterId && !executableFilterKey) return null;
-  const filterKey =
-    executableFilterKey ||
-    contribution.filterKey ||
-    (contribution.customFieldKey ? `extension:${contribution.extensionId}:${contribution.id}` : undefined);
-  if (!filterKey) return null;
-
-  return {
-    id: `extension:${contribution.extensionId}:${contribution.id}`,
-    label: contribution.label,
-    type: criterionType,
-    entityType: normalizeReferenceEntityType(contribution.entityReferenceType),
-    filterKey,
-    customFieldKey: contribution.customFieldKey,
-    customFieldType: contribution.customFieldType,
-    modifiers: contribution.modifiers,
-    options: contribution.options,
-  };
-}
-
 function createExtensionSortOption(contribution: ExtensionListSortContribution) {
   const value =
     contribution.sortKey ||
@@ -397,6 +318,15 @@ export function ListPage({
     const merged = [...(criteriaDefinitions ?? []), ...extensionCriteriaDefinitions, ...unavailableExtensionCriteria];
     return merged.length > 0 ? merged : undefined;
   }, [criteriaDefinitions, extensionCriteriaDefinitions, unavailableExtensionCriteria]);
+  const multiIdExtensionFilterKeys = useMemo(
+    () =>
+      new Set(
+        extensionCriteriaDefinitions
+          .filter((definition) => definition.type === "multiId")
+          .map((definition) => definition.filterKey),
+      ),
+    [extensionCriteriaDefinitions],
+  );
   const editorObjectFilter = useMemo(
     () =>
       migrateLegacyPerformerFavoriteCriterion(
@@ -1204,7 +1134,7 @@ export function ListPage({
                 });
               }
               const next = removeObjectFilterChipTarget(editorObjectFilter, mergedCriteriaDefinitions, target);
-              onObjectFilterChange(collapseExtensionCriteria(next, objectFilter));
+              onObjectFilterChange(collapseExtensionCriteria(next, objectFilter, multiIdExtensionFilterKeys));
               onFilterChange({ ...filter, page: 1 });
             }}
             onClearAll={
@@ -1345,7 +1275,7 @@ export function ListPage({
                 },
               });
             }
-            onObjectFilterChange(collapseExtensionCriteria(f, objectFilter));
+            onObjectFilterChange(collapseExtensionCriteria(f, objectFilter, multiIdExtensionFilterKeys));
             onFilterChange({ ...filter, page: 1 });
           }}
           preselectCriterion={filterDialogPreselect}

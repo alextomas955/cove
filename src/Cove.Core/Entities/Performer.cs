@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Cove.Core.Enums;
 
 namespace Cove.Core.Entities;
@@ -35,6 +36,11 @@ public class Performer : BaseEntity
     public DatePrecision CareerEndPrecision { get; set; }
     public string? Tattoos { get; set; }
     public string? Piercings { get; set; }
+    // Binary-compatibility shim for extensions built while a shared favorite flag was stored here.
+    // Favorites are per-user, so Cove no longer stores or reads this: it loads as false.
+    [Obsolete("Favorites are per-user. Read IUserEngagementService.GetSnapshotAsync(AffinityHostType.Performer, id) and use IsFavorite.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool Favorite { get; set; }
     public string? Details { get; set; }
     public string? SearchText { get; set; }

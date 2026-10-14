@@ -310,7 +310,7 @@ For implementation guidance, see [Create a scraper](../create-scraper/) and [Cre
 
 Pair `IExtensionEntityFilterProvider` with an `IUIExtension` declaration created by `UIManifestBuilder.AddExtensionListFilter`. Cove owner-keys provider registrations automatically, verifies that the provider's `Filters` collection matches the owner-stamped manifest declaration, and pins the exact provider generation for the complete criterion execution.
 
-The current executable boundary is limited to tags. Providers receive authorized candidate ids in bounded batches and return membership plus a stable revision; they do not own query authorization, sorting, counts, or pagination. See [UI extension points](../ui-extension-points/#extension-owned-tag-predicates) for the request contract, limits, cancellation rules, and saved-filter behavior.
+The current executable boundary covers the tag list, the tag graph, and the video list. Providers receive authorized candidate ids in bounded batches and return membership plus a stable revision; they do not own query authorization, sorting, counts, or pagination. See [UI extension points](../ui-extension-points/#extension-owned-list-predicates) for the request contract, limits, cancellation rules, and saved-filter behavior.
 
 ## Specialized service contributions
 

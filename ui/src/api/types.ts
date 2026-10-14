@@ -3507,6 +3507,7 @@ export interface BulkVideoUpdate {
   ids: number[];
   clearFields?: string[];
   rating?: number;
+  favorite?: boolean;
   organized?: boolean;
   studioId?: number | null;
   date?: string;
@@ -3570,6 +3571,7 @@ export interface BulkGalleryUpdate {
   ids: number[];
   clearFields?: string[];
   rating?: number;
+  favorite?: boolean;
   organized?: boolean;
   studioId?: number | null;
   date?: string;
@@ -3586,6 +3588,7 @@ export interface BulkImageUpdate {
   ids: number[];
   clearFields?: string[];
   rating?: number;
+  favorite?: boolean;
   organized?: boolean;
   studioId?: number | null;
   date?: string;

@@ -304,6 +304,7 @@ export function ImagesPage({ onNavigate }: Props) {
       title: getImageDisplayTitle(img),
       interactionSource: "imagesPage",
       interactionMeta: { pageKey: "images" },
+      references: img,
     }),
     [],
   );

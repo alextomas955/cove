@@ -5,9 +5,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { CustomFieldDefinition } from "../api/types";
 import {
   BulkEditDialog,
+  GALLERY_BULK_FIELDS,
   GROUP_BULK_FIELDS,
   IMAGE_BULK_FIELDS,
   PERFORMER_BULK_FIELDS,
+  STUDIO_BULK_FIELDS,
+  TAG_BULK_FIELDS,
   VIDEO_BULK_FIELDS,
 } from "../components/BulkEditDialog";
 
@@ -114,6 +117,29 @@ describe("BulkEditDialog", () => {
       groupIds: [{ groupId: 5, videoIndex: 0 }],
       groupMode: "SET",
     });
+  });
+
+  it.each([
+    ["videos", VIDEO_BULK_FIELDS],
+    ["images", IMAGE_BULK_FIELDS],
+    ["galleries", GALLERY_BULK_FIELDS],
+    ["performers", PERFORMER_BULK_FIELDS],
+    ["tags", TAG_BULK_FIELDS],
+    ["studios", STUDIO_BULK_FIELDS],
+  ])("adds or removes favorites for selected %s, saying which", async (_, fields) => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+
+    renderDialog(
+      <BulkEditDialog open onClose={vi.fn()} title="Edit" selectedCount={3} fields={fields} onApply={onApply} />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Favorite" }));
+    expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove from favorites" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onApply).toHaveBeenCalledWith({ favorite: false });
   });
 
   it("loads studio search results and renders the shared rating widget", async () => {

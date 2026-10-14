@@ -794,6 +794,29 @@ public class ExtensionBundleSupportTests
     }
 
     [Fact]
+    public void Entity_picker_filters_declare_a_multi_id_criterion_with_its_reference_type()
+    {
+        var builder = new UIManifestBuilder("com.example.builder");
+        Assert.Throws<ArgumentException>(() => builder.AddExtensionEntityListFilter(
+            "videos", "segment-tags", "Segment tags", " ", "segment-tags"));
+
+        var manifest = new UIManifestBuilder("com.example.builder")
+            .AddExtensionEntityListFilter(" Videos ", " segment-tags ", " Segment tags ", " Tags ", " segment-tags ")
+            .AddExtensionEntityListFilter("videos", "slot-performers", "Slot performers", "performers", "slot-performers",
+                modifiers: ["includes", "is-null"])
+            .Build();
+
+        var defaults = manifest.ListFilters[0];
+        Assert.Equal("videos", defaults.EntityType);
+        Assert.Equal("segment-tags", defaults.Id);
+        Assert.Equal("multiid", defaults.CriterionType);
+        Assert.Equal("tags", defaults.EntityReferenceType);
+        Assert.Equal("segment-tags", defaults.FilterId);
+        Assert.Equal(["INCLUDES", "INCLUDES_ALL", "EXCLUDES", "IS_NULL", "NOT_NULL"], defaults.Modifiers);
+        Assert.Equal(["INCLUDES", "IS_NULL"], manifest.ListFilters[1].Modifiers);
+    }
+
+    [Fact]
     public void Executable_filters_support_generic_entity_types_in_the_sdk_and_aggregated_manifest()
     {
         var builder = new UIManifestBuilder("com.example.builder");

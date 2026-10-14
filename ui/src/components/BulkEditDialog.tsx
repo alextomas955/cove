@@ -21,6 +21,9 @@ export interface BulkEditField {
   options?: { label: string; value: string | number }[];
   modeKey?: string;
   nullable?: boolean;
+  /** Button labels for a bool field, when "True" and "False" would not say what happens to the selection. */
+  trueLabel?: string;
+  falseLabel?: string;
   serializeValue?: (value: unknown) => unknown;
 }
 
@@ -332,7 +335,7 @@ function BulkFieldEditor({
             onClick={() => onValueChange(true)}
             className={pillClass(value === true)}
           >
-            True
+            {field.trueLabel ?? "True"}
           </button>
           <button
             type="button"
@@ -340,7 +343,7 @@ function BulkFieldEditor({
             onClick={() => onValueChange(false)}
             className={pillClass(value === false)}
           >
-            False
+            {field.falseLabel ?? "False"}
           </button>
         </div>
       )}
@@ -798,8 +801,18 @@ function serializeBulkFieldValue(field: BulkEditField, value: unknown) {
 
 // ===== Pre-configured bulk edit field sets =====
 
+// Favorites are the current user's own, so the choice is to add the selection to them or take it out.
+const FAVORITE_FIELD: BulkEditField = {
+  key: "favorite",
+  label: "Favorite",
+  type: "bool",
+  trueLabel: "Add to favorites",
+  falseLabel: "Remove from favorites",
+};
+
 export const VIDEO_BULK_FIELDS: BulkEditField[] = [
   { key: "rating", label: "Rating", type: "rating" },
+  FAVORITE_FIELD,
   { key: "organized", label: "Organized", type: "bool" },
   { key: "isVr", label: "VR", type: "bool" },
   { key: "studioId", label: "Studio", type: "select", entityType: "studios", nullable: true },
@@ -820,7 +833,7 @@ export const VIDEO_BULK_FIELDS: BulkEditField[] = [
 
 export const PERFORMER_BULK_FIELDS: BulkEditField[] = [
   { key: "rating", label: "Rating", type: "rating" },
-  { key: "favorite", label: "Favorite", type: "bool" },
+  FAVORITE_FIELD,
   {
     key: "gender",
     label: "Gender",
@@ -837,6 +850,7 @@ export const PERFORMER_BULK_FIELDS: BulkEditField[] = [
 
 export const GALLERY_BULK_FIELDS: BulkEditField[] = [
   { key: "rating", label: "Rating", type: "rating" },
+  FAVORITE_FIELD,
   { key: "organized", label: "Organized", type: "bool" },
   { key: "studioId", label: "Studio", type: "select", entityType: "studios", nullable: true },
   { key: "date", label: "Date", type: "date" },
@@ -849,6 +863,7 @@ export const GALLERY_BULK_FIELDS: BulkEditField[] = [
 
 export const IMAGE_BULK_FIELDS: BulkEditField[] = [
   { key: "rating", label: "Rating", type: "rating" },
+  FAVORITE_FIELD,
   { key: "organized", label: "Organized", type: "bool" },
   { key: "studioId", label: "Studio", type: "select", entityType: "studios", nullable: true },
   { key: "date", label: "Date", type: "date" },
@@ -888,14 +903,14 @@ export const TAG_BULK_FIELDS: BulkEditField[] = [
   { key: "minOccurrenceSec", label: "Min Seconds", type: "number" },
   { key: "minOccurrencePercent", label: "Min Percent", type: "number" },
   { key: "organized", label: "Organized", type: "bool" },
-  { key: "favorite", label: "Favorite", type: "bool" },
+  FAVORITE_FIELD,
   { key: "parentIds", label: "Parent Tags", type: "multiId", entityType: "tags", modeKey: "parentMode" },
   { key: "childIds", label: "Child Tags", type: "multiId", entityType: "tags", modeKey: "childMode" },
 ];
 
 export const STUDIO_BULK_FIELDS: BulkEditField[] = [
   { key: "rating", label: "Rating", type: "rating" },
-  { key: "favorite", label: "Favorite", type: "bool" },
+  FAVORITE_FIELD,
   { key: "details", label: "Details", type: "string" },
   { key: "organized", label: "Organized", type: "bool" },
   { key: "tagIds", label: "Tags", type: "multiId", entityType: "tags", modeKey: "tagMode" },

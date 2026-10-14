@@ -18,6 +18,7 @@ import {
 } from "./EntityReferenceSelector";
 import { metadataServerLabel } from "./MetadataServerLinks";
 import { relationKey, scrapedAsTitle, type ScrapeRelationActionMap } from "./ScrapeRelationChoices";
+import { toTagOption } from "../utils/tags";
 import type { CollectionMode } from "./videoScrapeUtils";
 import {
   renderDiffValue,
@@ -461,6 +462,7 @@ function RelationshipEditor({
   incomingHidden,
   waiting = false,
   onLinkTag,
+  tagOptions,
 }: {
   entityType: "tag" | "performer";
   label: string;
@@ -473,13 +475,20 @@ function RelationshipEditor({
   /** The library has not said yet which scraped items it has, so none is called new or matched. */
   waiting?: boolean;
   onLinkTag?: TaggerReviewInput["onLinkTag"];
+  /** The video's tags as options, so the current tag chips carry their colors. */
+  tagOptions?: EntityReferenceOption[];
 }) {
   const chosen = new Set(selected);
   const current = items.filter((entry) => entry.inTarget && entry.localId != null);
   const libraryIds = selected
     .map(libraryIdOf)
     .filter((id): id is number => id != null && !current.some((entry) => entry.localId === id));
-  const seedOptions: EntityReferenceOption[] = current.map((entry) => ({ id: entry.localId!, label: entry.label }));
+  // Tags come with their colors, so the chips look like the video's tags elsewhere.
+  const seedOptions: EntityReferenceOption[] = current.map((entry) => ({
+    ...tagOptions?.find((option) => option.id === entry.localId),
+    id: entry.localId!,
+    label: entry.label,
+  }));
   const labelOf = new Map(seedOptions.map((option) => [option.id, option.label]));
   // The selector draws the current items; what the search added is drawn apart as additions, the way
   // added scraped items are, so it is not mistaken for something the video already has.
@@ -903,6 +912,7 @@ export function buildTaggerReview(input: TaggerReviewInput) {
         incomingHidden={mode === "skip"}
         waiting={Boolean(field.waiting)}
         onLinkTag={entityType === "tag" ? input.onLinkTag : undefined}
+        tagOptions={entityType === "tag" ? input.video.tags.map(toTagOption) : undefined}
       />
     );
     fields.push(field);

@@ -223,6 +223,56 @@ public partial class StashMigrationService
         }
     }
 
+    // Favorites are per-user, so a Stash favorite becomes one for the importing owner. Stash rows that
+    // merge into one Cove entity favorite it when any of them was a favorite; an existing favorite is kept.
+    private async Task AddImportedFavoritesAsync(
+        IEnumerable<int> favoriteStashIds,
+        IReadOnlyDictionary<int, int> idMap,
+        AffinityHostType hostType,
+        CancellationToken ct)
+    {
+        var hostIds = favoriteStashIds
+            .Where(idMap.ContainsKey)
+            .Select(stashId => idMap[stashId])
+            .ToHashSet();
+        if (hostIds.Count == 0)
+            return;
+
+        var engagementUserId = await GetRequiredImportEngagementUserIdAsync(ct);
+        foreach (var hostIdChunk in hostIds.Chunk(500))
+        {
+            var existingByHostId = await _db.ReadSet<UserEntityAffinity>()
+                .Where(affinity => affinity.UserId == engagementUserId
+                    && affinity.HostType == hostType
+                    && hostIdChunk.Contains(affinity.HostId))
+                .ToDictionaryAsync(affinity => affinity.HostId, ct);
+
+            foreach (var hostId in hostIdChunk)
+            {
+                if (existingByHostId.TryGetValue(hostId, out var existingAffinity))
+                {
+                    if (!existingAffinity.IsFavorite)
+                    {
+                        existingAffinity.IsFavorite = true;
+                        _db.Entry(existingAffinity).State = EntityState.Modified;
+                    }
+                    continue;
+                }
+
+                _db.UserEntityAffinities.Add(new UserEntityAffinity
+                {
+                    UserId = engagementUserId,
+                    HostType = hostType,
+                    HostId = hostId,
+                    IsFavorite = true,
+                });
+            }
+
+            await _db.SaveChangesAsync(ct);
+            _db.ChangeTracker.Clear();
+        }
+    }
+
     private async Task AddImportedVideoLikeInteractionsAsync(
         IReadOnlyDictionary<int, List<DateTime>> likeHistoryByStashId,
         IReadOnlyDictionary<int, int> idMap,

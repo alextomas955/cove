@@ -219,6 +219,7 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
         title: displayTitle,
         interactionSource: "imageDetailPage",
         interactionMeta: { pageKey: "imageDetail", route: `/image/${image.id}` },
+        references: image,
       },
     ];
   }, [displayTitle, image]);

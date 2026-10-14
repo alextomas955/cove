@@ -412,8 +412,8 @@ public class VideoRepository : IVideoRepository
 
             if (filter.PerformerFavoriteCriterion != null)
                 query = filter.PerformerFavoriteCriterion.Value
-                    ? query.Where(s => s.VideoPerformers.Any(sp => sp.Performer!.Favorite))
-                    : query.Where(s => !s.VideoPerformers.Any(sp => sp.Performer!.Favorite));
+                    ? query.Where(s => s.VideoPerformers.Any(sp => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(sp.PerformerId)))
+                    : query.Where(s => !s.VideoPerformers.Any(sp => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(sp.PerformerId)));
 
             query = FilterHelpers.ApplyRemoteId(query, filter.RemoteIdCriterion, filter.RemoteIdValueCriterion, video => video.RemoteIds, remoteId => remoteId.Endpoint, remoteId => remoteId.RemoteId);
 

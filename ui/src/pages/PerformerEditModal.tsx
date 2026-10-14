@@ -12,6 +12,7 @@ import { RemoteIdsEditor, normalizeRemoteIds, type RemoteIdValue } from "../comp
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 import { SelectedTagChips, type SelectableTag } from "../components/TagSelector";
+import { TagChipHover } from "../components/TagProvenanceHover";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 import { CountrySelect } from "../components/Country";
 import { changedUpdateFields } from "../utils/changedUpdateFields";
@@ -558,7 +559,9 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
                   type="button"
                   className={`block w-full px-3 py-1.5 text-left text-sm ${activeTagKey === tagAutocompleteItems[index].key ? "bg-accent text-white" : "text-foreground hover:bg-card"}`}
                 >
-                  {tag.name}
+                  <TagChipHover tag={tag} wrapperClassName="-mx-3 -my-1.5 flex px-3 py-1.5">
+                    <span>{tag.name}</span>
+                  </TagChipHover>
                 </button>
               ))}
               {showTagCreateOption ? (

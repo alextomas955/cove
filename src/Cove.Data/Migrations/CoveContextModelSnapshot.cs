@@ -2909,9 +2909,6 @@ namespace Cove.Data.Migrations
                     b.Property<string>("FakeTits")
                         .HasColumnType("text");
 
-                    b.Property<bool>("Favorite")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("GalleryCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2983,8 +2980,6 @@ namespace Cove.Data.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Favorite");
 
                     b.HasIndex("GalleryCount");
 
@@ -3665,9 +3660,6 @@ namespace Cove.Data.Migrations
                     b.Property<string>("Details")
                         .HasColumnType("text");
 
-                    b.Property<bool>("Favorite")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("GalleryCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3733,8 +3725,6 @@ namespace Cove.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ChildStudioCount");
-
-                    b.HasIndex("Favorite");
 
                     b.HasIndex("GalleryCount");
 
@@ -3864,9 +3854,6 @@ namespace Cove.Data.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<bool>("Favorite")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("GalleryCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3953,8 +3940,6 @@ namespace Cove.Data.Migrations
                         .HasDefaultValue(0);
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Favorite");
 
                     b.HasIndex("GalleryCount");
 
@@ -4860,12 +4845,17 @@ namespace Cove.Data.Migrations
                     b.Property<DateTime>("PlayedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("VideoId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("VideoId");
+
+                    b.HasIndex("UserId", "VideoId", "PlayedAt");
 
                     b.ToTable("video_play_history", (string)null);
                 });
@@ -6364,6 +6354,12 @@ namespace Cove.Data.Migrations
 
             modelBuilder.Entity("Cove.Core.Entities.VideoPlayHistory", b =>
                 {
+                    b.HasOne("Cove.Core.Entities.Auth.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Cove.Core.Entities.Video", "Video")
                         .WithMany("PlayHistory")
                         .HasForeignKey("VideoId")

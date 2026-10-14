@@ -1603,6 +1603,9 @@ public class EntityListSortBehaviorHarnessTests
 
         public UserEntityAffinity Affinity(AffinityHostType hostType, int hostId) => Affinities[(hostType, hostId)];
 
+        public void AddFavorite(AffinityHostType hostType, int hostId)
+            => AddAffinity(hostType, hostId, viewCount: 0, likeCount: 0, totalConsumedSec: 0, lastPositionSec: null, lastConsumedAt: null, favoritedAt: Now);
+
         public DateTime Now { get; } = new(2024, 7, 1, 12, 0, 0, DateTimeKind.Utc);
 
         public DateTime? LastLike(InteractionHostType hostType, int hostId)
@@ -1641,7 +1644,7 @@ public class EntityListSortBehaviorHarnessTests
             var tags = new[]
             {
                 new Tag { Id = 201, Name = "Arc", SortName = "Arc", TagGroup = tagGroups[0], CreatedAt = now.AddDays(-23), UpdatedAt = now.AddHours(-9), VideoCount = 1, GalleryCount = 3, GroupCount = 2, ImageCount = 1, PerformerCount = 2, StudioCount = 3 },
-                new Tag { Id = 202, Name = "Bloom", SortName = "Bloom", TagGroup = tagGroups[1], Favorite = true, CreatedAt = now.AddDays(-22), UpdatedAt = now.AddHours(-8), VideoCount = 2, GalleryCount = 1, GroupCount = 3, ImageCount = 2, PerformerCount = 3, StudioCount = 1 },
+                new Tag { Id = 202, Name = "Bloom", SortName = "Bloom", TagGroup = tagGroups[1], CreatedAt = now.AddDays(-22), UpdatedAt = now.AddHours(-8), VideoCount = 2, GalleryCount = 1, GroupCount = 3, ImageCount = 2, PerformerCount = 3, StudioCount = 1 },
                 new Tag { Id = 203, Name = "Cinder", SortName = "Cinder", TagGroup = tagGroups[2], CreatedAt = now.AddDays(-21), UpdatedAt = now.AddHours(-6), VideoCount = 3, GalleryCount = 2, GroupCount = 1, ImageCount = 3, PerformerCount = 1, StudioCount = 2 },
             };
 
@@ -1947,6 +1950,7 @@ public class EntityListSortBehaviorHarnessTests
             AddAffinity(AffinityHostType.Text, texts[2].Id, viewCount: 6, likeCount: 12, totalConsumedSec: 120, lastPositionSec: 12, lastConsumedAt: now.AddDays(-4));
             AddAffinity(AffinityHostType.Gallery, galleries[0].Id, viewCount: 0, likeCount: 0, totalConsumedSec: 0, lastPositionSec: null, lastConsumedAt: null, favoritedAt: now.AddDays(-10));
             AddAffinity(AffinityHostType.Group, groups[0].Id, viewCount: 0, likeCount: 0, totalConsumedSec: 0, lastPositionSec: null, lastConsumedAt: null, favoritedAt: now.AddDays(-10));
+            AddAffinity(AffinityHostType.Tag, tags[1].Id, viewCount: 0, likeCount: 0, totalConsumedSec: 0, lastPositionSec: null, lastConsumedAt: null, favoritedAt: now.AddDays(-10));
             Context.Interactions.AddRange(
                 new Interaction { UserId = TestUserId, HostType = InteractionHostType.Image, HostId = images[0].Id, Kind = InteractionKind.LikeCount, At = now.AddDays(-9) },
                 new Interaction { UserId = TestUserId, HostType = InteractionHostType.Image, HostId = images[1].Id, Kind = InteractionKind.LikeCount, At = now.AddDays(-6) },

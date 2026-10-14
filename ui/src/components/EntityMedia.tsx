@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { entityImages } from "../api/client";
 import type { Tag } from "../api/types";
 import { ExtensionComponentOverrideRenderer, useExtensions } from "../extensions/ExtensionLoader";
+import { fullscreenContainerFor } from "../utils/fullscreenPortal";
 
 export const ENTITY_MEDIA_TARGET = "entity.media" as const;
 
@@ -27,6 +28,8 @@ interface EntityMediaHoverProps extends Omit<EntityMediaRenderProps, "surface" |
   wrapperClassName?: string;
   /** Host-owned details shown under the media, outside the entity.media extension boundary. */
   footer?: ReactNode;
+  /** Shows the footer as the whole popup when there is no media, for details worth a hover on their own. */
+  showFooterWithoutMedia?: boolean;
 }
 
 interface EntityMediaPreviewProps extends Omit<EntityMediaRenderProps, "renderDefault"> {
@@ -54,7 +57,7 @@ function aspectRatioValue(aspectRatio: string) {
 }
 
 export type TagMediaReference = Pick<Tag, "id" | "name"> &
-  Partial<Pick<Tag, "imagePath" | "hasImage" | "tagGroupName" | "tagGroupColor">>;
+  Partial<Pick<Tag, "description" | "imagePath" | "hasImage" | "tagGroupName" | "tagGroupColor">>;
 
 export function getTagMediaImageUrl(tag: TagMediaReference) {
   return tag.imagePath || (tag.hasImage ? entityImages.tagImageUrl(tag.id) : null);
@@ -76,7 +79,25 @@ export function TagGroupCaption({ tag, className }: { tag: TagMediaReference; cl
   );
 }
 
-/** Shared hover boundary for compact tag references across cards, feeds, and badges. */
+/** Says what the tag means in its hover popup. Renders nothing for a tag without a description. */
+export function TagDescriptionCaption({ tag, className }: { tag: TagMediaReference; className?: string }) {
+  const description = tag.description?.trim();
+  if (!description) return null;
+  return (
+    <span
+      className={["line-clamp-8 whitespace-pre-line break-words text-xs text-secondary", className ?? ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {description}
+    </span>
+  );
+}
+
+/**
+ * Shared hover boundary for compact tag references across cards, feeds, and badges. A tag with a
+ * description gets the popup even without media, so its chip can always say what the tag means.
+ */
 export function TagMediaHover({
   tag,
   children,
@@ -86,6 +107,8 @@ export function TagMediaHover({
   children: ReactNode;
   wrapperClassName?: string;
 }) {
+  const hasGroup = Boolean(tag.tagGroupName?.trim());
+  const hasDescription = Boolean(tag.description?.trim());
   return (
     <EntityMediaHover
       entityType="tag"
@@ -95,9 +118,19 @@ export function TagMediaHover({
       fit="cover"
       loading="lazy"
       wrapperClassName={wrapperClassName}
-      footer={tag.tagGroupName?.trim() ? <TagGroupCaption tag={tag} className="px-3 py-2" /> : undefined}
+      footer={
+        hasGroup || hasDescription ? (
+          <span className="flex flex-col gap-1.5 px-3 py-2">
+            <TagGroupCaption tag={tag} />
+            <TagDescriptionCaption tag={tag} />
+          </span>
+        ) : undefined
+      }
+      showFooterWithoutMedia={hasDescription}
     >
       {children}
+      {/* The popup is portalled and only drawn on hover, so screen readers read the description here. */}
+      {hasDescription ? <span className="sr-only"> {tag.description?.trim()}</span> : null}
     </EntityMediaHover>
   );
 }
@@ -180,20 +213,26 @@ export function EntityMediaPreview({ frameClassName, ...componentProps }: Entity
  * Optional hover surface for entity references. The host owns positioning,
  * containment, and the supplied static image; an entity.media override may
  * replace that image and owns any additional data fetching. With neither
- * static media nor an active override this returns the reference unchanged.
+ * static media nor an active override this returns the reference unchanged, unless the
+ * footer is asked to show on its own.
  */
 export function EntityMediaHover({
   children,
   wrapperClassName = "inline-flex",
   footer,
+  showFooterWithoutMedia = false,
   ...mediaProps
 }: EntityMediaHoverProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const [aspectRatio, setAspectRatio] = useState(DEFAULT_HOVER_ASPECT_RATIO);
   const preview = useEntityMediaPreview({ ...mediaProps, surface: "hover", className: "h-full w-full" });
+  // Without media the footer alone is the popup, when the caller says it is worth showing by itself.
+  const footerAlone = showFooterWithoutMedia && Boolean(footer);
+  const enabled = preview.enabled || footerAlone;
 
   useLayoutEffect(() => {
     if (!preview.enabled || !open) return;
@@ -218,7 +257,7 @@ export function EntityMediaHover({
   }, [preview.enabled, open]);
 
   useLayoutEffect(() => {
-    if (!preview.enabled || !open) return;
+    if (!enabled || !open) return;
 
     const place = () => {
       const anchor = anchorRef.current?.getBoundingClientRect();
@@ -251,17 +290,23 @@ export function EntityMediaHover({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [aspectRatio, preview.enabled, open]);
+  }, [aspectRatio, enabled, open]);
 
-  if (!preview.enabled) return <>{children}</>;
+  if (!enabled) return <>{children}</>;
 
   return (
     <span
       ref={anchorRef}
       className={`relative ${wrapperClassName}`}
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={() => {
+        setPortalTarget(fullscreenContainerFor(anchorRef.current));
+        setOpen(true);
+      }}
       onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onFocus={() => {
+        setPortalTarget(fullscreenContainerFor(anchorRef.current));
+        setOpen(true);
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
       }}
@@ -272,18 +317,20 @@ export function EntityMediaHover({
             <div
               ref={tooltipRef}
               role="tooltip"
-              aria-label={`Media for ${mediaProps.alt}`}
-              // Hidden while the media frame is empty, so a footer alone never shows as a popup.
-              className="pointer-events-none fixed z-[10000] block w-72 overflow-hidden rounded-xl border border-border bg-surface/95 shadow-2xl has-[>[data-media-frame]:empty]:hidden"
+              aria-label={preview.enabled ? `Media for ${mediaProps.alt}` : `About ${mediaProps.alt}`}
+              // Hidden while the media frame is empty, so a footer alone shows as a popup only when asked to.
+              className={`pointer-events-none fixed z-[10000] block w-72 overflow-hidden rounded-xl border border-border bg-surface/95 shadow-2xl ${footerAlone ? "" : "has-[>[data-media-frame]:empty]:hidden"}`}
               style={position}
             >
               {/* The frame clips the media to its aspect ratio, so an override can't push into the footer. */}
-              <div data-media-frame="" className="w-full overflow-hidden" style={{ aspectRatio }}>
+              <div data-media-frame="" className="w-full overflow-hidden empty:hidden" style={{ aspectRatio }}>
                 {preview.render()}
               </div>
-              {footer ? <div className="border-t border-border/70">{footer}</div> : null}
+              {footer ? (
+                <div className="border-border/70 [[data-media-frame]:not(:empty)+&]:border-t">{footer}</div>
+              ) : null}
             </div>,
-            document.body,
+            portalTarget ?? document.body,
           )
         : null}
     </span>

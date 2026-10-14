@@ -139,7 +139,6 @@ public sealed class StudioMergeService(
         target.ImageBlobId = FirstText(target.ImageBlobId, sources.Select(source => source.ImageBlobId));
         target.ImageOverrideBlobId = FirstText(target.ImageOverrideBlobId, sources.Select(source => source.ImageOverrideBlobId));
         target.SearchText = FirstText(target.SearchText, sources.Select(source => source.SearchText));
-        target.Favorite |= sources.Any(source => source.Favorite);
         target.Organized |= sources.Any(source => source.Organized);
     }
 

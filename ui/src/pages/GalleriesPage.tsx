@@ -148,6 +148,8 @@ export function GalleriesPage({ onNavigate }: Props) {
       setShowBulkEdit(false);
       selectNone();
       queryClient.invalidateQueries({ queryKey: ["galleries"] });
+      // Ratings and favorites set here are the user's engagement, which cards read separately.
+      queryClient.invalidateQueries({ queryKey: ["engagement", "gallery"] });
     },
   });
 

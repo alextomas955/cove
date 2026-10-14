@@ -4,7 +4,7 @@ Cove's tag, performer, and studio merge services are the authoritative implement
 
 Every merge runs transactionally. The requested target and sources are first resolved through the caller's normal visibility and authorization rules. Once authorized, the transfer sees Cove-owned references hidden by row-level content filters so another user's engagement or relationships to restricted content are not lost.
 
-Set-like relationships are unioned and duplicate rows are removed. The survivor keeps populated intrinsic metadata and fills empty fields from sources in deterministic ID order. Boolean favorite and organized state is combined with logical OR. Hierarchy references are remapped on both ends, duplicate edges are removed, and self-edges introduced by the merge are discarded.
+Set-like relationships are unioned and duplicate rows are removed. The survivor keeps populated intrinsic metadata and fills empty fields from sources in deterministic ID order. Organized state is combined with logical OR, and so is each user's favorite: a user who favorited any merged entity has the survivor as a favorite. Hierarchy references are remapped on both ends, duplicate edges are removed, and self-edges introduced by the merge are discarded.
 
 The services transfer direct media relationships, aliases, URLs and remote identifiers, segments, groups, custom fields, provenance, ratings, bookmarks, affinities, interactions, playback history, security rules, saved and default filters, dynamic queries, share links, and documented Cove-owned JSON references. Provider- or extension-defined opaque JSON is not rewritten because Cove cannot safely infer its identifier semantics.
 

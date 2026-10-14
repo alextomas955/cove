@@ -375,11 +375,11 @@ public class MetadataController(
                         tagLookup.TryGetValue(normalizedName, out var existing);
                         if (existing != null)
                         {
-                            if (overwrite) { existing.Description = tag.Description; existing.Favorite = tag.Favorite; }
+                            if (overwrite) existing.Description = tag.Description;
                         }
                         else
                         {
-                            var created = new Tag { Name = normalizedName, Description = tag.Description, Favorite = tag.Favorite };
+                            var created = new Tag { Name = normalizedName, Description = tag.Description };
                             dbCtx.Tags.Add(created);
                             tagLookup[normalizedName] = created;
                         }
@@ -609,7 +609,6 @@ public class MetadataController(
     internal static void ApplyImportedStudioMetadata(Studio target, Studio source)
     {
         target.Details = source.Details;
-        target.Favorite = source.Favorite;
         target.Organized = source.Organized;
     }
 
@@ -637,7 +636,6 @@ public class MetadataController(
         target.Tattoos = source.Tattoos;
         target.Piercings = source.Piercings;
         target.Details = source.Details;
-        target.Favorite = source.Favorite;
     }
 
     [HttpPost("clean-generated")]

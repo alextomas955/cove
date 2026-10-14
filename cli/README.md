@@ -64,6 +64,28 @@ cove-cli tag-groups delete Seasons --yes
 
 An empty `--description` or `--color` clears it. Deleting a tag group keeps its tags and leaves them ungrouped.
 
+Create, show, and delete groups. Commands that act on a group take its ID or its name:
+
+```sh
+cove-cli groups create "Road Trip" --description "Summer drive" --date 2026-07
+cove-cli groups show "Road Trip"
+cove-cli groups delete "Road Trip" --yes
+```
+
+A reference made only of digits is tried as an ID first and then as a name, except in `groups delete`, where it is always an ID. Names match exactly, including spaces; a name differing only in the case of A–Z letters is accepted when no exact match exists. Group names need not be unique, so a name shared by several groups is rejected with their IDs; use one of those IDs instead. Deleting a group keeps the videos and other records it held.
+
+Add records to a static group by type and record ID, then reorder or remove them by their group item ID:
+
+```sh
+cove-cli groups items add "Road Trip" video 7 8 9
+cove-cli groups items add 42 image 15 --first
+cove-cli groups items list "Road Trip"
+cove-cli groups items move 42 103 --to-position 2
+cove-cli groups items remove 42 103
+```
+
+New items go at the end unless `--first` or `--to-position` is given. Every ID is checked before anything is added or removed, so an unknown ID leaves the group unchanged. Removing an item keeps the record itself in the library.
+
 Authenticate interactively with a Cove server:
 
 ```sh

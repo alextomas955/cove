@@ -133,6 +133,8 @@ export function VideoSelectionActions({
       setShowBulkEdit(false);
       onSelectNone();
       invalidate();
+      // Ratings and favorites set here are the user's engagement, which cards read separately.
+      queryClient.invalidateQueries({ queryKey: ["engagement", "video"] });
     },
   });
 

@@ -63,7 +63,6 @@ public sealed class TagMergeServiceTests
             Name = " Source ",
             SortName = "Source sort",
             SearchText = "Source supplemental search text",
-            Favorite = true,
             Aliases =
             [
                 new TagAlias { Alias = " source " },
@@ -151,7 +150,6 @@ public sealed class TagMergeServiceTests
         Assert.Equal("Survivor description", merged.Description);
         Assert.Equal("Source sort", merged.SortName);
         Assert.Equal("Source supplemental search text", merged.SearchText);
-        Assert.True(merged.Favorite);
         Assert.Contains(merged.Aliases, alias => alias.Alias == "Historical alias");
         Assert.DoesNotContain(merged.Aliases, alias => TagNameRules.NamesEqual(alias.Alias, target.Name));
         Assert.Contains(merged.RemoteIds, remote => remote.RemoteId == "remote-source");

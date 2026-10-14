@@ -587,6 +587,7 @@ export const GALLERY_CRITERIA: CriteriaDefinitionList<GalleryFilterCriteria> = [
     filterKey: "performerFilterCriterion",
     category: "related",
     relatedCriteria: () => getRelatedCriteria("performers"),
+    relatedResultLabel: "galleries",
   },
   {
     id: "imageCount",
@@ -688,6 +689,7 @@ export const IMAGE_CRITERIA: CriteriaDefinitionList<ImageFilterCriteria> = [
     filterKey: "performerFilterCriterion",
     category: "related",
     relatedCriteria: () => getRelatedCriteria("performers"),
+    relatedResultLabel: "images",
   },
   {
     id: "fileCount",
@@ -858,6 +860,7 @@ export const AUDIO_CRITERIA: CriteriaDefinitionList<AudioFilterCriteria> = [
     category: "related",
     supportsDistinctSiblingMatches: true,
     relatedCriteria: () => getRelatedCriteria("performers"),
+    relatedResultLabel: "audios",
   },
   {
     id: "studios",
@@ -973,6 +976,7 @@ export const TEXT_CRITERIA: CriteriaDefinitionList<TextFilterCriteria> = [
     filterKey: "performerFilterCriterion",
     category: "related",
     relatedCriteria: () => getRelatedCriteria("performers"),
+    relatedResultLabel: "texts",
   },
   {
     id: "studios",

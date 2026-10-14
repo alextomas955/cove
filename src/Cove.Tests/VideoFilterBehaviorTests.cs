@@ -874,7 +874,6 @@ public class VideoFilterBehaviorTests
         await using var context = CreateContext();
         var age19 = CreatePerformer("Age 19", new DateOnly(2006, 1, 1));
         var favoriteAge28 = CreatePerformer("Favorite age 28", new DateOnly(1997, 1, 1));
-        favoriteAge28.Favorite = true;
         var age28 = CreatePerformer("Age 28", new DateOnly(1997, 1, 1));
         var matches = CreateVideoWithFile("age-or-favorite", videoDate: new DateOnly(2025, 6, 2));
         matches.VideoPerformers.Add(new VideoPerformer { Performer = age19 });
@@ -884,6 +883,7 @@ public class VideoFilterBehaviorTests
         fails.VideoPerformers.Add(new VideoPerformer { Performer = age28 });
         context.Videos.AddRange(matches, fails, CreateVideoWithFile("empty", videoDate: new DateOnly(2025, 6, 2)));
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoritePerformerAsync(context, favoriteAge28);
 
         var (items, count) = await new VideoRepository(context).FindAsync(
             new VideoFilter
@@ -909,7 +909,6 @@ public class VideoFilterBehaviorTests
         await using var context = CreateContext();
         var unknownAge = CreatePerformer("Unknown age", null);
         var favorite = CreatePerformer("Favorite", new DateOnly(1990, 1, 1));
-        favorite.Favorite = true;
         var knownNonFavorite = CreatePerformer("Known non-favorite", new DateOnly(1990, 1, 1));
         var matches = CreateVideoWithFile("unknown-or-favorite", videoDate: new DateOnly(2025, 6, 2));
         matches.VideoPerformers.Add(new VideoPerformer { Performer = unknownAge });
@@ -918,6 +917,7 @@ public class VideoFilterBehaviorTests
         fails.VideoPerformers.Add(new VideoPerformer { Performer = knownNonFavorite });
         context.Videos.AddRange(matches, fails);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await FavoritePerformerAsync(context, favorite);
 
         var (items, count) = await new VideoRepository(context).FindAsync(
             new VideoFilter
@@ -2738,6 +2738,12 @@ public class VideoFilterBehaviorTests
     {
         context.TextDocuments.Add(textDocument);
         return textDocument.Id;
+    }
+
+    private static async Task FavoritePerformerAsync(CoveContext context, Performer performer)
+    {
+        context.UserEntityAffinities.Add(new UserEntityAffinity { UserId = 1, HostType = AffinityHostType.Performer, HostId = performer.Id, IsFavorite = true });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private static CoveContext CreateContext()

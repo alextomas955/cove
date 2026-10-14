@@ -313,7 +313,34 @@ public class VideoEngagementControllerTests
                 Assert.Equal("overall", rating.Aspect);
                 Assert.Equal(88, rating.Value);
             });
+
+        // Play dates are each user's own: user two neither sees user one's play nor removes it.
+        Assert.Empty((await GetHistoryAsync(videosController, videoId)).PlayHistory);
+        // A date given to user two on upgrade has no affinity row beside it; -1 still removes it.
+        context.Add(new VideoPlayHistory { VideoId = videoId, UserId = 9, PlayedAt = DateTime.UtcNow });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        Assert.Single((await GetHistoryAsync(videosController, videoId)).PlayHistory);
+        Assert.IsType<NoContentResult>(await videosController.DeletePlay(videoId, CancellationToken.None));
+        Assert.Empty((await GetHistoryAsync(videosController, videoId)).PlayHistory);
+        Assert.IsType<NoContentResult>(await videosController.ResetPlayCount(videoId, CancellationToken.None));
+        var playDate = Assert.Single(await context.Set<VideoPlayHistory>().IgnoreQueryFilters().ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(7, playDate.UserId);
+
+        context.ChangeTracker.Clear();
+        // A caller without a user, such as a background job, neither sees nor records play dates.
+        principalAccessor.Set(CovePrincipal.System());
+        Assert.Empty((await GetHistoryAsync(videosController, videoId)).PlayHistory);
+        Assert.IsType<NoContentResult>(await videosController.RecordPlay(videoId, CancellationToken.None));
+        Assert.Single(await context.Set<VideoPlayHistory>().IgnoreQueryFilters().ToListAsync(TestContext.Current.CancellationToken));
+
+        principalAccessor.Set(CreatePrincipal(7));
+        Assert.Single((await GetHistoryAsync(videosController, videoId)).PlayHistory);
+        await new UserEngagementService(context, principalAccessor).ResetAllActivityAsync(TestContext.Current.CancellationToken);
+        Assert.Empty(await context.Set<VideoPlayHistory>().IgnoreQueryFilters().ToListAsync(TestContext.Current.CancellationToken));
     }
+
+    private static async Task<VideoHistoryDto> GetHistoryAsync(VideosController controller, int videoId)
+        => Assert.IsType<VideoHistoryDto>(Assert.IsType<OkObjectResult>((await controller.GetHistory(videoId, CancellationToken.None)).Result).Value);
 
     private static VideosController CreateVideosController(CoveContext context, CurrentPrincipalAccessor principalAccessor)
     {

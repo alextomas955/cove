@@ -124,7 +124,7 @@ import {
 import { trackInteraction } from "../utils/interactionTracking";
 import { formatDateTime } from "../utils/dateFormat";
 import { faceDisplayName } from "../utils/faceDisplay";
-import { getEditableTagIds, getLockedTagIds, mergeTagIds } from "../utils/tags";
+import { getEditableTagIds, getLockedTagIds, mergeTagIds, toTagOption } from "../utils/tags";
 import { VideoVisualSimilarityPanel, useVideoVisualSimilarityAvailability } from "../components/VisualSimilarityPanel";
 import { VideoAudioSimilarityPanel, useVideoAudioSimilarityAvailability } from "../components/AudioSimilarityPanel";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
@@ -3257,7 +3257,7 @@ function VideoEditPanel({
   // Chip labels are already on the loaded video, so seed the selectors with them instead of letting
   // each selected chip re-fetch its name by id (30 tags = 30 authz-gated GETs that also starve the
   // connection pool and delay the search requests fired while typing).
-  const tagSeedOptions = useMemo(() => video.tags.map((tag) => ({ id: tag.id, label: tag.name })), [video.tags]);
+  const tagSeedOptions = useMemo(() => video.tags.map(toTagOption), [video.tags]);
   const performerSeedOptions = useMemo(
     () =>
       video.performers.map((performer) => ({

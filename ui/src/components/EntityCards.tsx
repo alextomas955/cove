@@ -79,6 +79,7 @@ import { ExtensionSlot, useHasExtensionSlot } from "../router/RouteRegistry";
 import { getImageDisplayTitle } from "../utils/imageDisplay";
 import { getGalleryDisplayTitle } from "../utils/galleryDisplay";
 import { faceDisplayName } from "../utils/faceDisplay";
+import { fullscreenContainerFor } from "../utils/fullscreenPortal";
 import { getAudioDisplayTitle, getTextDisplayTitle, pickPrimaryTextFile } from "../utils/audioTextDisplay";
 import { BookmarkButton } from "./BookmarkButton";
 import { useOptionalAppConfig } from "../state/AppConfigContext";
@@ -640,6 +641,7 @@ export function PopoverButton({
   children,
   wide,
   preferBelow,
+  buttonClassName = "text-secondary hover:text-accent",
 }: {
   icon: React.ReactNode;
   count: number;
@@ -647,6 +649,8 @@ export function PopoverButton({
   children?: React.ReactNode;
   wide?: boolean;
   preferBelow?: boolean;
+  /** Colour classes for the trigger button, for surfaces that do not follow the card palette. */
+  buttonClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLDivElement>(null);
@@ -654,6 +658,7 @@ export function PopoverButton({
   const enterTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   const handleMouseEnter = useCallback(() => {
     clearTimeout(leaveTimer.current);
@@ -670,11 +675,16 @@ export function PopoverButton({
         }
         const centerX = rect.left + rect.width / 2;
         const popWidth = wide ? 300 : 220;
-        let left = centerX - popWidth / 2;
-        if (left < 8) left = 8;
-        if (left + popWidth > window.innerWidth - 8) left = window.innerWidth - 8 - popWidth;
-        style.left = left;
+        // Content can widen the popover to its max-width class. Where that could cross the right edge,
+        // align it to the trigger's right edge instead so it grows leftward and stays beside the trigger.
+        const maxPopWidth = wide ? 360 : 280;
+        if (centerX + maxPopWidth / 2 > window.innerWidth - 8) {
+          style.right = Math.max(8, window.innerWidth - rect.right);
+        } else {
+          style.left = Math.max(8, centerX - popWidth / 2);
+        }
         setPopoverStyle(style);
+        setPortalTarget(fullscreenContainerFor(buttonRef.current));
       }
       setOpen(true);
     }, 200);
@@ -696,7 +706,7 @@ export function PopoverButton({
   return (
     <div className="relative" ref={buttonRef} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       <button
-        className="flex items-center gap-1 px-1.5 py-1 text-secondary hover:text-accent rounded text-xs transition-colors"
+        className={`flex items-center gap-1 px-1.5 py-1 ${buttonClassName} rounded text-xs transition-colors`}
         title={title}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -721,7 +731,7 @@ export function PopoverButton({
             <div className="text-xs uppercase tracking-wider text-muted font-semibold mb-1.5 px-1">{title}</div>
             {children}
           </div>,
-          document.body,
+          portalTarget ?? document.body,
         )}
     </div>
   );
@@ -859,7 +869,13 @@ export function PerformersPopoverContent({ filter }: { filter: Record<string, st
 
 // ===== Lazy gallery list popover content =====
 
-export function GalleriesPopoverContent({ filter }: { filter: Record<string, string | number> }) {
+export function GalleriesPopoverContent({
+  filter,
+  onNavigate,
+}: {
+  filter: Record<string, string | number>;
+  onNavigate?: (route: any) => void;
+}) {
   const { data, isLoading } = useQuery({
     queryKey: ["galleries-popover", filter],
     queryFn: () => galleries.find({ perPage: 10, sort: "title", direction: "asc" }, filter),
@@ -867,7 +883,7 @@ export function GalleriesPopoverContent({ filter }: { filter: Record<string, str
   if (isLoading) return <p className="text-[11px] text-muted px-1">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</p>;
   const items = data?.items ?? [];
   if (items.length === 0) return <p className="text-[11px] text-muted px-1">No galleries</p>;
-  return <GalleryPreviewList galleries={items} />;
+  return <GalleryPreviewList galleries={items} onNavigate={onNavigate} />;
 }
 
 // ===== Lazy studio list popover content =====
@@ -2119,47 +2135,7 @@ export function ImageTile({
         <>
           <hr className="border-border/50 my-0" />
           <div className="relative z-10 flex flex-wrap items-center justify-center gap-1 px-2 py-1.5 rounded-b card-popovers min-h-[28px]">
-            {(image.tags?.length ?? 0) > 0 && (
-              <PopoverButton icon={<Tag className="w-3.5 h-3.5" />} count={image.tags.length} title="Tags" preferBelow>
-                <TagLinkList items={image.tags} onNavigate={onNavigate} />
-              </PopoverButton>
-            )}
-            {(image.performers?.length ?? 0) > 0 && (
-              <PopoverButton
-                icon={<User className="w-3.5 h-3.5" />}
-                count={image.performers.length}
-                title="Performers"
-                wide
-                preferBelow
-              >
-                <PerformerPreviewGrid performers={image.performers} onNavigate={onNavigate} />
-              </PopoverButton>
-            )}
-            {image.galleryCount > 0 && (
-              <PopoverButton
-                icon={<FolderOpen className="w-3.5 h-3.5" />}
-                count={image.galleryCount}
-                title="Galleries"
-                wide
-                preferBelow
-              >
-                <GalleriesPopoverContent filter={{ imageId: image.id }} />
-              </PopoverButton>
-            )}
-            {imageGroups.length > 0 ? (
-              <PopoverButton
-                icon={<Layers className="w-3.5 h-3.5" />}
-                count={imageGroups.length}
-                title="Groups"
-                preferBelow
-              >
-                <EntityLinkList
-                  items={imageGroups.map((group) => ({ id: group.id, label: group.name }))}
-                  page="group"
-                  onNavigate={onNavigate}
-                />
-              </PopoverButton>
-            ) : null}
+            <ImageReferencePopovers imageId={image.id} references={image} onNavigate={onNavigate} />
             {likeCount > 0 && <LikeCounter count={likeCount} />}
             {hasFavorite ? (
               <CardFavoriteButton hostType="image" hostId={image.id} favorite={engagement?.isFavorite ?? false} />
@@ -2173,6 +2149,88 @@ export function ImageTile({
         </>
       )}
     </div>
+  );
+}
+
+/** The tag, performer, gallery and group references an image card summarises in its footer. */
+export type ImageReferences = Pick<Image, "tags" | "performers" | "galleryCount" | "groups">;
+
+export function hasImageReferences(references: ImageReferences) {
+  return (
+    (references.tags?.length ?? 0) > 0 ||
+    (references.performers?.length ?? 0) > 0 ||
+    references.galleryCount > 0 ||
+    (references.groups?.length ?? 0) > 0
+  );
+}
+
+export function ImageReferencePopovers({
+  imageId,
+  references,
+  onNavigate,
+  buttonClassName,
+}: {
+  imageId: number;
+  references: ImageReferences;
+  onNavigate?: (route: any) => void;
+  buttonClassName?: string;
+}) {
+  const tags = references.tags ?? [];
+  const performers = references.performers ?? [];
+  const groups = references.groups ?? [];
+  return (
+    <>
+      {tags.length > 0 && (
+        <PopoverButton
+          icon={<Tag className="w-3.5 h-3.5" />}
+          count={tags.length}
+          title="Tags"
+          preferBelow
+          buttonClassName={buttonClassName}
+        >
+          <TagLinkList items={tags} onNavigate={onNavigate} />
+        </PopoverButton>
+      )}
+      {performers.length > 0 && (
+        <PopoverButton
+          icon={<User className="w-3.5 h-3.5" />}
+          count={performers.length}
+          title="Performers"
+          wide
+          preferBelow
+          buttonClassName={buttonClassName}
+        >
+          <PerformerPreviewGrid performers={performers} onNavigate={onNavigate} />
+        </PopoverButton>
+      )}
+      {references.galleryCount > 0 && (
+        <PopoverButton
+          icon={<FolderOpen className="w-3.5 h-3.5" />}
+          count={references.galleryCount}
+          title="Galleries"
+          wide
+          preferBelow
+          buttonClassName={buttonClassName}
+        >
+          <GalleriesPopoverContent filter={{ imageId }} onNavigate={onNavigate} />
+        </PopoverButton>
+      )}
+      {groups.length > 0 ? (
+        <PopoverButton
+          icon={<Layers className="w-3.5 h-3.5" />}
+          count={groups.length}
+          title="Groups"
+          preferBelow
+          buttonClassName={buttonClassName}
+        >
+          <EntityLinkList
+            items={groups.map((group) => ({ id: group.id, label: group.name }))}
+            page="group"
+            onNavigate={onNavigate}
+          />
+        </PopoverButton>
+      ) : null}
+    </>
   );
 }
 

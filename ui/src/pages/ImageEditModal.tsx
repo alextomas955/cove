@@ -3,12 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { images, system } from "../api/client";
 import type { DownloaderMatch, Image, ImageCreate, VideoGroupInput } from "../api/types";
 import { CreateModalActions, EditModal, Field, TextInput, TextArea, SaveButton } from "../components/EditModal";
+import { invalidateImageMetadataQueries } from "../components/imageMetadataQueryInvalidation";
 import { IsoDateInput } from "../components/IsoDateInput";
 import { RatingField } from "../components/Rating";
 import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared";
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
+import { toTagOption } from "../utils/tags";
 import {
   PerformerContextTagEditor,
   applyPerformerContextTagEdits,
@@ -226,7 +228,7 @@ function ImageMetadataModal({
   const showRating = Boolean(image);
   const tagProvenanceById = buildTagProvenanceById(image?.tags ?? [], image?.fieldProvenance);
   // Seed chip labels from the loaded image so selected chips don't each re-fetch their name by id.
-  const tagSeedOptions = (image?.tags ?? []).map((tag) => ({ id: tag.id, label: tag.name }));
+  const tagSeedOptions = (image?.tags ?? []).map(toTagOption);
   const performerSeedOptions = (image?.performers ?? []).map((performer) => ({
     id: performer.id,
     label: performer.name,
@@ -574,8 +576,7 @@ export function ImageEditPanel({ image, onSaved }: { image: Image; onSaved?: () 
     onSuccess: (saved) => {
       // Reopening Edit before the refetch lands must start from the saved image.
       queryClient.setQueryData(["image", image.id], saved);
-      queryClient.invalidateQueries({ queryKey: ["image", image.id] });
-      queryClient.invalidateQueries({ queryKey: ["images"] });
+      void invalidateImageMetadataQueries(queryClient, image.id);
       onSaved?.();
     },
   });
@@ -624,8 +625,7 @@ export function ImageEditModal({ image, open, onClose }: ImageEditProps) {
     onSuccess: (saved) => {
       // Reopening Edit before the refetch lands must start from the saved image.
       queryClient.setQueryData(["image", image.id], saved);
-      queryClient.invalidateQueries({ queryKey: ["image", image.id] });
-      queryClient.invalidateQueries({ queryKey: ["images"] });
+      void invalidateImageMetadataQueries(queryClient, image.id);
       onClose();
     },
   });

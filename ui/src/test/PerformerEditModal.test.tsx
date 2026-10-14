@@ -306,7 +306,7 @@ describe("PerformerEditModal", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => expect(mocks.tagsCreate).toHaveBeenCalledWith({ name: "Novel tag" }));
-    expect(await screen.findByText("Qualities")).toBeInTheDocument();
+    expect(await screen.findByTitle("Tag group: Qualities")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mocks.performersUpdate).toHaveBeenCalledWith(1, expect.objectContaining({ tagIds: [9] })),

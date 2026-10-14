@@ -109,7 +109,6 @@ public partial class StashMigrationService
                 entity.SortName = row.SortName;
             if (string.IsNullOrWhiteSpace(entity.Description) && !string.IsNullOrWhiteSpace(row.Description))
                 entity.Description = row.Description;
-            entity.Favorite |= row.Favorite;
             if (string.IsNullOrWhiteSpace(entity.ImageBlobId))
                 entity.ImageBlobId = GetBlobId(blobMap, row.ImageBlob);
 
@@ -225,6 +224,7 @@ public partial class StashMigrationService
                 stopwatch.Elapsed.TotalMilliseconds);
         }
 
+        await AddImportedFavoritesAsync(rows.Where(row => row.Favorite).Select(row => row.Id), idMap, AffinityHostType.Tag, ct);
         _logger.LogInformation("Imported {Count} tags in {Elapsed}", idMap.Count, stopwatch.Elapsed);
         return idMap;
     }

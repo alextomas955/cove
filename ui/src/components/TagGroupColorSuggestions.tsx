@@ -29,8 +29,15 @@ export function TagGroupColorSuggestions({
   const [selectedIds, setSelectedIds] = useState(() => findGroupsNeedingColor(groups));
   const [variant, setVariant] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const allSelected = groups.length > 0 && groups.every((group) => selectedIds.has(group.id));
+  const someSelected = !allSelected && groups.some((group) => selectedIds.has(group.id));
   // The button that opened the panel is disabled while it is open, so take focus here.
   useEffect(() => headingRef.current?.focus(), []);
+  // A partial selection shows as a dash on the select-all box; React has no prop for that state.
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
+  }, [someSelected]);
   // A suggestion that equals the group's current color is not a change, so it is neither shown nor saved.
   const suggestions = useMemo(() => {
     const proposals = suggestDistinctColors(groups, selectedIds, variant);
@@ -48,6 +55,9 @@ export function TagGroupColorSuggestions({
       return next;
     });
 
+  // Partly or fully unchecked selects every group; fully checked clears the selection.
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(groups.map((group) => group.id)));
+
   const changes = groups.flatMap((group) => {
     const next = suggestions.get(group.id);
     return next ? [{ id: group.id, name: group.name, previous: group.color ?? null, next }] : [];
@@ -61,8 +71,23 @@ export function TagGroupColorSuggestions({
         </h4>
         <p className="mt-1 text-sm text-secondary">
           Groups with no color, the old default green, or a color another group uses are checked. Check any other group
-          you want to recolor. Nothing is saved until you apply.
+          you want to recolor, or select all to recolor every group. Nothing is saved until you apply.
         </p>
+      </div>
+
+      <div className="flex items-center gap-x-3 border-b border-border px-1 pb-2">
+        <input
+          ref={selectAllRef}
+          id="tag-group-color-suggest-all"
+          type="checkbox"
+          checked={allSelected}
+          disabled={applying || groups.length === 0}
+          onChange={toggleAll}
+          className="h-4 w-4 accent-accent"
+        />
+        <label htmlFor="tag-group-color-suggest-all" className="text-sm text-secondary">
+          Select all groups
+        </label>
       </div>
 
       <ul className="max-h-[50vh] space-y-1 overflow-y-auto">

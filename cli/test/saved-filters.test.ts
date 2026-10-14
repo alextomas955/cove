@@ -131,6 +131,15 @@ describe("composing saved filters", () => {
     expect(summary).toBe("Default filter · Tags: not all of First, Second, and Third with sub-tags · Duration: Between 10 and 20");
   });
 
+  test("summarizes studio hierarchy depth as sub-studios", async () => {
+    const client = await clientWith(() => json({}, 404));
+    const summary = await savedFilterSummary(client, {
+      sorts: [],
+      objectFilter: { studiosCriterion: { value: [1], modifier: "includesAll", depth: -1, _names: { 1: "First" } } },
+    });
+    expect(summary).toBe("Default filter · Studios: First with sub-studios");
+  });
+
   test("extracts search, sorting, and normalized criteria for list queries", () => {
     const query = queryForSavedFilter(savedFilter({
       findFilter: JSON.stringify({ q: "term", page: 8, perPage: 10, sort: "date", direction: "asc" }),

@@ -134,7 +134,8 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         var items = await LoadListItemsAsync(pagedIds, ct);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
-        var dtos = items.Select(text => MapToDto(text, null, null, effectiveTags)).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var dtos = items.Select(text => MapToDto(text, favorites, null, null, effectiveTags)).ToList();
         return Ok(new PaginatedResponse<TextDocumentDto>(dtos, totalCount, page, perPage));
     }
 
@@ -199,7 +200,8 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         var items = await LoadListItemsAsync(pagedIds, ct);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
-        var dtos = items.Select(text => MapToDto(text, null, null, effectiveTags)).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var dtos = items.Select(text => MapToDto(text, favorites, null, null, effectiveTags)).ToList();
         return Ok(new PaginatedResponse<TextDocumentDto>(dtos, totalCount, page, perPage));
     }
 
@@ -830,15 +832,16 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         var groups = await GetGroupsAsync(text.Id, ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Text, text.Id, ct);
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, [text.Id], ct);
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var contextTagApplications = await GetContextTagApplicationsAsync(text.Id, ct);
         var performerCounts = await PerformerSummaryCountsLoader.LoadAsync(db, text.TextPerformers.Select(link => link.PerformerId), ct, principalAccessor);
         var fieldProvenance = fieldProvenanceService == null
             ? null
             : (await fieldProvenanceService.GetForHostAsync(AffinityHostType.Text, text.Id, ct)).ToList();
-        return MapToDto(text, groups, customFieldValues, effectiveTags, contextTagApplications, fieldProvenance, performerCounts);
+        return MapToDto(text, favorites, groups, customFieldValues, effectiveTags, contextTagApplications, fieldProvenance, performerCounts);
     }
 
-    private TextDocumentDto MapToDto(TextDocument text, List<GroupSummaryDto>? groups, Dictionary<string, object>? customFieldValues, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId = null, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null) => new(
+    private TextDocumentDto MapToDto(TextDocument text, CatalogFavorites favorites, List<GroupSummaryDto>? groups, Dictionary<string, object>? customFieldValues, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId = null, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null) => new(
         text.Id,
         text.Title,
         text.Code,
@@ -848,14 +851,14 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         text.Studio?.Name,
         PartialDate.Format(text.Date, text.DatePrecision),
         text.Urls.Select(url => url.Url).ToList(),
-        GetEffectiveTags(text, effectiveTagsByTextId),
+        GetEffectiveTags(text, favorites, effectiveTagsByTextId),
         text.TextPerformers.Where(link => link.Performer != null).Select(link => link.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(
             performer.Id,
             performer.Name,
             performer.Disambiguation,
             performer.Gender?.ToString(),
             PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision),
-            performer.Favorite,
+            favorites.IsPerformer(performer.Id),
             EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer),
             performerCounts?.GetValueOrDefault(performer.Id)?.VideoCount ?? 0,
             performerCounts?.GetValueOrDefault(performer.Id)?.ImageCount ?? 0,
@@ -884,10 +887,10 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         contextTagApplications,
         fieldProvenance);
 
-    private static List<TagDto> GetEffectiveTags(TextDocument text, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId)
+    private static List<TagDto> GetEffectiveTags(TextDocument text, CatalogFavorites favorites, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId)
         => effectiveTagsByTextId != null && effectiveTagsByTextId.TryGetValue(text.Id, out var tags)
             ? tags
-            : text.TextTags.Where(link => link.Tag != null).Select(link => TagDtoMapping.MapTagDto(link.Tag!)).OrderForDisplay().ToList();
+            : text.TextTags.Where(link => link.Tag != null).Select(link => TagDtoMapping.MapTagDto(link.Tag!, favorites)).OrderForDisplay().ToList();
 
     private async Task<List<TagApplicationDto>?> GetContextTagApplicationsAsync(int textId, CancellationToken ct)
     {
@@ -905,7 +908,8 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
             .ThenBy(item => item.TagId)
             .ToListAsync(ct);
 
-        return applications.Count == 0 ? null : applications.Select(TagApplicationsController.Map).ToList();
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        return applications.Count == 0 ? null : applications.Select(application => TagApplicationsController.Map(application, favorites)).ToList();
     }
 
     private async Task<TextDocument?> GetTextForDtoAsync(int id, CancellationToken ct)

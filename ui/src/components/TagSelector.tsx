@@ -1,14 +1,16 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Tag, TagProvenance } from "../api/types";
-import { TagProvenanceHover } from "./TagProvenanceHover";
+import { TagChipHover } from "./TagProvenanceHover";
+import { TagGroupMarker, getTagChipColorStyle } from "./TagChipAppearance";
 import { rankByLabel } from "../utils/searchRanking";
 import { compareNatural } from "../utils/naturalCompare";
 
 export type SelectableTag = Pick<
   Tag,
   "id" | "name" | "sortName" | "color" | "tagGroupId" | "tagGroupName" | "tagGroupColor" | "tagGroupSortOrder"
->;
+> &
+  Partial<Pick<Tag, "description" | "imagePath" | "hasImage">>;
 
 export interface TagSelectorGroup<TTag extends SelectableTag = SelectableTag> {
   key: string;
@@ -94,15 +96,14 @@ export function SelectedTagChips({
   return (
     <div className={className ?? "flex flex-wrap gap-1.5"}>
       {tags.map((tag) => {
-        const style = getTagChipStyle(tag);
+        const style = getTagChipColorStyle(tag.color ?? tag.tagGroupColor);
         const chip = (
           <span
-            key={tag.id}
             style={style}
             className="inline-flex max-w-full items-center gap-1.5 rounded border border-border bg-card px-2 py-0.5 text-xs font-medium text-secondary"
           >
-            <span className="truncate text-foreground">{tag.name}</span>
-            {tag.tagGroupName ? <span className="truncate text-[10px] text-muted">{tag.tagGroupName}</span> : null}
+            <TagGroupMarker color={tag.tagGroupColor} name={tag.tagGroupName} />
+            <span className="truncate">{tag.name}</span>
             {onRemove ? (
               <button
                 type="button"
@@ -115,13 +116,22 @@ export function SelectedTagChips({
             ) : null}
           </span>
         );
-        const provenance = provenanceById?.[tag.id];
-        return provenance?.length ? (
-          <TagProvenanceHover key={tag.id} provenance={provenance}>
+        return (
+          <TagChipHover
+            key={tag.id}
+            tag={{
+              id: tag.id,
+              name: tag.name,
+              description: tag.description,
+              imagePath: tag.imagePath,
+              hasImage: tag.hasImage,
+              tagGroupName: tag.tagGroupName,
+              tagGroupColor: tag.tagGroupColor,
+            }}
+            provenance={provenanceById?.[tag.id]}
+          >
             {chip}
-          </TagProvenanceHover>
-        ) : (
-          chip
+          </TagChipHover>
         );
       })}
     </div>
@@ -244,30 +254,4 @@ export function GroupedTagOptionList<TTag extends SelectableTag>({
       ))}
     </div>
   );
-}
-
-function getTagChipStyle(tag: SelectableTag): CSSProperties | undefined {
-  const color = normalizeTagColor(tag.color ?? tag.tagGroupColor);
-  if (!color) {
-    return undefined;
-  }
-
-  return {
-    borderColor: hexToRgba(color, 0.5),
-    backgroundColor: hexToRgba(color, 0.12),
-    color: hexToRgba(color, 0.96),
-  };
-}
-
-function normalizeTagColor(value?: string | null) {
-  const trimmed = value?.trim();
-  return trimmed && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(trimmed) ? trimmed : null;
-}
-
-function hexToRgba(hex: string, alpha: number) {
-  const value = hex.slice(1, 7);
-  const r = Number.parseInt(value.slice(0, 2), 16);
-  const g = Number.parseInt(value.slice(2, 4), 16);
-  const b = Number.parseInt(value.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

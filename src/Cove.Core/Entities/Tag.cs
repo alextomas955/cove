@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Cove.Core.Entities;
 
 public class Tag : BaseEntity
@@ -9,6 +11,11 @@ public class Tag : BaseEntity
     public string? Description { get; set; }
     public string? Color { get; set; }
     public int? TagGroupId { get; set; }
+    // Binary-compatibility shim for extensions built while a shared favorite flag was stored here.
+    // Favorites are per-user, so Cove no longer stores or reads this: it loads as false.
+    [Obsolete("Favorites are per-user. Read IUserEngagementService.GetSnapshotAsync(AffinityHostType.Tag, id) and use IsFavorite.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool Favorite { get; set; }
     public bool Organized { get; set; }
     public double? MinOccurrenceSec { get; set; }

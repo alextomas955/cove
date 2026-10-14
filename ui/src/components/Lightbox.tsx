@@ -22,6 +22,8 @@ import { useEntityEngagement } from "../hooks/useEntityEngagement";
 import { InteractiveRating } from "./Rating";
 import type { EntityEngagement } from "../api/types";
 import { useKeySequence } from "../hooks/useKeySequence";
+import { buildRouteUrl, navigateToUrl, resolveContextualDetailRoute, type Route } from "../router/location";
+import { hasImageReferences, ImageReferencePopovers, type ImageReferences } from "./EntityCards";
 
 // Movement (px) past which a pointer gesture counts as a pan rather than a click. Below it, releasing
 // the pointer toggles zoom; above it the gesture is a drag and must not also toggle zoom on release.
@@ -33,6 +35,8 @@ export interface LightboxImage {
   title?: string;
   interactionSource?: string;
   interactionMeta?: Record<string, unknown>;
+  /** Tags, performers, galleries and groups shown as hover popovers, matching the image card footer. */
+  references?: ImageReferences;
 }
 
 export interface LightboxProps {
@@ -111,6 +115,8 @@ export function Lightbox({
     open,
   );
   const failed = failedSrc === current?.src;
+  // References describe the image on screen, so they keep showing the previous one until the next has loaded.
+  const referenceImage = loading ? displayed : current;
   const visibleImages =
     displayed && displayed.src !== current?.src ? [displayed, ...(current ? [current] : [])] : current ? [current] : [];
   const queryClient = useQueryClient();
@@ -424,6 +430,17 @@ export function Lightbox({
     onClose();
   }, [displayCount, displayPosition, onClose, open, trackCurrentImageInteraction]);
 
+  // Following a reference leaves the viewer, so close it first; otherwise a page that stays mounted
+  // across the navigation would keep the lightbox open over the destination.
+  const navigateToReference = useCallback(
+    (route: Route) => {
+      handleClose();
+      const contextualRoute = resolveContextualDetailRoute(route);
+      navigateToUrl(buildRouteUrl(contextualRoute), { state: contextualRoute });
+    },
+    [handleClose],
+  );
+
   // Slideshow
   useEffect(() => {
     if (playing && open) {
@@ -703,26 +720,44 @@ export function Lightbox({
         ))}
       </div>
 
-      {current ? (
-        <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-20 flex items-center gap-2 rounded-lg border border-white/15 bg-black/65 px-3 py-2 text-white shadow-lg backdrop-blur-sm">
-          <InteractiveRating
-            value={rating}
-            onChange={setRating}
-            readOnly={(loading && Boolean(displayed)) || !canEngage || ratingPending}
-          />
-          <button
-            type="button"
-            disabled={(loading && Boolean(displayed)) || !canLike || likeMutation.isPending}
-            onClick={() => likeMutation.mutate(current.id)}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`Like image (${likeCount} likes)`}
-            title={likeMutation.isPending ? "Saving like" : "Like image"}
+      {/* Wrap-reverse lifts the references above the engagement controls when both can't share a row. */}
+      <div className="pointer-events-none absolute inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex flex-wrap-reverse items-end gap-2">
+        {current ? (
+          <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-white/15 bg-black/65 px-3 py-2 text-white shadow-lg backdrop-blur-sm">
+            <InteractiveRating
+              value={rating}
+              onChange={setRating}
+              readOnly={(loading && Boolean(displayed)) || !canEngage || ratingPending}
+            />
+            <button
+              type="button"
+              disabled={(loading && Boolean(displayed)) || !canLike || likeMutation.isPending}
+              onClick={() => likeMutation.mutate(current.id)}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Like image (${likeCount} likes)`}
+              title={likeMutation.isPending ? "Saving like" : "Like image"}
+            >
+              <ThumbsUp className={likeCount > 0 ? "h-4 w-4 fill-current text-accent" : "h-4 w-4"} />
+              <span className="text-sm tabular-nums">{likeCount}</span>
+            </button>
+          </div>
+        ) : null}
+
+        {referenceImage?.references && hasImageReferences(referenceImage.references) ? (
+          <div
+            data-lightbox-references=""
+            className="pointer-events-auto ml-auto flex items-center gap-1 rounded-lg border border-white/15 bg-black/65 px-2 py-1.5 text-white shadow-lg backdrop-blur-sm"
           >
-            <ThumbsUp className={likeCount > 0 ? "h-4 w-4 fill-current text-accent" : "h-4 w-4"} />
-            <span className="text-sm tabular-nums">{likeCount}</span>
-          </button>
-        </div>
-      ) : null}
+            <ImageReferencePopovers
+              key={referenceImage.id}
+              imageId={referenceImage.id}
+              references={referenceImage.references}
+              onNavigate={navigateToReference}
+              buttonClassName="text-white/80 hover:bg-white/10 hover:text-white"
+            />
+          </div>
+        ) : null}
+      </div>
     </div>,
     document.body,
   );
