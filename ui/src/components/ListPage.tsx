@@ -871,6 +871,7 @@ export function ListPage({
               onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
               onApplyObjectFilter={onObjectFilterChange}
               onApplyUIOptions={applySavedFilterUIOptions}
+              criteria={mergedCriteriaDefinitions}
             />
           )}
 

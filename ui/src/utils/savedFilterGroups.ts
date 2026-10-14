@@ -71,3 +71,27 @@ export function groupSavedFilters<T extends { name: string }>(
   if (ungrouped.length > 0) sections.push({ group: null, items: ungrouped });
   return sections;
 }
+
+// Which saved-filter groups are collapsed is a per-browser convenience, keyed by mode with lower-cased group names. The
+// saved-filter menu and the import/export dialog share it, so a list's groups look the same in both.
+function collapsedGroupsStorageKey(mode: string) {
+  return `cove-saved-filter-collapsed-groups-${mode.trim().toLowerCase()}`;
+}
+
+export function readCollapsedSavedFilterGroups(mode: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(collapsedGroupsStorageKey(mode)) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((group): group is string => typeof group === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeCollapsedSavedFilterGroups(mode: string, groups: string[]) {
+  try {
+    if (groups.length > 0) localStorage.setItem(collapsedGroupsStorageKey(mode), JSON.stringify(groups));
+    else localStorage.removeItem(collapsedGroupsStorageKey(mode));
+  } catch {
+    // Storage can be unavailable (private windows, blocked site data); groups then reset per page load.
+  }
+}

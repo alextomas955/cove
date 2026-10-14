@@ -12,10 +12,30 @@ import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { savedFilters } from "../api/client";
 import type { FindFilter, SavedFilter, SavedFilterUIOptions } from "../api/types";
-import { Bookmark, Check, ChevronDown, ChevronRight, Loader2, Pencil, Save, Search, Star, Trash2 } from "lucide-react";
+import {
+  ArrowDownUp,
+  Bookmark,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Save,
+  Search,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { getDefaultFilter, normalizeSavedFindFilter } from "../utils/defaultSavedFilter";
-import { groupSavedFilters, SAVED_FILTER_GROUP_SEPARATOR } from "../utils/savedFilterGroups";
+import {
+  groupSavedFilters,
+  readCollapsedSavedFilterGroups,
+  SAVED_FILTER_GROUP_SEPARATOR,
+  writeCollapsedSavedFilterGroups,
+} from "../utils/savedFilterGroups";
+import { highlightSavedFilterMatch } from "./savedFilterHighlight";
 import { updateAuthenticatedUserUiPreferences } from "../utils/userUiPreferences";
+import type { CriterionDefinition } from "./filterCriteriaTypes";
+import { SavedFilterTransferDialog } from "./SavedFilterTransferDialog";
 
 export { getDefaultFilter, resolveSavedDisplayMode } from "../utils/defaultSavedFilter";
 
@@ -84,44 +104,8 @@ function clearDefaultFilter(mode: string) {
   });
 }
 
-// Which saved-filter groups are collapsed is a per-browser convenience, keyed by mode with lower-cased group names.
-function collapsedGroupsStorageKey(mode: string) {
-  return `cove-saved-filter-collapsed-groups-${mode.trim().toLowerCase()}`;
-}
-
-function readCollapsedGroups(mode: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(collapsedGroupsStorageKey(mode)) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((group): group is string => typeof group === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeCollapsedGroups(mode: string, groups: string[]) {
-  try {
-    if (groups.length > 0) localStorage.setItem(collapsedGroupsStorageKey(mode), JSON.stringify(groups));
-    else localStorage.removeItem(collapsedGroupsStorageKey(mode));
-  } catch {
-    // Storage can be unavailable (private windows, blocked site data); groups then reset per page load.
-  }
-}
-
 function prefersTouch() {
   return window.matchMedia?.("(pointer: coarse)").matches === true;
-}
-
-function highlightMatch(text: string, query: string): ReactNode {
-  const normalized = query.trim().toLocaleLowerCase();
-  const index = normalized ? text.toLocaleLowerCase().indexOf(normalized) : -1;
-  if (index < 0) return text;
-  return (
-    <>
-      {text.slice(0, index)}
-      <mark className="rounded-sm bg-accent/25 text-inherit">{text.slice(index, index + normalized.length)}</mark>
-      {text.slice(index + normalized.length)}
-    </>
-  );
 }
 
 interface SavedFilterMenuProps {
@@ -138,7 +122,11 @@ interface SavedFilterMenuProps {
   onApplyFilter: (filter: FindFilter) => void;
   onApplyObjectFilter?: (filter: Record<string, unknown>) => void;
   onApplyUIOptions?: (options: SavedFilterUIOptions) => void;
+  /** The list's criterion definitions, which locate the entity IDs an exported filter replaces with names. */
+  criteria?: CriterionDefinition[];
 }
+
+const NO_CRITERIA: CriterionDefinition[] = [];
 
 function SavedFilterName({
   id,
@@ -230,9 +218,11 @@ export function SavedFilterMenu({
   onApplyFilter,
   onApplyObjectFilter,
   onApplyUIOptions,
+  criteria = NO_CRITERIA,
 }: SavedFilterMenuProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [showSave, setShowSave] = useState(false);
   const [query, setQuery] = useState("");
@@ -240,7 +230,7 @@ export function SavedFilterMenu({
   const [activeId, setActiveId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsedGroups(mode));
+  const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsedSavedFilterGroups(mode));
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -305,7 +295,7 @@ export function SavedFilterMenu({
       setRenamingId(null);
     } else {
       // Another menu for the same mode may have collapsed or expanded groups since this one was last open.
-      setCollapsedGroups(readCollapsedGroups(mode));
+      setCollapsedGroups(readCollapsedSavedFilterGroups(mode));
     }
   }
 
@@ -469,7 +459,7 @@ export function SavedFilterMenu({
       ? collapsedGroups.filter((collapsed) => collapsed !== key)
       : [...collapsedGroups, key];
     setCollapsedGroups(next);
-    writeCollapsedGroups(mode, next);
+    writeCollapsedSavedFilterGroups(mode, next);
   };
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -632,7 +622,7 @@ export function SavedFilterMenu({
         <SavedFilterName
           id={filterButtonId(f.id)}
           name={f.name}
-          label={highlightMatch(label, query)}
+          label={highlightSavedFilterMatch(label, query)}
           onClick={() => applyFilter(f.findFilter, f.objectFilter, f.uiOptions)}
         />
         <button
@@ -773,7 +763,7 @@ export function SavedFilterMenu({
                       ) : (
                         <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
                       )}
-                      <span className="min-w-0 truncate">{highlightMatch(section.group, query)}</span>
+                      <span className="min-w-0 truncate">{highlightSavedFilterMatch(section.group, query)}</span>
                       <span className="ml-auto pl-2 text-[10px] font-normal text-muted tabular-nums">
                         {section.items.length}
                       </span>
@@ -872,8 +862,30 @@ export function SavedFilterMenu({
                 Save current filter
               </button>
             )}
+            <button
+              onClick={() => {
+                setOpen(false);
+                setTransferOpen(true);
+              }}
+              className="flex items-center gap-1.5 text-xs text-secondary hover:text-foreground w-full"
+            >
+              <ArrowDownUp className="w-3 h-3" />
+              Import / Export
+            </button>
           </div>
         </div>
+      )}
+
+      {transferOpen && (
+        <SavedFilterTransferDialog
+          onClose={() => {
+            setTransferOpen(false);
+            triggerRef.current?.focus({ preventScroll: true });
+          }}
+          mode={mode}
+          filters={filters ?? []}
+          criteria={criteria}
+        />
       )}
     </div>
   );

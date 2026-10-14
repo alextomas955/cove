@@ -437,6 +437,7 @@ export function DetailListToolbar({
             <SavedFilterMenu
               mode={filterMode}
               defaultFilterKey={filterDefaultKey}
+              criteria={criteriaDefinitions}
               currentFilter={filter}
               currentObjectFilter={activeObjectFilter}
               currentUIOptions={{ displayMode, zoomLevel: effectiveZoomLevel }}
