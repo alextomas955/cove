@@ -47,6 +47,24 @@
       ]
     },
     {
+      "id": "find-and-group",
+      "title": "Find, rename, and group saved filters",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "The first row of the Saved filters menu is a search box. Start typing to narrow the list to names containing what you typed; the match count appears on the right. Use the arrow keys to move between matches and Enter to apply the highlighted one. Escape clears the search, and a second Escape closes the menu."
+        },
+        {
+          "type": "paragraph",
+          "text": "To group saved filters, name them Group / Name, with a space on each side of the slash. Filters that share a group name are listed together under a header you can collapse, and groups appear above the filters without one. A slash without spaces, as in 1080p/4K, does not start a group. Use the pencil beside a name to rename a filter in place; renaming does not change what it filters."
+        },
+        {
+          "type": "note",
+          "text": "The group is part of the name, so other places that list saved filters, such as dashboard widgets and the command-line interface, show the full name. Which groups are collapsed is remembered in this browser."
+        }
+      ]
+    },
+    {
       "id": "set-a-default",
       "title": "Open a page with a default filter",
       "blocks": [

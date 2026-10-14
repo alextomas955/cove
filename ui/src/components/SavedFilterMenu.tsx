@@ -1,10 +1,20 @@
-import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { savedFilters } from "../api/client";
-import type { FindFilter, SavedFilterUIOptions } from "../api/types";
-import { Bookmark, ChevronDown, Save, Trash2, Loader2, Star } from "lucide-react";
+import type { FindFilter, SavedFilter, SavedFilterUIOptions } from "../api/types";
+import { Bookmark, Check, ChevronDown, ChevronRight, Loader2, Pencil, Save, Search, Star, Trash2 } from "lucide-react";
 import { getDefaultFilter, normalizeSavedFindFilter } from "../utils/defaultSavedFilter";
+import { groupSavedFilters, SAVED_FILTER_GROUP_SEPARATOR } from "../utils/savedFilterGroups";
 import { updateAuthenticatedUserUiPreferences } from "../utils/userUiPreferences";
 
 export { getDefaultFilter, resolveSavedDisplayMode } from "../utils/defaultSavedFilter";
@@ -74,6 +84,46 @@ function clearDefaultFilter(mode: string) {
   });
 }
 
+// Which saved-filter groups are collapsed is a per-browser convenience, keyed by mode with lower-cased group names.
+function collapsedGroupsStorageKey(mode: string) {
+  return `cove-saved-filter-collapsed-groups-${mode.trim().toLowerCase()}`;
+}
+
+function readCollapsedGroups(mode: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(collapsedGroupsStorageKey(mode)) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((group): group is string => typeof group === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCollapsedGroups(mode: string, groups: string[]) {
+  try {
+    if (groups.length > 0) localStorage.setItem(collapsedGroupsStorageKey(mode), JSON.stringify(groups));
+    else localStorage.removeItem(collapsedGroupsStorageKey(mode));
+  } catch {
+    // Storage can be unavailable (private windows, blocked site data); groups then reset per page load.
+  }
+}
+
+function prefersTouch() {
+  return window.matchMedia?.("(pointer: coarse)").matches === true;
+}
+
+function highlightMatch(text: string, query: string): ReactNode {
+  const normalized = query.trim().toLocaleLowerCase();
+  const index = normalized ? text.toLocaleLowerCase().indexOf(normalized) : -1;
+  if (index < 0) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <mark className="rounded-sm bg-accent/25 text-inherit">{text.slice(index, index + normalized.length)}</mark>
+      {text.slice(index + normalized.length)}
+    </>
+  );
+}
+
 interface SavedFilterMenuProps {
   mode: string;
   /**
@@ -90,7 +140,17 @@ interface SavedFilterMenuProps {
   onApplyUIOptions?: (options: SavedFilterUIOptions) => void;
 }
 
-function SavedFilterName({ name, onClick }: { name: string; onClick: () => void }) {
+function SavedFilterName({
+  id,
+  name,
+  label,
+  onClick,
+}: {
+  id?: string;
+  name: string;
+  label?: ReactNode;
+  onClick: () => void;
+}) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const hideTimerRef = useRef<number | null>(null);
   const tooltipId = useId();
@@ -130,6 +190,7 @@ function SavedFilterName({ name, onClick }: { name: string; onClick: () => void 
     <>
       <button
         ref={buttonRef}
+        id={id}
         onClick={onClick}
         onPointerEnter={showTooltipIfTruncated}
         onPointerLeave={hideTooltip}
@@ -138,7 +199,7 @@ function SavedFilterName({ name, onClick }: { name: string; onClick: () => void 
         aria-describedby={tooltip ? tooltipId : undefined}
         className="saved-filter-name flex-1 text-left text-xs text-foreground hover:text-accent"
       >
-        {name}
+        {label ?? name}
       </button>
       {tooltip &&
         createPortal(
@@ -174,9 +235,23 @@ export function SavedFilterMenu({
   const [open, setOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [showSave, setShowSave] = useState(false);
+  const [query, setQuery] = useState("");
+  // The highlight follows a filter rather than a position, so deleting, renaming, or a refetch cannot move it.
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsedGroups(mode));
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const focusRenameInputRef = useRef(false);
+  const idPrefix = useId();
+  const listId = `${idPrefix}-list`;
+  const filterButtonId = (id: number) => `${idPrefix}-filter-${id}`;
+  // The widest the panel has been while open; kept as its minimum so narrowing the list by search does not shrink it.
+  const openWidthRef = useRef(0);
   const [panelPosition, setPanelPosition] = useState<{
     top: number;
     left: number;
@@ -194,6 +269,14 @@ export function SavedFilterMenu({
     queryFn: () => savedFilters.list(mode),
   });
 
+  // Closing unmounts the panel; when focus was inside it, hand focus back to the trigger instead of dropping it on
+  // the page body. Clicking elsewhere closes without this, since that click already decides where focus goes.
+  const closeMenu = () => {
+    if (panelRef.current?.contains(document.activeElement)) triggerRef.current?.focus({ preventScroll: true });
+    setOpen(false);
+  };
+  const closeMenuEvent = useEffectEvent(closeMenu);
+
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -202,7 +285,7 @@ export function SavedFilterMenu({
       setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && !event.isComposing) closeMenuEvent();
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -215,11 +298,22 @@ export function SavedFilterMenu({
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
-    if (!open) setPanelPosition(null);
+    if (!open) {
+      setPanelPosition(null);
+      setQuery("");
+      setActiveId(null);
+      setRenamingId(null);
+    } else {
+      // Another menu for the same mode may have collapsed or expanded groups since this one was last open.
+      setCollapsedGroups(readCollapsedGroups(mode));
+    }
   }
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) {
+      openWidthRef.current = 0;
+      return;
+    }
 
     const positionPanel = () => {
       const trigger = triggerRef.current;
@@ -235,15 +329,20 @@ export function SavedFilterMenu({
       const maxWidth = Math.max(0, viewportRight - viewportLeft - viewportPadding * 2);
       panel.style.maxHeight = `${maxHeight}px`;
       panel.style.maxWidth = `${maxWidth}px`;
-      panel.style.minWidth = `${Math.min(224, maxWidth)}px`;
+      const minWidth = Math.min(Math.max(224, openWidthRef.current), maxWidth);
+      panel.style.minWidth = `${minWidth}px`;
       const triggerRect = trigger.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
+      openWidthRef.current = Math.max(openWidthRef.current, panelRect.width);
+      // Typing in the panel can raise a mobile keyboard that scrolls the trigger away. The search box is focused on
+      // every desktop open, so it only counts once the user is actually typing in it (or on a touch device).
+      const active = document.activeElement;
       const editingInsidePanel =
-        document.activeElement instanceof HTMLInputElement &&
-        panel.contains(document.activeElement) &&
-        document.activeElement.placeholder === "Filter name...";
+        active instanceof HTMLInputElement &&
+        panel.contains(active) &&
+        (active !== searchRef.current || active.value !== "" || prefersTouch());
       if ((triggerRect.bottom < viewportTop || triggerRect.top > viewportBottom) && !editingInsidePanel) {
-        setOpen(false);
+        closeMenuEvent();
         return;
       }
       const below = triggerRect.bottom + 4;
@@ -266,7 +365,7 @@ export function SavedFilterMenu({
         ),
         maxHeight,
         maxWidth,
-        minWidth: Math.min(224, maxWidth),
+        minWidth: Math.min(Math.max(224, openWidthRef.current), maxWidth),
       });
     };
 
@@ -317,7 +416,7 @@ export function SavedFilterMenu({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-filters"] });
-      setOpen(false);
+      closeMenu();
     },
   });
 
@@ -327,6 +426,107 @@ export function SavedFilterMenu({
       queryClient.invalidateQueries({ queryKey: ["saved-filters"] });
     },
   });
+
+  const renameMut = useMutation({
+    meta: { suppressGlobalError: true },
+    mutationFn: ({ id, name }: { id: number; name: string }) => savedFilters.update(id, { name }),
+    onSuccess: (_saved, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["saved-filters"] });
+      finishRename(id);
+    },
+  });
+
+  const searching = query.trim().length > 0;
+  const sections = groupSavedFilters(filters ?? [], query);
+  const isCollapsed = (group: string) => !searching && collapsedGroups.includes(group.toLocaleLowerCase());
+  const visibleFilters = sections.flatMap((section) =>
+    section.group != null && isCollapsed(section.group) ? [] : section.items.map((item) => item.filter),
+  );
+  const matchCount = sections.reduce((count, section) => count + section.items.length, 0);
+  // While searching, the first match is highlighted so Enter applies it; arrow keys move from there. A highlighted
+  // filter that is no longer listed falls back the same way.
+  // A row being renamed is skipped, so Enter in the search cannot apply it and discard the unsaved name.
+  const selectableFilters = visibleFilters.filter((filter) => filter.id !== renamingId);
+  const activeIndex = activeId == null ? -1 : selectableFilters.findIndex((filter) => filter.id === activeId);
+  const highlightedIndex = activeIndex >= 0 ? activeIndex : searching && selectableFilters.length > 0 ? 0 : -1;
+  const highlightedId = highlightedIndex >= 0 ? selectableFilters[highlightedIndex].id : null;
+
+  // Focus once the panel is visible (focus is refused while it is still hidden for measuring); skip touch devices,
+  // where focusing would raise the on-screen keyboard over the list on every open.
+  const panelVisible = open && panelPosition != null;
+  useEffect(() => {
+    if (panelVisible && !prefersTouch()) searchRef.current?.focus({ preventScroll: true });
+  }, [panelVisible]);
+
+  useEffect(() => {
+    if (highlightedId == null) return;
+    listRef.current?.querySelector(`[data-saved-filter-id="${highlightedId}"]`)?.scrollIntoView?.({ block: "nearest" });
+  }, [highlightedId]);
+
+  const toggleGroup = (group: string) => {
+    const key = group.toLocaleLowerCase();
+    const next = collapsedGroups.includes(key)
+      ? collapsedGroups.filter((collapsed) => collapsed !== key)
+      : [...collapsedGroups, key];
+    setCollapsedGroups(next);
+    writeCollapsedGroups(mode, next);
+  };
+
+  const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (selectableFilters.length === 0) return;
+      const next =
+        event.key === "ArrowDown"
+          ? Math.min(highlightedIndex + 1, selectableFilters.length - 1)
+          : Math.max(highlightedIndex - 1, 0);
+      setActiveId(selectableFilters[next].id);
+    } else if (event.key === "Enter" && highlightedIndex >= 0 && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      const filter = selectableFilters[highlightedIndex];
+      applyFilter(filter.findFilter, filter.objectFilter, filter.uiOptions);
+    } else if (event.key === "Escape" && query && !event.nativeEvent.isComposing) {
+      // Clear the search first; the next Escape reaches the document listener and closes the menu.
+      event.stopPropagation();
+      setQuery("");
+      setActiveId(null);
+    }
+  };
+
+  const normalizedRenameName = renameValue.trim();
+  const hasDuplicateRename =
+    !!normalizedRenameName &&
+    !!filters?.some(
+      (filter) =>
+        filter.id !== renamingId && filter.name.trim().toLocaleLowerCase() === normalizedRenameName.toLocaleLowerCase(),
+    );
+  const startRename = (filter: SavedFilter) => {
+    renameMut.reset();
+    focusRenameInputRef.current = true;
+    setRenamingId(filter.id);
+    setRenameValue(filter.name);
+  };
+  // Ends a rename unless a newer one has started. Focus in the closing row (or already lost to the page body, as when
+  // its save button was disabled mid-save) moves to the search box rather than dropping to the body on unmount.
+  function finishRename(id: number) {
+    const active = document.activeElement;
+    if (
+      !active ||
+      active === document.body ||
+      (active instanceof HTMLElement && active.closest(`[data-saved-filter-id="${id}"]`) != null)
+    ) {
+      searchRef.current?.focus({ preventScroll: true });
+    }
+    setRenamingId((current) => (current === id ? null : current));
+  }
+  const commitRename = (filter: SavedFilter) => {
+    if (!normalizedRenameName || hasDuplicateRename || renameMut.isPending) return;
+    if (normalizedRenameName === filter.name) {
+      finishRename(filter.id);
+      return;
+    }
+    renameMut.mutate({ id: filter.id, name: normalizedRenameName });
+  };
 
   const applyFilter = (findFilterJson: string | undefined, objectFilterJson?: string, uiOptionsJson?: string) => {
     try {
@@ -360,11 +560,123 @@ export function SavedFilterMenu({
       }
     }
 
-    setOpen(false);
+    closeMenu();
   };
   const normalizedSaveName = saveName.trim().toLocaleLowerCase();
   const hasDuplicateName =
     !!normalizedSaveName && !!filters?.some((filter) => filter.name.trim().toLocaleLowerCase() === normalizedSaveName);
+
+  const renderFilterRow = (f: SavedFilter, label: string, grouped: boolean) => {
+    const rowClassName = `group flex items-center py-1.5 hover:bg-card/80 ${grouped ? "pl-6 pr-3" : "px-3"} ${
+      f.id === highlightedId ? "bg-accent/10" : ""
+    }`;
+
+    if (f.id === renamingId) {
+      return (
+        <div key={f.id} data-saved-filter-id={f.id} className={grouped ? "pl-6 pr-3 py-1.5" : "px-3 py-1.5"}>
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => {
+                setRenameValue(e.target.value);
+                if (renameMut.isError) renameMut.reset();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) commitRename(f);
+                else if (e.key === "Escape" && !e.nativeEvent.isComposing) {
+                  e.stopPropagation();
+                  finishRename(f.id);
+                }
+              }}
+              aria-label={`New name for saved filter "${f.name}"`}
+              className="min-w-0 flex-1 rounded border border-border bg-card/70 px-2 py-1 text-xs text-foreground focus:outline-none focus:border-accent"
+              // Focused once when the rename starts, not on every mount: collapsing a group or clearing a search can
+              // remount this row, and it must not pull focus back from wherever the user has moved it.
+              ref={(input) => {
+                if (input && focusRenameInputRef.current) {
+                  focusRenameInputRef.current = false;
+                  input.focus();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => commitRename(f)}
+              disabled={!normalizedRenameName || hasDuplicateRename || renameMut.isPending}
+              aria-label={`Save name for saved filter "${f.name}"`}
+              className="shrink-0 rounded bg-accent px-2 py-1 text-white hover:bg-accent-hover disabled:opacity-60"
+            >
+              {renameMut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+            </button>
+          </div>
+          {hasDuplicateRename ? (
+            <p className="mt-1 w-0 min-w-full text-[10px] text-red-400">
+              A saved filter with this name already exists.
+            </p>
+          ) : renameMut.isError ? (
+            <p role="alert" className="mt-1 w-0 min-w-full text-[10px] text-red-400">
+              Could not rename this saved filter.
+            </p>
+          ) : (
+            <p className="mt-1 w-0 min-w-full text-[10px] text-muted">
+              Name it “Group{SAVED_FILTER_GROUP_SEPARATOR}Name” to file it under a group.
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div key={f.id} data-saved-filter-id={f.id} className={rowClassName}>
+        <SavedFilterName
+          id={filterButtonId(f.id)}
+          name={f.name}
+          label={highlightMatch(label, query)}
+          onClick={() => applyFilter(f.findFilter, f.objectFilter, f.uiOptions)}
+        />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            startRename(f);
+          }}
+          aria-label={`Rename saved filter "${f.name}"`}
+          title="Rename"
+          className="shrink-0 p-1 text-muted hover:text-accent transition-colors"
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            updateMut.reset();
+            updateMut.mutate(f.id);
+          }}
+          disabled={updateMut.isPending}
+          aria-label={`Update saved filter "${f.name}"`}
+          title="Update with current filter"
+          className="shrink-0 p-1 text-muted hover:text-accent transition-colors disabled:opacity-50"
+        >
+          {updateMut.isPending && updateMut.variables === f.id ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Save className="w-3 h-3" />
+          )}
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteMut.mutate(f.id);
+          }}
+          aria-label={`Delete saved filter "${f.name}"`}
+          title="Delete saved filter"
+          className="shrink-0 p-1 text-muted hover:text-red-400 transition-colors"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div ref={menuRef} className="relative">
@@ -396,46 +708,82 @@ export function SavedFilterMenu({
             visibility: panelPosition ? "visible" : "hidden",
           }}
         >
-          <div className="p-2 border-b border-border">
-            <p className="text-[10px] text-muted uppercase tracking-wider font-medium">Saved Filters</p>
-          </div>
+          {/* The header doubles as the search: at rest its placeholder reads like the former "Saved Filters" label. */}
+          <label className="flex items-center gap-1.5 border-b border-border p-2 transition-colors focus-within:border-accent">
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActiveId(null);
+              }}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Saved filters"
+              aria-label="Search saved filters"
+              aria-controls={listId}
+              aria-activedescendant={highlightedId != null ? filterButtonId(highlightedId) : undefined}
+              autoComplete="off"
+              spellCheck={false}
+              className="h-[15px] min-w-0 flex-1 bg-transparent text-xs leading-[15px] text-foreground outline-none placeholder:text-[10px] placeholder:font-medium placeholder:uppercase placeholder:tracking-wider placeholder:text-muted"
+            />
+            {searching ? (
+              <span className="shrink-0 text-[10px] text-muted tabular-nums" aria-hidden="true">
+                {matchCount}/{filters?.length ?? 0}
+              </span>
+            ) : (
+              <Search className="h-3 w-3 shrink-0 text-muted opacity-60" aria-hidden="true" />
+            )}
+            {/* Always rendered so the first count after typing is announced too. */}
+            <span className="sr-only" aria-live="polite">
+              {searching ? `${matchCount} of ${filters?.length ?? 0} saved filters match` : ""}
+            </span>
+          </label>
 
           {/* Existing filters */}
-          <div className="max-h-48 overflow-y-auto">
+          <div ref={listRef} id={listId} className="max-h-72 overflow-y-auto">
             {(!filters || filters.length === 0) && <p className="px-3 py-2 text-xs text-muted">No saved filters</p>}
-            {filters?.map((f) => (
-              <div key={f.id} className="group flex items-center px-3 py-1.5 hover:bg-card/80">
-                <SavedFilterName name={f.name} onClick={() => applyFilter(f.findFilter, f.objectFilter, f.uiOptions)} />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    updateMut.reset();
-                    updateMut.mutate(f.id);
-                  }}
-                  disabled={updateMut.isPending}
-                  aria-label={`Update saved filter "${f.name}"`}
-                  title="Update with current filter"
-                  className="shrink-0 p-1 text-muted hover:text-accent transition-colors disabled:opacity-50"
+            {searching && matchCount === 0 && !!filters?.length && (
+              <p className="px-3 py-2 text-xs text-muted">No saved filters match</p>
+            )}
+            {sections.map((section) => {
+              const collapsed = section.group != null && isCollapsed(section.group);
+              return (
+                <div
+                  key={section.group ?? ""}
+                  role={section.group != null ? "group" : undefined}
+                  aria-label={section.group ?? undefined}
+                  // Ungrouped filters follow the groups without a header; a rule keeps them from reading as the
+                  // last group's members.
+                  className={
+                    section.group == null && sections.length > 1 ? "mt-1 border-t border-border/60" : undefined
+                  }
                 >
-                  {updateMut.isPending && updateMut.variables === f.id ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Save className="w-3 h-3" />
+                  {section.group != null && (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(section.group!)}
+                      disabled={searching}
+                      aria-expanded={!collapsed}
+                      aria-label={`${section.group}, ${section.items.length} ${section.items.length === 1 ? "filter" : "filters"}`}
+                      className="flex w-full items-center gap-1 px-2 pt-2 pb-1 text-left text-[11px] font-semibold text-secondary hover:text-foreground disabled:hover:text-secondary"
+                    >
+                      {collapsed ? (
+                        <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      )}
+                      <span className="min-w-0 truncate">{highlightMatch(section.group, query)}</span>
+                      <span className="ml-auto pl-2 text-[10px] font-normal text-muted tabular-nums">
+                        {section.items.length}
+                      </span>
+                    </button>
                   )}
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteMut.mutate(f.id);
-                  }}
-                  aria-label={`Delete saved filter "${f.name}"`}
-                  title="Delete saved filter"
-                  className="shrink-0 p-1 text-muted hover:text-red-400 transition-colors"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+                  {!collapsed &&
+                    section.items.map(({ filter: f, label }) => renderFilterRow(f, label, section.group != null))}
+                </div>
+              );
+            })}
             {updateMut.isError && (
               <p role="alert" className="px-3 py-1.5 text-[10px] text-red-400">
                 Could not update this saved filter.
@@ -449,7 +797,7 @@ export function SavedFilterMenu({
             <button
               onClick={() => {
                 setDefaultFilter(defaultKey, currentFilter, currentObjectFilter, currentUIOptions);
-                setOpen(false);
+                closeMenu();
               }}
               className="flex items-center gap-1.5 text-xs text-secondary hover:text-yellow-400 w-full"
               title="Apply the current filter state automatically when opening this page"
@@ -461,7 +809,7 @@ export function SavedFilterMenu({
               <button
                 onClick={() => {
                   clearDefaultFilter(defaultKey);
-                  setOpen(false);
+                  closeMenu();
                 }}
                 className="flex items-center gap-1.5 text-xs text-muted hover:text-red-400 w-full"
               >
@@ -480,7 +828,11 @@ export function SavedFilterMenu({
                       createMut.reset();
                     }}
                     onKeyDown={(e) =>
-                      e.key === "Enter" && normalizedSaveName && !hasDuplicateName && createMut.mutate()
+                      e.key === "Enter" &&
+                      !e.nativeEvent.isComposing &&
+                      normalizedSaveName &&
+                      !hasDuplicateName &&
+                      createMut.mutate()
                     }
                     placeholder="Filter name..."
                     className="flex-1 rounded border border-border bg-card/70 px-2 py-1 text-xs text-foreground focus:outline-none focus:border-accent placeholder:text-muted"
@@ -496,11 +848,18 @@ export function SavedFilterMenu({
                   </button>
                 </div>
                 {hasDuplicateName && (
-                  <p className="mt-1 text-[10px] text-red-400">A saved filter with this name already exists.</p>
+                  <p className="mt-1 w-0 min-w-full text-[10px] text-red-400">
+                    A saved filter with this name already exists.
+                  </p>
                 )}
                 {createMut.isError && (
-                  <p role="alert" className="mt-1 text-[10px] text-red-400">
+                  <p role="alert" className="mt-1 w-0 min-w-full text-[10px] text-red-400">
                     Could not save this filter. Its name may already be in use.
+                  </p>
+                )}
+                {!hasDuplicateName && !createMut.isError && (
+                  <p className="mt-1 w-0 min-w-full text-[10px] text-muted">
+                    Name it “Group{SAVED_FILTER_GROUP_SEPARATOR}Name” to file it under a group.
                   </p>
                 )}
               </div>
