@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EntityReferenceMultiSelector, EntityReferenceSelector } from "../components/EntityReferenceSelector";
 import { toTagOption } from "../utils/tags";
+import { MutationFailureNotice } from "../components/MutationFailureNotice";
+import { createAppQueryClient } from "../queryClient";
+import { resetMutationFailureForTests } from "../state/mutationFailure";
 
 const mocks = vi.hoisted(() => ({ tagsCreate: vi.fn(), tagsFind: vi.fn() }));
 
@@ -848,4 +851,139 @@ describe("tag descriptions in the selectors", () => {
 
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
+});
+
+// Tag names and aliases share one namespace on the server, so a name typed as an existing tag's alias is that tag.
+describe("typing an existing tag's alias", () => {
+  const aliased = { id: 7, name: "Canonical Tag", aliases: ["Alias Name"] };
+
+  function renderSelector(selector: React.ReactElement) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<QueryClientProvider client={queryClient}>{selector}</QueryClientProvider>);
+  }
+
+  it("offers the aliased tag instead of creating a duplicate", async () => {
+    mocks.tagsFind.mockResolvedValue({ items: [aliased] });
+    const onChange = vi.fn();
+    renderSelector(<EntityReferenceMultiSelector entityType="tag" values={[]} onChange={onChange} />);
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "alias name{Enter}");
+
+    expect(onChange).toHaveBeenCalledWith([7]);
+    expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+    expect(mocks.tagsCreate).not.toHaveBeenCalled();
+  });
+
+  it("says the aliased tag is already added in the multi selector", async () => {
+    mocks.tagsFind.mockResolvedValue({ items: [aliased] });
+    renderSelector(
+      <EntityReferenceMultiSelector
+        entityType="tag"
+        values={[7]}
+        onChange={vi.fn()}
+        seedOptions={[toTagOption(aliased)]}
+      />,
+    );
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "Alias Name");
+
+    expect(
+      await screen.findByText("“Alias Name” is an alias of “Canonical Tag”, which is already added."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("No tags found")).not.toBeInTheDocument();
+  });
+
+  it("says the aliased tag is already selected in the single selector", async () => {
+    mocks.tagsFind.mockResolvedValue({ items: [aliased] });
+    renderSelector(<EntityReferenceSelector entityType="tag" value={7} onChange={vi.fn()} />);
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "Alias Name");
+
+    expect(
+      await screen.findByText("“Alias Name” is an alias of “Canonical Tag”, which is already added."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("typing an existing tag's name or alias when it cannot be offered", () => {
+  function renderSelector(selector: React.ReactElement) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}>{selector}</QueryClientProvider>);
+  }
+
+  it("says a tag typed by its own name is already added", async () => {
+    mocks.tagsFind.mockResolvedValue({ items: [{ id: 7, name: "Canonical Tag" }] });
+    renderSelector(<EntityReferenceMultiSelector entityType="tag" values={[7]} onChange={vi.fn()} />);
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "canonical tag");
+
+    expect(await screen.findByText("“Canonical Tag” is already added.")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+  });
+
+  it("does not offer to create an excluded tag's alias", async () => {
+    mocks.tagsFind.mockResolvedValue({ items: [{ id: 7, name: "Canonical Tag", aliases: ["Alias Name"] }] });
+    renderSelector(<EntityReferenceMultiSelector entityType="tag" values={[]} excludeIds={[7]} onChange={vi.fn()} />);
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "Alias Name");
+
+    expect(await screen.findByText("No tags found")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps an exact alias match among many tags whose names contain the alias", async () => {
+    const namesContaining = Array.from({ length: 30 }, (_, index) => ({ id: index + 100, name: `Solo ${index}` }));
+    mocks.tagsFind.mockResolvedValue({
+      items: [...namesContaining, { id: 7, name: "Single Performer", aliases: ["Solo"] }],
+    });
+    renderSelector(<EntityReferenceMultiSelector entityType="tag" values={[]} onChange={vi.fn()} />);
+
+    await userEvent.type(screen.getByPlaceholderText("Search tags..."), "Solo");
+
+    const options = await screen.findAllByRole("option");
+    expect(options[0]).toHaveTextContent("Single Performer");
+    expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("a create the server rejects", () => {
+  const detail = 'A tag alias with name "Taken" already exists. Tag names and tag aliases must be unique.';
+
+  afterEach(() => resetMutationFailureForTests());
+
+  it.each(["multi", "single"] as const)(
+    "shows the server's reason in place of Create in the %s selector",
+    async (kind) => {
+      mocks.tagsFind.mockResolvedValue({ items: [] });
+      mocks.tagsCreate.mockRejectedValue(new Error(`API Error 409: ${JSON.stringify({ message: detail })}`));
+      const queryClient = createAppQueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MutationFailureNotice />
+          {kind === "multi" ? (
+            <EntityReferenceMultiSelector entityType="tag" values={[]} onChange={vi.fn()} />
+          ) : (
+            <EntityReferenceSelector entityType="tag" onChange={vi.fn()} />
+          )}
+        </QueryClientProvider>,
+      );
+      const input = screen.getByPlaceholderText("Search tags...");
+
+      await userEvent.type(input, "Taken");
+      await userEvent.click(await screen.findByRole("option", { name: "Create “Taken”" }));
+
+      expect(await within(screen.getByRole("listbox")).findByRole("alert")).toHaveTextContent(detail);
+      expect(screen.queryByRole("option", { name: /Create/ })).not.toBeInTheDocument();
+      expect(screen.queryByText("No tags found")).not.toBeInTheDocument();
+      expect(screen.queryByText("Couldn’t complete the action")).not.toBeInTheDocument();
+
+      await userEvent.type(input, "x");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(await screen.findByRole("option", { name: "Create “Takenx”" })).toBeInTheDocument();
+    },
+  );
 });

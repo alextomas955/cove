@@ -2,6 +2,8 @@ export interface LabelledSearchOption {
   label: string;
   /** Favorites rank ahead of everything else, and only then by how well the label matches. */
   favorite?: boolean;
+  /** Other names the option is known by; typing one exactly ranks it like an exact label match. */
+  aliases?: string[];
 }
 
 export function rankSearchOptions<T extends LabelledSearchOption>(options: T[], searchText: string): T[] {
@@ -17,8 +19,8 @@ export function rankSearchOptions<T extends LabelledSearchOption>(options: T[], 
 
     const leftLabel = normalizeSearchText(left.label);
     const rightLabel = normalizeSearchText(right.label);
-    const leftRank = getSearchRank(leftLabel, needle);
-    const rightRank = getSearchRank(rightLabel, needle);
+    const leftRank = hasAlias(left, needle) ? 0 : getSearchRank(leftLabel, needle);
+    const rightRank = hasAlias(right, needle) ? 0 : getSearchRank(rightLabel, needle);
 
     if (leftRank !== rightRank) return leftRank - rightRank;
     if (leftLabel.length !== rightLabel.length) return leftLabel.length - rightLabel.length;
@@ -36,6 +38,10 @@ export function rankByLabel<T>(
     items.map((item) => ({ item, label: getLabel(item), favorite: isFavorite?.(item) === true })),
     searchText,
   ).map((entry) => entry.item);
+}
+
+function hasAlias(option: LabelledSearchOption, needle: string) {
+  return (option.aliases ?? []).some((alias) => normalizeSearchText(alias) === needle);
 }
 
 function getSearchRank(label: string, needle: string) {

@@ -32,6 +32,16 @@ describe("rankSearchOptions", () => {
     ]);
   });
 
+  it("ranks an exact alias match like an exact label match", () => {
+    const options = [{ label: "Piano Solo" }, { label: "Grand Piano" }, { label: "Keyboard", aliases: ["Piano"] }];
+
+    expect(rankSearchOptions(options, "piano").map((option) => option.label)).toEqual([
+      "Keyboard",
+      "Piano Solo",
+      "Grand Piano",
+    ]);
+  });
+
   it("leaves order untouched without a search term", () => {
     const options = [{ label: "B" }, { label: "A", favorite: true }];
 

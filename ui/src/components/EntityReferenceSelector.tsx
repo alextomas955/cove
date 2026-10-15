@@ -22,6 +22,7 @@ import { rankSearchOptions } from "../utils/searchRanking";
 import { toTagOption } from "../utils/tags";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
+import { getApiValidationFailureDetail } from "../utils/requestFailure";
 
 export type EntityReferenceType =
   | Extract<CustomFieldType, "tag" | "performer" | "studio" | "video" | "gallery" | "image" | "group">
@@ -40,6 +41,34 @@ export interface EntityReferenceOption {
   tagDescription?: string | null;
   tagImagePath?: string | null;
   tagHasImage?: boolean;
+  /** Tags only: other names the tag is known by. The server rejects a new tag named as one of them. */
+  aliases?: string[];
+}
+
+/** Whether the option is named `text`, by its label or one of its aliases. */
+function isNamed(option: EntityReferenceOption, text: string) {
+  const name = text.trim().toLowerCase();
+  return option.label.toLowerCase() === name || (option.aliases ?? []).some((alias) => alias.toLowerCase() === name);
+}
+
+/** Why a typed name offers neither a result nor Create: the entity it names is already selected. */
+function AlreadySelectedNotice({ option, typed }: { option: EntityReferenceOption; typed: string }) {
+  return (
+    <div className="px-3 py-2 text-sm text-muted">
+      {option.label.toLowerCase() === typed.toLowerCase()
+        ? `“${option.label}” is already added.`
+        : `“${typed}” is an alias of “${option.label}”, which is already added.`}
+    </div>
+  );
+}
+
+/** Why the server refused to create the typed name, shown where Create was so it is not offered again. */
+function CreateFailureNotice({ error }: { error: unknown }) {
+  return (
+    <div role="alert" className="border-t border-border px-3 py-2 text-sm text-red-400">
+      {getApiValidationFailureDetail(error)}
+    </div>
+  );
 }
 
 /** A tag's chip tint and group dot, or nothing for other entities and uncolored tags. */
@@ -72,10 +101,10 @@ const RESULT_HOVER_WRAPPER = "-mx-3 -my-2 flex min-w-0 flex-1 px-3 py-2";
 
 type ReferenceAutocompleteValue = { kind: "entity"; option: EntityReferenceOption } | { kind: "create"; query: string };
 
-// Enter without a highlighted option picks the result named exactly as typed. Create is never offered
-// alongside such a result, so this cannot stand in for a Create the person meant.
+// Enter without a highlighted option picks the result named exactly as typed, by name or alias. Create is never
+// offered alongside such a result, so this cannot stand in for a Create the person meant.
 const matchesTypedName = (value: ReferenceAutocompleteValue, inputValue: string) =>
-  value.kind === "entity" && value.option.label.toLowerCase() === inputValue.trim().toLowerCase();
+  value.kind === "entity" && isNamed(value.option, inputValue);
 
 function buildReferenceAutocompleteItems(
   options: EntityReferenceOption[],
@@ -234,14 +263,17 @@ export function EntityReferenceSelector({
     () => searchOptions.filter((option) => option.id !== value && !excluded.has(option.id)),
     [excluded, searchOptions, value],
   );
+  const selectedMatch = searchOptions.find((option) => option.id === value && isNamed(option, trimmedSearch));
 
   const canCreate = allowCreate && CREATABLE_TYPES.has(entityType);
   const exactMatchExists = useMemo(
-    () => searchOptions.some((o) => o.label.toLowerCase() === trimmedSearch.toLowerCase()),
+    () => searchOptions.some((o) => isNamed(o, trimmedSearch)),
     [searchOptions, trimmedSearch],
   );
 
   const createMutation = useMutation({
+    // The server's reason (a name taken by another tag's alias, say) shows under the input instead.
+    meta: { suppressGlobalError: true },
     mutationFn: async (entityName: string) => {
       switch (entityType) {
         case "tag":
@@ -267,7 +299,9 @@ export function EntityReferenceSelector({
     },
   });
 
-  const showCreateOption = trimmedSearch && !isLoading && creatable && canCreate && !exactMatchExists;
+  // Tied to the name it was for, so the reason goes away once the search changes or is cleared.
+  const createFailed = createMutation.isError && createMutation.variables === trimmedSearch;
+  const showCreateOption = trimmedSearch && !isLoading && creatable && canCreate && !exactMatchExists && !createFailed;
   const autocompleteItems = useMemo(
     () =>
       buildReferenceAutocompleteItems(
@@ -373,7 +407,8 @@ export function EntityReferenceSelector({
           {...listboxProps}
         >
           {isLoading ? <div className="px-3 py-2 text-sm text-muted">Loading...</div> : null}
-          {!isLoading && visibleResults.length === 0 && !showCreateOption ? (
+          {!isLoading && selectedMatch ? <AlreadySelectedNotice option={selectedMatch} typed={trimmedSearch} /> : null}
+          {!isLoading && visibleResults.length === 0 && !showCreateOption && !selectedMatch && !createFailed ? (
             <div className="px-3 py-2 text-sm text-muted">No {labels.plural} found</div>
           ) : null}
           {visibleResults.map((option, index) => (
@@ -410,6 +445,7 @@ export function EntityReferenceSelector({
               )}
             </button>
           ) : null}
+          {createFailed ? <CreateFailureNotice error={createMutation.error} /> : null}
         </AutocompleteDropdown>
       ) : null}
     </div>
@@ -513,14 +549,17 @@ export function EntityReferenceMultiSelector({
     () => searchOptions.filter((option) => !values.includes(option.id) && !excluded.has(option.id)),
     [excluded, searchOptions, values],
   );
+  const selectedMatch = searchOptions.find((option) => values.includes(option.id) && isNamed(option, trimmedSearch));
 
   const canCreate = allowCreate && CREATABLE_TYPES.has(entityType);
   const exactMatchExists = useMemo(
-    () => searchOptions.some((o) => o.label.toLowerCase() === trimmedSearch.toLowerCase()),
+    () => searchOptions.some((o) => isNamed(o, trimmedSearch)),
     [searchOptions, trimmedSearch],
   );
 
   const createMutation = useMutation({
+    // The server's reason (a name taken by another tag's alias, say) shows under the input instead.
+    meta: { suppressGlobalError: true },
     mutationFn: async (name: string) => {
       switch (entityType) {
         case "tag":
@@ -546,7 +585,9 @@ export function EntityReferenceMultiSelector({
     },
   });
 
-  const showCreateOption = trimmedSearch && !isLoading && creatable && canCreate && !exactMatchExists;
+  // Tied to the name it was for, so the reason goes away once the search changes or is cleared.
+  const createFailed = createMutation.isError && createMutation.variables === trimmedSearch;
+  const showCreateOption = trimmedSearch && !isLoading && creatable && canCreate && !exactMatchExists && !createFailed;
   const autocompleteItems = useMemo(
     () =>
       buildReferenceAutocompleteItems(
@@ -646,7 +687,8 @@ export function EntityReferenceMultiSelector({
           {...listboxProps}
         >
           {isLoading ? <div className="px-3 py-2 text-sm text-muted">Loading...</div> : null}
-          {!isLoading && visibleResults.length === 0 && !showCreateOption ? (
+          {!isLoading && selectedMatch ? <AlreadySelectedNotice option={selectedMatch} typed={trimmedSearch} /> : null}
+          {!isLoading && visibleResults.length === 0 && !showCreateOption && !selectedMatch && !createFailed ? (
             <div className="px-3 py-2 text-sm text-muted">{emptyMessage ?? `No ${labels.plural} found`}</div>
           ) : null}
           {visibleResults.map((option, index) => (
@@ -682,6 +724,7 @@ export function EntityReferenceMultiSelector({
               )}
             </button>
           ) : null}
+          {createFailed ? <CreateFailureNotice error={createMutation.error} /> : null}
         </AutocompleteDropdown>
       ) : null}
     </div>
