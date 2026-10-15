@@ -10,6 +10,10 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-15
+
+- This is the first release with standalone downloads for the 1.6.0 changes. The 1.6.0 build failed on macOS, so 1.6.0 shipped only as Docker images.
+- Fixed first-run setup on macOS and Windows failing when Cove downloads its own PostgreSQL: the download server started refusing requests without a User-Agent, so Cove exited during startup. Cove now identifies itself when downloading PostgreSQL, as it already did for FFmpeg.
 - Submitting a video draft to a metadata server such as StashDB now works when the video has several files with the same hashes, for example the same file stored at two paths. Before, the draft listed each shared fingerprint once per file, and the metadata server failed when saving the scene from it. Drafts now send each fingerprint once, as Stash does, and **Submit fingerprints** no longer submits a shared fingerprint more than once.
 
 ## [1.6.0] - 2026-10-14
