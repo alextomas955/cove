@@ -2279,6 +2279,69 @@ public sealed class MetadataServerServiceTests
     }
 
     [Fact]
+    public async Task SubmitVideoDraftAsync_SendsEachFingerprintOnceWhenFilesShareHashes()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Two Copies" };
+        var first = new VideoFile { Duration = 121 };
+        first.Fingerprints.Add(new FileFingerprint { Type = "oshash", Value = "1a2b" });
+        first.Fingerprints.Add(new FileFingerprint { Type = "md5", Value = "abc" });
+        var second = new VideoFile { Duration = 121 };
+        second.Fingerprints.Add(new FileFingerprint { Type = "oshash", Value = "0000000000001a2b" });
+        second.Fingerprints.Add(new FileFingerprint { Type = "md5", Value = "def" });
+        video.Files.Add(first);
+        video.Files.Add(second);
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(context, httpClient);
+
+        await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        using var variables = JsonDocument.Parse(Assert.Single(handler.Requests).VariablesJson);
+        var fingerprints = variables.RootElement.GetProperty("input").GetProperty("fingerprints").EnumerateArray()
+            .Select(fp => $"{fp.GetProperty("algorithm").GetString()}:{fp.GetProperty("hash").GetString()}")
+            .ToList();
+        Assert.Equal(["OSHASH:0000000000001a2b", "MD5:abc", "MD5:def"], fingerprints);
+    }
+
+    [Fact]
+    public async Task SubmitFingerprintsAsync_SubmitsEachFingerprintOnceWhenFilesShareHashes()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Two Copies" };
+        video.RemoteIds.Add(new VideoRemoteId { Endpoint = Endpoint, RemoteId = "remote-video-1" });
+        var first = new VideoFile { Duration = 121 };
+        first.Fingerprints.Add(new FileFingerprint { Type = "oshash", Value = "1a2b" });
+        first.Fingerprints.Add(new FileFingerprint { Type = "md5", Value = "abc" });
+        var second = new VideoFile { Duration = 121 };
+        second.Fingerprints.Add(new FileFingerprint { Type = "oshash", Value = "0000000000001a2b" });
+        second.Fingerprints.Add(new FileFingerprint { Type = "md5", Value = "def" });
+        video.Files.Add(first);
+        video.Files.Add(second);
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("\"submitFingerprint\": true"));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(context, httpClient);
+
+        await service.SubmitFingerprintsAsync(video, Endpoint, CancellationToken.None);
+
+        var fingerprints = handler.Requests
+            .Select(request =>
+            {
+                using var variables = JsonDocument.Parse(request.VariablesJson);
+                var fp = variables.RootElement.GetProperty("input").GetProperty("fingerprint");
+                return $"{fp.GetProperty("algorithm").GetString()}:{fp.GetProperty("hash").GetString()}";
+            })
+            .ToList();
+        Assert.Equal(["OSHASH:0000000000001a2b", "MD5:abc", "MD5:def"], fingerprints);
+    }
+
+    [Fact]
     public async Task SubmitFingerprintsAsync_UsesSceneIdFieldForMetadataServerSchema()
     {
         await using var context = CreateContext();

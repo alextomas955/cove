@@ -1568,6 +1568,7 @@ query Me {
         if (videoRemoteId == null)
             throw new InvalidOperationException("Video does not have a remote ID for this endpoint");
 
+        var submitted = new HashSet<(string Algorithm, string Hash)>();
         foreach (var file in video.Files)
         {
             foreach (var fingerprint in file.Fingerprints)
@@ -1581,12 +1582,15 @@ query Me {
                 };
                 if (algorithm == null) continue;
 
+                var hash = algorithm == "OSHASH" ? NormalizeOshash(fingerprint.Value) : fingerprint.Value;
+                if (!submitted.Add((algorithm, hash))) continue;
+
                 var input = new
                 {
                     scene_id = videoRemoteId.RemoteId,
                     fingerprint = new
                     {
-                        hash = algorithm == "OSHASH" ? NormalizeOshash(fingerprint.Value) : fingerprint.Value,
+                        hash,
                         algorithm,
                         duration = (int)(file is VideoFile vf ? vf.Duration : 0),
                     },
@@ -1613,6 +1617,8 @@ query Me {
                 algorithm = x.fp.Type.ToUpperInvariant(),
                 duration = (int)(x.file is VideoFile vf ? vf.Duration : 0),
             })
+            // Copies of one file share hashes; the metadata server rejects a draft that repeats one.
+            .DistinctBy(fp => (fp.algorithm, fp.hash))
             .ToList();
 
         // The video's performers, tags and studio arrive without their own remote IDs loaded, so read

@@ -10,6 +10,8 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 
 ## [Unreleased]
 
+- Submitting a video draft to a metadata server such as StashDB now works when the video has several files with the same hashes, for example the same file stored at two paths. Before, the draft listed each shared fingerprint once per file, and the metadata server failed when saving the scene from it. Drafts now send each fingerprint once, as Stash does, and **Submit fingerprints** no longer submits a shared fingerprint more than once.
+
 ## [1.6.0] - 2026-10-14
 
 - Downloads started without create-missing choices on screen now follow the Scraping → scrape apply defaults from Settings: Settings → Operations → Download From File, downloading a source into an existing video, image, or gallery, and creating an item from a URL. Before, these sent whatever a scrape dialog had last remembered in that browser, or no creation at all, so a URL file could download videos without creating their performers even though Settings said to. Scrape and download dialogs that do show the choices now start from the Settings defaults as well, instead of all-off, the first time they open in a browser.
