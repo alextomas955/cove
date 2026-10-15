@@ -7,8 +7,8 @@ namespace Cove.Data.Repositories;
 /// <summary>One clock reading for an entire query, including related and expression branches.</summary>
 public sealed class RelativeDateEvaluation : IDisposable
 {
-    private static readonly Regex RelativePattern = new(@"^(?<sign>[+-]?)(?<parts>(?:\d+[ymwdh])+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex PartPattern = new(@"(?<amount>\d+)(?<unit>[ymwdh])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RelativePattern = new(@"^(?<sign>[+-]?)(?<parts>(?:\d+(?:min|[ymwdhs]))+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PartPattern = new(@"(?<amount>\d+)(?<unit>min|[ymwdhs])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly AsyncLocal<DateTime?> Current = new();
     private readonly DateTime? previous;
     public static DateTime UtcNow => Current.Value ?? TimeProvider.System.GetUtcNow().UtcDateTime;
@@ -38,18 +38,18 @@ public sealed class RelativeDateEvaluation : IDisposable
         return new TimestampCriterion { Modifier = criterion.Modifier, Value = value ?? "", Value2 = value2 };
     }
 
-    public static bool IsRelativeExpression(string? value) => TryParse(value, allowHours: true, out _, out _);
+    public static bool IsRelativeExpression(string? value) => TryParse(value, allowTime: true, out _, out _);
 
     public static bool IsRelativeExpressionCandidate(string? value)
     {
         if (value?.Trim() is not { Length: > 0 } trimmed) return false;
-        return trimmed[0] is '+' or '-' || Regex.IsMatch(trimmed, @"^\d+[ymwdh][\dymwdh+-]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return trimmed[0] is '+' or '-' || Regex.IsMatch(trimmed, @"^\d+(?:min|[ymwdhs])[\dymwdhins+-]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private static string? ResolveDateValue(string? value)
     {
         if (!IsRelativeExpressionCandidate(value)) return value;
-        if (!TryParse(value, allowHours: false, out var sign, out var parts)) throw InvalidExpression();
+        if (!TryParse(value, allowTime: false, out var sign, out var parts)) throw InvalidExpression();
         try
         {
             var date = Add(DateOnly.FromDateTime(UtcNow), sign, parts);
@@ -62,13 +62,13 @@ public sealed class RelativeDateEvaluation : IDisposable
     private static string? ResolveTimestampValue(string? value)
     {
         if (!IsRelativeExpressionCandidate(value)) return value;
-        if (!TryParse(value, allowHours: true, out var sign, out var parts)) throw InvalidExpression();
+        if (!TryParse(value, allowTime: true, out var sign, out var parts)) throw InvalidExpression();
         try { return Add(UtcNow, sign, parts).ToString("O", CultureInfo.InvariantCulture); }
         catch (ArgumentOutOfRangeException) { throw OutOfRange(); }
         catch (OverflowException) { throw OutOfRange(); }
     }
 
-    private static bool TryParse(string? value, bool allowHours, out int sign, out RelativePart[] parts)
+    private static bool TryParse(string? value, bool allowTime, out int sign, out RelativePart[] parts)
     {
         sign = 1;
         parts = [];
@@ -81,8 +81,8 @@ public sealed class RelativeDateEvaluation : IDisposable
         foreach (Match partMatch in PartPattern.Matches(match.Groups["parts"].Value))
         {
             if (!int.TryParse(partMatch.Groups["amount"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var amount)) return false;
-            var unit = char.ToLowerInvariant(partMatch.Groups["unit"].Value[0]);
-            if (unit == 'h' && !allowHours) return false;
+            var unit = ParseUnit(partMatch.Groups["unit"].Value);
+            if (IsTimeUnit(unit) && !allowTime) return false;
             var rank = UnitRank(unit);
             if (rank >= previousRank) return false;
             parsed.Add(new(amount, unit));
@@ -118,15 +118,22 @@ public sealed class RelativeDateEvaluation : IDisposable
             'm' => value.AddMonths(checked(sign * part.Amount)),
             'y' => value.AddYears(checked(sign * part.Amount)),
             'h' => value.AddHours(checked(sign * part.Amount)),
+            'i' => value.AddMinutes(checked(sign * part.Amount)),
+            's' => value.AddSeconds(checked(sign * part.Amount)),
             _ => throw InvalidExpression(),
         };
         return value;
     }
 
-    private static int UnitRank(char unit) => unit switch { 'y' => 5, 'm' => 4, 'w' => 3, 'd' => 2, 'h' => 1, _ => 0 };
+    // Minutes are spelled "min" because "m" already means months; they are tracked internally as 'i'.
+    private static char ParseUnit(string unit) =>
+        unit.Equals("min", StringComparison.OrdinalIgnoreCase) ? 'i' : char.ToLowerInvariant(unit[0]);
+
+    private static bool IsTimeUnit(char unit) => unit is 'h' or 'i' or 's';
+    private static int UnitRank(char unit) => unit switch { 'y' => 7, 'm' => 6, 'w' => 5, 'd' => 4, 'h' => 3, 'i' => 2, 's' => 1, _ => 0 };
     private readonly record struct RelativePart(int Amount, char Unit);
 
-    private static RelativeDateFilterException InvalidExpression() => new("Relative date values must start with + or -, followed by whole-number y, m, w, or d parts in largest-to-smallest order; timestamp filters also support h after d (for example -1y3m, +2w, or -6h). 0d means the current date or time.");
+    private static RelativeDateFilterException InvalidExpression() => new("Relative date values must start with + or -, followed by whole-number y, m, w, or d parts in largest-to-smallest order; timestamp filters also support h, min, and s after d (for example -1y3m, +2w, -6h, or -1h30min). 0d means the current date or time.");
     private static RelativeDateFilterException OutOfRange() => new("Relative date value exceeds the supported date range.");
 }
 

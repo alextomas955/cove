@@ -918,8 +918,8 @@ export function TimestampEditor({
           </div>
           {allowRelative && (
             <p className="text-sm text-muted-foreground">
-              Use an exact date and time or an offset such as -6h, -1d6h, or -1y3m. Combine y, m, w, d, and h from
-              largest to smallest; use 0d for now.
+              Use an exact date and time or an offset such as -6h, -1h30min, -90s, or -1y3m. Combine y, m, w, d, h, min,
+              and s from largest to smallest; use 0d for now.
             </p>
           )}
         </div>

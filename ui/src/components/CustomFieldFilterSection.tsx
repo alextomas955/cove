@@ -16,6 +16,7 @@ import {
   parseEntityReferenceId,
 } from "./EntityReferenceSelector";
 import { IsoDateInput } from "./IsoDateInput";
+import { describeRelativeDate, isValidRelativeDate, looksLikeRelativeDate } from "../utils/relativeDate";
 
 export const CUSTOM_FIELD_FILTER_SECTION_ID = "custom-fields";
 export const CUSTOM_FIELD_CRITERIA_FILTER_KEY = "customFieldCriteria";
@@ -114,7 +115,14 @@ function isCustomFieldCriterionActive(value: CustomFieldCriterion | undefined) {
     if (modifier === "EQUALS" || modifier === "NOT_EQUALS") return true;
     return String(value.value ?? "").length > 0;
   }
-  if (modifier === "BETWEEN" || modifier === "NOT_BETWEEN") {
+  const isRange = modifier === "BETWEEN" || modifier === "NOT_BETWEEN";
+  if (value.type === "date" || value.type === "timestamp") {
+    const allowTime = value.type === "timestamp";
+    const isValidBound = (bound: unknown) =>
+      !looksLikeRelativeDate(String(bound ?? "")) || isValidRelativeDate(String(bound), allowTime);
+    if (!isValidBound(value.value) || (isRange && !isValidBound(value.value2))) return false;
+  }
+  if (isRange) {
     return String(value.value ?? "").trim() !== "" && String(value.value2 ?? "").trim() !== "";
   }
   return String(value.value ?? "").trim() !== "";
@@ -162,6 +170,10 @@ function formatCustomFieldCriterionValue(
   if (definition && isEntityReferenceType(definition.type)) {
     const displayValue = valueKey === "value2" ? criterion.displayValue2 : criterion.displayValue;
     return displayValue || `Selected ${getEntityReferenceLabel(definition.type).singular}`;
+  }
+
+  if (definition?.type === "date" || definition?.type === "timestamp") {
+    return describeRelativeDate(rawValue, definition.type === "date") ?? String(rawValue);
   }
 
   return String(rawValue);
@@ -574,18 +586,29 @@ function CustomFieldValueInput({
     percent: "number",
   };
 
-  const Input = definition.type === "date" || definition.type === "timestamp" ? IsoDateInput : "input";
+  const className =
+    "mt-1 w-full rounded border border-border bg-input px-3 py-2 text-sm text-foreground disabled:opacity-50 focus:border-accent focus:outline-none";
   return (
     <label className="block text-xs text-muted">
       {label}
-      <Input
-        {...(definition.type === "timestamp" ? { pickerType: "datetime-local" as const } : {})}
-        type={inputType[definition.type] ?? "text"}
-        disabled={disabled}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded border border-border bg-input px-3 py-2 text-sm text-foreground disabled:opacity-50 focus:border-accent focus:outline-none"
-      />
+      {definition.type === "date" || definition.type === "timestamp" ? (
+        <IsoDateInput
+          allowRelative
+          pickerType={definition.type === "timestamp" ? "datetime-local" : "date"}
+          disabled={disabled}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={className}
+        />
+      ) : (
+        <input
+          type={inputType[definition.type] ?? "text"}
+          disabled={disabled}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={className}
+        />
+      )}
     </label>
   );
 }

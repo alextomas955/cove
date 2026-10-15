@@ -58,6 +58,9 @@ public class RelativeDateExpressionTests
     [InlineData("-1y3m", "2022-12-01T12:00:00.0000000Z")]
     [InlineData("-6h", "2024-03-01T06:00:00.0000000Z")]
     [InlineData("-1d6h", "2024-02-29T06:00:00.0000000Z")]
+    [InlineData("-1h30min", "2024-03-01T10:30:00.0000000Z")]
+    [InlineData("-90s", "2024-03-01T11:58:30.0000000Z")]
+    [InlineData("+1d2h3MIN4s", "2024-03-02T14:03:04.0000000Z")]
     [InlineData("0d", "2024-03-01T12:00:00.0000000Z")]
     public void TimestampsResolveFromCurrentUtcInstant(string expression, string expected)
     {
@@ -111,6 +114,12 @@ public class RelativeDateExpressionTests
     [InlineData("1y+3m")]
     [InlineData("1y-3m")]
     [InlineData("+2147483648d")]
+    [InlineData("-30s1min")]
+    [InlineData("-1min1min")]
+    [InlineData("-1s1h")]
+    [InlineData("+1.5s")]
+    [InlineData("1s")]
+    [InlineData("-1mi")]
     public void InvalidSignedExpressionsAreRejected(string expression)
     {
         using var scope = RelativeDateEvaluation.Begin(new Clock(Now));
@@ -121,7 +130,9 @@ public class RelativeDateExpressionTests
     [Theory]
     [InlineData("-6h")]
     [InlineData("-1d6h")]
-    public void DateOnlyCriteriaRejectHourParts(string expression)
+    [InlineData("-30min")]
+    [InlineData("-1d15s")]
+    public void DateOnlyCriteriaRejectTimeParts(string expression)
     {
         using var scope = RelativeDateEvaluation.Begin(new Clock(Now));
         Assert.Throws<RelativeDateFilterException>(() => RelativeDateEvaluation.Resolve(new DateCriterion { Value = expression }));

@@ -265,3 +265,41 @@ describe("long text custom fields", () => {
     expect(display?.textContent).toBe(value);
   });
 });
+
+describe("timestamp custom fields", () => {
+  const timestampDefinition: CustomFieldDefinition = {
+    ...jsonDefinition,
+    key: "recorded_at",
+    label: "Recorded At",
+    type: "timestamp",
+    filterable: true,
+    sortable: true,
+  };
+
+  it("presents saved values in UTC to the second", () => {
+    renderWithDefinition(
+      <CustomFieldsDisplay customFields={{ recorded_at: "2024-03-01T08:30:15.0000000Z" }} entityType="video" />,
+      [timestampDefinition],
+    );
+
+    expect(screen.getByText("2024-03-01 08:30:15 UTC")).toBeInTheDocument();
+  });
+
+  it("edits saved values with a seconds-capable date-time picker", () => {
+    const onChange = vi.fn();
+    renderWithDefinition(
+      <CustomFieldsEditor
+        value={{ recorded_at: "2024-03-01T08:30:15.0000000Z" }}
+        onChange={onChange}
+        entityType="video"
+      />,
+      [timestampDefinition],
+    );
+
+    const editor = screen.getByLabelText("Recorded At");
+    expect(editor).toHaveValue("2024-03-01T08:30:15Z");
+    expect(document.querySelector('input[type="datetime-local"]')).toHaveAttribute("step", "1");
+    fireEvent.change(editor, { target: { value: "2024-03-01T08:30:16Z" } });
+    expect(onChange).toHaveBeenLastCalledWith({ recorded_at: "2024-03-01T08:30:16Z" });
+  });
+});

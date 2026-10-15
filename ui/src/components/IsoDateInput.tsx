@@ -39,19 +39,24 @@ export function IsoDateInput({
 }: IsoDateInputProps) {
   const pickerRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLInputElement>(null);
-  const absolutePlaceholder = pickerType === "date" ? "yyyy-MM-dd" : "yyyy-MM-ddTHH:mm";
-  const allowHours = pickerType === "datetime-local";
-  const placeholder = allowRelative ? `${absolutePlaceholder} or ${allowHours ? "-6h" : "-1y3m"}` : absolutePlaceholder;
+  const absolutePlaceholder = pickerType === "date" ? "yyyy-MM-dd" : "yyyy-MM-ddTHH:mm:ss";
+  const allowTime = pickerType === "datetime-local";
+  const placeholder = allowRelative
+    ? `${absolutePlaceholder} or ${allowTime ? "-1h30min" : "-1y3m"}`
+    : absolutePlaceholder;
   const presentLabel = pickerType === "date" ? "today" : "now";
+  const absoluteMessage = allowTime
+    ? "YYYY-MM-DDTHH:mm or YYYY-MM-DDTHH:mm:ss, optionally followed by Z or an offset such as +02:00"
+    : "YYYY, YYYY-MM, or YYYY-MM-DD";
   const dateMessage = allowRelative
-    ? `Use YYYY, YYYY-MM, YYYY-MM-DD, or an offset such as -7d, -1y3m, or ${allowHours ? "-6h" : "+2w"}; combine y, m, w, d${allowHours ? ", and h" : ""} from largest to smallest. Use 0d for ${presentLabel}.`
-    : "Use YYYY, YYYY-MM, or YYYY-MM-DD.";
+    ? `Use ${absoluteMessage}, or an offset such as -7d, -1y3m, or ${allowTime ? "-1h30min" : "+2w"}; combine y, m, w, d${allowTime ? ", h, min, and s" : ""} from largest to smallest. Use 0d for ${presentLabel}.`
+    : `Use ${absoluteMessage}.`;
   const isValidValue = useCallback(
     (candidate: string) => {
-      if (looksLikeRelativeDate(candidate)) return allowRelative && isValidRelativeDate(candidate, allowHours);
+      if (looksLikeRelativeDate(candidate)) return allowRelative && isValidRelativeDate(candidate, allowTime);
       return pickerType !== "date" || isValidPartialIsoDate(candidate);
     },
-    [allowRelative, allowHours, pickerType],
+    [allowRelative, allowTime, pickerType],
   );
 
   useEffect(() => {
@@ -67,7 +72,12 @@ export function IsoDateInput({
   const openPicker = () => {
     const picker = pickerRef.current;
     if (!picker) return;
-    picker.value = typeof value === "string" ? value : "";
+    const current = typeof value === "string" ? value : "";
+    // datetime-local rejects offsets and fractions, so prime it with the wall-clock prefix of an ISO value.
+    picker.value =
+      pickerType === "datetime-local"
+        ? (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?/.exec(current)?.[0] ?? current)
+        : current;
     if (typeof picker.showPicker === "function") picker.showPicker();
     else picker.click();
   };
@@ -99,6 +109,7 @@ export function IsoDateInput({
       <input
         ref={pickerRef}
         type={pickerType}
+        step={pickerType === "datetime-local" ? 1 : undefined}
         tabIndex={-1}
         aria-hidden="true"
         className="pointer-events-none absolute h-px w-px opacity-0"

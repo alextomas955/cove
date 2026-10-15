@@ -64,6 +64,23 @@ describe("relative date filters", () => {
     expect(isCriterionValueValid({ value: "-6h", modifier: "EQUALS" }, definition)).toBe(false);
   });
 
+  it("supports minute and second offsets for timestamps but not date-only criteria", () => {
+    const timestamp = { ...definition, type: "timestamp" as const };
+    render(<Editor timestamp />);
+    fireEvent.change(screen.getByLabelText("Value"), { target: { value: "-1d2h3min4s" } });
+    expect(screen.getByLabelText("Value")).toBeValid();
+    expect(formatFilterChipValue(timestamp, { value: "-90s", modifier: "GREATER_THAN" })).toBe(
+      "Later than 90 seconds ago",
+    );
+    expect(formatFilterChipValue(timestamp, { value: "-30min", value2: "-10min", modifier: "BETWEEN" })).toBe(
+      "Between 10 and 30 minutes ago",
+    );
+    expect(isCriterionValueValid({ value: "-30s", modifier: "EQUALS" }, timestamp)).toBe(true);
+    expect(isCriterionValueValid({ value: "-30s1min", modifier: "EQUALS" }, timestamp)).toBe(false);
+    expect(isCriterionValueValid({ value: "-30min", modifier: "EQUALS" }, definition)).toBe(false);
+    expect(isCriterionValueValid({ value: "-30s", modifier: "EQUALS" }, definition)).toBe(false);
+  });
+
   it("rejects malformed unsigned combined offsets", () => {
     expect(isCriterionValueValid({ value: "1y+3m", modifier: "EQUALS" }, definition)).toBe(false);
     expect(isCriterionValueValid({ value: "1y-3m", modifier: "EQUALS" }, definition)).toBe(false);
@@ -81,15 +98,39 @@ describe("relative date filters", () => {
     expect(formatFilterChipValue({ ...definition, type: "timestamp" }, rollingWeek)).toBe("Between 7 days ago and now");
   });
 
-  it.each([
-    { ...definition, customFieldKey: "custom_date" },
-    { ...definition, filterKey: "extension-filter:example:date" },
-  ])("keeps relative expressions unavailable for custom and extension criteria", (criterion) => {
+  it("keeps relative expressions unavailable for extension criteria", () => {
+    const criterion = { ...definition, filterKey: "extension-filter:example:date" };
     render(<CriterionEditor criterion={criterion} value={undefined} onChange={() => {}} />);
     const input = screen.getByLabelText("Value");
     fireEvent.change(input, { target: { value: "+7d" } });
     expect(input).toBeInvalid();
     expect(formatFilterChipValue(criterion, { value: "+7d", modifier: "EQUALS" })).toBe("= +7d");
+  });
+
+  it("accepts relative expressions for custom-field criteria, which the server resolves", () => {
+    const criterion = {
+      ...definition,
+      type: "timestamp" as const,
+      customFieldKey: "recorded_at",
+      customFieldType: "timestamp",
+    };
+    render(<CriterionEditor criterion={criterion} value={undefined} onChange={() => {}} />);
+    const input = screen.getByLabelText("Value");
+    fireEvent.change(input, { target: { value: "-1h30min" } });
+    expect(input).toBeValid();
+    expect(isCriterionValueValid({ value: "-1h30min", modifier: "GREATER_THAN" }, criterion)).toBe(true);
+    expect(formatFilterChipValue(criterion, { value: "-1h30min", modifier: "GREATER_THAN" })).toBe(
+      "Later than 1 hour 30 minutes ago",
+    );
+  });
+
+  it.each([
+    { ...definition, type: "timestamp" as const, customFieldKey: "recorded_on", customFieldType: "date" },
+    { ...definition, customFieldKey: "recorded_on", customFieldType: "datetime" },
+    { ...definition, customFieldKey: "recorded_on" },
+  ])("withholds relative expressions when the custom field type differs from the editor's", (criterion) => {
+    expect(isCriterionValueValid({ value: "-6h", modifier: "GREATER_THAN" }, criterion)).toBe(false);
+    expect(isCriterionValueValid({ value: "-7d", modifier: "GREATER_THAN" }, criterion)).toBe(false);
   });
 
   it("summarizes relative expressions like other date values", () => {
@@ -146,7 +187,10 @@ describe("relative date filters", () => {
     expect(parseDateFilterValue("+1m2w3d", reference)).toBe(Date.parse("2024-05-17T12:34:56.789Z"));
     expect(parseDateFilterValue("-6h", reference)).toBe(Date.parse("2024-03-31T06:34:56.789Z"));
     expect(parseDateFilterValue("-1d6h", reference)).toBe(Date.parse("2024-03-30T06:34:56.789Z"));
+    expect(parseDateFilterValue("-1h30min", reference)).toBe(Date.parse("2024-03-31T11:04:56.789Z"));
+    expect(parseDateFilterValue("+90s", reference)).toBe(Date.parse("2024-03-31T12:36:26.789Z"));
     expect(parseDateFilterValue("-6h", reference, true)).toBeNaN();
+    expect(parseDateFilterValue("-5min", reference, true)).toBeNaN();
     expect(parseDateFilterValue("0d", reference, true)).toBe(Date.parse("2024-03-31T00:00:00.000Z"));
     expect(parseDateFilterValue("0d", reference)).toBe(reference.getTime());
   });

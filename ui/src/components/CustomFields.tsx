@@ -19,7 +19,7 @@ import {
   parseEntityReferenceIds,
 } from "./EntityReferenceSelector";
 import { useCustomFieldDefinitions } from "../hooks/useCustomFieldDefinitions";
-import { formatDate } from "../utils/dateFormat";
+import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { IsoDateInput } from "./IsoDateInput";
 import { compareNatural } from "../utils/naturalCompare";
 
@@ -330,7 +330,7 @@ export function ConfiguredFieldInput({
     return (
       <textarea
         aria-label={controlLabel}
-        value={serializeMultiValue(value)}
+        value={serializeMultiValue(value, definition.type)}
         onChange={(event) => onChange(event.target.value)}
         rows={3}
         className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
@@ -356,7 +356,7 @@ export function ConfiguredFieldInput({
       {...(definition.type === "timestamp" ? { pickerType: "datetime-local" as const } : {})}
       aria-label={controlLabel}
       type={inputType[definition.type] ?? "text"}
-      value={serializeScalarValue(value)}
+      value={serializeScalarValue(value, definition.type)}
       onChange={(event) => onChange(event.target.value)}
       className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
     />
@@ -1036,7 +1036,7 @@ function formatCustomFieldValue(value: unknown, type: CustomFieldType | undefine
 
   if (Array.isArray(value)) {
     return value
-      .map((entry) => formatCustomFieldValue(entry, undefined))
+      .map((entry) => formatCustomFieldValue(entry, type === "date" || type === "timestamp" ? type : undefined))
       .filter(Boolean)
       .join(", ");
   }
@@ -1050,6 +1050,8 @@ function formatCustomFieldValue(value: unknown, type: CustomFieldType | undefine
     }
     case "date":
       return formatDateValue(value);
+    case "timestamp":
+      return formatTimestampValue(value);
     default:
       return typeof value === "object" ? JSON.stringify(value) : String(value);
   }
@@ -1061,6 +1063,15 @@ function formatDateValue(value: unknown): string {
   }
 
   const formatted = formatDate(value);
+  return formatted === "Invalid Date" ? value : formatted;
+}
+
+function formatTimestampValue(value: unknown): string {
+  if (typeof value !== "string" || !value) {
+    return String(value ?? "");
+  }
+
+  const formatted = formatDateTime(value);
   return formatted === "Invalid Date" ? value : formatted;
 }
 
@@ -1122,17 +1133,19 @@ function serializeBooleanValue(value: unknown) {
   return "";
 }
 
-function serializeScalarValue(value: unknown) {
+function serializeScalarValue(value: unknown, type?: CustomFieldType) {
   if (value == null) return "";
-  return typeof value === "string" ? value : String(value);
+  if (typeof value !== "string") return String(value);
+  // Saved timestamps come back as .NET round-trip strings; drop the all-zero fraction so the editor shows seconds.
+  return type === "timestamp" ? value.replace(/\.0{7}Z$/, "Z") : value;
 }
 
-function serializeMultiValue(value: unknown) {
+function serializeMultiValue(value: unknown, type?: CustomFieldType) {
   if (Array.isArray(value)) {
-    return value.map((entry) => serializeScalarValue(entry)).join("\n");
+    return value.map((entry) => serializeScalarValue(entry, type)).join("\n");
   }
 
-  return serializeScalarValue(value);
+  return serializeScalarValue(value, type);
 }
 
 function normalizeReferenceFieldValue(value: unknown, isMultiValue: boolean): unknown {

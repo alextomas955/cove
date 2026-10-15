@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Cove.Core.Entities;
 using Cove.Core.Interfaces;
 
 namespace Cove.Data.Repositories;
@@ -40,6 +41,10 @@ public static class RelativeDateFilterJson
         "addedAtCriterion", "createdAtCriterion", "updatedAtCriterion", "lastPlayedAtCriterion", "lastLikedAtCriterion",
         "lastReadAtCriterion", "lastResolvedAtCriterion", "fileModTimeCriterion", "rawCreatedAtCriterion", "rawUpdatedAtCriterion",
     };
+    private static readonly HashSet<string> CustomFieldKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "customFieldCriterion", "customFieldCriteria",
+    };
     private static readonly HashSet<string> ContainerKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "objectFilter", "filterExpression", "_filterExpression", "children", "filter", "group",
@@ -58,15 +63,34 @@ public static class RelativeDateFilterJson
             {
                 var isDate = DateKeys.Contains(property.Name);
                 if ((isDate || TimestampKeys.Contains(property.Name)) && property.Value.ValueKind == JsonValueKind.Object)
-                {
-                    var value = GetStringProperty(property.Value, "value") ?? "";
-                    var value2 = GetStringProperty(property.Value, "value2");
-                    if (isDate) RelativeDateEvaluation.Resolve(new DateCriterion { Value = value, Value2 = value2 });
-                    else RelativeDateEvaluation.Resolve(new TimestampCriterion { Value = value, Value2 = value2 });
-                }
+                    ValidateCriterion(property.Value, isDate);
+                else if (CustomFieldKeys.Contains(property.Name)) ValidateCustomFieldCriteria(property.Value);
                 else if (ContainerKeys.Contains(property.Name)) ValidateElement(property.Value);
             }
         }
+    }
+
+    private static void ValidateCriterion(JsonElement criterion, bool isDate)
+    {
+        var value = GetStringProperty(criterion, "value") ?? "";
+        var value2 = GetStringProperty(criterion, "value2");
+        if (isDate) RelativeDateEvaluation.Resolve(new DateCriterion { Value = value, Value2 = value2 });
+        else RelativeDateEvaluation.Resolve(new TimestampCriterion { Value = value, Value2 = value2 });
+    }
+
+    private static void ValidateCustomFieldCriteria(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray()) ValidateCustomFieldCriteria(item);
+            return;
+        }
+
+        // JSON-path criteria are typed by the path, which never resolves relative offsets.
+        if (element.ValueKind != JsonValueKind.Object || !string.IsNullOrWhiteSpace(GetStringProperty(element, "jsonPath"))) return;
+        var type = GetStringProperty(element, "type");
+        if (CustomFieldTypes.IsDateLike(type)) ValidateCriterion(element, isDate: true);
+        else if (CustomFieldTypes.IsTimestampLike(type)) ValidateCriterion(element, isDate: false);
     }
 
     private static string? GetStringProperty(JsonElement element, string name)

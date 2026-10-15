@@ -61,12 +61,23 @@ function hasFingerprintCriterionValue(criterion: { modifier?: CriterionModifier;
   return hasStringCriterionValue(criterion);
 }
 
+/**
+ * Whether a date or timestamp criterion accepts relative offsets. Extension-evaluated filters never do. A
+ * custom-field-backed criterion is resolved by the server using its custom field type, so offsets are offered
+ * only when that type agrees with the editor's; otherwise the server would reject or ignore what the editor allows.
+ */
+export function supportsRelativeDateInput(criterion: CriterionDefinition) {
+  if (criterion.filterKey.startsWith("extension-filter:")) return false;
+  if (!criterion.customFieldKey) return true;
+  return (criterion.customFieldType ?? "text").trim().toLowerCase() === criterion.type;
+}
+
 function hasDateCriterionValue(
   value: { modifier?: CriterionModifier; value?: string; value2?: string },
   criterion: CriterionDefinition,
 ) {
   if (!hasStringCriterionValue(value)) return false;
-  const allowRelative = !criterion.customFieldKey && !criterion.filterKey.startsWith("extension-filter:");
+  const allowRelative = supportsRelativeDateInput(criterion);
   const isValidBound = (bound?: string) =>
     !bound ||
     !looksLikeRelativeDate(bound) ||

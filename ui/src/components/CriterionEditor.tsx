@@ -26,6 +26,7 @@ import {
 } from "./PrimitiveCriterionEditors";
 import { TagDurationEditor } from "./TagDurationFilterEditor";
 import type { CriterionDefinition, CriterionType } from "./filterCriteriaTypes";
+import { supportsRelativeDateInput } from "./filterCriterionState";
 
 const TYPE_MODIFIERS: Record<CriterionType, CriterionModifier[]> = {
   string: ["EQUALS", "NOT_EQUALS", "INCLUDES", "EXCLUDES", "MATCHES_REGEX", "NOT_MATCHES_REGEX", "IS_NULL", "NOT_NULL"],
@@ -168,7 +169,7 @@ export function CriterionEditor({
     case "date":
       return (
         <DateEditor
-          allowRelative={!criterion.customFieldKey && !criterion.filterKey.startsWith("extension-filter:")}
+          allowRelative={supportsRelativeDateInput(criterion)}
           value={value as DateCriterion | undefined}
           onChange={onChange}
           modifiers={modifiers}
@@ -177,7 +178,7 @@ export function CriterionEditor({
     case "timestamp":
       return (
         <TimestampEditor
-          allowRelative={!criterion.customFieldKey && !criterion.filterKey.startsWith("extension-filter:")}
+          allowRelative={supportsRelativeDateInput(criterion)}
           value={value as TimestampCriterion | undefined}
           onChange={onChange}
           modifiers={modifiers}

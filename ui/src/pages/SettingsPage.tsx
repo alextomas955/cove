@@ -966,6 +966,7 @@ const customFieldTypeOptions: { value: CustomFieldType; label: string }[] = [
   { value: "number", label: "Number" },
   { value: "boolean", label: "Boolean" },
   { value: "date", label: "Date" },
+  { value: "timestamp", label: "Timestamp" },
   { value: "url", label: "URL" },
   { value: "enum", label: "Enum" },
   { value: "json", label: "JSON" },

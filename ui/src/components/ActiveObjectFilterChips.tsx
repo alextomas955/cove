@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import { groups, performers, studios, tagGroups, tags } from "../api/client";
 import { formatHumanDuration } from "../utils/durationFormat";
 import type { CriterionDefinition, FilterDialogCustomSection } from "./filterCriteriaTypes";
+import { supportsRelativeDateInput } from "./filterCriterionState";
 import { getMultiIdModifierLabel } from "../utils/filterModifierLabels";
 import type { MetadataServer, RatingSystemOptions } from "../api/types";
 import {
@@ -23,7 +24,12 @@ import {
   sortFilterExpressionChildrenForDisplay,
 } from "../utils/filterExpressionPresentation";
 import { repairRelatedScopes } from "../utils/filterExpressionTree";
-import { parseRelativeDateExpression, type RelativeDateExpression } from "../utils/relativeDate";
+import {
+  describeRelativeDate,
+  parseRelativeDateExpression,
+  RELATIVE_UNIT_LABELS,
+  type RelativeDateExpression,
+} from "../utils/relativeDate";
 
 export type RelatedFilterChipFacet = "criterion" | "search" | "existence" | "mode";
 
@@ -127,25 +133,9 @@ function formatCareerLength(value: unknown): string {
   return `${value} ${value === 1 ? "year" : "years"}`;
 }
 
-function readRelativeDateChipValue(value: unknown, allowHours = true): RelativeDateExpression | undefined {
+function readRelativeDateChipValue(value: unknown, allowTime = true): RelativeDateExpression | undefined {
   if (typeof value !== "string") return undefined;
-  return parseRelativeDateExpression(value, allowHours);
-}
-
-function formatRelativeDateChipValue(value: unknown, dateOnly: boolean): string | undefined {
-  const relative = readRelativeDateChipValue(value, !dateOnly);
-  if (!relative) return undefined;
-  const nonzeroParts = relative.parts.filter((part) => part.amount !== 0);
-  if (nonzeroParts.length === 0) return dateOnly ? "today" : "now";
-
-  const duration = nonzeroParts
-    .map(({ amount, unit }) => {
-      const label =
-        unit === "y" ? "year" : unit === "m" ? "month" : unit === "w" ? "week" : unit === "d" ? "day" : "hour";
-      return `${amount} ${label}${amount === 1 ? "" : "s"}`;
-    })
-    .join(" ");
-  return relative.sign === "-" ? `${duration} ago` : `${duration} from now`;
+  return parseRelativeDateExpression(value, allowTime);
 }
 
 function formatCompactRelativeDateRange(value: unknown, value2: unknown, dateOnly: boolean): string | undefined {
@@ -161,17 +151,7 @@ function formatCompactRelativeDateRange(value: unknown, value2: unknown, dateOnl
   const upperAmount = Math.max(firstPart.amount, secondPart.amount);
   const plural = firstPart.amount === 1 && secondPart.amount === 1 ? "" : "s";
   const suffix = first.sign === "-" ? "ago" : "from now";
-  const unit =
-    firstPart.unit === "y"
-      ? "year"
-      : firstPart.unit === "m"
-        ? "month"
-        : firstPart.unit === "w"
-          ? "week"
-          : firstPart.unit === "d"
-            ? "day"
-            : "hour";
-  return `${lowerAmount} and ${upperAmount} ${unit}${plural} ${suffix}`;
+  return `${lowerAmount} and ${upperAmount} ${RELATIVE_UNIT_LABELS[firstPart.unit]}${plural} ${suffix}`;
 }
 
 function formatMetadataServiceLabel(endpoint: string, metadataServers: MetadataServer[]): string {
@@ -378,13 +358,10 @@ export function formatFilterChipValue(
   }
 
   if (criterion.modifier === "IS_NULL" || criterion.modifier === "NOT_NULL") return modifier;
-  const supportsRelativeDates =
-    (def?.type === "date" || def?.type === "timestamp") &&
-    !def.customFieldKey &&
-    !def.filterKey.startsWith("extension-filter:");
+  const supportsRelativeDates = (def?.type === "date" || def?.type === "timestamp") && supportsRelativeDateInput(def);
   if (supportsRelativeDates) {
-    const valueText = formatRelativeDateChipValue(criterion.value, def.type === "date");
-    const value2Text = formatRelativeDateChipValue(criterion.value2, def.type === "date");
+    const valueText = describeRelativeDate(criterion.value, def.type === "date");
+    const value2Text = describeRelativeDate(criterion.value2, def.type === "date");
     const isRange = criterion.modifier === "BETWEEN" || criterion.modifier === "NOT_BETWEEN";
     if (valueText || (isRange && value2Text)) {
       const first = valueText ?? formatChipScalar(criterion.value);

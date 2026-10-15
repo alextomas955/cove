@@ -677,36 +677,67 @@ public static class FilterHelpers
     private static IQueryable<T> ApplyDateCustomField<T>(IQueryable<T> query, IQueryable<CustomFieldValue> values, CustomFieldCriterion criterion)
         where T : BaseEntity
     {
-        if (!DateOnly.TryParse(criterion.Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) return query;
-        var date2 = DateOnly.TryParse(criterion.Value2, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate2) ? parsedDate2 : date;
+        var resolved = RelativeDateEvaluation.Resolve(new DateCriterion { Value = criterion.Value, Value2 = criterion.Value2 });
+        if (!DateOnly.TryParse(resolved.Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) return query;
+        var date2 = DateOnly.TryParse(resolved.Value2, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate2) ? parsedDate2 : date;
+        var lower = date <= date2 ? date : date2;
+        var upper = date <= date2 ? date2 : date;
         return criterion.Modifier switch
         {
             CriterionModifier.Equals => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.DateValue == date)),
             CriterionModifier.NotEquals => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.DateValue == date)),
             CriterionModifier.GreaterThan => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.DateValue > date)),
             CriterionModifier.LessThan => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.DateValue < date)),
-            CriterionModifier.Between => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.DateValue >= date && value.DateValue <= date2)),
-            CriterionModifier.NotBetween => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.DateValue >= date && value.DateValue <= date2)),
+            CriterionModifier.Between => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.DateValue >= lower && value.DateValue <= upper)),
+            CriterionModifier.NotBetween => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.DateValue >= lower && value.DateValue <= upper)),
             _ => query,
         };
     }
 
+    /// <summary>
+    /// Timestamp custom fields compare at whole-second precision: every bound, including a resolved relative
+    /// offset, names the one-second window that contains it, so stored sub-second digits never decide a match.
+    /// </summary>
     private static IQueryable<T> ApplyTimestampCustomField<T>(IQueryable<T> query, IQueryable<CustomFieldValue> values, CustomFieldCriterion criterion)
         where T : BaseEntity
     {
-        if (!DateTime.TryParse(criterion.Value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var timestamp)) return query;
-        var timestamp2 = DateTime.TryParse(criterion.Value2, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsedTimestamp2) ? parsedTimestamp2 : timestamp;
+        var resolved = RelativeDateEvaluation.Resolve(new TimestampCriterion { Value = criterion.Value, Value2 = criterion.Value2 });
+        if (!TryParseCustomFieldTimestamp(resolved.Value, out var timestamp)) return query;
+        var timestamp2 = TryParseCustomFieldTimestamp(resolved.Value2, out var parsedTimestamp2) ? parsedTimestamp2 : timestamp;
+        var start = timestamp <= timestamp2 ? timestamp : timestamp2;
+        var end = NextSecond(timestamp <= timestamp2 ? timestamp2 : timestamp);
+        var next = NextSecond(timestamp);
         return criterion.Modifier switch
         {
-            CriterionModifier.Equals => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue == timestamp)),
-            CriterionModifier.NotEquals => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.TimestampValue == timestamp)),
-            CriterionModifier.GreaterThan => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue > timestamp)),
+            CriterionModifier.Equals => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= timestamp && value.TimestampValue < next)),
+            CriterionModifier.NotEquals => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= timestamp && value.TimestampValue < next)),
+            CriterionModifier.GreaterThan => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= next)),
             CriterionModifier.LessThan => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue < timestamp)),
-            CriterionModifier.Between => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= timestamp && value.TimestampValue <= timestamp2)),
-            CriterionModifier.NotBetween => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= timestamp && value.TimestampValue <= timestamp2)),
+            CriterionModifier.Between => query.Where(entity => values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= start && value.TimestampValue < end)),
+            CriterionModifier.NotBetween => query.Where(entity => !values.Any(value => value.EntityId == entity.Id && value.TimestampValue >= start && value.TimestampValue < end)),
             _ => query,
         };
     }
+
+    // Custom field timestamps are stored as UTC, and values without an offset are read as UTC when saved,
+    // so filter bounds without an offset use the same convention.
+    private static bool TryParseCustomFieldTimestamp(string? value, out DateTime timestamp)
+    {
+        if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+        {
+            timestamp = default;
+            return false;
+        }
+
+        timestamp = parsed.AddTicks(-(parsed.Ticks % TimeSpan.TicksPerSecond));
+        return true;
+    }
+
+    // The last second of the supported range has no successor, so its window closes at the maximum value.
+    private static DateTime NextSecond(DateTime second) =>
+        DateTime.MaxValue.Ticks - second.Ticks < TimeSpan.TicksPerSecond
+            ? DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc)
+            : second.AddSeconds(1);
 
 
     /// <summary>Apply an IntCriterion to a queryable using an expression selector.</summary>

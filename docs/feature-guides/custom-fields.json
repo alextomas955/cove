@@ -36,6 +36,7 @@
             ["Number", "A score, count, rank, or measurement", "Optional, with numeric comparisons and order"],
             ["Boolean", "A true or false state", "Optional"],
             ["Date", "A calendar date", "Optional, with date comparisons and order"],
+            ["Timestamp", "A moment in time, kept in UTC and shown and compared to the second", "Optional, with date-and-time comparisons, relative offsets, and order"],
             ["URL", "A web address that should open as a link", "Optional"],
             ["Enum", "One value from a controlled list you define", "Optional"],
             ["JSON", "A structured document containing objects, arrays, or scalar values", "Presence filter, plus configured Text, Number, or Boolean paths"]
@@ -43,7 +44,7 @@
         },
         {
           "type": "paragraph",
-          "text": "Prefer the narrowest type that represents the value. A Number sorts numerically, a Date sorts chronologically, and an Enum prevents spelling variants. Use Long Text when the value is primarily for reading. Use JSON when several related properties belong together and you need to preserve their structure."
+          "text": "Prefer the narrowest type that represents the value. A Number sorts numerically, a Date or Timestamp sorts chronologically, and an Enum prevents spelling variants. Use Long Text when the value is primarily for reading. Use JSON when several related properties belong together and you need to preserve their structure."
         },
         {
           "type": "links",
@@ -143,7 +144,7 @@
             "Open the list page for an entity type enabled on the field and choose Filters.",
             "Select Custom Fields, then choose Add custom field filter.",
             "Choose the Field. For JSON, also choose either Presence or one configured path under Target.",
-            "Choose a Match operator, enter the value when the operator needs one, and choose Apply. The available operators follow the field or JSON-path type."
+            "Choose a Match operator, enter the value when the operator needs one, and choose Apply. The available operators follow the field or JSON-path type. Date and Timestamp fields also accept relative offsets such as -7d or -1h30min; Timestamp comparisons work to the whole second, and values without an offset are read as UTC."
           ]
         },
         {
