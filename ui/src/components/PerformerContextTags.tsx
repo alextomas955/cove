@@ -67,6 +67,29 @@ export function buildPerformerContextTagIds(applications: TagApplication[] | und
   return result;
 }
 
+function performerContextTagPairs(byPerformer: Record<number, number[]>): Set<string> {
+  return new Set(
+    Object.entries(byPerformer).flatMap(([performerId, tagIds]) => tagIds.map((tagId) => `${performerId}:${tagId}`)),
+  );
+}
+
+/**
+ * Whether two performer context tag maps hold the same performer-tag pairs for the selected performers, ignoring
+ * order and empty entries. Context tags of performers no longer selected are never saved, so they are ignored.
+ */
+export function performerContextTagsEqual(
+  left: Record<number, number[]>,
+  right: Record<number, number[]>,
+  selectedPerformerIds: number[],
+): boolean {
+  const selected = new Set(selectedPerformerIds.map(String));
+  const pairsOfSelected = (byPerformer: Record<number, number[]>) =>
+    new Set([...performerContextTagPairs(byPerformer)].filter((pair) => selected.has(pair.split(":")[0])));
+  const leftPairs = pairsOfSelected(left);
+  const rightPairs = pairsOfSelected(right);
+  return leftPairs.size === rightPairs.size && [...leftPairs].every((pair) => rightPairs.has(pair));
+}
+
 /**
  * The performer context tags an edit should leave on the server: the current ones with the user's changes
  * (the form against the state it was filled from) applied, so context tags changed elsewhere since are kept.
@@ -76,13 +99,9 @@ export function applyPerformerContextTagEdits(
   baseline: Record<number, number[]>,
   edited: Record<number, number[]>,
 ): Record<number, number[]> {
-  const pairs = (byPerformer: Record<number, number[]>) =>
-    new Set(
-      Object.entries(byPerformer).flatMap(([performerId, tagIds]) => tagIds.map((tagId) => `${performerId}:${tagId}`)),
-    );
-  const baselinePairs = pairs(baseline);
-  const editedPairs = pairs(edited);
-  const result = pairs(current);
+  const baselinePairs = performerContextTagPairs(baseline);
+  const editedPairs = performerContextTagPairs(edited);
+  const result = performerContextTagPairs(current);
   for (const pair of editedPairs) if (!baselinePairs.has(pair)) result.add(pair);
   for (const pair of baselinePairs) if (!editedPairs.has(pair)) result.delete(pair);
 

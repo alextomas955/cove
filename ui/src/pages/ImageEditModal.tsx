@@ -16,6 +16,7 @@ import {
   applyPerformerContextTagEdits,
   buildPerformerContextTagIds,
   syncPerformerContextTags,
+  performerContextTagsEqual,
 } from "../components/PerformerContextTags";
 import { FileBackedCreateSource, type CreateSourceMode } from "../components/FileBackedCreateSource";
 import {
@@ -24,7 +25,7 @@ import {
   NoDownloaderFoundError,
   type UrlDownloadMode,
 } from "../utils/createFromUrlDownload";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 import { untouchedFieldUpdates } from "../utils/rebaseEditForm";
 import { useFileBackedCreatePreferences } from "../hooks/useFileBackedCreatePreferences";
 import { ImageSourceDownloadDialog } from "../components/ImageSourceDownloadDialog";
@@ -270,6 +271,16 @@ function ImageMetadataModal({
       clearFields,
     };
   };
+
+  // Creating always has something to save; editing only once the form differs from what it was filled from.
+  const hasChanges =
+    !image ||
+    hasUpdateChanges(buildPayload(baselineState), buildPayload(form)) ||
+    !performerContextTagsEqual(
+      form.contextTagIdsByPerformer,
+      baselineState.contextTagIdsByPerformer,
+      form.selectedPerformerIds,
+    );
 
   const handleSave = () => {
     const payload = buildPayload(form);
@@ -531,7 +542,12 @@ function ImageMetadataModal({
             <button onClick={onClose} className="px-4 py-2 text-sm text-secondary hover:text-white">
               Cancel
             </button>
-            <SaveButton loading={isPending} disabled={!customFieldsValid} onClick={handleSave} />
+            <SaveButton
+              loading={isPending}
+              disabled={!customFieldsValid}
+              hasChanges={hasChanges}
+              onClick={handleSave}
+            />
           </div>
         )}
       </>

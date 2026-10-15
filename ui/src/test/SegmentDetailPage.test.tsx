@@ -279,6 +279,27 @@ describe("SegmentDetailPage", () => {
     expect(onNavigate).toHaveBeenCalledWith({ page: "video", id: 99, seekTo: 12 });
   });
 
+  it("shows Save in the accent color only while the segment has unsaved changes", async () => {
+    mockSegmentLibrary.get.mockResolvedValue(buildSegment());
+    mockVideos.get.mockResolvedValue(buildVideo());
+    mockVideos.segments.list.mockResolvedValue([buildSegment()]);
+    mockVideos.segments.spans.mockResolvedValue({ profileId: 3, spans: [] });
+    mockTags.find.mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Episode Intro" });
+    fireEvent.keyDown(window, { key: "e" });
+    await screen.findByRole("heading", { name: "Edit Segment" });
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).not.toHaveClass("bg-accent");
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Renamed Intro" } });
+    expect(save).toHaveClass("bg-accent");
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Episode Intro" } });
+    expect(save).not.toHaveClass("bg-accent");
+  });
+
   it("creates a metadata-preserving sub-video from the current segment", async () => {
     mockSegmentLibrary.get.mockResolvedValue(buildSegment());
     mockVideos.get.mockResolvedValue(buildVideo());

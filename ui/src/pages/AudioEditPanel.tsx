@@ -2,17 +2,18 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { audios } from "../api/client";
 import type { Audio, AudioUpdate, VideoGroupInput } from "../api/types";
-import { Field } from "../components/EditModal";
+import { Field, saveButtonTone } from "../components/EditModal";
 import {
   PerformerContextTagEditor,
   applyPerformerContextTagEdits,
   buildPerformerContextTagIds,
   syncPerformerContextTags,
+  performerContextTagsEqual,
 } from "../components/PerformerContextTags";
 import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared";
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 import { IsoDateInput } from "../components/IsoDateInput";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
@@ -162,10 +163,15 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
     setSelectedTagIds(tagIds.filter((tagId) => !locked.has(tagId)));
   };
 
+  const baselineValues = audioFormValues(baseline);
+  const baselinePayload = audioUpdatePayload(baselineValues);
+  const currentPayload = audioUpdatePayload(currentValues);
+  const hasChanges =
+    hasUpdateChanges(baselinePayload, currentPayload) ||
+    !performerContextTagsEqual(contextTagIdsByPerformer, baselineValues.contextTagIdsByPerformer, selectedPerformerIds);
+
   const handleSave = () => {
-    mutation.mutate(
-      changedUpdateFields(audioUpdatePayload(audioFormValues(baseline)), audioUpdatePayload(currentValues)),
-    );
+    mutation.mutate(changedUpdateFields(baselinePayload, currentPayload));
   };
 
   return (
@@ -290,7 +296,7 @@ export function AudioEditPanel({ audio, onSaved }: Props) {
           type="button"
           onClick={handleSave}
           disabled={mutation.isPending || !customFieldsValid}
-          className="rounded-lg bg-accent px-4 py-2 text-sm text-white transition hover:bg-accent-hover disabled:opacity-60"
+          className={`rounded-lg ${saveButtonTone(hasChanges)} px-4 py-2 text-sm transition disabled:opacity-60`}
         >
           {mutation.isPending ? "Saving..." : "Save"}
         </button>

@@ -11,7 +11,7 @@ import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelec
 import { toTagOption } from "../utils/tags";
 import { invalidateVideosForGalleryLinkChange } from "../utils/galleryVideoLinks";
 import { refreshSavedEntity } from "../utils/refreshSavedEntity";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 import { untouchedFieldUpdates } from "../utils/rebaseEditForm";
 
 interface Props {
@@ -27,7 +27,7 @@ function buildFormState(gallery: Gallery) {
     date: gallery.date ?? "",
     details: gallery.details ?? "",
     photographer: gallery.photographer ?? "",
-    studioId: gallery.studioId,
+    studioId: gallery.studioId ?? undefined,
     urls: gallery.urls.length > 0 ? gallery.urls : [""],
     tagIds: gallery.tags.map((t) => t.id),
     performerIds: gallery.performers.map((p) => p.id),
@@ -112,8 +112,12 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
     },
   });
 
+  const baselinePayload = buildUpdatePayload(buildFormState(baseline));
+  const currentPayload = buildUpdatePayload(form);
+  const hasChanges = hasUpdateChanges(baselinePayload, currentPayload);
+
   const save = () => {
-    mutation.mutate(changedUpdateFields(buildUpdatePayload(buildFormState(baseline)), buildUpdatePayload(form)));
+    mutation.mutate(changedUpdateFields(baselinePayload, currentPayload));
   };
 
   return (
@@ -196,7 +200,7 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
       </Field>
 
       <div className="flex justify-end mt-4">
-        <SaveButton loading={mutation.isPending} disabled={!customFieldsValid} onClick={save} />
+        <SaveButton loading={mutation.isPending} disabled={!customFieldsValid} hasChanges={hasChanges} onClick={save} />
       </div>
     </EditModal>
   );

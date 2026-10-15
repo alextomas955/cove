@@ -9,7 +9,7 @@ import { StringListEditor } from "../components/StringListEditor";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
 import { refreshSavedEntity } from "../utils/refreshSavedEntity";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
@@ -225,10 +225,13 @@ export function TagEditModal({ tag, open, onClose }: Props) {
     onClose();
   };
 
+  const baselineValues = tagFormValues(baseline);
+  const baselinePayload = tagUpdatePayload(baselineValues);
+  const currentPayload = tagUpdatePayload(withVisibleSegmentOverrides(currentValues, baselineValues));
+  const hasChanges = hasUpdateChanges(baselinePayload, currentPayload);
+
   const handleSave = () => {
-    const baselineValues = tagFormValues(baseline);
-    const current = tagUpdatePayload(withVisibleSegmentOverrides(currentValues, baselineValues));
-    mutation.mutate(changedUpdateFields(tagUpdatePayload(baselineValues), current));
+    mutation.mutate(changedUpdateFields(baselinePayload, currentPayload));
   };
 
   return (
@@ -360,7 +363,12 @@ export function TagEditModal({ tag, open, onClose }: Props) {
         <button onClick={handleClose} className="px-4 py-2 text-sm text-secondary hover:text-white">
           Cancel
         </button>
-        <SaveButton loading={mutation.isPending} disabled={!customFieldsValid} onClick={handleSave} />
+        <SaveButton
+          loading={mutation.isPending}
+          disabled={!customFieldsValid}
+          hasChanges={hasChanges}
+          onClick={handleSave}
+        />
       </div>
     </EditModal>
   );

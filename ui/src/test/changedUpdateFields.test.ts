@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 
 describe("changedUpdateFields", () => {
   const baseline = {
@@ -50,5 +50,18 @@ describe("changedUpdateFields", () => {
     );
 
     expect(changed).toEqual({ color: null });
+  });
+});
+
+describe("hasUpdateChanges", () => {
+  const baseline = { title: "Loaded", tagIds: [1, 2], clearFields: ["date"] };
+
+  it("is false when nothing differs, including fields already cleared", () => {
+    expect(hasUpdateChanges(baseline, { ...baseline, tagIds: [1, 2], clearFields: ["date"] })).toBe(false);
+  });
+
+  it("is true when a field changes or is newly cleared", () => {
+    expect(hasUpdateChanges(baseline, { ...baseline, tagIds: [2, 1] })).toBe(true);
+    expect(hasUpdateChanges(baseline, { ...baseline, clearFields: ["date", "studioId"] })).toBe(true);
   });
 });

@@ -158,4 +158,22 @@ describe("GroupEditModal", () => {
     await waitFor(() => expect(mockGroups.update).toHaveBeenCalledOnce());
     expect(mockGroups.removeSubGroup).not.toHaveBeenCalled();
   });
+
+  it("shows Save in the accent color when only the parent groups changed", async () => {
+    const parent = { ...buildGroup(), id: 30, name: "Parent group" } as Group;
+    mockGroups.dynamicSources.mockResolvedValue([]);
+    mockGroups.containingGroups.mockResolvedValue([parent]);
+    mockGroups.get.mockResolvedValue(parent);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <GroupEditModal group={buildGroup()} open onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("Parent group")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Save" })).not.toHaveClass("bg-accent");
+    fireEvent.click(screen.getByRole("button", { name: /Remove Parent group/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toHaveClass("bg-accent"));
+  });
 });

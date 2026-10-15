@@ -13,7 +13,7 @@ import {
   FILTER_DYNAMIC_SOURCE_KEY,
   defaultDynamicGroupFilterQueryJson,
 } from "../components/DynamicGroupFilterEditor";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 import { refreshSavedEntity } from "../utils/refreshSavedEntity";
 
 interface Props {
@@ -177,23 +177,31 @@ export function GroupEditModal({ group, open, onClose }: Props) {
     },
   });
 
+  const baselinePayload = groupUpdatePayload(groupFormValues(baseline));
+  const currentPayload = groupUpdatePayload({
+    name,
+    aliases,
+    director,
+    date,
+    studioId,
+    description,
+    urls,
+    selectedTagIds,
+    customFields,
+    kind,
+    querySourceKey,
+    queryJson,
+    showInVideoLists,
+  });
+  // Parent groups are saved as memberships rather than in the update, so compare them as sets on their own.
+  const originalParentIds = new Set((containingGroups ?? []).map((parent) => parent.id));
+  const parentGroupsChanged =
+    new Set(selectedParentGroupIds).size !== originalParentIds.size ||
+    selectedParentGroupIds.some((parentId) => !originalParentIds.has(parentId));
+  const hasChanges = hasUpdateChanges(baselinePayload, currentPayload) || parentGroupsChanged;
+
   const handleSave = () => {
-    const current = groupUpdatePayload({
-      name,
-      aliases,
-      director,
-      date,
-      studioId,
-      description,
-      urls,
-      selectedTagIds,
-      customFields,
-      kind,
-      querySourceKey,
-      queryJson,
-      showInVideoLists,
-    });
-    mutation.mutate(changedUpdateFields(groupUpdatePayload(groupFormValues(baseline)), current));
+    mutation.mutate(changedUpdateFields(baselinePayload, currentPayload));
   };
 
   return (
@@ -331,7 +339,12 @@ export function GroupEditModal({ group, open, onClose }: Props) {
         <button onClick={onClose} className="px-4 py-2 text-sm text-secondary hover:text-white">
           Cancel
         </button>
-        <SaveButton loading={mutation.isPending} disabled={!customFieldsValid} onClick={handleSave} />
+        <SaveButton
+          loading={mutation.isPending}
+          disabled={!customFieldsValid}
+          hasChanges={hasChanges}
+          onClick={handleSave}
+        />
       </div>
     </EditModal>
   );

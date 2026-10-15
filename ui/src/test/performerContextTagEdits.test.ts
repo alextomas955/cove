@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPerformerContextTagEdits } from "../components/PerformerContextTags";
+import { applyPerformerContextTagEdits, performerContextTagsEqual } from "../components/PerformerContextTags";
 
 describe("applyPerformerContextTagEdits", () => {
   it("applies the user's additions and removals on top of the current context tags", () => {
@@ -16,5 +16,20 @@ describe("applyPerformerContextTagEdits", () => {
       1: [10],
       3: [30],
     });
+  });
+});
+
+describe("performerContextTagsEqual", () => {
+  it("ignores tag order and performers without context tags", () => {
+    expect(performerContextTagsEqual({ 1: [10, 11] }, { 1: [11, 10], 2: [] }, [1, 2])).toBe(true);
+  });
+
+  it("detects an added or removed performer context tag", () => {
+    expect(performerContextTagsEqual({ 1: [10] }, { 1: [10], 2: [20] }, [1, 2])).toBe(false);
+    expect(performerContextTagsEqual({ 1: [10, 11] }, { 1: [10] }, [1])).toBe(false);
+  });
+
+  it("ignores context tags of performers that are no longer selected", () => {
+    expect(performerContextTagsEqual({ 1: [10] }, { 1: [10], 2: [20] }, [1])).toBe(true);
   });
 });

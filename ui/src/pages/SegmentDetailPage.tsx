@@ -19,6 +19,7 @@ import { entityImages, videos, segmentLibrary } from "../api/client";
 import type { Video, SegmentRecord, TagProvenance } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { canDeleteEntity, canReadEntity, canWriteEntity } from "../auth/visibility";
+import { saveButtonTone } from "../components/EditModal";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { DetailSkeleton } from "../components/DetailSkeleton";
 import { ListLoadError } from "../components/ListLoadError";
@@ -297,6 +298,23 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
     endTimeIsValid &&
     (parsedEnd == null || parsedEnd >= parsedStart) &&
     hasSelectedReference;
+
+  // Compare against what the form holds right after resetEditState, so a just-loaded segment reads unchanged
+  // even when its times are rounded for display.
+  const hasChanges =
+    !!segment &&
+    (normalizedTitle !== (segment.title?.trim() || undefined) ||
+      kind !== getEditableSegmentKind(segment) ||
+      normalizedColorHint !== (segment.colorHint?.trim() || undefined) ||
+      parsedStart !== parseSegmentTimeInput(formatSegmentTimeInput(Math.max(0, segment.startSec))) ||
+      parsedEnd !==
+        (segment.endSec == null ? null : parseSegmentTimeInput(formatSegmentTimeInput(Math.max(0, segment.endSec)))) ||
+      // Only the reference of the chosen kind is saved.
+      (kind === "tag"
+        ? selectedTagId !== (segment.tagId ?? null)
+        : kind === "performer"
+          ? selectedPerformerId !== getSegmentPerformerId(segment)
+          : selectedFaceId !== getSegmentFaceId(segment)));
 
   const invalidateSegmentQueries = (current?: SegmentRecord | null, nextTagId?: number | null) => {
     queryClient.invalidateQueries({ queryKey: ["segments"] });
@@ -815,7 +833,7 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
               type="button"
               onClick={() => updateMutation.mutate()}
               disabled={!canSave || updateMutation.isPending}
-              className="rounded-lg bg-accent px-4 py-2 text-sm text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className={`rounded-lg ${saveButtonTone(hasChanges)} px-4 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {updateMutation.isPending ? "Saving..." : "Save"}
             </button>

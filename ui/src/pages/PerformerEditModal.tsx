@@ -15,7 +15,7 @@ import { SelectedTagChips, type SelectableTag } from "../components/TagSelector"
 import { TagChipHover } from "../components/TagProvenanceHover";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 import { CountrySelect } from "../components/Country";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
 import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 
 interface Props {
@@ -308,10 +308,12 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
     onClose();
   };
 
+  const baselinePayload = performerUpdatePayload(performerFormValues(baseline));
+  const currentPayload = performerUpdatePayload(currentValues);
+  const hasChanges = hasUpdateChanges(baselinePayload, currentPayload);
+
   const handleSave = () => {
-    mutation.mutate(
-      changedUpdateFields(performerUpdatePayload(performerFormValues(baseline)), performerUpdatePayload(currentValues)),
-    );
+    mutation.mutate(changedUpdateFields(baselinePayload, currentPayload));
   };
 
   const filteredTags = useMemo(
@@ -608,7 +610,12 @@ export function PerformerEditModal({ performer, open, onClose }: Props) {
         <button onClick={handleClose} className="px-4 py-2 text-sm text-secondary hover:text-white">
           Cancel
         </button>
-        <SaveButton loading={mutation.isPending} disabled={!customFieldsValid} onClick={handleSave} />
+        <SaveButton
+          loading={mutation.isPending}
+          disabled={!customFieldsValid}
+          hasChanges={hasChanges}
+          onClick={handleSave}
+        />
       </div>
     </EditModal>
   );

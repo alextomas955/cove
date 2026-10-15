@@ -61,6 +61,18 @@ describe("StudioEditModal", () => {
     mocks.studiosUpdate.mockReset().mockResolvedValue({});
   });
 
+  it("shows Save in the accent color only while there are unsaved changes", () => {
+    renderModal();
+    const save = screen.getByRole("button", { name: "Save" });
+    const nameInput = screen.getByPlaceholderText("Studio name");
+
+    expect(save).not.toHaveClass("bg-accent");
+    fireEvent.change(nameInput, { target: { value: "Renamed Studio" } });
+    expect(save).toHaveClass("bg-accent");
+    fireEvent.change(nameInput, { target: { value: "Original Studio" } });
+    expect(save).not.toHaveClass("bg-accent");
+  });
+
   it("sends only the fields the user changed", async () => {
     renderModal();
 

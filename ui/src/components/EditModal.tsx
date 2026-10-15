@@ -170,20 +170,29 @@ export function SelectInput({
   );
 }
 
+/** Color classes for an editor's Save button, which takes the accent color only while there are unsaved changes. */
+export function saveButtonTone(hasChanges: boolean): string {
+  return hasChanges
+    ? "border border-transparent bg-accent hover:bg-accent-hover text-white"
+    : "border border-border bg-card hover:bg-card-hover text-secondary hover:text-foreground";
+}
+
 export function SaveButton({
   loading,
   disabled = false,
+  hasChanges = true,
   onClick,
 }: {
   loading: boolean;
   disabled?: boolean;
+  hasChanges?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={loading || disabled}
-      className="flex items-center gap-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-6 py-2 rounded-lg transition-colors text-sm"
+      className={`flex items-center gap-2 ${saveButtonTone(hasChanges)} disabled:opacity-50 px-6 py-2 rounded-lg transition-colors text-sm`}
     >
       {loading ? "Saving..." : "Save"}
     </button>

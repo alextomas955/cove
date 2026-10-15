@@ -307,6 +307,21 @@ describe("Audio and text detail pages", () => {
     await waitFor(() => expect(mockAudios.update).toHaveBeenCalledWith(14, { details: "Updated soundtrack." }));
   });
 
+  it("shows the audio Save in the accent color only while there are unsaved changes", async () => {
+    mockAudios.get.mockResolvedValue(buildAudio());
+
+    renderWithQueryClient(<AudioDetailPage id={14} onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).not.toHaveClass("bg-accent");
+    const details = screen.getByText("Details", { selector: "label" }).nextElementSibling!;
+    fireEvent.change(details, { target: { value: "Updated soundtrack." } });
+    expect(save).toHaveClass("bg-accent");
+    fireEvent.change(details, { target: { value: "Cruising soundtrack." } });
+    expect(save).not.toHaveClass("bg-accent");
+  });
+
   it("keeps unsaved audio edits when the audio refetches with other changes", async () => {
     mockAudios.get.mockResolvedValue(buildAudio({ organized: false }));
     mockAudios.update.mockResolvedValue(buildAudio({ organized: true, code: "SCRAPED-1" }));

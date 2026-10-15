@@ -120,6 +120,7 @@ import {
   PerformerContextTagList,
   applyPerformerContextTagEdits,
   getPerformerContextTags,
+  performerContextTagsEqual,
 } from "../components/PerformerContextTags";
 import { trackInteraction } from "../utils/interactionTracking";
 import { formatDateTime } from "../utils/dateFormat";
@@ -136,7 +137,8 @@ import { videoEditClearFields } from "../utils/videoEditClearFields";
 import { VrLayoutFields, detectedVrLayout, explicitVrLayout } from "../components/VrLayoutFields";
 import { formatVrLayout, type VrDescriptor } from "../vr/immersiveVideo";
 import { invalidateGalleriesForVideoLinkChange } from "../utils/galleryVideoLinks";
-import { changedUpdateFields } from "../utils/changedUpdateFields";
+import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFields";
+import { saveButtonTone } from "../components/EditModal";
 import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 import { LikeHistorySection } from "../components/LikeHistorySection";
 import type { CutRange } from "../utils/videoCut";
@@ -3218,11 +3220,19 @@ function VideoEditPanel({
     },
   });
 
+  const baselinePayload = videoUpdatePayload(videoFormValues(baseline));
+  const currentPayload = videoUpdatePayload(currentValues);
+  const hasChanges =
+    hasUpdateChanges(baselinePayload, currentPayload) ||
+    !performerContextTagsEqual(
+      contextTagIdsByPerformer,
+      buildVideoEditPerformerContextTagIds(baseline),
+      selectedPerformerIds,
+    );
+
   const handleSave = () => {
     pendingSave.current = { values: currentValues, baseline };
-    mutation.mutate(
-      changedUpdateFields(videoUpdatePayload(videoFormValues(baseline)), videoUpdatePayload(currentValues)),
-    );
+    mutation.mutate(changedUpdateFields(baselinePayload, currentPayload));
   };
 
   const setPerformerContextTagIds = (performerId: number, tagIds: number[]) => {
@@ -3517,7 +3527,7 @@ function VideoEditPanel({
         <button
           onClick={handleSave}
           disabled={mutation.isPending || !customFieldsValid}
-          className="px-4 py-2 text-sm bg-accent hover:bg-accent-hover text-white rounded disabled:opacity-50"
+          className={`px-4 py-2 text-sm ${saveButtonTone(hasChanges)} rounded disabled:opacity-50`}
         >
           {mutation.isPending ? "Saving…" : "Save"}
         </button>

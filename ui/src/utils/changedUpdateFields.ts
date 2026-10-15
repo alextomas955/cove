@@ -41,3 +41,8 @@ export function changedUpdateFields<T extends object>(baseline: T, current: T): 
   if (newlyCleared.length > 0) changed.clearFields = newlyCleared;
   return changed as Partial<T>;
 }
+
+/** Whether saving `current` over `baseline` would send any change. */
+export function hasUpdateChanges<T extends object>(baseline: T, current: T): boolean {
+  return Object.keys(changedUpdateFields(baseline, current)).length > 0;
+}
