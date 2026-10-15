@@ -229,6 +229,34 @@ public class VideoFilterBehaviorTests
     }
 
     [Fact]
+    public async Task ProductionDateCriterion_FiltersOnTheProductionDateNotTheReleaseDate()
+    {
+        await using var context = CreateContext();
+        var older = CreateVideoWithFile("shot 2019", basename: "older.mp4", videoDate: new DateOnly(2025, 1, 1));
+        older.ProductionDate = new DateOnly(2019, 6, 1);
+        var newer = CreateVideoWithFile("shot 2023", basename: "newer.mp4", videoDate: new DateOnly(2018, 1, 1));
+        newer.ProductionDate = new DateOnly(2023, 2, 1);
+        var unknown = CreateVideoWithFile("no production date", basename: "unknown.mp4", videoDate: new DateOnly(2024, 1, 1));
+        context.Videos.AddRange(older, newer, unknown);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var repository = new VideoRepository(context);
+
+        async Task<string[]> TitlesAsync(DateCriterion criterion)
+        {
+            var (items, _) = await repository.FindAsync(new VideoFilter { ProductionDateCriterion = criterion },
+                new FindFilter { Page = 1, PerPage = 50, Sort = "title" }, TestContext.Current.CancellationToken);
+            return items.Select(video => video.Title ?? string.Empty).ToArray();
+        }
+
+        Assert.Equal(["shot 2023"], await TitlesAsync(new DateCriterion { Value = "2020-01-01", Modifier = CriterionModifier.GreaterThan }));
+        Assert.Equal(["shot 2019"], await TitlesAsync(new DateCriterion { Value = "2019-01-01", Value2 = "2019-12-31", Modifier = CriterionModifier.Between }));
+        Assert.Equal(["no production date"], await TitlesAsync(new DateCriterion { Value = string.Empty, Modifier = CriterionModifier.IsNull }));
+        Assert.Equal(["shot 2019", "shot 2023"], await TitlesAsync(new DateCriterion { Value = string.Empty, Modifier = CriterionModifier.NotNull }));
+        // Relative values resolve as they do for the release date: everything shot before a year ago.
+        Assert.Equal(["shot 2019", "shot 2023"], await TitlesAsync(new DateCriterion { Value = "-1y", Modifier = CriterionModifier.LessThan }));
+    }
+
+    [Fact]
     public async Task PerformerDateCriterion_NullModifiers_ApplyWithoutAValue()
     {
         await using var context = CreateContext();

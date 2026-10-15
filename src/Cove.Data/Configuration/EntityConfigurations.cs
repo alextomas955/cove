@@ -32,6 +32,7 @@ public class VideoConfiguration : IEntityTypeConfiguration<Video>
         builder.HasIndex(s => s.StudioId);
         builder.HasIndex(s => s.ParentVideoId);
         builder.HasIndex(s => s.Date);
+        builder.HasIndex(s => s.ProductionDate);
         builder.HasIndex(s => s.CreatedAt);
         builder.HasIndex(s => s.UpdatedAt);
         builder.HasIndex(s => s.Organized);

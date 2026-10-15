@@ -721,6 +721,53 @@ public class RepositorySortBehaviorTests
         Assert.Equal(single.Select(video => video.Details).ToArray(), compound.Select(video => video.Details).ToArray());
     }
 
+    [Theory]
+    [InlineData(Cove.Core.Enums.SortDirection.Asc, new[] { "shot first", "shot later", "missing" })]
+    [InlineData(Cove.Core.Enums.SortDirection.Desc, new[] { "shot later", "shot first", "missing" })]
+    public async Task VideoRepository_ProductionDateSort_IgnoresReleaseDateAndPlacesMissingLast(
+        Cove.Core.Enums.SortDirection direction,
+        string[] expected)
+    {
+        await using var context = CreateContext();
+        // Release dates run the other way, so ordering by them would fail.
+        context.Videos.AddRange(
+            new Video { Title = "a", Date = new DateOnly(2020, 1, 1), ProductionDate = new DateOnly(2023, 1, 1), Details = "shot later" },
+            new Video { Title = "b", Date = new DateOnly(2024, 1, 1), ProductionDate = new DateOnly(2019, 1, 1), Details = "shot first" },
+            new Video { Title = "c", Date = new DateOnly(2022, 1, 1), Details = "missing" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var repository = new VideoRepository(context);
+        var (single, _) = await repository.FindAsync(
+            filter: null,
+            new FindFilter { Page = 1, PerPage = 20, Sort = "production_date", Direction = direction },
+            ct: TestContext.Current.CancellationToken);
+        var (compound, _) = await repository.FindAsync(
+            filter: null,
+            new FindFilter { Page = 1, PerPage = 20, Sorts = [new SortClause("production_date", direction), new SortClause("updated_at", direction)] },
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, single.Select(video => video.Details).ToArray());
+        Assert.Equal(expected, compound.Select(video => video.Details).ToArray());
+    }
+
+    [Theory]
+    [InlineData(false, new[] { 2, 1, 3, 4 })]
+    [InlineData(true, new[] { 1, 2, 4, 3 })]
+    public void VideoListWithCompilations_ProductionDateSort_PutsUndatedVideosAndCompilationsLast(bool descending, int[] expected)
+    {
+        var entries = new[]
+        {
+            new Cove.Api.Controllers.VideosController.VideoListEntryKey { Kind = "video", Id = 1, Date = new DateOnly(2020, 1, 1), ProductionDate = new DateOnly(2024, 1, 1) },
+            new Cove.Api.Controllers.VideosController.VideoListEntryKey { Kind = "video", Id = 2, Date = new DateOnly(2025, 1, 1), ProductionDate = new DateOnly(2019, 1, 1) },
+            new Cove.Api.Controllers.VideosController.VideoListEntryKey { Kind = "compilation", Id = 3, Date = new DateOnly(2021, 1, 1) },
+            new Cove.Api.Controllers.VideosController.VideoListEntryKey { Kind = "video", Id = 4 },
+        };
+
+        var ordered = Cove.Api.Controllers.VideosController.ApplyVideoListEntrySorting(entries.AsQueryable(), "production_date", descending, seed: null);
+
+        Assert.Equal(expected, ordered.Select(entry => entry.Id).ToArray());
+    }
+
     // The Videos list with compilation groups orders its combined rows itself; missing dates go last there too.
     [Theory]
     [InlineData(false, new[] { 2, 1, 3 })]

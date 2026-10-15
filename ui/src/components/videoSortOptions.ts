@@ -3,6 +3,7 @@ export const VIDEO_SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "created_at", label: "Created At" },
   { value: "title", label: "Title" },
   { value: "date", label: "Date" },
+  { value: "production_date", label: "Production Date" },
   { value: "rating", label: "Rating" },
   { value: "play_count", label: "Play Count" },
   { value: "like_counter", label: "Likes" },

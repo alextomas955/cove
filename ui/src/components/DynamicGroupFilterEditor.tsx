@@ -26,6 +26,7 @@ const VIDEO_SORT_OPTIONS = [
   { value: "updated_at", label: "Recently Updated" },
   { value: "created_at", label: "Recently Added" },
   { value: "date", label: "Date" },
+  { value: "production_date", label: "Production Date" },
   { value: "title", label: "Title" },
   { value: "rating", label: "Rating" },
   { value: "duration", label: "Duration" },

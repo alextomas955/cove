@@ -33,7 +33,7 @@ public static class RelativeDateFilterJson
 
     private static readonly HashSet<string> DateKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "dateCriterion", "birthdateCriterion", "deathDateCriterion", "careerStartCriterion", "careerEndCriterion",
+        "dateCriterion", "productionDateCriterion", "birthdateCriterion", "deathDateCriterion", "careerStartCriterion", "careerEndCriterion",
     };
     private static readonly HashSet<string> TimestampKeys = new(StringComparer.OrdinalIgnoreCase)
     {

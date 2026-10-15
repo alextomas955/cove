@@ -23,11 +23,20 @@ namespace Cove.Data.Migrations
                 type: "integer",
                 nullable: false,
                 defaultValue: 0);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_videos_ProductionDate",
+                table: "videos",
+                column: "ProductionDate");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropIndex(
+                name: "IX_videos_ProductionDate",
+                table: "videos");
+
             migrationBuilder.DropColumn(
                 name: "ProductionDate",
                 table: "videos");

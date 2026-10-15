@@ -17,6 +17,7 @@
     "last_like_at",
     "last_played_at",
     "play_duration",
+    "production_date",
     "resume_time",
     "rating",
     "resolution",

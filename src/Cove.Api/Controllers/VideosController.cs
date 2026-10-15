@@ -165,6 +165,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             Id = video.Id,
             Title = video.Title ?? video.FileSearchText ?? string.Empty,
             Date = video.Date,
+            ProductionDate = video.ProductionDate,
             CreatedAt = video.CreatedAt,
             UpdatedAt = video.UpdatedAt,
             Duration = video.MaxDuration,
@@ -184,6 +185,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             Id = group.Id,
             Title = group.Name,
             Date = group.Date,
+            ProductionDate = (DateOnly?)null,
             CreatedAt = group.CreatedAt,
             UpdatedAt = group.UpdatedAt,
             Duration = group.Duration ?? 0,
@@ -960,6 +962,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
         public DateOnly? Date { get; set; }
+        // Compilations have no production date, so they sort with the undated videos.
+        public DateOnly? ProductionDate { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public double Duration { get; set; }
@@ -979,6 +983,9 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             "date" => desc
                 ? query.OrderBy(item => item.Date == null ? 1 : 0).ThenByDescending(item => item.Date)
                 : query.OrderBy(item => item.Date == null ? 1 : 0).ThenBy(item => item.Date),
+            "production_date" => desc
+                ? query.OrderBy(item => item.ProductionDate == null ? 1 : 0).ThenByDescending(item => item.ProductionDate)
+                : query.OrderBy(item => item.ProductionDate == null ? 1 : 0).ThenBy(item => item.ProductionDate),
             "rating" => desc
                 ? query.OrderBy(item => item.Rating <= 0 ? 1 : 0).ThenByDescending(item => item.Rating)
                 : query.OrderBy(item => item.Rating <= 0 ? 0 : 1).ThenBy(item => item.Rating),

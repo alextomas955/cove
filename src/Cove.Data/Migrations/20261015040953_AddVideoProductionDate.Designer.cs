@@ -4736,6 +4736,8 @@ namespace Cove.Data.Migrations
 
                     b.HasIndex("PrimaryFileId");
 
+                    b.HasIndex("ProductionDate");
+
                     b.HasIndex("SearchVector");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "gin");

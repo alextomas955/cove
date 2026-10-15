@@ -197,6 +197,7 @@ public class RelativeDateExpressionTests
     [InlineData("{\"filterExpression\":{\"children\":[{\"filter\":{\"dateCriterion\":{\"modifier\":\"BETWEEN\",\"value\":\"-1m\",\"value2\":\"+1.5d\"}}}]}}")]
     [InlineData("{\"dateCriterion\":{\"modifier\":\"EQUALS\",\"value\":\"1y+3m\"}}")]
     [InlineData("{\"dateCriterion\":{\"modifier\":\"EQUALS\",\"value\":\"-6h\"}}")]
+    [InlineData("{\"objectFilter\":{\"productionDateCriterion\":{\"modifier\":\"EQUALS\",\"value\":\"-6h\"}}}")]
     public void InvalidSavedRulesAreRejected(string json) => Assert.Throws<RelativeDateFilterException>(() => RelativeDateFilterJson.Validate(json));
 
     [Fact]

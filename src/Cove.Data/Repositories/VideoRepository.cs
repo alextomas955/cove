@@ -410,6 +410,8 @@ public class VideoRepository : IVideoRepository
 
             query = FilterHelpers.ApplyDate(query, filter.DateCriterion, video => video.Date);
 
+            query = FilterHelpers.ApplyDate(query, filter.ProductionDateCriterion, video => video.ProductionDate);
+
             if (filter.PerformerFavoriteCriterion != null)
                 query = filter.PerformerFavoriteCriterion.Value
                     ? query.Where(s => s.VideoPerformers.Any(sp => EngagementQueryHelpers.FavoriteHostIds(_db, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Performer).Contains(sp.PerformerId)))
@@ -524,6 +526,11 @@ public class VideoRepository : IVideoRepository
                 compound.Append(video => video.Date == null ? 1 : 0, false);
                 compound.Append(video => video.Date, desc);
             },
+            ["production_date"] = (compound, desc) =>
+            {
+                compound.Append(video => video.ProductionDate == null ? 1 : 0, false);
+                compound.Append(video => video.ProductionDate, desc);
+            },
             ["organized"] = (compound, desc) => compound.Append(video => video.Organized, desc),
             ["duration"] = (compound, desc) => compound.Append(video => video.MaxDuration, desc),
             ["file_size"] = (compound, desc) => compound.Append(video => video.MaxFileSize, desc),
@@ -609,6 +616,9 @@ public class VideoRepository : IVideoRepository
             "date" => desc
                 ? query.OrderBy(s => s.Date == null ? 1 : 0).ThenByDescending(s => s.Date).ThenByDescending(s => s.Id)
                 : query.OrderBy(s => s.Date == null ? 1 : 0).ThenBy(s => s.Date).ThenBy(s => s.Id),
+            "production_date" => desc
+                ? query.OrderBy(s => s.ProductionDate == null ? 1 : 0).ThenByDescending(s => s.ProductionDate).ThenByDescending(s => s.Id)
+                : query.OrderBy(s => s.ProductionDate == null ? 1 : 0).ThenBy(s => s.ProductionDate).ThenBy(s => s.Id),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), RatingHostType.Video, desc),
             "play_count" => EngagementQueryHelpers.ApplyAffinityIntSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Video, nameof(UserEntityAffinity.ViewCount), desc),
             "like_counter" => EngagementQueryHelpers.ApplyAffinityIntSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Video, nameof(UserEntityAffinity.LikeCount), desc),

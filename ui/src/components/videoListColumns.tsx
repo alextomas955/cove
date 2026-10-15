@@ -39,6 +39,7 @@ export type VideoListColumnId =
   | "title"
   | "studio"
   | "date"
+  | "productionDate"
   | "duration"
   | "resolution"
   | "fileSize"
@@ -199,6 +200,13 @@ export const VIDEO_LIST_COLUMNS: readonly VideoListColumnDefinition[] = [
     widthPx: 104,
     cellClassName: DATE_CELL,
     render: (video) => (video.date ? formatDate(video.date) : null),
+  },
+  {
+    id: "productionDate",
+    label: "Production Date",
+    widthPx: 120,
+    cellClassName: DATE_CELL,
+    render: (video) => (video.productionDate ? formatDate(video.productionDate) : null),
   },
   {
     id: "duration",

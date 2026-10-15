@@ -50,6 +50,7 @@ public static class EntityListSortFilterCatalog
         new("videos", "created_at", "Created At"),
         new("videos", "title", "Title"),
         new("videos", "date", "Date"),
+        new("videos", "production_date", "Production Date"),
         new("videos", "rating", "Rating"),
         new("videos", "play_count", "Play Count"),
         new("videos", "like_counter", "Likes"),

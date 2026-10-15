@@ -119,6 +119,7 @@ export const VIDEO_CRITERIA: CriteriaDefinitionList<VideoFilterCriteria> = [
     modifiers: NON_NULL_NUMBER_MODIFIERS,
   },
   { id: "date", label: "Date", type: "date", filterKey: "dateCriterion" },
+  { id: "productionDate", label: "Production Date", type: "date", filterKey: "productionDateCriterion" },
   { id: "videoCodec", label: "Video Codec", type: "string", filterKey: "videoCodecCriterion" },
   { id: "audioCodec", label: "Audio Codec", type: "string", filterKey: "audioCodecCriterion" },
   {

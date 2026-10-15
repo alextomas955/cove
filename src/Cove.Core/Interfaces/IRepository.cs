@@ -361,6 +361,7 @@ public class VideoFilter
     public BoolCriterion? DuplicatedRemoteIdCriterion { get; set; }
     public StringCriterion? UrlCriterion { get; set; }
     public DateCriterion? DateCriterion { get; set; }
+    public DateCriterion? ProductionDateCriterion { get; set; }
     public TimestampCriterion? CreatedAtCriterion { get; set; }
     public TimestampCriterion? UpdatedAtCriterion { get; set; }
     public BoolCriterion? PerformerFavoriteCriterion { get; set; }

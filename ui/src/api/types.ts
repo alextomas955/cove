@@ -3090,6 +3090,7 @@ export interface VideoFilterCriteria {
   duplicatedRemoteIdCriterion?: BoolCriterion;
   urlCriterion?: StringCriterion;
   dateCriterion?: DateCriterion;
+  productionDateCriterion?: DateCriterion;
   createdAtCriterion?: TimestampCriterion;
   updatedAtCriterion?: TimestampCriterion;
   performerFavoriteCriterion?: BoolCriterion;

@@ -1288,7 +1288,7 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
   ]);
   withSortFields(videoList, [
     "title", "rating", "play_count", "like_counter", "last_like_at", "last_played_at", "play_duration", "resume_time",
-    "date", "organized", "duration", "file_size", "file_mod_time", "file_count", "path", "resolution", "framerate",
+    "date", "production_date", "organized", "duration", "file_size", "file_mod_time", "file_count", "path", "resolution", "framerate",
     "bitrate", "tag_count", "performer_count", "studio", "code", "studio_code", "created_at", "updated_at",
   ]).action(async (options: EntityFilterOptions, command: Command) => {
       const global = globals(command);
