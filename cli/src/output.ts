@@ -766,6 +766,7 @@ export function renderVideo(item: Video, context: RenderContext = {}): string {
   ].filter((value): value is string => !!value).join(" · ");
   return renderSectionedDetail(heading, metadata, [
     { heading: "Overview", values: [
+      ["Production date", item.productionDate ?? undefined],
       ["Code", item.code ?? undefined], ["Director", item.director ?? undefined], ["Captions", item.captions ?? undefined],
       ["Organized", item.organized === undefined ? undefined : item.organized ? "yes" : "no"], ["VR", item.isVr === undefined ? undefined : item.isVr ? "yes" : "no"],
       ["Created", item.createdAt], ["Updated", item.updatedAt],

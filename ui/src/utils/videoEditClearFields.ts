@@ -1,3 +1,5 @@
-export function videoEditClearFields(date: string, studioId: number | undefined): string[] {
-  return [!date && "date", studioId === undefined && "studioId"].filter((field): field is string => Boolean(field));
+export function videoEditClearFields(date: string, studioId: number | undefined, productionDate: string): string[] {
+  return [!date && "date", studioId === undefined && "studioId", !productionDate && "productionDate"].filter(
+    (field): field is string => Boolean(field),
+  );
 }

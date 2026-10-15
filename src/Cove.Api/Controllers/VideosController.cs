@@ -467,11 +467,14 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         }
 
         var parsedDate = PartialDate.Parse(dto.Date);
+        var parsedProductionDate = PartialDate.Parse(dto.ProductionDate);
         var video = new Video
         {
             Title = dto.Title, Code = dto.Code, Details = dto.Details, Director = dto.Director,
             Date = parsedDate.Value ?? parentVideo?.Date,
             DatePrecision = parsedDate.Value.HasValue ? parsedDate.Precision : parentVideo?.DatePrecision ?? DatePrecision.Day,
+            ProductionDate = parsedProductionDate.Value ?? parentVideo?.ProductionDate,
+            ProductionDatePrecision = parsedProductionDate.Value.HasValue ? parsedProductionDate.Precision : parentVideo?.ProductionDatePrecision ?? DatePrecision.Day,
             Organized = dto.Organized, IsVr = dto.IsVr, StudioId = dto.StudioId ?? parentVideo?.StudioId,
             Captions = dto.Captions,
             ParentVideoId = parentVideo?.Id, ClipStartSec = dto.ClipStartSec, ClipEndSec = dto.ClipEndSec,
@@ -548,6 +551,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         if (dto.Details != null) video.Details = string.IsNullOrWhiteSpace(dto.Details) ? null : dto.Details;
         if (dto.Director != null) video.Director = string.IsNullOrWhiteSpace(dto.Director) ? null : dto.Director;
         if (dto.Date != null) { var date = PartialDate.Parse(dto.Date); video.Date = date.Value; video.DatePrecision = date.Precision; }
+        if (dto.ProductionDate != null) { var productionDate = PartialDate.Parse(dto.ProductionDate); video.ProductionDate = productionDate.Value; video.ProductionDatePrecision = productionDate.Precision; }
         if (dto.Organized.HasValue) video.Organized = dto.Organized.Value;
         if (dto.IsVr.HasValue) video.IsVr = dto.IsVr.Value;
         if (dto.Vr != null)
@@ -565,6 +569,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         if (dto.StudioId.HasValue) video.StudioId = dto.StudioId;
         if (dto.Captions != null) video.Captions = string.IsNullOrWhiteSpace(dto.Captions) ? null : dto.Captions;
         if (clearFields.Contains("date")) video.Date = null;
+        if (clearFields.Contains("productionDate")) video.ProductionDate = null;
         if (clearFields.Contains("studioId")) video.StudioId = null;
         if (video.ParentVideoId.HasValue && (dto.ClipStartSec.HasValue || dto.ClipEndSec.HasValue))
         {
@@ -1079,6 +1084,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
     {
         PrimaryFileId = s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId,
         Vr = ResolveVr(s),
+        ProductionDate = PartialDate.Format(s.ProductionDate, s.ProductionDatePrecision),
     };
 
     private VideoDto MapListToDto(Video s, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByVideoId = null) => new(
@@ -1122,6 +1128,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
     {
         PrimaryFileId = s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId,
         Vr = ResolveVr(s),
+        ProductionDate = PartialDate.Format(s.ProductionDate, s.ProductionDatePrecision),
     };
 
     private static List<TagDto> GetEffectiveTags(Video video, CatalogFavorites favorites, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByVideoId)
@@ -1877,6 +1884,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
                 Director = dto.Director ?? source.Director,
                 Date = source.Date,
                 DatePrecision = source.DatePrecision,
+                ProductionDate = source.ProductionDate,
+                ProductionDatePrecision = source.ProductionDatePrecision,
                 Organized = source.Organized,
                 IsVr = source.IsVr,
                 StudioId = source.StudioId,
@@ -1892,6 +1901,8 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
                 split.Director = metadata.Director;
                 split.Date = parsedDate.Value;
                 split.DatePrecision = parsedDate.Precision;
+                // The split dialog has no production date, so a separately described scene does not inherit one unseen.
+                split.ProductionDate = null;
                 split.Organized = false;
                 split.IsVr = metadata.IsVr;
                 split.StudioId = metadata.StudioId;

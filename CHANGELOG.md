@@ -10,6 +10,8 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 
 ## [Unreleased]
 
+- Videos have a **Production Date** beside their release date, for when a video was shot rather than when it came out. It accepts a year, a year and month, or a full date, like the release date, and shows on a video's Details tab. Edit it in the video edit form; the tagger, Identify, and video merge review show it as a separate field. Importing from a metadata server such as StashDB now fills it from the scene's production date, and a Stash migration brings over the production dates that newer Stash versions record on scenes. Video drafts submitted to a metadata server include it. A metadata server that does not know scene production dates, such as a stash-box older than the end of 2024, is queried without them instead of failing. Sub-videos take the production date of their parent video, and a video split keeps it unless the split describes the new video itself. `cove-cli` shows it in video details. The API returns it as `productionDate` on videos and accepts it on `POST /api/videos` and `PUT /api/videos/{id}`; clear it with `"productionDate"` in `clearFields`. Extensions get it as `ProductionDate` on `Video`, `VideoDto`, `VideoCreateDto`, `VideoUpdateDto`, and `MetadataServerVideoMatchDto`.
+
 ## [1.6.1] - 2026-10-15
 
 - This is the first release with standalone downloads for the 1.6.0 changes. The 1.6.0 build failed on macOS, so 1.6.0 shipped only as Docker images.

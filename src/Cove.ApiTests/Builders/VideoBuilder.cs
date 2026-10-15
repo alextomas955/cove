@@ -14,6 +14,7 @@ public sealed class VideoBuilder
     private string? _captions;
     private string? _code;
     private string? _date;
+    private string? _productionDate;
     private string? _details;
     private string? _director;
     private bool _isVr;
@@ -38,6 +39,7 @@ public sealed class VideoBuilder
     public VideoBuilder WithDetails(string details) { _details = details; return this; }
     public VideoBuilder WithDirector(string director) { _director = director; return this; }
     public VideoBuilder WithDate(string date) { _date = date; return this; }
+    public VideoBuilder WithProductionDate(string productionDate) { _productionDate = productionDate; return this; }
     public VideoBuilder WithRating(int rating) { _rating = rating; return this; }
     public VideoBuilder WithCaptions(string captions) { _captions = captions; return this; }
     public VideoBuilder WithUrl(string url) { _urls.Add(url); return this; }
@@ -77,5 +79,8 @@ public sealed class VideoBuilder
         Groups: [.. _groups],
         RemoteIds: [.. _remoteIds],
         CustomFields: new Dictionary<string, object>(_customFields),
-        IsVr: _isVr);
+        IsVr: _isVr)
+    {
+        ProductionDate = _productionDate,
+    };
 }

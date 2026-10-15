@@ -4651,6 +4651,12 @@ namespace Cove.Data.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
 
+                    b.Property<DateOnly?>("ProductionDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("ProductionDatePrecision")
+                        .HasColumnType("integer");
+
                     b.Property<string>("SearchText")
                         .HasColumnType("text");
 

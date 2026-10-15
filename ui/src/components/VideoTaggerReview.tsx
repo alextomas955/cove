@@ -181,7 +181,15 @@ export interface ReviewItem {
   locked?: boolean;
 }
 
-const SCALAR_KEYS = ["title", "code", "details", "director", "date"] as const;
+const SCALAR_KEYS = ["title", "code", "details", "director", "date", "productionDate"] as const;
+const SCALAR_LABELS: Record<(typeof SCALAR_KEYS)[number], string> = {
+  title: "Title",
+  code: "Code",
+  details: "Details",
+  director: "Director",
+  date: "Date",
+  productionDate: "Production Date",
+};
 const HAND_EDITED_SOURCES = new Set(["user", "manual"]);
 /** A selection id for a library item added through search, outside both compared sides. */
 const LIBRARY_PREFIX = "library:";
@@ -195,7 +203,9 @@ const libraryIdOf = (selectionId: string) => {
 /** True when the person set this field by hand, so a scrape should not silently overwrite it. */
 export function isHandEdited(video: Video, fieldKey: string) {
   return (video.fieldProvenance ?? []).some(
-    (entry) => entry.fieldKey === fieldKey && HAND_EDITED_SOURCES.has(entry.sourceKey.trim().toLowerCase()),
+    (entry) =>
+      entry.fieldKey.toLowerCase() === fieldKey.toLowerCase() &&
+      HAND_EDITED_SOURCES.has(entry.sourceKey.trim().toLowerCase()),
   );
 }
 
@@ -776,7 +786,7 @@ export function buildTaggerReview(input: TaggerReviewInput) {
 
   for (const key of SCALAR_KEYS) {
     if (!normalize(result[key])) continue;
-    fields.push({ key, label: key === "details" ? "Details" : key[0].toUpperCase() + key.slice(1) });
+    fields.push({ key, label: SCALAR_LABELS[key] });
     sourceValues[key] = result[key];
     targetValues[key] = video[key] ?? null;
     selection[key] = input.fieldStrategies[key] === "overwrite" ? "source" : "target";

@@ -32,6 +32,7 @@ const METADATA_FIELD_OPTIONS: { key: string; label: string }[] = [
   { key: "details", label: "Details" },
   { key: "director", label: "Director" },
   { key: "date", label: "Date" },
+  { key: "productionDate", label: "Production Date" },
   { key: "urls", label: "URLs" },
   { key: "studio", label: "Studio" },
   { key: "performers", label: "Performers" },

@@ -55,6 +55,9 @@ public record VideoDto(
     /// layout is inferred from the file name and dimensions and <see cref="VrDescriptorDto.Inferred"/> is set.
     /// </summary>
     public VrDescriptorDto? Vr { get; init; }
+
+    /// <summary>When the video was shot, as a partial date; <see cref="Date"/> is when it was released.</summary>
+    public string? ProductionDate { get; init; }
 }
 
 /// <summary>How a VR video should be projected. <paramref name="FieldOfView"/> is the horizontal
@@ -72,7 +75,12 @@ public record VideoCreateDto(
     string? Captions,
     List<string>? Urls, List<int>? TagIds, List<int>? PerformerIds, List<int>? GalleryIds,
     List<VideoGroupInputDto>? Groups, List<VideoRemoteIdDto>? RemoteIds = null, Dictionary<string, object>? CustomFields = null,
-    int? ParentVideoId = null, double? ClipStartSec = null, double? ClipEndSec = null, bool IsVr = false);
+    int? ParentVideoId = null, double? ClipStartSec = null, double? ClipEndSec = null, bool IsVr = false)
+{
+    // Not positional, see src/Cove.Sdk/README.md.
+    [PartialDate]
+    public string? ProductionDate { get; init; }
+}
 
 public record VideoUpdateDto(
     string? Title, string? Code, string? Details, string? Director,
@@ -86,6 +94,10 @@ public record VideoUpdateDto(
     /// <summary>Sets an explicit VR layout. Clear it with <c>"vr"</c> in <see cref="ClearFields"/> to go back to detection.
     /// Not positional, see src/Cove.Sdk/README.md.</summary>
     public VrDescriptorDto? Vr { get; init; }
+
+    /// <summary>Sets the production date. Clear it with <c>"productionDate"</c> in <see cref="ClearFields"/>.</summary>
+    [PartialDate]
+    public string? ProductionDate { get; init; }
 }
 
 // ===== PERFORMER DTOs =====
@@ -1829,7 +1841,11 @@ public record MetadataServerVideoMatchDto(
     MetadataServerEntityCandidateDto? StudioCandidate,
     List<MetadataServerEntityCandidateDto> PerformerCandidates,
     List<MetadataServerEntityCandidateDto> TagCandidates
-);
+)
+{
+    // Not positional, see src/Cove.Sdk/README.md.
+    public string? ProductionDate { get; init; }
+}
 
 public record MetadataServerFingerprintDto(string Algorithm, string Hash, int? Duration);
 

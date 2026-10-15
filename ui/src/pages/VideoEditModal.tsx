@@ -29,6 +29,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
   const [captions, setCaptions] = useState(video.captions || "");
   const [director, setDirector] = useState(video.director || "");
   const [date, setDate] = useState(video.date || "");
+  const [productionDate, setProductionDate] = useState(video.productionDate || "");
   const [isVr, setIsVr] = useState(video.isVr ?? false);
   const [vrLayout, setVrLayout] = useState<VrDescriptor | null>(explicitVrLayout(video));
   const [rating, setRating] = useState<number | undefined>(undefined);
@@ -59,6 +60,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
     setCaptions(video.captions || "");
     setDirector(video.director || "");
     setDate(video.date || "");
+    setProductionDate(video.productionDate || "");
     setIsVr(video.isVr ?? false);
     setVrLayout(explicitVrLayout(video));
     setRating(undefined);
@@ -94,7 +96,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
 
   const handleSave = () => {
     const urlList = urls.map((u) => u.trim()).filter(Boolean);
-    const clearFields = videoEditClearFields(date, studioId);
+    const clearFields = videoEditClearFields(date, studioId, productionDate);
     if (!vrLayout && explicitVrLayout(video)) clearFields.push("vr");
     mutation.mutate({
       title: title,
@@ -103,6 +105,7 @@ export function VideoEditModal({ video, open, onClose }: Props) {
       captions: captions,
       director: director,
       date: date || undefined,
+      productionDate: productionDate || undefined,
       isVr,
       vr: isVr && vrLayout ? vrLayout : undefined,
       rating,
@@ -156,6 +159,16 @@ export function VideoEditModal({ video, open, onClose }: Props) {
           <IsoDateInput
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            className="w-full bg-card border border-border rounded px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+          />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Production Date" fieldProvenance={video.fieldProvenance} fieldKey="productionDate">
+          <IsoDateInput
+            value={productionDate}
+            onChange={(e) => setProductionDate(e.target.value)}
             className="w-full bg-card border border-border rounded px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
           />
         </Field>

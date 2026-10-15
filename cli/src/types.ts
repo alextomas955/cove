@@ -88,6 +88,7 @@ export interface Video extends CoveRecord {
   id: number;
   title?: string | null;
   date?: string | null;
+  productionDate?: string | null;
   studioId?: number | null;
   studioName?: string | null;
   code?: string | null;

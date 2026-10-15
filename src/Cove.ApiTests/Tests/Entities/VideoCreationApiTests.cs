@@ -50,6 +50,7 @@ public sealed class VideoCreationApiTests(
             .WithDetails(movie.Premise)
             .WithDirector("Penny Farthing")
             .WithDate("2026-07-18")
+            .WithProductionDate("2026-05")
             .WithRating(93)
             .WithStudio(studio)
             .WithCaptions("The vault is this way.")
@@ -75,6 +76,7 @@ public sealed class VideoCreationApiTests(
         videoAfter.Details.Should().Be(request.Details);
         videoAfter.Director.Should().Be(request.Director);
         videoAfter.Date.Should().Be(request.Date);
+        videoAfter.ProductionDate.Should().Be("2026-05");
         videoAfter.Organized.Should().BeTrue();
         videoAfter.IsVr.Should().BeTrue();
         videoAfter.StudioId.Should().Be(studio.Id);

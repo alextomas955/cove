@@ -544,6 +544,40 @@ describe("VideoDetailPage media-player extension surface", () => {
     await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(14, { title: "Renamed video" }));
   });
 
+  it("saves and clears the production date without touching the release date", async () => {
+    const video = {
+      id: 15,
+      title: "Editable video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      date: "2026-07-01",
+      productionDate: "2025-11",
+      files: [],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    };
+    mockVideos.get.mockResolvedValue(video);
+    mockVideos.update.mockResolvedValue(video);
+
+    renderVideoDetail(15);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    const productionDate = screen.getByRole("textbox", { name: /^Production Date/ });
+    expect(productionDate).toHaveValue("2025-11");
+    fireEvent.change(productionDate, { target: { value: "2025-11-20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVideos.update).toHaveBeenCalledWith(15, { productionDate: "2025-11-20" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: /^Production Date/ }), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVideos.update).toHaveBeenLastCalledWith(15, { clearFields: ["productionDate"] }));
+  });
+
   it("keeps unsaved edits and follows other changes when the video refetches", async () => {
     const video = {
       id: 14,

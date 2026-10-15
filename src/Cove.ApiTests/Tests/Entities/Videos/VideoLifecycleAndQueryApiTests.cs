@@ -10,6 +10,56 @@ public sealed class VideoLifecycleAndQueryApiTests(
     CoveApiTestFixture fixture) : ApiTest(output, fixture)
 {
     [Fact]
+    [CoversEndpoint("PUT", "/api/videos/{id:int}")]
+    public async Task GivenVideo_WhenProductionDateIsSetAndCleared_ThenReleaseDateIsUnchanged()
+    {
+        // Arrange
+        var video = await AsUser().CreateVideoAsync(new VideoBuilder()
+            .WithTitle($"Production date video {Guid.NewGuid():N}")
+            .WithDate("2026-08-01")
+            .Build(), TestContext.Current.CancellationToken);
+
+        // Act & Assert
+        var withYear = await AsUser().UpdateVideoAsync(video.Id, new { productionDate = "2025" }, TestContext.Current.CancellationToken);
+        withYear.ProductionDate.Should().Be("2025");
+        withYear.Date.Should().Be("2026-08-01");
+
+        var untouched = await AsUser().UpdateVideoAsync(video.Id, new { title = "Renamed production date video" }, TestContext.Current.CancellationToken);
+        untouched.ProductionDate.Should().Be("2025");
+
+        var invalid = () => AsUser().UpdateVideoAsync(video.Id, new { productionDate = "2025-13" }, TestContext.Current.CancellationToken);
+        await invalid.Should().ThrowAsync<InvalidOperationException>().WithMessage("*returned 400 (BadRequest)*");
+
+        var cleared = await AsUser().UpdateVideoAsync(video.Id, new { clearFields = new[] { "productionDate" } }, TestContext.Current.CancellationToken);
+        cleared.ProductionDate.Should().BeNull();
+        cleared.Date.Should().Be("2026-08-01");
+    }
+
+    [Fact]
+    public async Task GivenParentWithProductionDate_WhenSubVideoIsCreated_ThenItInheritsTheProductionDate()
+    {
+        // Arrange
+        var parent = await AsUser().CreateVideoAsync(new VideoBuilder()
+            .WithTitle($"Parent video {Guid.NewGuid():N}")
+            .WithProductionDate("2025-03")
+            .Build(), TestContext.Current.CancellationToken);
+        await AsDbUser().AttachVideoFileAsync(parent.Id, duration: 120, size: 1_000, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Act
+        var child = await AsUser().CreateVideoAsync(new VideoBuilder()
+                .WithTitle($"Sub-video {Guid.NewGuid():N}")
+                .Build() with
+            {
+                ParentVideoId = parent.Id,
+                ClipStartSec = 30,
+                ClipEndSec = 60,
+            }, TestContext.Current.CancellationToken);
+
+        // Assert
+        child.ProductionDate.Should().Be("2025-03");
+    }
+
+    [Fact]
     public async Task GivenSubVideo_WhenReadByIdAndListed_ThenParentFileMetadataIsReturned()
     {
         // Arrange

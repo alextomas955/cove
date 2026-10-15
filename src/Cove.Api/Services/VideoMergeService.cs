@@ -89,7 +89,7 @@ public sealed class VideoMergeService(
 
     /// <summary>The scalar fields a review can choose a side for, in the order the default policy applies them.</summary>
     private static readonly string[] MergeScalarFields =
-        ["title", "code", "details", "director", "date", "studioId", "captions", "organized", "isVr", "cover"];
+        ["title", "code", "details", "director", "date", "productionDate", "studioId", "captions", "organized", "isVr", "cover"];
 
     public async Task<VideoMergeResult> MergeAsync(VideoMergePlan plan, CancellationToken ct)
     {
@@ -474,6 +474,7 @@ public sealed class VideoMergeService(
         "details" => !string.IsNullOrWhiteSpace(video.Details),
         "director" => !string.IsNullOrWhiteSpace(video.Director),
         "date" => video.Date.HasValue,
+        "productionDate" => video.ProductionDate.HasValue,
         "studioId" => video.StudioId.HasValue,
         "captions" => !string.IsNullOrWhiteSpace(video.Captions),
         "cover" => video.ImageBlobId != null,
@@ -490,6 +491,7 @@ public sealed class VideoMergeService(
             case "details": target.Details = source.Details; provenance[key] = target.Details; break;
             case "director": target.Director = source.Director; provenance[key] = target.Director; break;
             case "date": target.Date = source.Date; target.DatePrecision = source.DatePrecision; provenance[key] = PartialDate.Format(target.Date, target.DatePrecision); break;
+            case "productionDate": target.ProductionDate = source.ProductionDate; target.ProductionDatePrecision = source.ProductionDatePrecision; provenance[key] = PartialDate.Format(target.ProductionDate, target.ProductionDatePrecision); break;
             case "studioId":
                 target.StudioId = source.StudioId;
                 if (!source.StudioId.HasValue) provenance["studio"] = null;

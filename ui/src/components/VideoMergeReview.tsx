@@ -40,6 +40,7 @@ const scalarLabels = {
   details: "Description",
   director: "Director",
   date: "Date",
+  productionDate: "Production Date",
   studioId: "Studio",
   captions: "Captions",
   organized: "Organized",
@@ -282,7 +283,9 @@ export function buildVideoMergeDiff(
       const disagree = withValue.some(
         (entry) => JSON.stringify(entry.values[key]) !== JSON.stringify(origin.values[key]),
       );
-      provenance[key] = disagree ? `From ${videoTitle(origin.video)}` : origin.provenance[key];
+      provenance[key] = disagree
+        ? `From ${videoTitle(origin.video)}`
+        : (origin.provenance[key] ?? origin.provenance[key.toLowerCase()]);
     }
     const union = <T,>(items: T[], key: (item: T) => string) => {
       const seen = new Map<string, T>();

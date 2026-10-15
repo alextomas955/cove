@@ -66,22 +66,25 @@ public partial class StashMigrationService
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var sceneRows = new List<(int Id, string? Title, string? Details, string? Date, int? Rating,
             int? StudioId, bool Organized, string? Code, string? Director,
-            double ResumeTime, double PlayDuration, string CreatedAt, string UpdatedAt, string? CoverBlob, string? LastPlayedAt)>();
+            double ResumeTime, double PlayDuration, string CreatedAt, string UpdatedAt, string? CoverBlob, string? LastPlayedAt, string? ProductionDate)>();
         var hasSceneCoverBlob = await ColumnExistsAsync(conn, "scenes", "cover_blob", ct);
         var hasSceneLastPlayedAt = await ColumnExistsAsync(conn, "scenes", "last_played_at", ct);
         var hasDatePrecision = await ColumnExistsAsync(conn, "scenes", "date_precision", ct);
+        var hasProductionDate = await ColumnExistsAsync(conn, "scenes", "production_date", ct);
+        var hasProductionDatePrecision = hasProductionDate && await ColumnExistsAsync(conn, "scenes", "production_date_precision", ct);
         await using (var cmd = conn.CreateCommand())
         {
             var coverBlobExpr = hasSceneCoverBlob ? "cover_blob" : "NULL";
             var lastPlayedAtExpr = hasSceneLastPlayedAt ? "last_played_at" : "NULL";
+            var productionDateExpr = hasProductionDate ? PartialDateSql("production_date", hasProductionDatePrecision) : "NULL";
             cmd.CommandText = $@"SELECT id, title, details, {PartialDateSql("date", hasDatePrecision)} AS date, rating, studio_id, organized, code, director,
-                resume_time, play_duration, created_at, updated_at, {coverBlobExpr} AS cover_blob, {lastPlayedAtExpr} AS last_played_at FROM scenes WHERE id IN ({sourceIds}) ORDER BY id";
+                resume_time, play_duration, created_at, updated_at, {coverBlobExpr} AS cover_blob, {lastPlayedAtExpr} AS last_played_at, {productionDateExpr} AS production_date FROM scenes WHERE id IN ({sourceIds}) ORDER BY id";
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
                 sceneRows.Add((r.GetInt32(0), ReadStringNull(r, 1), ReadStringNull(r, 2), ReadStringNull(r, 3),
                     ReadIntNull(r, 4), ReadIntNull(r, 5), ReadBool(r, 6), ReadStringNull(r, 7),
                     ReadStringNull(r, 8), r.GetDouble(9), r.GetDouble(10), r.GetString(11), r.GetString(12),
-                    ReadStringNull(r, 13), ReadStringNull(r, 14)));
+                    ReadStringNull(r, 13), ReadStringNull(r, 14), ReadStringNull(r, 15)));
         }
 
         var sceneTagMap = await ReadJunctionAsync(conn, "scenes_tags", "scene_id", "tag_id", ct, sourceIds);
@@ -249,6 +252,7 @@ public partial class StashMigrationService
         foreach (var row in sceneRows)
         {
             var date = ParsePartialDate(row.Date);
+            var productionDate = ParsePartialDate(row.ProductionDate);
             var coverBlobId = GetBlobId(blobMap, row.CoverBlob);
             var viewHistory = sceneViewDates.GetValueOrDefault(row.Id, []);
             var importedLastPlayedAt = ParseDateTimeOrNull(row.LastPlayedAt);
@@ -259,6 +263,8 @@ public partial class StashMigrationService
                 Details = row.Details,
                 Date = date.Value,
                 DatePrecision = date.Precision,
+                ProductionDate = productionDate.Value,
+                ProductionDatePrecision = productionDate.Precision,
                 StudioId = row.StudioId.HasValue && studioIdMap.TryGetValue(row.StudioId.Value, out var sId) ? sId : null,
                 Organized = row.Organized,
                 Code = row.Code,

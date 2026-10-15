@@ -12,6 +12,8 @@ export interface Video {
   captions?: string;
   director?: string;
   date?: string;
+  /** When the video was shot, as a partial date; `date` is when it was released. */
+  productionDate?: string;
   organized: boolean;
   isVr?: boolean;
   /** VR layout for immersive playback; null when the video is not VR. */
@@ -85,6 +87,7 @@ export interface VideoCreate {
   captions?: string;
   director?: string;
   date?: string;
+  productionDate?: string;
   rating?: number;
   organized?: boolean;
   isVr?: boolean;
@@ -2887,6 +2890,7 @@ export interface MetadataServerVideoMatch {
   title?: string;
   code?: string;
   date?: string;
+  productionDate?: string;
   director?: string;
   details?: string;
   studioName?: string;

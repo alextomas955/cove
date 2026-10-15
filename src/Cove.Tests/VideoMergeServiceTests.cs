@@ -2,6 +2,7 @@ using System.Reflection;
 using Cove.Api.Services;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
+using Cove.Core.Enums;
 using Cove.Core.Events;
 using Cove.Core.Interfaces;
 using Cove.Data;
@@ -81,6 +82,38 @@ public sealed class VideoMergeServiceTests
         Assert.Equal(VideoMergeService.ChosenSourceKey, provenance["title"]);
         Assert.Equal(VideoMergeService.DefaultPolicySourceKey, provenance["director"]);
         Assert.DoesNotContain("details", provenance.Keys);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, "source")]
+    public async Task ProductionDateMergesWithItsPrecision(bool keptHasProductionDate, string? choice)
+    {
+        await using var harness = await Harness.CreateAsync();
+        var (kept, removed) = await harness.SeedPairAsync(keptDuration: 60, removedDuration: 60);
+        await using (var db = harness.CreateContext())
+        {
+            var removedVideo = await db.Videos.SingleAsync(item => item.Id == removed.Id);
+            removedVideo.ProductionDate = new DateOnly(2023, 11, 1);
+            removedVideo.ProductionDatePrecision = DatePrecision.Month;
+            if (keptHasProductionDate)
+            {
+                var keptVideo = await db.Videos.SingleAsync(item => item.Id == kept.Id);
+                keptVideo.ProductionDate = new DateOnly(2019, 6, 2);
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var metadata = choice == null ? null : new VideoMergeMetadataDto(Fields: new() { ["productionDate"] = choice });
+        var result = await harness.MergeAsync(new VideoMergePlan(kept.Id, [removed.Id], Metadata: metadata));
+
+        Assert.Equal(VideoMergeOutcome.Merged, result.Outcome);
+        await using var verify = harness.CreateContext();
+        var video = await verify.Videos.SingleAsync(item => item.Id == kept.Id);
+        Assert.Equal(new DateOnly(2023, 11, 1), video.ProductionDate);
+        Assert.Equal(DatePrecision.Month, video.ProductionDatePrecision);
+        var provenance = await verify.FieldProvenance.Where(item => item.HostId == kept.Id).ToDictionaryAsync(item => item.FieldKey, item => item.SourceKey);
+        Assert.Equal(choice == null ? VideoMergeService.DefaultPolicySourceKey : VideoMergeService.ChosenSourceKey, provenance["productiondate"]);
     }
 
     [Fact]

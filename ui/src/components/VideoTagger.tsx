@@ -619,6 +619,7 @@ function buildDefaultVideoFieldStrategies(video: Video, result: UnifiedVideoMatc
     { key: "details", current: video.details, scraped: result.details },
     { key: "director", current: video.director, scraped: result.director },
     { key: "date", current: video.date, scraped: result.date },
+    { key: "productionDate", current: video.productionDate, scraped: result.productionDate },
   ];
   const strategies: Record<string, VideoFieldStrategy> = {};
   for (const field of fields) {

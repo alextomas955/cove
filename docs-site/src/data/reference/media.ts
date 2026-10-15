@@ -58,7 +58,8 @@ function defineMediaReference(reference: MediaReference): MediaReference {
 export const videoReference = defineMediaReference({
   fields: [
     { name: 'Title', meaning: 'Display title for the video.' },
-    { name: 'Date', meaning: 'Calendar date associated with the video.' },
+    { name: 'Date', meaning: 'Release date of the video.' },
+    { name: 'Production Date', meaning: 'When the video was shot, as opposed to its release date. Imported from metadata servers such as StashDB that record it.' },
     { name: 'Studio Code', meaning: 'Studio- or publisher-assigned catalog code.' },
     { name: 'Director', meaning: 'Free-text director value.' },
     { name: 'Details', meaning: 'Longer free-text description.' },

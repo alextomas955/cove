@@ -477,7 +477,8 @@ function ScalarRow({
   const option = (side: DiffSide, record: DiffRecord) => {
     const available = Object.hasOwn(record.values, field.key);
     const interactive = available && !disabled && !field.readOnly && !(side === "source" && awaitsCreate);
-    const provenance = record.provenance?.[field.key];
+    // The server stores provenance field keys lowercased, so a camelCase field key also matches that form.
+    const provenance = record.provenance?.[field.key] ?? record.provenance?.[field.key.toLowerCase()];
     return (
       <label className={optionClass(chosen === side, interactive)}>
         <input

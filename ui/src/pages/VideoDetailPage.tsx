@@ -1775,6 +1775,16 @@ export function DetailsTab({
         <dd className="text-foreground">{formatDate(video.createdAt)}</dd>
         <dt className="text-muted pr-3">Updated</dt>
         <dd className="text-foreground">{formatDate(video.updatedAt)}</dd>
+        {video.productionDate && (
+          <>
+            <dt className="text-muted pr-3">Production Date</dt>
+            <dd className="text-foreground">
+              <FieldProvenanceHover fieldProvenance={video.fieldProvenance} fieldKey="productionDate">
+                {formatDate(video.productionDate)}
+              </FieldProvenanceHover>
+            </dd>
+          </>
+        )}
         {video.code && (
           <>
             <dt className="text-muted pr-3">Studio Code</dt>
@@ -3056,6 +3066,7 @@ function videoFormValues(video: Video) {
     details: video.details || "",
     director: video.director || "",
     date: video.date || "",
+    productionDate: video.productionDate || "",
     isVr: video.isVr ?? false,
     vrLayout: explicitVrLayout(video),
     rating: undefined as number | undefined,
@@ -3080,6 +3091,7 @@ function videoUpdatePayload(values: VideoFormValues): VideoUpdate {
     details: values.details,
     director: values.director,
     date: values.date || undefined,
+    productionDate: values.productionDate || undefined,
     isVr: values.isVr,
     vr: values.isVr && values.vrLayout ? values.vrLayout : undefined,
     rating: values.rating,
@@ -3091,7 +3103,10 @@ function videoUpdatePayload(values: VideoFormValues): VideoUpdate {
     performerIds: values.selectedPerformerIds,
     galleryIds: values.selectedGalleryIds,
     groups: values.selectedGroups,
-    clearFields: [...videoEditClearFields(values.date, values.studioId), ...(values.vrLayout ? [] : ["vr"])],
+    clearFields: [
+      ...videoEditClearFields(values.date, values.studioId, values.productionDate),
+      ...(values.vrLayout ? [] : ["vr"]),
+    ],
   };
 }
 
@@ -3113,6 +3128,7 @@ function VideoEditPanel({
   const [details, setDetails] = useState(video.details || "");
   const [director, setDirector] = useState(video.director || "");
   const [date, setDate] = useState(video.date || "");
+  const [productionDate, setProductionDate] = useState(video.productionDate || "");
   const [isVr, setIsVr] = useState(video.isVr ?? false);
   const [vrLayout, setVrLayout] = useState<VrDescriptor | null>(explicitVrLayout(video));
   const [rating, setRating] = useState<number | undefined>(undefined);
@@ -3139,6 +3155,7 @@ function VideoEditPanel({
     details,
     director,
     date,
+    productionDate,
     isVr,
     vrLayout,
     rating,
@@ -3158,6 +3175,7 @@ function VideoEditPanel({
     details: setDetails,
     director: setDirector,
     date: setDate,
+    productionDate: setProductionDate,
     isVr: setIsVr,
     vrLayout: setVrLayout,
     rating: setRating,
@@ -3294,6 +3312,18 @@ function VideoEditPanel({
           <label className="space-y-1">
             <span className="text-xs text-secondary">Date</span>
             <IsoDateInput value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </label>
+        </FieldProvenanceHover>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FieldProvenanceHover fieldProvenance={video.fieldProvenance} fieldKey="productionDate" block>
+          <label className="space-y-1">
+            <span className="text-xs text-secondary">Production Date</span>
+            <IsoDateInput
+              value={productionDate}
+              onChange={(e) => setProductionDate(e.target.value)}
+              className={inputCls}
+            />
           </label>
         </FieldProvenanceHover>
       </div>

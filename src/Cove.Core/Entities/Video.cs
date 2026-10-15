@@ -8,6 +8,9 @@ public class Video : BaseEntity
     public string? Director { get; set; }
     public DateOnly? Date { get; set; }
     public Cove.Core.Enums.DatePrecision DatePrecision { get; set; }
+    // When the video was shot; Date is when it was released.
+    public DateOnly? ProductionDate { get; set; }
+    public Cove.Core.Enums.DatePrecision ProductionDatePrecision { get; set; }
     public bool Organized { get; set; }
     public bool IsVr { get; set; }
     // Explicit VR layout. Null means "not set": readers fall back to VrDescriptorDetector,

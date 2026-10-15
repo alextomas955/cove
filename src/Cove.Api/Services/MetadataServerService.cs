@@ -33,6 +33,11 @@ public class MetadataServerService : IMetadataServerService
 {
     private static readonly Regex LeadingVideoIndexRegex = new(@"^\s*(?:video\s+)?(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+)\s*(?:[-â€“â€”:._)\]]\s*)+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    // Scene production dates arrived in stash-box at the end of 2024; an older or stash-box-like server rejects the
+    // whole query over the unknown field. Endpoints that did so are queried without it from then on.
+    private const string ProductionDateField = "production_date";
+    private static readonly Regex ProductionDateSelectionRegex = new(@"^[ \t]*production_date[ \t]*\r?\n", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> EndpointsWithoutProductionDate = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Maximum hamming distance for phash to be considered a match.
@@ -167,6 +172,7 @@ fragment VideoFields on Scene {
     director
     duration
     date
+    production_date
     urls {
         url
     }
@@ -1365,20 +1371,10 @@ query Me {
         ApplyMetadataStringField(fieldProvenance, "code", remote.Code, GetMetadataFieldStrategy(fieldStrategies, "code", defaultScalarStrategy), value => video.Code = value, video.Code);
         ApplyMetadataStringField(fieldProvenance, "details", remote.Details, GetMetadataFieldStrategy(fieldStrategies, "details", defaultScalarStrategy), value => video.Details = value, video.Details);
         ApplyMetadataStringField(fieldProvenance, "director", remote.Director, GetMetadataFieldStrategy(fieldStrategies, "director", defaultScalarStrategy), value => video.Director = value, video.Director);
-        var parsedRemotePartialDate = PartialDate.TryParse(remote.Date, out var remoteDate) ? remoteDate : default;
-        var parsedRemoteDate = parsedRemotePartialDate.Value;
-        var dateStrategy = GetMetadataFieldStrategy(fieldStrategies, "date", defaultScalarStrategy);
-        var useRemoteDate = parsedRemoteDate.HasValue && dateStrategy != MetadataFieldStrategy.Ignore
-            && (dateStrategy == MetadataFieldStrategy.Overwrite || !video.Date.HasValue);
-        var mergedDate = MergeDateField(video.Date, parsedRemoteDate, dateStrategy);
-        if (mergedDate.HasValue)
-        {
-            video.Date = mergedDate;
-            if (useRemoteDate)
-                video.DatePrecision = parsedRemotePartialDate.Precision;
-            if (parsedRemoteDate.HasValue && dateStrategy != MetadataFieldStrategy.Ignore)
-                fieldProvenance["date"] = PartialDate.Format(mergedDate, video.DatePrecision);
-        }
+        ApplyMetadataPartialDateField(fieldProvenance, "date", remote.Date, GetMetadataFieldStrategy(fieldStrategies, "date", defaultScalarStrategy),
+            video.Date, video.DatePrecision, (value, precision) => { video.Date = value; video.DatePrecision = precision; });
+        ApplyMetadataPartialDateField(fieldProvenance, "productionDate", remote.ProductionDate, GetMetadataFieldStrategy(fieldStrategies, "productionDate", defaultScalarStrategy),
+            video.ProductionDate, video.ProductionDatePrecision, (value, precision) => { video.ProductionDate = value; video.ProductionDatePrecision = precision; });
         if (markOrganized) video.Organized = true;
 
         var urlsStrategy = GetMetadataFieldStrategy(fieldStrategies, "urls", MetadataFieldStrategy.Merge);
@@ -1672,6 +1668,7 @@ query Me {
             director = video.Director,
             url = video.Urls.Select(u => u.Url).FirstOrDefault(),
             date = PartialDate.Format(video.Date, video.DatePrecision),
+            production_date = SupportsProductionDate(box) ? PartialDate.Format(video.ProductionDate, video.ProductionDatePrecision) : null,
             studio,
             performers,
             tags,
@@ -1679,7 +1676,16 @@ query Me {
         };
 
         var cover = await TryReadVideoCoverAsync(video, ct);
-        var response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct, cover);
+        MetadataServerDraftSubmissionResponse response;
+        try
+        {
+            response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input }, ct, cover);
+        }
+        catch (InvalidOperationException ex) when (input.production_date != null && RejectsProductionDate(ex))
+        {
+            response = await SendQueryAsync<MetadataServerDraftSubmissionResponse>(box, SubmitVideoDraftMutation, new { input = input with { production_date = (string?)null } }, ct, cover);
+            MarkProductionDateUnsupported(box);
+        }
         return response.SubmitSceneDraft?.Id;
     }
 
@@ -3041,6 +3047,39 @@ query Me {
 
     private async Task<T> SendQueryAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct, MetadataServerUpload? image = null)
     {
+        if (!ProductionDateSelectionRegex.IsMatch(query))
+            return await SendQueryCoreAsync<T>(box, query, variables, ct, image);
+        if (!SupportsProductionDate(box))
+            return await SendQueryCoreAsync<T>(box, ProductionDateSelectionRegex.Replace(query, string.Empty), variables, ct, image);
+
+        try
+        {
+            return await SendQueryCoreAsync<T>(box, query, variables, ct, image);
+        }
+        catch (InvalidOperationException ex) when (RejectsProductionDate(ex))
+        {
+            // Remembered only once the query works without the field, so an unrelated failure that happens to
+            // mention it does not turn production dates off for this server.
+            var result = await SendQueryCoreAsync<T>(box, ProductionDateSelectionRegex.Replace(query, string.Empty), variables, ct, image);
+            MarkProductionDateUnsupported(box);
+            return result;
+        }
+    }
+
+    private static bool SupportsProductionDate(MetadataServerInstance box)
+        => !EndpointsWithoutProductionDate.ContainsKey(NormalizeEndpoint(box.Endpoint));
+
+    private void MarkProductionDateUnsupported(MetadataServerInstance box)
+    {
+        if (EndpointsWithoutProductionDate.TryAdd(NormalizeEndpoint(box.Endpoint), true))
+            _logger.LogInformation("Metadata server {Endpoint} does not support scene production dates; querying it without them until Cove restarts", box.Endpoint);
+    }
+
+    private static bool RejectsProductionDate(InvalidOperationException ex)
+        => ex.Message.Contains(ProductionDateField, StringComparison.Ordinal);
+
+    private async Task<T> SendQueryCoreAsync<T>(MetadataServerInstance box, string query, object? variables, CancellationToken ct, MetadataServerUpload? image = null)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Post, box.Endpoint);
         if (!string.IsNullOrWhiteSpace(box.ApiKey))
             request.Headers.TryAddWithoutValidation("ApiKey", box.ApiKey);
@@ -3211,7 +3250,10 @@ query Me {
             StudioCandidate: studioCandidate,
             PerformerCandidates: performerCandidates,
             TagCandidates: tagCandidates
-        );
+        )
+        {
+            ProductionDate = video.ProductionDate,
+        };
     }
 
     private async Task<MetadataServerEntityCandidateDto?> BuildStudioCandidateAsync(string endpoint, MetadataServerRemoteStudio? remoteStudio, CancellationToken ct)
@@ -3502,15 +3544,24 @@ query Me {
         return nextValue.Trim();
     }
 
-    private static DateOnly? MergeDateField(DateOnly? currentValue, DateOnly? nextValue, MetadataFieldStrategy strategy)
+    // Takes the remote partial date, with its precision, when the strategy lets it replace the current one.
+    private static void ApplyMetadataPartialDateField(
+        Dictionary<string, object?> fieldProvenance,
+        string field,
+        string? remoteValue,
+        MetadataFieldStrategy strategy,
+        DateOnly? currentValue,
+        DatePrecision currentPrecision,
+        Action<DateOnly?, DatePrecision> setter)
     {
-        if (strategy == MetadataFieldStrategy.Ignore || !nextValue.HasValue)
-            return currentValue;
+        var remoteDate = PartialDate.TryParse(remoteValue, out var parsed) ? parsed : default;
+        if (!remoteDate.Value.HasValue || strategy == MetadataFieldStrategy.Ignore)
+            return;
 
-        if (strategy == MetadataFieldStrategy.Merge && currentValue.HasValue)
-            return currentValue;
-
-        return nextValue;
+        var useRemote = strategy == MetadataFieldStrategy.Overwrite || !currentValue.HasValue;
+        var (value, precision) = useRemote ? (remoteDate.Value, remoteDate.Precision) : (currentValue, currentPrecision);
+        setter(value, precision);
+        fieldProvenance[field] = PartialDate.Format(value, precision);
     }
 
     // An absent list means no gender filter. A list that is present but empty means the caller allowed no
@@ -3672,6 +3723,7 @@ query Me {
         string? Director,
         int? Duration,
         string? Date,
+        [property: JsonPropertyName("production_date")] string? ProductionDate,
         List<MetadataServerRemoteUrl> Urls,
         List<MetadataServerRemoteImage> Images,
         MetadataServerRemoteStudio? Studio,

@@ -165,6 +165,48 @@ describe("VideoTaggerReview", () => {
     expect(generic.code).toBe("source");
   });
 
+  it("reviews a scraped production date beside the release date", () => {
+    const merged = {
+      ...video,
+      productionDate: "2019-06-02",
+      // The server stores provenance field keys lowercased.
+      fieldProvenance: [{ fieldKey: "productiondate", sourceKey: "manual", createdAt: "" }],
+    } as Video;
+    const reviewInput = input({
+      video: merged,
+      result: { ...result, productionDate: "2023-11" },
+      fieldStrategies: { productionDate: "overwrite" },
+    });
+    const review = buildTaggerReview(reviewInput);
+
+    const field = review.fields.find((entry) => entry.key === "productionDate");
+    expect(field?.label).toBe("Production Date");
+    expect(review.source.values.productionDate).toBe("2023-11");
+    expect(review.target.values.productionDate).toBe("2019-06-02");
+    expect(review.selection.productionDate).toBe("source");
+    expect(isHandEdited(merged, "productionDate")).toBe(true);
+
+    render(
+      <MetadataDiff
+        fields={review.fields.filter((entry) => entry.key === "productionDate")}
+        source={review.source}
+        target={review.target}
+        value={review.selection}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Edited by you")).toBeInTheDocument();
+
+    const handlers = { onFieldStrategyChange: vi.fn() };
+    applyTaggerSelectionChange(
+      reviewInput,
+      review.selection,
+      { ...review.selection, productionDate: "target" },
+      handlers,
+    );
+    expect(handlers.onFieldStrategyChange).toHaveBeenCalledWith("productionDate", "ignore");
+  });
+
   it("maps scalar and studio choices back to strategies and modes", () => {
     const handlers = { onFieldStrategyChange: vi.fn(), onCollectionModeChange: vi.fn() };
     const review = buildTaggerReview(input());

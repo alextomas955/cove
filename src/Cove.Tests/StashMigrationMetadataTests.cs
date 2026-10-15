@@ -4,6 +4,7 @@ using Cove.Api.Services;
 using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Core.Entities.Auth;
+using Cove.Core.Enums;
 using Cove.Core.Interfaces;
 using Cove.Data;
 using Microsoft.Data.Sqlite;
@@ -1323,6 +1324,56 @@ INSERT INTO video_files SELECT id,120,'h264','mp4','aac',1920,1080,30,1000 FROM 
         Assert.Equal("single.mp4", primaries["single"]);
         Assert.Equal("two-b.mp4", primaries["second marked primary"]);
         Assert.Equal("three-b.mp4", primaries["primary not imported"]);
+    }
+
+    [Fact]
+    public async Task ImportScenesAsync_ImportsProductionDatesWithTheirPrecision()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var context = CreateContext();
+        var folder = new Folder { Path = @"C:\library", ModTime = new DateTime(2024, 1, 4, 0, 0, 0, DateTimeKind.Utc) };
+        context.Folders.Add(folder);
+        await context.SaveChangesAsync(ct);
+
+        await using var stash = new SqliteConnection("Data Source=:memory:");
+        await stash.OpenAsync(ct);
+        // Stash stores a partial date as the first day of its period plus a precision: 0 day, 1 month, 2 year.
+        await ExecuteSqlAsync(stash, @"
+CREATE TABLE scenes(id INTEGER PRIMARY KEY,title TEXT,details TEXT,date TEXT,rating INTEGER,studio_id INTEGER,organized INTEGER,code TEXT,director TEXT,resume_time REAL,play_duration REAL,created_at TEXT,updated_at TEXT,production_date TEXT,production_date_precision INTEGER);
+CREATE TABLE scenes_files(scene_id INTEGER,file_id INTEGER,[primary] INTEGER);
+CREATE TABLE groups_scenes(scene_id INTEGER,group_id INTEGER,scene_index INTEGER);
+CREATE TABLE files(id INTEGER PRIMARY KEY,basename TEXT,parent_folder_id INTEGER,size INTEGER,mod_time TEXT,created_at TEXT);
+CREATE TABLE video_files(file_id INTEGER,duration REAL,video_codec TEXT,format TEXT,audio_codec TEXT,width INTEGER,height INTEGER,frame_rate REAL,bit_rate INTEGER);
+CREATE TABLE files_fingerprints(file_id INTEGER,type TEXT,fingerprint TEXT);
+INSERT INTO scenes VALUES
+  (1,'day',NULL,'2024-05-01',NULL,NULL,0,NULL,NULL,0,0,'2024-01-01','2024-01-01','2023-11-20',0),
+  (2,'month',NULL,NULL,NULL,NULL,0,NULL,NULL,0,0,'2024-01-01','2024-01-01','2023-11-01',1),
+  (3,'year',NULL,NULL,NULL,NULL,0,NULL,NULL,0,0,'2024-01-01','2024-01-01','2023-01-01',2),
+  (4,'none',NULL,NULL,NULL,NULL,0,NULL,NULL,0,0,'2024-01-01','2024-01-01',NULL,NULL);
+INSERT INTO files VALUES
+  (10,'day.mp4',1,1,'2024-01-01','2024-01-01'),
+  (20,'month.mp4',1,1,'2024-01-01','2024-01-01'),
+  (30,'year.mp4',1,1,'2024-01-01','2024-01-01'),
+  (40,'none.mp4',1,1,'2024-01-01','2024-01-01');
+INSERT INTO scenes_files VALUES (1,10,1),(2,20,1),(3,30,1),(4,40,1);
+INSERT INTO video_files SELECT id,120,'h264','mp4','aac',1920,1080,30,1000 FROM files;
+");
+
+        var service = CreateService(context);
+        await InvokePrivateAsync(service, "ImportScenesAsync", stash, new Dictionary<string, string>(),
+            new Dictionary<int, int> { [1] = folder.Id },
+            new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(),
+            NullJobProgress.Instance, 0d, 1d, ct);
+
+        var videos = await context.Videos.ToDictionaryAsync(video => video.Title!, ct);
+        Assert.Equal(new DateOnly(2023, 11, 20), videos["day"].ProductionDate);
+        Assert.Equal(DatePrecision.Day, videos["day"].ProductionDatePrecision);
+        Assert.Equal(new DateOnly(2024, 5, 1), videos["day"].Date);
+        Assert.Equal(new DateOnly(2023, 11, 1), videos["month"].ProductionDate);
+        Assert.Equal(DatePrecision.Month, videos["month"].ProductionDatePrecision);
+        Assert.Equal(new DateOnly(2023, 1, 1), videos["year"].ProductionDate);
+        Assert.Equal(DatePrecision.Year, videos["year"].ProductionDatePrecision);
+        Assert.Null(videos["none"].ProductionDate);
     }
 
     [Fact]

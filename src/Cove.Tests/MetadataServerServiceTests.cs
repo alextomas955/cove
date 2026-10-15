@@ -64,6 +64,7 @@ public sealed class MetadataServerServiceTests
         {
             Assert.Equal(ApiKey, request.ApiKey);
             Assert.Contains("query SearchVideo", request.Query);
+            Assert.Contains("production_date", request.Query);
             Assert.Equal("Remote Video", GetVariableString(request, "term"));
 
             return GraphQlData($$"""
@@ -78,6 +79,7 @@ public sealed class MetadataServerServiceTests
         var match = Assert.Single(matches);
         Assert.Equal("remote-video-1", match.Id);
         Assert.Equal("Fixture Box", match.MetadataServerName);
+        Assert.Equal("2023-11", match.ProductionDate);
         Assert.Equal("Remote Video", match.Title);
         Assert.Equal("Fixture Studio", match.StudioName);
         Assert.Equal(["Jane Doe"], match.PerformerNames);
@@ -1638,6 +1640,198 @@ public sealed class MetadataServerServiceTests
     }
 
     [Fact]
+    public async Task MergeVideoAsync_ImportsProductionDateWithItsPrecision()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video", Date = new DateOnly(2020, 1, 1) };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(request =>
+        {
+            Assert.Contains("production_date", request.Query);
+            return GraphQlData($$"""
+                "findVideo": {{RemoteVideoJson}}
+                """);
+        }));
+        var fieldProvenance = new FieldProvenanceService(context);
+        var service = CreateService(context, httpClient, fieldProvenance: fieldProvenance);
+
+        var imported = await service.MergeVideoAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                FieldStrategies = new Dictionary<string, string> { ["productionDate"] = "merge" },
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(imported);
+        Assert.Equal(new DateOnly(2023, 11, 1), video.ProductionDate);
+        Assert.Equal(DatePrecision.Month, video.ProductionDatePrecision);
+        // The release date is a separate field: merging keeps the one the video already had.
+        Assert.Equal(new DateOnly(2020, 1, 1), video.Date);
+        var provenanceRows = await fieldProvenance.GetForHostAsync(AffinityHostType.Video, video.Id, TestContext.Current.CancellationToken);
+        Assert.Contains(provenanceRows, row => row.FieldKey == "productiondate" && row.Value.HasValue && row.Value.Value.GetString() == "2023-11");
+    }
+
+    [Theory]
+    [InlineData("merge", 2019, 6, 2, DatePrecision.Day)]
+    [InlineData("ignore", 2019, 6, 2, DatePrecision.Day)]
+    [InlineData("overwrite", 2023, 11, 1, DatePrecision.Month)]
+    public async Task MergeVideoAsync_AppliesProductionDateStrategyToAnExistingValue(string strategy, int year, int month, int day, DatePrecision precision)
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video", ProductionDate = new DateOnly(2019, 6, 2), ProductionDatePrecision = DatePrecision.Day };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var imported = await service.MergeVideoAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                FieldStrategies = new Dictionary<string, string> { ["productionDate"] = strategy },
+            },
+            CancellationToken.None);
+
+        Assert.True(imported);
+        Assert.Equal(new DateOnly(year, month, day), video.ProductionDate);
+        Assert.Equal(precision, video.ProductionDatePrecision);
+    }
+
+    [Fact]
+    public async Task MergeVideoAsync_LeavesProductionDateAloneWhenTheRemoteHasNone()
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Original Video", ProductionDate = new DateOnly(2019, 6, 2), ProductionDatePrecision = DatePrecision.Day };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var remoteVideoJson = RemoteVideoJson.Replace("\"production_date\": \"2023-11\"", "\"production_date\": null", StringComparison.Ordinal);
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{remoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var imported = await service.MergeVideoAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false },
+            CancellationToken.None);
+
+        Assert.True(imported);
+        Assert.Equal(new DateOnly(2019, 6, 2), video.ProductionDate);
+        Assert.Equal(DatePrecision.Day, video.ProductionDatePrecision);
+    }
+
+    // Endpoints without production dates are remembered for the process, so these tests each use their own.
+    private static (string Endpoint, CoveConfiguration Configuration) OldBoxConfiguration()
+    {
+        var endpoint = $"https://old-box-{Guid.NewGuid():N}.example/graphql";
+        return (endpoint, new CoveConfiguration
+        {
+            Scraping = new ScrapingConfig { MetadataServers = [new MetadataServerInstance { Endpoint = endpoint, ApiKey = ApiKey, Name = "Old Box" }] },
+        });
+    }
+
+    [Fact]
+    public async Task SearchVideosAsync_FallsBackWhenTheServerHasNoProductionDate()
+    {
+        await using var context = CreateContext();
+        var (endpoint, configuration) = OldBoxConfiguration();
+        var remoteVideoJson = RemoteVideoJson.Replace("\"production_date\": \"2023-11\",", string.Empty, StringComparison.Ordinal);
+        // How stash-box (gqlgen) rejects a selection its schema does not have.
+        var handler = new FixtureMetadataServerHandler(
+            request => request.Query.Contains("production_date", StringComparison.Ordinal)
+                ? """{"errors":[{"message":"Cannot query field \"production_date\" on type \"Scene\".","locations":[{"line":9,"column":5}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":null}"""
+                : GraphQlData($$"""
+                    "searchVideo": [{{remoteVideoJson}}]
+                    """),
+            request => request.Query.Contains("production_date", StringComparison.Ordinal) ? HttpStatusCode.UnprocessableEntity : HttpStatusCode.OK);
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(context, httpClient, configuration: configuration);
+        var video = new Video { Title = "Local Video" };
+
+        var first = await service.SearchVideosAsync(video, "Remote Video", endpoint, VideoMetadataSearchStrategy.Text, CancellationToken.None);
+        var second = await service.SearchVideosAsync(video, "Remote Video", endpoint, VideoMetadataSearchStrategy.Text, CancellationToken.None);
+
+        Assert.Equal("remote-video-1", Assert.Single(first).Id);
+        Assert.Null(first[0].ProductionDate);
+        Assert.Single(second);
+        // The first search learns the server lacks the field; later ones leave it out from the start.
+        Assert.Equal([true, false, false], handler.Requests.Select(request => request.Query.Contains("production_date", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task SearchVideosAsync_KeepsProductionDateWhenTheFailureWasNotAboutIt()
+    {
+        await using var context = CreateContext();
+        var (endpoint, configuration) = OldBoxConfiguration();
+        var serverDown = true;
+        // A gateway error that echoes the request mentions the field without the schema lacking it.
+        var handler = new FixtureMetadataServerHandler(
+            request => serverDown
+                ? $$"""{"error":"upstream timeout","query":{{JsonSerializer.Serialize(request.Query)}}}"""
+                : GraphQlData($$"""
+                    "searchVideo": [{{RemoteVideoJson}}]
+                    """),
+            _ => serverDown ? HttpStatusCode.BadGateway : HttpStatusCode.OK);
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(context, httpClient, configuration: configuration);
+        var video = new Video { Title = "Local Video" };
+
+        await Record.ExceptionAsync(() => service.SearchVideosAsync(video, "Remote Video", endpoint, VideoMetadataSearchStrategy.Text, CancellationToken.None));
+        serverDown = false;
+        var matches = await service.SearchVideosAsync(video, "Remote Video", endpoint, VideoMetadataSearchStrategy.Text, CancellationToken.None);
+
+        Assert.Equal("2023-11", Assert.Single(matches).ProductionDate);
+        Assert.Contains("production_date", handler.Requests[^1].Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SubmitVideoDraftAsync_RetriesWithoutProductionDateWhenTheServerRejectsIt()
+    {
+        await using var context = CreateContext();
+        var (endpoint, configuration) = OldBoxConfiguration();
+        var video = new Video { Title = "Draft Video", ProductionDate = new DateOnly(2024, 3, 1), ProductionDatePrecision = DatePrecision.Month };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // How stash-box (gqlgen) rejects an input field its schema does not have: the field is named only in the path.
+        var handler = new FixtureMetadataServerHandler(
+            request => request.VariablesJson.Contains("production_date", StringComparison.Ordinal)
+                ? """{"errors":[{"message":"unknown field","path":["variable","input","production_date"],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":null}"""
+                : GraphQlData("""
+                    "submitSceneDraft": { "id": "draft-video-1" }
+                    """),
+            request => request.VariablesJson.Contains("production_date", StringComparison.Ordinal) ? HttpStatusCode.UnprocessableEntity : HttpStatusCode.OK);
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(context, httpClient, configuration: configuration);
+
+        var draftId = await service.SubmitVideoDraftAsync(video, endpoint, CancellationToken.None);
+        var secondDraftId = await service.SubmitVideoDraftAsync(video, endpoint, CancellationToken.None);
+
+        Assert.Equal("draft-video-1", draftId);
+        Assert.Equal("draft-video-1", secondDraftId);
+        // Rejected, retried without the field, then sent without it from the start.
+        Assert.Equal([true, false, false], handler.Requests.Select(request => request.VariablesJson.Contains("production_date", StringComparison.Ordinal)));
+        using var retried = JsonDocument.Parse(handler.Requests[1].VariablesJson);
+        Assert.Equal("Draft Video", retried.RootElement.GetProperty("input").GetProperty("title").GetString());
+    }
+
+    [Fact]
     public async Task MergeVideoAsync_AllowsRemoteTagsWithNullAliases()
     {
         await using var context = CreateContext();
@@ -2117,6 +2311,8 @@ public sealed class MetadataServerServiceTests
             Details = "Draft details",
             Director = "Draft Director",
             Date = new DateOnly(2024, 6, 2),
+            ProductionDate = new DateOnly(2024, 3, 1),
+            ProductionDatePrecision = DatePrecision.Month,
             Studio = studio,
         };
         video.RemoteIds.Add(new VideoRemoteId { Endpoint = Endpoint, RemoteId = "remote-video-1" });
@@ -2156,6 +2352,7 @@ public sealed class MetadataServerServiceTests
         Assert.Equal("https://cove.example/videos/draft", input.GetProperty("url").GetString());
         Assert.False(input.TryGetProperty("urls", out _));
         Assert.Equal("2024-06-02", input.GetProperty("date").GetString());
+        Assert.Equal("2024-03", input.GetProperty("production_date").GetString());
         Assert.Equal("remote-studio-1", input.GetProperty("studio").GetProperty("id").GetString());
         Assert.Equal("remote-performer-1", input.GetProperty("performers")[0].GetProperty("id").GetString());
         Assert.Equal("remote-tag-1", input.GetProperty("tags")[0].GetProperty("id").GetString());
@@ -2496,6 +2693,7 @@ public sealed class MetadataServerServiceTests
           "director": "Fixture Director",
           "duration": 120,
           "date": "2024-05-01",
+          "production_date": "2023-11",
           "urls": [
             { "url": "https://metadata.example/videos/remote-video-1" }
           ],
@@ -2604,9 +2802,10 @@ public sealed class MetadataServerServiceTests
             => Entries.Add((logLevel, formatter(state, exception)));
     }
 
-    private sealed class FixtureMetadataServerHandler(Func<GraphQlRequestSnapshot, string> responseFactory) : HttpMessageHandler
+    private sealed class FixtureMetadataServerHandler(Func<GraphQlRequestSnapshot, string> responseFactory, Func<GraphQlRequestSnapshot, HttpStatusCode>? statusFactory = null) : HttpMessageHandler
     {
         private readonly Func<GraphQlRequestSnapshot, string> _responseFactory = responseFactory;
+        private readonly Func<GraphQlRequestSnapshot, HttpStatusCode> _statusFactory = statusFactory ?? (_ => HttpStatusCode.OK);
 
         public List<GraphQlRequestSnapshot> Requests { get; } = [];
 
@@ -2652,7 +2851,7 @@ public sealed class MetadataServerServiceTests
             var snapshot = new GraphQlRequestSnapshot(query, variables.GetRawText(), request.RequestUri, apiKey, mapJson, upload);
             Requests.Add(snapshot);
 
-            return new HttpResponseMessage(HttpStatusCode.OK)
+            return new HttpResponseMessage(_statusFactory(snapshot))
             {
                 Content = new StringContent(_responseFactory(snapshot), Encoding.UTF8, "application/json"),
             };
