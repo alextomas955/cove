@@ -855,6 +855,8 @@ public class PostgresManagerService : IHostedService
     private async Task DownloadFileAsync(string url, string destPath, CancellationToken ct)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        // EDB's download redirector rejects requests that carry no User-Agent with 403.
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("Cove/1.0");
         _logger.LogInformation("Downloading managed PostgreSQL component");
 
         using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
