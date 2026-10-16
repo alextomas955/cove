@@ -31,13 +31,15 @@ public sealed class ScopeVideoPlayHistoryToUsersPostgresTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var database = await PostgreSqlTestDatabase.CreateAsync(ct);
-        await using var db = new CoveContext(new DbContextOptionsBuilder<CoveContext>()
+        var options = new DbContextOptionsBuilder<CoveContext>()
             .UseNpgsql(database.ConnectionString, options => options.UseVector())
-            .Options);
+            .Options;
+        await using var db = new CoveContext(options);
         var migrations = db.GetService<IMigrationsAssembly>().Migrations.Keys.ToList();
         var scopingIndex = migrations.IndexOf(MigrationId<ScopeVideoPlayHistoryToUsers>());
         Assert.True(scopingIndex > 0);
         await db.GetService<IMigrator>().MigrateAsync(migrations[scopingIndex - 1], ct);
+        await using var seed = new PreProductionDateCoveContext(options);
 
         // A member with a lower id than the owner must not receive the dates.
         var member = new User { Username = "member", PasswordHash = "test", PasswordAlgo = "test" };
@@ -52,17 +54,17 @@ public sealed class ScopeVideoPlayHistoryToUsersPostgresTests
         var ownerRole = new Role { Name = "Owner", IsBuiltin = true, IsSystem = true };
         var memberRole = new Role { Name = "Member", IsBuiltin = true };
         var video = new Video { Title = "Played video" };
-        db.AddRange(member, memberRole, video);
+        seed.AddRange(member, memberRole, video);
         if (ownerKind != Owner.None)
-            db.AddRange(owner, ownerRole);
-        await db.SaveChangesAsync(ct);
-        db.UserRoleAssignments.Add(new UserRoleAssignment { UserId = member.Id, RoleId = memberRole.Id });
+            seed.AddRange(owner, ownerRole);
+        await seed.SaveChangesAsync(ct);
+        seed.UserRoleAssignments.Add(new UserRoleAssignment { UserId = member.Id, RoleId = memberRole.Id });
         if (ownerKind != Owner.None)
-            db.UserRoleAssignments.Add(new UserRoleAssignment { UserId = owner.Id, RoleId = ownerRole.Id });
-        await db.SaveChangesAsync(ct);
+            seed.UserRoleAssignments.Add(new UserRoleAssignment { UserId = owner.Id, RoleId = ownerRole.Id });
+        await seed.SaveChangesAsync(ct);
         var playedAt = new DateTime(2025, 2, 22, 9, 6, 51, DateTimeKind.Utc);
         // The current model writes the user column, which does not exist yet.
-        await db.Database.ExecuteSqlAsync(
+        await seed.Database.ExecuteSqlAsync(
             $"""INSERT INTO video_play_history ("VideoId", "PlayedAt") VALUES ({video.Id}, {playedAt}), ({video.Id}, {playedAt.AddHours(8)})""", ct);
 
         await db.Database.MigrateAsync(ct);

@@ -20,14 +20,16 @@ public sealed class LeftoverImportedTagApplicationsPostgresTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var database = await PostgreSqlTestDatabase.CreateAsync(ct);
-        await using var db = new CoveContext(new DbContextOptionsBuilder<CoveContext>()
+        var options = new DbContextOptionsBuilder<CoveContext>()
             .UseNpgsql(database.ConnectionString, options => options.UseVector())
-            .Options);
+            .Options;
+        await using var db = new CoveContext(options);
         var migrations = db.GetService<IMigrationsAssembly>().Migrations.Keys.ToList();
         var cleanupIndex = migrations.IndexOf(MigrationId<RemoveLeftoverImportedVideoTagApplications>());
         Assert.True(cleanupIndex > 0);
         await db.GetService<IMigrator>().MigrateAsync(migrations[cleanupIndex - 1], ct);
         await AllowCurrentModelTagInsertsAsync(db, ct);
+        await using var seed = new PreProductionDateCoveContext(options);
 
         // "Scraped" is also linked on a second video, recorded long enough on a third, and recorded too briefly
         // on a fourth, so after the cleanup it counts two videos.
@@ -43,13 +45,13 @@ public sealed class LeftoverImportedTagApplicationsPostgresTests
         var alsoLinked = new Video { Title = "Also linked", VideoTags = [new VideoTag { Tag = scraped }] };
         var longEnough = new Video { Title = "Recorded long enough" };
         var tooBrief = new Video { Title = "Recorded too briefly" };
-        db.AddRange(scraped, imported, lookalike, fromExtension, fromUser, inContext, onImage, video, alsoLinked, longEnough, tooBrief);
-        await db.SaveChangesAsync(ct);
+        seed.AddRange(scraped, imported, lookalike, fromExtension, fromUser, inContext, onImage, video, alsoLinked, longEnough, tooBrief);
+        await seed.SaveChangesAsync(ct);
 
         var attempt = new ScrapeAttempt { ScraperId = "tests.fake-scraper/video", EntityType = "video", EntityId = video.Id, InputKind = "url", InputJson = "{}" };
         var otherVideosAttempt = new ScrapeAttempt { ScraperId = "tests.fake-scraper/video", EntityType = "video", EntityId = alsoLinked.Id, InputKind = "url", InputJson = "{}" };
-        db.ScrapeAttempts.AddRange(attempt, otherVideosAttempt);
-        await db.SaveChangesAsync(ct);
+        seed.ScrapeAttempts.AddRange(attempt, otherVideosAttempt);
+        await seed.SaveChangesAsync(ct);
 
         TagApplication Record(Tag tag, string sourceKey, string sourceRunId = "", int? hostId = null, double? durationSec = null)
             => new() { HostType = AffinityHostType.Video, HostId = hostId ?? video.Id, TagId = tag.Id, SourceKey = sourceKey, SourceRunId = sourceRunId, TotalDurationSec = durationSec };
@@ -75,10 +77,10 @@ public sealed class LeftoverImportedTagApplicationsPostgresTests
             new TagApplication { HostType = AffinityHostType.Video, HostId = video.Id, TagId = inContext.Id, ContextType = "performer", ContextId = 1, SourceKey = ScraperKey, SourceRunId = attempt.Id.ToString() },
             new TagApplication { HostType = AffinityHostType.Image, HostId = video.Id, TagId = onImage.Id, SourceKey = ScraperKey, SourceRunId = attempt.Id.ToString() },
         };
-        db.TagApplications.AddRange([.. leftovers, .. kept]);
-        await db.SaveChangesAsync(ct);
+        seed.TagApplications.AddRange([.. leftovers, .. kept]);
+        await seed.SaveChangesAsync(ct);
         var keptIds = kept.Select(application => application.Id).Order().ToList();
-        await db.Tags.Where(tag => tag.Id == scraped.Id || tag.Id == imported.Id)
+        await seed.Tags.Where(tag => tag.Id == scraped.Id || tag.Id == imported.Id)
             .ExecuteUpdateAsync(setters => setters.SetProperty(tag => tag.VideoCount, 99), ct);
 
         await db.Database.MigrateAsync(ct);

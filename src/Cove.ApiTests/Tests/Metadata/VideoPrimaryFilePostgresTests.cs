@@ -50,18 +50,19 @@ public sealed class VideoPrimaryFilePostgresTests
         var repairIndex = migrations.IndexOf(MigrationId<AssignMissingVideoPrimaryFiles>());
         Assert.True(repairIndex > 0);
         await db.GetService<IMigrator>().MigrateAsync(migrations[repairIndex - 1], ct);
+        await using var seed = new PreProductionDateCoveContext(CreateOptions(database));
 
-        var folder = await AddFolderAsync(db, ct);
+        var folder = await AddFolderAsync(seed, ct);
         var missing = new Video { Title = "missing", Files = [NewFile(folder, "missing-1.mp4"), NewFile(folder, "missing-2.mp4")] };
         var chosen = new Video { Title = "chosen", Files = [NewFile(folder, "chosen-1.mp4"), NewFile(folder, "chosen-2.mp4")] };
         var empty = new Video { Title = "empty" };
-        db.Videos.AddRange(missing, chosen, empty);
-        await db.SaveChangesAsync(ct);
+        seed.Videos.AddRange(missing, chosen, empty);
+        await seed.SaveChangesAsync(ct);
         var chosenPrimary = chosen.Files.Max(file => file.Id);
         // Recreate what an affected import left behind, and a primary someone picked by hand.
-        await db.Videos.Where(video => video.Id == missing.Id)
+        await seed.Videos.Where(video => video.Id == missing.Id)
             .ExecuteUpdateAsync(setters => setters.SetProperty(video => video.PrimaryFileId, (int?)null), ct);
-        await db.Videos.Where(video => video.Id == chosen.Id)
+        await seed.Videos.Where(video => video.Id == chosen.Id)
             .ExecuteUpdateAsync(setters => setters.SetProperty(video => video.PrimaryFileId, chosenPrimary), ct);
 
         await db.Database.MigrateAsync(ct);
@@ -73,9 +74,11 @@ public sealed class VideoPrimaryFilePostgresTests
         Assert.Null(primaries["empty"]);
     }
 
-    private static CoveContext CreateContext(PostgreSqlTestDatabase database) => new(new DbContextOptionsBuilder<CoveContext>()
+    private static CoveContext CreateContext(PostgreSqlTestDatabase database) => new(CreateOptions(database));
+
+    private static DbContextOptions<CoveContext> CreateOptions(PostgreSqlTestDatabase database) => new DbContextOptionsBuilder<CoveContext>()
         .UseNpgsql(database.ConnectionString, options => options.UseVector())
-        .Options);
+        .Options;
 
     private static async Task<Folder> AddFolderAsync(CoveContext db, CancellationToken ct)
     {
