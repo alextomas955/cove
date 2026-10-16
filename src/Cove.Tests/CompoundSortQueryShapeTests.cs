@@ -209,11 +209,14 @@ public class CompoundSortQueryShapeTests
         Assert.Contains("'/profile/name'", sortSql, StringComparison.Ordinal);
     }
 
-    // Single and compound video sorts order dates and titles the same way. Missing dates go last in either
-    // direction; titles keep the natural-collated order IX_videos_Title_natural serves, without a null flag.
+    // Single and compound video sorts order dates and titles the same way. Dates order by the key the
+    // undated-first expression indexes in the AddVideoProductionDate migration cover, so undated videos count
+    // as the oldest; titles keep the natural-collated order IX_videos_Title_natural serves, without a null flag.
     [Theory]
-    [InlineData("date", false, "CASE WHEN v.\"Date\" IS NULL THEN 1 ELSE 0 END, v.\"Date\"")]
-    [InlineData("date", true, "CASE WHEN v.\"Date\" IS NULL THEN 1 ELSE 0 END, v.\"Date\" DESC")]
+    [InlineData("date", false, "COALESCE(v.\"Date\", DATE '-infinity')")]
+    [InlineData("date", true, "COALESCE(v.\"Date\", DATE '-infinity') DESC")]
+    [InlineData("production_date", false, "COALESCE(v.\"ProductionDate\", DATE '-infinity')")]
+    [InlineData("production_date", true, "COALESCE(v.\"ProductionDate\", DATE '-infinity') DESC")]
     [InlineData("title", false, "v.\"Title\" COLLATE cove_natural")]
     [InlineData("title", true, "v.\"Title\" COLLATE cove_natural DESC")]
     public void VideoDateAndTitleSorts_OrderSingleAndCompoundSortsAlike(string key, bool descending, string expectedPrefix)
@@ -230,6 +233,23 @@ public class CompoundSortQueryShapeTests
 
         Assert.EndsWith("ORDER BY " + expectedPrefix + ", v.\"Id\"" + (descending ? " DESC" : ""), single, StringComparison.Ordinal);
         Assert.Contains("ORDER BY " + expectedPrefix + ", ", compound, StringComparison.Ordinal);
+    }
+
+    // Performer ages translate on PostgreSQL and count from the production date before the release date in
+    // the video-level filter, the related-performer filter, and the sort.
+    [Fact]
+    public void VideoPerformerAges_TranslateForPostgresFromProductionDateThenReleaseDate()
+    {
+        using var context = CreatePostgresContext();
+        var comparison = VideoPerformerAge.Comparison(new IntCriterion { Modifier = CriterionModifier.Between, Value = 18, Value2 = 25 })!;
+
+        var videoFilter = VideoPerformerAge.WhereAnyPerformer(context.Videos.IgnoreQueryFilters(), comparison).Select(video => video.Id).ToQueryString();
+        var linkFilter = VideoPerformerAge.WhereLinks(context.Set<VideoPerformer>().IgnoreQueryFilters(), comparison).Select(link => link.VideoId).ToQueryString();
+        var sort = new VideoRepository(context).ApplySorting(context.Videos.IgnoreQueryFilters(), "performer_age", desc: true).Select(video => video.Id).ToQueryString();
+
+        foreach (var sql in new[] { videoFilter, linkFilter, sort })
+            Assert.Matches(@"COALESCE\(\w+\.""ProductionDate"", \w+\.""Date""\)", sql);
+        Assert.Contains("max(", sort, StringComparison.OrdinalIgnoreCase);
     }
 
     private static CoveContext CreatePostgresContext()

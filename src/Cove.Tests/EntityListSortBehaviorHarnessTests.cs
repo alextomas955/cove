@@ -1143,8 +1143,8 @@ public class EntityListSortBehaviorHarnessTests
             "updated_at" => Order(fixture.Videos, video => video.UpdatedAt, descending),
             "created_at" => Order(fixture.Videos, video => video.CreatedAt, descending),
             "title" => Order(fixture.Videos, video => video.Title, descending),
-            "date" => Order(fixture.Videos, video => video.Date ?? (descending ? DateOnly.MinValue : DateOnly.MaxValue), descending),
-            "production_date" => Order(fixture.Videos, video => video.ProductionDate ?? (descending ? DateOnly.MinValue : DateOnly.MaxValue), descending),
+            "date" => Order(fixture.Videos, video => video.Date ?? DateOnly.MinValue, descending),
+            "production_date" => Order(fixture.Videos, video => video.ProductionDate ?? DateOnly.MinValue, descending),
             "rating" => Order(fixture.Videos, video => fixture.Rating(RatingHostType.Video, video.Id), descending),
             "play_count" => Order(fixture.Videos, video => fixture.Affinity(AffinityHostType.Video, video.Id).ViewCount, descending),
             "like_counter" => Order(fixture.Videos, video => fixture.Affinity(AffinityHostType.Video, video.Id).LikeCount, descending),
@@ -1519,8 +1519,8 @@ public class EntityListSortBehaviorHarnessTests
     private static int? PerformerAge(Video video, bool descending)
     {
         var ages = video.VideoPerformers
-            .Where(link => video.Date != null && link.Performer!.Birthdate != null)
-            .Select(link => AgeOnDate(link.Performer!.Birthdate!.Value, video.Date!.Value))
+            .Where(link => (video.ProductionDate ?? video.Date) != null && link.Performer!.Birthdate != null)
+            .Select(link => AgeOnDate(link.Performer!.Birthdate!.Value, (video.ProductionDate ?? video.Date)!.Value))
             .ToArray();
 
         if (ages.Length == 0)

@@ -28,11 +28,20 @@ namespace Cove.Data.Migrations
                 name: "IX_videos_ProductionDate",
                 table: "videos",
                 column: "ProductionDate");
+
+            // Date sorts treat undated videos as the oldest by ordering on COALESCE(date, '-infinity'), which
+            // the plain date indexes cannot serve; these serve the first page in both directions. The plain
+            // indexes stay for date filters.
+            migrationBuilder.Sql("CREATE INDEX \"IX_videos_Date_undated_first\" ON \"videos\" (COALESCE(\"Date\", '-infinity'::date), \"Id\");");
+            migrationBuilder.Sql("CREATE INDEX \"IX_videos_ProductionDate_undated_first\" ON \"videos\" (COALESCE(\"ProductionDate\", '-infinity'::date), \"Id\");");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_videos_ProductionDate_undated_first\";");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_videos_Date_undated_first\";");
+
             migrationBuilder.DropIndex(
                 name: "IX_videos_ProductionDate",
                 table: "videos");

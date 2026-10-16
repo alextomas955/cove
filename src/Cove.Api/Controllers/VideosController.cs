@@ -979,13 +979,9 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             "title" or "name" => desc
                 ? query.OrderByDescending(item => NaturalSort.Key(item.Title))
                 : query.OrderBy(item => NaturalSort.Key(item.Title)),
-            // Missing dates sort last in either direction, as in the video repository.
-            "date" => desc
-                ? query.OrderBy(item => item.Date == null ? 1 : 0).ThenByDescending(item => item.Date)
-                : query.OrderBy(item => item.Date == null ? 1 : 0).ThenBy(item => item.Date),
-            "production_date" => desc
-                ? query.OrderBy(item => item.ProductionDate == null ? 1 : 0).ThenByDescending(item => item.ProductionDate)
-                : query.OrderBy(item => item.ProductionDate == null ? 1 : 0).ThenBy(item => item.ProductionDate),
+            // Undated entries count as the oldest, as in the video repository.
+            "date" => query.OrderByDate(item => item.Date, desc),
+            "production_date" => query.OrderByDate(item => item.ProductionDate, desc),
             "rating" => desc
                 ? query.OrderBy(item => item.Rating <= 0 ? 1 : 0).ThenByDescending(item => item.Rating)
                 : query.OrderBy(item => item.Rating <= 0 ? 0 : 1).ThenBy(item => item.Rating),

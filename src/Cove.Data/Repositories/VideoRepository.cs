@@ -521,16 +521,8 @@ public class VideoRepository : IVideoRepository
             ["last_played_at"] = (compound, desc) => compound.AppendAffinityTimestamp(nameof(UserEntityAffinity.LastConsumedAt), desc),
             ["play_duration"] = (compound, desc) => compound.AppendAffinityDouble(nameof(UserEntityAffinity.TotalConsumedSec), desc),
             ["resume_time"] = (compound, desc) => compound.AppendAffinityDouble(nameof(UserEntityAffinity.LastPositionSec), desc),
-            ["date"] = (compound, desc) =>
-            {
-                compound.Append(video => video.Date == null ? 1 : 0, false);
-                compound.Append(video => video.Date, desc);
-            },
-            ["production_date"] = (compound, desc) =>
-            {
-                compound.Append(video => video.ProductionDate == null ? 1 : 0, false);
-                compound.Append(video => video.ProductionDate, desc);
-            },
+            ["date"] = (compound, desc) => compound.Append(UndatedOldestOrdering.Key<Video>(video => video.Date), desc),
+            ["production_date"] = (compound, desc) => compound.Append(UndatedOldestOrdering.Key<Video>(video => video.ProductionDate), desc),
             ["organized"] = (compound, desc) => compound.Append(video => video.Organized, desc),
             ["duration"] = (compound, desc) => compound.Append(video => video.MaxDuration, desc),
             ["file_size"] = (compound, desc) => compound.Append(video => video.MaxFileSize, desc),
@@ -612,13 +604,10 @@ public class VideoRepository : IVideoRepository
             // Title orders by the natural-collated column alone so IX_videos_Title_natural can serve the first
             // page; a missing-title flag in front of it would sort every match. Compound sorts order it the same way.
             "title" => desc ? query.OrderByDescending(s => NaturalSort.Key(s.Title)).ThenByDescending(s => s.Id) : query.OrderBy(s => NaturalSort.Key(s.Title)).ThenBy(s => s.Id),
-            // Missing dates sort last in either direction, as in compound sorts.
-            "date" => desc
-                ? query.OrderBy(s => s.Date == null ? 1 : 0).ThenByDescending(s => s.Date).ThenByDescending(s => s.Id)
-                : query.OrderBy(s => s.Date == null ? 1 : 0).ThenBy(s => s.Date).ThenBy(s => s.Id),
-            "production_date" => desc
-                ? query.OrderBy(s => s.ProductionDate == null ? 1 : 0).ThenByDescending(s => s.ProductionDate).ThenByDescending(s => s.Id)
-                : query.OrderBy(s => s.ProductionDate == null ? 1 : 0).ThenBy(s => s.ProductionDate).ThenBy(s => s.Id),
+            // Undated videos count as the oldest, as in compound sorts, so the undated-first date indexes serve
+            // the first page in both directions.
+            "date" => ApplyDateSort(query, s => s.Date, desc),
+            "production_date" => ApplyDateSort(query, s => s.ProductionDate, desc),
             "rating" => EngagementQueryHelpers.ApplyRatingSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), RatingHostType.Video, desc),
             "play_count" => EngagementQueryHelpers.ApplyAffinityIntSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Video, nameof(UserEntityAffinity.ViewCount), desc),
             "like_counter" => EngagementQueryHelpers.ApplyAffinityIntSort(_db, query, EngagementQueryHelpers.CurrentUserId(_db), AffinityHostType.Video, nameof(UserEntityAffinity.LikeCount), desc),
@@ -756,46 +745,24 @@ public class VideoRepository : IVideoRepository
             : sortQuery.OrderBy(item => item.Code == null ? 1 : 0).ThenBy(item => NaturalSort.Key(item.Code)).ThenBy(item => item.Video.Id).Select(item => item.Video);
     }
 
+    private static IQueryable<Video> ApplyDateSort(IQueryable<Video> query, Expression<Func<Video, DateOnly?>> date, bool desc)
+    {
+        var ordered = query.OrderByDate(date, desc);
+        return desc ? ordered.ThenByDescending(s => s.Id) : ordered.ThenBy(s => s.Id);
+    }
+
     private static IQueryable<Video> ApplyPerformerAgeSort(IQueryable<Video> query, bool desc)
     {
-        if (desc)
-        {
-            var descendingQuery = query.Select(video => new
-            {
-                Video = video,
-                PerformerAge = video.VideoPerformers
-                    .Where(sp => video.Date != null && sp.Performer!.Birthdate != null)
-                    .Select(sp => (int?)(
-                        video.Date!.Value.Year - sp.Performer!.Birthdate!.Value.Year
-                        - ((video.Date!.Value.Month < sp.Performer!.Birthdate!.Value.Month
-                            || (video.Date!.Value.Month == sp.Performer!.Birthdate!.Value.Month && video.Date!.Value.Day < sp.Performer!.Birthdate!.Value.Day)) ? 1 : 0)))
-                    .Max(),
-            });
-
-            return descendingQuery
-                .OrderBy(item => item.PerformerAge == null ? 1 : 0)
-                .ThenByDescending(item => item.PerformerAge)
-                .ThenByDescending(item => item.Video.Id)
-                .Select(item => item.Video);
-        }
-
-        var ascendingQuery = query.Select(video => new
-        {
-            Video = video,
-            PerformerAge = video.VideoPerformers
-                .Where(sp => video.Date != null && sp.Performer!.Birthdate != null)
-                .Select(sp => (int?)(
-                    video.Date!.Value.Year - sp.Performer!.Birthdate!.Value.Year
-                    - ((video.Date!.Value.Month < sp.Performer!.Birthdate!.Value.Month
-                        || (video.Date!.Value.Month == sp.Performer!.Birthdate!.Value.Month && video.Date!.Value.Day < sp.Performer!.Birthdate!.Value.Day)) ? 1 : 0)))
-                .Min(),
-        });
-
-        return ascendingQuery
-            .OrderBy(item => item.PerformerAge == null ? 1 : 0)
-            .ThenBy(item => item.PerformerAge)
-            .ThenBy(item => item.Video.Id)
-            .Select(item => item.Video);
+        // From oldest, each video's oldest performer decides; from youngest, its youngest. Videos without any
+        // performer age sort last in both directions.
+        var age = VideoPerformerAge.Extreme(oldest: desc);
+        var missingAge = Expression.Lambda<Func<Video, int>>(
+            Expression.Condition(Expression.Equal(age.Body, Expression.Constant(null, typeof(int?))), Expression.Constant(1), Expression.Constant(0)),
+            age.Parameters);
+        var ordered = query.OrderBy(missingAge);
+        return desc
+            ? ordered.ThenByDescending(age).ThenByDescending(s => s.Id)
+            : ordered.ThenBy(age).ThenBy(s => s.Id);
     }
 
     private static IQueryable<Video> ApplyPathCriterion(IQueryable<Video> query, StringCriterion? criterion)
@@ -953,43 +920,11 @@ public class VideoRepository : IVideoRepository
 
     private static IQueryable<Video> ApplyPerformerAgeCriterion(IQueryable<Video> query, IntCriterion? criterion)
     {
-        if (criterion == null) return query;
+        if (criterion?.Modifier is not (CriterionModifier.Equals or CriterionModifier.NotEquals or CriterionModifier.GreaterThan
+            or CriterionModifier.LessThan or CriterionModifier.Between))
+            return query;
 
-        var value = criterion.Value;
-        var value2 = criterion.Value2 ?? value;
-
-        return criterion.Modifier switch
-        {
-            CriterionModifier.Equals => query.Where(s => s.Date != null && s.VideoPerformers.Any(sp =>
-                sp.Performer!.Birthdate != null &&
-                (s.Date.Value.Year - sp.Performer.Birthdate.Value.Year
-                    - ((s.Date.Value.Month < sp.Performer.Birthdate.Value.Month
-                        || (s.Date.Value.Month == sp.Performer.Birthdate.Value.Month && s.Date.Value.Day < sp.Performer.Birthdate.Value.Day)) ? 1 : 0)) == value)),
-            CriterionModifier.NotEquals => query.Where(s => s.Date != null && s.VideoPerformers.Any(sp =>
-                sp.Performer!.Birthdate != null &&
-                (s.Date.Value.Year - sp.Performer.Birthdate.Value.Year
-                    - ((s.Date.Value.Month < sp.Performer.Birthdate.Value.Month
-                        || (s.Date.Value.Month == sp.Performer.Birthdate.Value.Month && s.Date.Value.Day < sp.Performer.Birthdate.Value.Day)) ? 1 : 0)) != value)),
-            CriterionModifier.GreaterThan => query.Where(s => s.Date != null && s.VideoPerformers.Any(sp =>
-                sp.Performer!.Birthdate != null &&
-                (s.Date.Value.Year - sp.Performer.Birthdate.Value.Year
-                    - ((s.Date.Value.Month < sp.Performer.Birthdate.Value.Month
-                        || (s.Date.Value.Month == sp.Performer.Birthdate.Value.Month && s.Date.Value.Day < sp.Performer.Birthdate.Value.Day)) ? 1 : 0)) > value)),
-            CriterionModifier.LessThan => query.Where(s => s.Date != null && s.VideoPerformers.Any(sp =>
-                sp.Performer!.Birthdate != null &&
-                (s.Date.Value.Year - sp.Performer.Birthdate.Value.Year
-                    - ((s.Date.Value.Month < sp.Performer.Birthdate.Value.Month
-                        || (s.Date.Value.Month == sp.Performer.Birthdate.Value.Month && s.Date.Value.Day < sp.Performer.Birthdate.Value.Day)) ? 1 : 0)) < value)),
-            CriterionModifier.Between => query.Where(s => s.Date != null && s.VideoPerformers.Any(sp =>
-                sp.Performer!.Birthdate != null &&
-                (s.Date.Value.Year - sp.Performer.Birthdate.Value.Year
-                    - ((s.Date.Value.Month < sp.Performer.Birthdate.Value.Month
-                        || (s.Date.Value.Month == sp.Performer.Birthdate.Value.Month && s.Date.Value.Day < sp.Performer.Birthdate.Value.Day)) ? 1 : 0)) >= value &&
-                (s.Date.Value.Year - sp.Performer.Birthdate.Value.Year
-                    - ((s.Date.Value.Month < sp.Performer.Birthdate.Value.Month
-                        || (s.Date.Value.Month == sp.Performer.Birthdate.Value.Month && s.Date.Value.Day < sp.Performer.Birthdate.Value.Day)) ? 1 : 0)) <= value2)),
-            _ => query,
-        };
+        return VideoPerformerAge.WhereAnyPerformer(query, VideoPerformerAge.Comparison(criterion)!);
     }
 
     private static string NormalizePathValue(string value) => value.Replace("\\", "/");

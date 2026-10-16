@@ -60,6 +60,7 @@ const video: Video = {
   code: "ABC-123",
   director: "Someone",
   date: "2024-03-05",
+  productionDate: "2023-05",
   organized: true,
   isVr: false,
   studioId: 7,
@@ -145,12 +146,22 @@ describe("videoListColumns", () => {
     "renders the %s column without throwing",
     (_id, column) => {
       expect(() => render(<div>{column.render(video, engagement, context)}</div>).unmount()).not.toThrow();
-      const emptyVideo = { ...video, title: undefined, files: [], tags: [], performers: [], groups: [], galleries: [] };
+      const emptyVideo = {
+        ...video,
+        title: undefined,
+        date: undefined,
+        productionDate: undefined,
+        files: [],
+        tags: [],
+        performers: [],
+        groups: [],
+        galleries: [],
+      };
       expect(() => render(<div>{column.render(emptyVideo, undefined, context)}</div>).unmount()).not.toThrow();
     },
   );
 
-  it("formats file-derived and engagement values", () => {
+  it("formats file-derived, date, and engagement values", () => {
     const cell = (id: string) => VIDEO_LIST_COLUMN_BY_ID.get(id as never)!.render(video, engagement, context);
     render(
       <div>
@@ -164,6 +175,8 @@ describe("videoListColumns", () => {
         <span data-testid="tags">{cell("tags")}</span>
         <span data-testid="rating">{cell("rating")}</span>
         <span data-testid="title">{cell("title")}</span>
+        <span data-testid="date">{cell("date")}</span>
+        <span data-testid="productionDate">{cell("productionDate")}</span>
       </div>,
     );
     expect(screen.getByTestId("duration")).toHaveTextContent("1:05:00");
@@ -176,6 +189,8 @@ describe("videoListColumns", () => {
     expect(screen.getByTestId("tags")).toHaveTextContent("+1");
     expect(screen.getByTestId("rating")).toHaveTextContent("80");
     expect(screen.getByTestId("title")).toHaveTextContent("Sample Video");
+    expect(screen.getByTestId("date")).toHaveTextContent("2024-03-05");
+    expect(screen.getByTestId("productionDate")).toHaveTextContent(/^2023-05$/);
   });
 
   it("falls back to the primary filename for untitled videos", () => {

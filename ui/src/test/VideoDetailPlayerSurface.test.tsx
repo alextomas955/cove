@@ -30,7 +30,7 @@ const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, cov
 const { videoSpritesMock, layoutMock } = vi.hoisted(() => ({
   videoSpritesMock: vi.fn((_videoId: number | null) => null as unknown),
   // Most tests only need the player row; timeline tests also render the scrubber below it.
-  layoutMock: { renderWholeMediaColumn: false },
+  layoutMock: { renderWholeMediaColumn: false, renderDetailsTab: false },
 }));
 
 vi.mock("../hooks/useVideoSprites", async (importOriginal) => ({
@@ -96,7 +96,7 @@ vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
         <div data-testid="video-detail-media" data-sizes-itself-on-mobile={String(Boolean(mediaSizesItselfOnMobile))}>
           {layoutMock.renderWholeMediaColumn ? mediaChildren : mediaChildren[0]}
         </div>
-        {activeTab === "edit" || activeTab === "file-info" ? children : null}
+        {activeTab === "edit" || activeTab === "file-info" || layoutMock.renderDetailsTab ? children : null}
       </>
     );
   };
@@ -147,6 +147,7 @@ vi.mock("../extensions/ExtensionLoader", () => ({
     resolveComponent: () => undefined,
     getFeature: () => undefined,
   }),
+  ExtensionComponentOverrideRenderer: ({ renderDefault }: { renderDefault: () => ReactNode }) => <>{renderDefault()}</>,
 }));
 
 vi.mock("../hooks/useBackNavigation", () => ({
@@ -165,7 +166,7 @@ vi.mock("../hooks/useEntityEngagement", () => ({
 }));
 
 vi.mock("../hooks/useEntityEngagementBatch", () => ({
-  useEntityEngagementBatch: () => ({ engagementById: {} }),
+  useEntityEngagementBatch: () => ({ engagementById: new Map() }),
 }));
 
 vi.mock("../components/VisualSimilarityPanel", () => ({
@@ -236,6 +237,7 @@ describe("VideoDetailPage media-player extension surface", () => {
     coverDialogMock.mockReset();
     videoSpritesMock.mockReset();
     layoutMock.renderWholeMediaColumn = false;
+    layoutMock.renderDetailsTab = false;
     videoSpritesMock.mockReturnValue(null);
     appConfigMock.config = { ui: {} };
   });
@@ -576,6 +578,33 @@ describe("VideoDetailPage media-player extension surface", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /^Production Date/ }), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockVideos.update).toHaveBeenLastCalledWith(15, { clearFields: ["productionDate"] }));
+  });
+
+  it.each([
+    ["the production date", "2018-06-01", "18 years old"],
+    ["the release date without a production date", undefined, "26 years old"],
+  ])("shows performer ages on %s", async (_case, productionDate, expectedAge) => {
+    layoutMock.renderDetailsTab = true;
+    mockVideos.get.mockResolvedValue({
+      id: 16,
+      title: "Dated video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      date: "2026-07-01",
+      productionDate,
+      files: [],
+      performers: [{ id: 3, name: "Dated Performer", birthdate: "2000-01-15", favorite: false, tags: [] }],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    });
+
+    renderVideoDetail(16);
+
+    expect(await screen.findByText(expectedAge)).toBeInTheDocument();
   });
 
   it("keeps unsaved edits and follows other changes when the video refetches", async () => {

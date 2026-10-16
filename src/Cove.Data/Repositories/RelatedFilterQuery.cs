@@ -246,36 +246,8 @@ public static class RelatedFilterQuery
 
     private static IQueryable<VideoPerformer> ApplyVideoPerformerAgeCriterion(IQueryable<VideoPerformer> links, IntCriterion criterion)
     {
-        var value = criterion.Value;
-        var value2 = criterion.Value2 ?? value;
-        return criterion.Modifier switch
-        {
-            CriterionModifier.Equals => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null
-                && link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) == value),
-            CriterionModifier.NotEquals => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null
-                && link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) != value),
-            CriterionModifier.GreaterThan => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null
-                && link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) > value),
-            CriterionModifier.LessThan => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null
-                && link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) < value),
-            CriterionModifier.Between => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null
-                && link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) >= value
-                && link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) <= value2),
-            CriterionModifier.NotBetween => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null
-                && (link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) < value
-                || link.Video.Date.Value.Year - link.Performer.Birthdate.Value.Year
-                - ((link.Video.Date.Value.Month < link.Performer.Birthdate.Value.Month || (link.Video.Date.Value.Month == link.Performer.Birthdate.Value.Month && link.Video.Date.Value.Day < link.Performer.Birthdate.Value.Day)) ? 1 : 0) > value2)),
-            CriterionModifier.IsNull => links.Where(link => link.Video!.Date == null || link.Performer!.Birthdate == null),
-            CriterionModifier.NotNull => links.Where(link => link.Video!.Date != null && link.Performer!.Birthdate != null),
-            _ => links.Where(_ => false),
-        };
+        var comparison = VideoPerformerAge.Comparison(criterion);
+        return comparison == null ? links.Where(_ => false) : VideoPerformerAge.WhereLinks(links, comparison);
     }
 
     private static IQueryable<VideoPerformer> ApplyVideoPerformerIdCriterion(

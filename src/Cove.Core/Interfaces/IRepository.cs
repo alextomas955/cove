@@ -274,7 +274,7 @@ public class RelatedFilterCriterion<TFilter> where TFilter : class
     public RelatedFilterConditionOperator ConditionOperator { get; set; } = RelatedFilterConditionOperator.And;
     /// <summary>Legacy negative mode retained for saved-filter compatibility. New filters use <see cref="Mode"/>.</summary>
     public bool Exclude { get; set; }
-    /// <summary>Optional age of the related performer on the host entity's date. Currently supported by video performer relationships.</summary>
+    /// <summary>Optional age of the related performer on the host entity's date: a video's production date, or its release date when it has none. Currently supported by video performer relationships.</summary>
     public IntCriterion? AgeAtHostDateCriterion { get; set; }
     /// <summary>Optional exact performer identities. Currently supported by video and audio performer relationships.</summary>
     public MultiIdCriterion? PerformerIdsCriterion { get; set; }

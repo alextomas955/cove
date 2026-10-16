@@ -424,6 +424,48 @@ public class VideoFilterBehaviorTests
         Assert.Equal(["after-birthday"], items.Select(video => video.Title ?? string.Empty).ToArray());
     }
 
+    // A performer's age on a video counts from its production date when it has one, else from its release
+    // date: the production date wins when both are set, and a video with only a production date still has an age.
+    [Theory]
+    [InlineData("performer age", new[] { "production-only", "released-young", "shot-young" })]
+    [InlineData("age then", new[] { "production-only", "released-young", "shot-young" })]
+    [InlineData("age then unknown", new[] { "undated" })]
+    public async Task PerformerAgeCriteria_UseProductionDateBeforeReleaseDate(string criterion, string[] expected)
+    {
+        await using var context = CreateContext();
+        var performer = CreatePerformer("Dated Performer", new DateOnly(2000, 6, 1));
+        Video Add(string title, DateOnly? releaseDate, DateOnly? productionDate)
+        {
+            var video = CreateVideoWithFile(title);
+            video.Date = releaseDate;
+            video.ProductionDate = productionDate;
+            video.VideoPerformers.Add(new VideoPerformer { Performer = performer });
+            context.Videos.Add(video);
+            return video;
+        }
+        Add("shot-young", new DateOnly(2024, 7, 1), new DateOnly(2017, 7, 1));
+        Add("released-young", new DateOnly(2017, 7, 1), null);
+        Add("shot-older", new DateOnly(2017, 7, 1), new DateOnly(2024, 7, 1));
+        Add("production-only", null, new DateOnly(2017, 7, 1));
+        Add("undated", null, null);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        RelatedFilterCriterion<PerformerFilter> Related(IntCriterion age) => new() { AgeAtHostDateCriterion = age };
+        var filter = criterion switch
+        {
+            "performer age" => new VideoFilter { PerformerAgeCriterion = new IntCriterion { Modifier = CriterionModifier.Equals, Value = 17 } },
+            "age then" => new VideoFilter { PerformerFilterCriterion = Related(new IntCriterion { Modifier = CriterionModifier.Between, Value = 17, Value2 = 17 }) },
+            _ => new VideoFilter { PerformerFilterCriterion = Related(new IntCriterion { Modifier = CriterionModifier.IsNull }) },
+        };
+
+        var (items, _) = await new VideoRepository(context).FindAsync(
+            filter,
+            new FindFilter { Page = 1, PerPage = 50, Sort = "title", Direction = SortDirection.Asc },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, items.Select(video => video.Title ?? string.Empty).ToArray());
+    }
+
     [Fact]
     public async Task FilterExpression_RepeatsCriteriaAndComposesNestedBooleanGroups()
     {
@@ -2437,6 +2479,8 @@ public class VideoFilterBehaviorTests
     [InlineData("title", true)]
     [InlineData("date", false)]
     [InlineData("date", true)]
+    [InlineData("production_date", false)]
+    [InlineData("production_date", true)]
     [InlineData("rating", false)]
     [InlineData("rating", true)]
     [InlineData("created_at", false)]

@@ -687,10 +687,10 @@ public class RepositorySortBehaviorTests
         Assert.Equal(expected, items.Select(video => video.Title).ToArray());
     }
 
-    // Missing dates go last in either direction. Missing titles follow the provider's null order, but a
-    // compound sort must place them where the single sort does.
+    // Undated videos count as the oldest: first from oldest, last from newest. Missing titles follow the
+    // provider's null order, but a compound sort must place them where the single sort does.
     [Theory]
-    [InlineData("date", Cove.Core.Enums.SortDirection.Asc, new[] { "older", "newer", "missing" })]
+    [InlineData("date", Cove.Core.Enums.SortDirection.Asc, new[] { "missing", "older", "newer" })]
     [InlineData("date", Cove.Core.Enums.SortDirection.Desc, new[] { "newer", "older", "missing" })]
     [InlineData("title", Cove.Core.Enums.SortDirection.Asc, null)]
     [InlineData("title", Cove.Core.Enums.SortDirection.Desc, null)]
@@ -722,9 +722,9 @@ public class RepositorySortBehaviorTests
     }
 
     [Theory]
-    [InlineData(Cove.Core.Enums.SortDirection.Asc, new[] { "shot first", "shot later", "missing" })]
+    [InlineData(Cove.Core.Enums.SortDirection.Asc, new[] { "missing", "shot first", "shot later" })]
     [InlineData(Cove.Core.Enums.SortDirection.Desc, new[] { "shot later", "shot first", "missing" })]
-    public async Task VideoRepository_ProductionDateSort_IgnoresReleaseDateAndPlacesMissingLast(
+    public async Task VideoRepository_ProductionDateSort_IgnoresReleaseDateAndTreatsMissingAsOldest(
         Cove.Core.Enums.SortDirection direction,
         string[] expected)
     {
@@ -750,10 +750,41 @@ public class RepositorySortBehaviorTests
         Assert.Equal(expected, compound.Select(video => video.Details).ToArray());
     }
 
+    // Performer ages count from a video's production date, else its release date; videos without an age go last.
     [Theory]
-    [InlineData(false, new[] { 2, 1, 3, 4 })]
+    [InlineData(Cove.Core.Enums.SortDirection.Asc, new[] { "shot at 10", "released at 15", "shot at 20", "undated" })]
+    [InlineData(Cove.Core.Enums.SortDirection.Desc, new[] { "shot at 20", "released at 15", "shot at 10", "undated" })]
+    public async Task VideoRepository_PerformerAgeSort_UsesProductionDateBeforeReleaseDate(
+        Cove.Core.Enums.SortDirection direction,
+        string[] expected)
+    {
+        await using var context = CreateContext();
+        var performer = new Performer { Name = "dated performer", Birthdate = new DateOnly(2000, 6, 1) };
+        void Add(string details, DateOnly? releaseDate, DateOnly? productionDate)
+        {
+            var video = new Video { Title = details, Date = releaseDate, ProductionDate = productionDate, Details = details };
+            video.VideoPerformers.Add(new VideoPerformer { Video = video, Performer = performer });
+            context.Videos.Add(video);
+        }
+        // Release dates alone would put "shot at 10" at 24 and leave "shot at 20" without an age.
+        Add("shot at 10", new DateOnly(2024, 7, 1), new DateOnly(2010, 7, 1));
+        Add("released at 15", new DateOnly(2015, 7, 1), null);
+        Add("shot at 20", null, new DateOnly(2020, 7, 1));
+        Add("undated", null, null);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (items, _) = await new VideoRepository(context).FindAsync(
+            filter: null,
+            new FindFilter { Page = 1, PerPage = 20, Sort = "performer_age", Direction = direction },
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, items.Select(video => video.Details).ToArray());
+    }
+
+    [Theory]
+    [InlineData(false, new[] { 3, 4, 2, 1 })]
     [InlineData(true, new[] { 1, 2, 4, 3 })]
-    public void VideoListWithCompilations_ProductionDateSort_PutsUndatedVideosAndCompilationsLast(bool descending, int[] expected)
+    public void VideoListWithCompilations_ProductionDateSort_TreatsUndatedVideosAndCompilationsAsOldest(bool descending, int[] expected)
     {
         var entries = new[]
         {
@@ -768,11 +799,11 @@ public class RepositorySortBehaviorTests
         Assert.Equal(expected, ordered.Select(entry => entry.Id).ToArray());
     }
 
-    // The Videos list with compilation groups orders its combined rows itself; missing dates go last there too.
+    // The Videos list with compilation groups orders its combined rows itself; undated rows count as the oldest there too.
     [Theory]
-    [InlineData(false, new[] { 2, 1, 3 })]
+    [InlineData(false, new[] { 3, 2, 1 })]
     [InlineData(true, new[] { 1, 2, 3 })]
-    public void VideoListWithCompilations_DateSort_PutsMissingDatesLast(bool descending, int[] expected)
+    public void VideoListWithCompilations_DateSort_TreatsMissingDatesAsOldest(bool descending, int[] expected)
     {
         var entries = new[]
         {
