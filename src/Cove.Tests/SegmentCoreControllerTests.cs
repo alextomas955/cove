@@ -7,6 +7,7 @@ using Cove.Core.Entities;
 using Cove.Core.Entities.Auth;
 using Cove.Core.Interfaces;
 using Cove.Data;
+using Cove.Data.Repositories;
 using Cove.Data.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Mvc;
@@ -858,6 +859,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -897,6 +899,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -943,6 +946,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -1017,6 +1021,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -1084,6 +1089,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -1143,6 +1149,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -1224,6 +1231,7 @@ public class SegmentCoreControllerTests
         using var serviceProvider = CreateSegmentControllerServiceProvider(scope.Connection);
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -1324,6 +1332,7 @@ public class SegmentCoreControllerTests
         using var serviceProvider = CreateSegmentControllerServiceProvider(scope.Connection);
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 
@@ -1406,6 +1415,7 @@ public class SegmentCoreControllerTests
 
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
         var exactRequest = new SegmentSpanSearchRequestDto(
@@ -1500,6 +1510,7 @@ public class SegmentCoreControllerTests
         using var serviceProvider = CreateSegmentControllerServiceProvider(scope.Connection);
         var controller = new SegmentsController(
             context,
+            new SegmentRepository(context),
             new SegmentSpanResolver(context, new CurrentPrincipalAccessor(), new MemoryCache(new MemoryCacheOptions())),
             new MemoryCache(new MemoryCacheOptions()));
 

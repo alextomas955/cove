@@ -3481,6 +3481,59 @@ export interface PerformerFilteredQueryRequest extends FilteredQueryRequest<Perf
 
 export type AudioFilteredQueryRequest = FilteredQueryRequest<AudioFilterCriteria>;
 
+/**
+ * The segment library's filter, as `POST /api/segments/find` takes it: every criterion of the Segments
+ * page plus the flat scoping fields of the GET list. Mirrors `Cove.Core.Interfaces.SegmentFilter`;
+ * extensions send the same object to `ISegmentRepository.FindAsync`.
+ */
+export interface SegmentFilterCriteria {
+  hostType?: SegmentHostType;
+  hostId?: number;
+  /** Exact source key; `sourceKeyCriterion` is the searchable form. */
+  sourceKey?: string;
+  refIds?: number[];
+  ids?: number[];
+  excludeIds?: number[];
+  videoIds?: number[];
+  excludeVideoIds?: number[];
+  tagIds?: number[];
+  tagDepth?: number;
+  videoTagIds?: number[];
+  videoTagDepth?: number;
+  performerIds?: number[];
+  sourceCategory?: "user" | "extensions";
+  tagged?: boolean;
+  minConfidence?: number;
+  minDurationSec?: number;
+  titleCriterion?: StringCriterion;
+  kindCriterion?: StringCriterion;
+  sourceKeyCriterion?: StringCriterion;
+  sourceRunIdCriterion?: StringCriterion;
+  colorHintCriterion?: StringCriterion;
+  videoTitleCriterion?: StringCriterion;
+  hasImageCriterion?: BoolCriterion;
+  hasPayloadCriterion?: BoolCriterion;
+  startSecCriterion?: IntCriterion;
+  endSecCriterion?: IntCriterion;
+  durationCriterion?: IntCriterion;
+  /** Against the stored 0..1 confidence. */
+  confidenceCriterion?: IntCriterion;
+  createdAtCriterion?: TimestampCriterion;
+  updatedAtCriterion?: TimestampCriterion;
+  tagsCriterion?: MultiIdCriterion;
+  videosCriterion?: MultiIdCriterion;
+  videoTagsCriterion?: MultiIdCriterion;
+  performersCriterion?: MultiIdCriterion;
+  facesCriterion?: MultiIdCriterion;
+}
+
+export type SegmentFilteredQueryRequest = FilteredQueryRequest<SegmentFilterCriteria>;
+
+export interface SegmentAggregate {
+  count: number;
+  duration: number;
+}
+
 export interface ImageAggregate {
   count: number;
   fileSize: number;

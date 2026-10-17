@@ -873,7 +873,36 @@ public record SegmentRecordDto(
     string? ColorHint,
     string CreatedAt,
     string UpdatedAt,
-    List<FieldProvenanceDto>? FieldProvenance = null);
+    List<FieldProvenanceDto>? FieldProvenance = null)
+{
+    /// <summary>
+    /// A segment library row as the API returns it. The segments endpoints and extensions that list
+    /// segments through <see cref="Interfaces.ISegmentRepository"/> map rows the same way.
+    /// </summary>
+    public static SegmentRecordDto FromLibraryItem(Interfaces.SegmentLibraryItem item, IReadOnlyList<FieldProvenanceDto>? fieldProvenance = null) => new(
+        item.Segment.Id,
+        item.Segment.HostType,
+        item.Segment.HostId,
+        item.VideoTitle,
+        item.Segment.StartSec,
+        item.Segment.EndSec,
+        item.Segment.TagId,
+        item.TagName,
+        item.Segment.Kind,
+        item.Segment.RefId,
+        item.RefLabel,
+        item.PerformerId,
+        item.PerformerName,
+        item.Segment.Payload != null ? item.Segment.Payload.RootElement.Clone() : (JsonElement?)null,
+        item.Segment.SourceKey,
+        item.Segment.SourceRunId,
+        item.Segment.Confidence,
+        item.Segment.Title,
+        item.Segment.ColorHint,
+        item.Segment.CreatedAt.ToString("o"),
+        item.Segment.UpdatedAt.ToString("o"),
+        fieldProvenance?.ToList());
+}
 
 public record SegmentCreateDto(
     double StartSec,

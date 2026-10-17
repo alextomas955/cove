@@ -58,6 +58,8 @@ public class EntityListSortFilterCatalogTests
     [InlineData("performers", typeof(PerformerFilter))]
     [InlineData("studios", typeof(StudioFilter))]
     [InlineData("tags", typeof(TagFilter))]
+    [InlineData("segments", typeof(SegmentFilter))]
+    [InlineData("faces", typeof(FaceFilter))]
     public void CoreFilterCriterionPropertiesHaveMatrixRows(string entity, Type filterType)
     {
         var matrixKeys = EntityListSortFilterCatalog.Filters
@@ -79,6 +81,7 @@ public class EntityListSortFilterCatalogTests
 
     private static bool IsCriterionProperty(Type type)
         => type == typeof(IntCriterion)
+           || type == typeof(DoubleCriterion)
            || type == typeof(StringCriterion)
            || type == typeof(BoolCriterion)
            || type == typeof(MultiIdCriterion)

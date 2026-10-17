@@ -83,6 +83,8 @@ public static class DataServiceExtensions
         services.AddScoped<IGalleryRepository, GalleryRepository>();
         services.AddScoped<IImageRepository, ImageRepository>();
         services.AddScoped<IGroupRepository, GroupRepository>();
+        services.AddScoped<IAudioRepository, AudioRepository>();
+        services.AddScoped<ITextDocumentRepository, TextDocumentRepository>();
         services.AddScoped<ISavedFilterRepository, SavedFilterRepository>();
         services.AddScoped<EmbeddingService>();
         services.AddSingleton<SegmentSpanCacheRegistry>();

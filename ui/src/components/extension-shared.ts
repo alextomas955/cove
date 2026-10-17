@@ -86,6 +86,51 @@ export type { DisplayMode, ListPageProps } from "./ListPage";
 // Cove's canonical multi-mode results renderer (grid / list / wall / feed / vertical) for a given entity type —
 // lets extensions render entity lists exactly like the native pages instead of reimplementing each layout.
 export { RelatedEntityListView, getRelatedEntityDisplayModes } from "./RelatedEntityListView";
+
+// ─── List & Card Building Blocks ─────────────────────────────────────────
+// The pieces Cove's own list pages are made of, so an extension page can look and behave like a
+// native one: the tile frame every card shares, the segment card, the responsive card grid that
+// follows ListPage's card-size slider, the overlay/toggle a card needs to be a link and selectable,
+// and the segment list's criteria, sort options and display helpers.
+export { EntityTileFrame, SegmentTile, CoverImage } from "./EntityCards";
+export { EntityCardGrid } from "./EntityCardGrid";
+export { VirtualizedEntityGrid } from "./VirtualizedEntityLayouts";
+export { CardSelectionToggle, RouteCardLinkOverlay } from "./RouteCardLinkOverlay";
+export { SegmentPreviewMedia } from "./SegmentPreviewMedia";
+export { useListPageCardSizeContext, useListPageCardMinWidthPx } from "./ListPageCardSizeContext";
+export {
+  clampEntityCardSizeLevel,
+  getEntityCardMaxLevel,
+  getEntityCardMinWidthPx,
+  useEntityCardSize,
+} from "../hooks/useEntityCardSize";
+export { RAW_SEGMENT_SORT_OPTIONS } from "./segmentSortOptions";
+export { SEGMENT_CRITERIA, createSegmentCriteria } from "../pages/segments/segmentCriteriaDefinitions";
+export {
+  Pill,
+  formatSegmentCardEyebrow,
+  formatSegmentDuration,
+  formatSegmentRange,
+  formatSegmentTime,
+} from "../pages/segments/segmentDisplayUtils";
+export { useSegmentListDensity } from "../pages/segments/segmentListDensity";
+export type { SegmentListDensity } from "../pages/segments/segmentListDensity";
+export { RawSegmentListHeader, RawSegmentListRow } from "../pages/segments/RawSegmentResults";
+export type { RawSegmentItem } from "../pages/segments/types";
+// The segment list request as the Segments page sends it: read the object filter the segment criteria
+// produce, then build the `POST /api/segments/find` body (or the SegmentFilter an extension hands to
+// ISegmentRepository.FindAsync) from it.
+export { createDefaultRawSegmentFilter, readRawSegmentListFilter } from "../pages/segments/rawSegmentFilter";
+export { buildSegmentFilteredQuery } from "../pages/segments/useRawSegmentsQuery";
+// Criterion modifiers travel as camelCase enum names; an extension posting a filter it built from the
+// dialog passes the body through this first, as every Cove list client does.
+export { normalizeCriterionPayload } from "../api/client";
+export {
+  readMultiIdCriterionDepth,
+  readMultiIdCriterionIds,
+  readVideoSelectionCriterion,
+} from "../pages/segments/segmentCriteriaDefinitions";
+export type { SegmentFilterCriteria, SegmentFilteredQueryRequest, SegmentAggregate } from "../api/types";
 export { FilterDialog } from "./FilterDialog";
 export { FilterButton } from "./FilterButton";
 export { AUDIO_CRITERIA, PERFORMER_CRITERIA, TAG_CRITERIA, VIDEO_CRITERIA } from "./filterCriteriaCatalogs";
@@ -113,6 +158,7 @@ export { Pager } from "./Pager";
 // modes where the CONTENT is expected to own infinite loading (grid/wall/feed/vertical), so an extension that
 // renders its own results layout needs this for infinite page size to work at all.
 export { InfiniteScrollSentinel } from "./InfiniteScrollSentinel";
+export { usePaginatedInfiniteQuery } from "../hooks/usePaginatedInfiniteQuery";
 export { VIDEO_SORT_OPTIONS } from "./videoSortOptions";
 export { AUDIO_SORT_OPTIONS } from "./audioSortOptions";
 export { TAG_SORT_OPTIONS } from "./tagSortOptions";

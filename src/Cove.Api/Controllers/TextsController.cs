@@ -18,16 +18,13 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.TextsRead)]
-public class TextsController(CoveContext db, CustomFieldService customFields, TextExtractionService textExtractionService, IScanService scanService, IThumbnailService thumbnailService, IBlobService blobService, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, IUserEngagementService? engagementService = null, BulkDeletionJobService? bulkDeletionJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, ITagProvenanceService? tagProvenanceService = null) : ControllerBase
+public class TextsController(CoveContext db, CustomFieldService customFields, TextExtractionService textExtractionService, IScanService scanService, IThumbnailService thumbnailService, IBlobService blobService, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, IUserEngagementService? engagementService = null, BulkDeletionJobService? bulkDeletionJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, ITagProvenanceService? tagProvenanceService = null, ITextDocumentRepository? textRepository = null) : ControllerBase
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
-    private static readonly HashSet<string> AffinityMultiSortKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "read_count", "like_counter", "read_duration", "last_read_at",
-    };
 
     private bool CanReadFiles => principalAccessor?.Current?.Has(Permissions.FilesRead) == true;
     private IUserEngagementService EngagementService => engagementService ?? new Cove.Data.Services.UserEngagementService(db, principalAccessor ?? new CurrentPrincipalAccessor());
+    private ITextDocumentRepository Texts => textRepository ?? new TextDocumentRepository(db);
 
     [HttpGet("{id:int}/history")]
     [RequiresEntityAccess(EntityKinds.Text, Permissions.TextsRead)]
@@ -97,41 +94,19 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         [FromQuery] string? sorts = null,
         CancellationToken ct = default)
     {
-        using var relativeDates = RelativeDateEvaluation.Begin();
         page = Math.Max(1, page);
         perPage = Math.Clamp(perPage, 1, 250);
-        var sortClauses = SortClause.Parse(sorts);
-        var primarySort = sortClauses.FirstOrDefault();
-        sort = primarySort?.Key ?? sort;
-        var descending = primarySort?.Direction == Cove.Core.Enums.SortDirection.Desc
-            || (primarySort is null && string.Equals(direction, "desc", StringComparison.OrdinalIgnoreCase));
-
-        var query = db.TextDocuments.AsNoTracking().AsQueryable();
-
-        var textBase = query;
-        var textQuery = FullTextSearchHelpers.Apply(db, textBase, q,
-            text => text.Title,
-            text => text.Code,
-            text => text.Details,
-            text => text.FileSearchText,
-            text => text.SearchText);
-        query = FullTextSearchHelpers.ApplyRelationalMatches(textQuery, textBase, q,
-            tagSelectors: [text => text.TextTags.Where(tt => tt.Tag != null).Select(tt => tt.Tag!)],
-            performerSelectors: [text => text.TextPerformers.Where(tp => tp.Performer != null).Select(tp => tp.Performer!)]);
-        query = FullTextSearchHelpers.ApplyFilePathMatch(query, textBase, q, text => text.Files);
-
-        query = ApplySort(query, sort, descending, seed, sortClauses);
-        if (FullTextSearchHelpers.ShouldOrderByRelevance(db, q, sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(db, query, q, text => text.Title);
-
-        var totalCount = await query.CountAsync(ct);
-        var pagedIds = await query
-            .Skip((page - 1) * perPage)
-            .Take(perPage)
-            .Select(text => text.Id)
-            .ToListAsync(ct);
-
-        var items = await LoadListItemsAsync(pagedIds, ct);
+        var findFilter = new FindFilter
+        {
+            Q = q,
+            Page = page,
+            PerPage = perPage,
+            Sort = sort,
+            Direction = string.Equals(direction, "desc", StringComparison.OrdinalIgnoreCase) ? Cove.Core.Enums.SortDirection.Desc : Cove.Core.Enums.SortDirection.Asc,
+            Sorts = SortClause.Parse(sorts),
+            Seed = seed,
+        };
+        var (items, totalCount) = await Texts.FindAsync(null, findFilter, ct);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
@@ -142,122 +117,32 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
     [HttpPost("find")]
     public async Task<ActionResult<PaginatedResponse<TextDocumentDto>>> FindPost([FromBody] FilteredQueryRequest<TextDocumentFilter> req, CancellationToken ct)
     {
-        using var relativeDates = RelativeDateEvaluation.Begin();
+        if (!FilterExpressionQuery.TryValidate(req.FilterExpression, out var expressionError))
+            return BadRequest(new { message = expressionError });
         var findFilter = req.FindFilter ?? new FindFilter();
-        var page = Math.Max(1, findFilter.Page);
-        var perPage = Math.Clamp(findFilter.PerPage, 1, 250);
-        var sortClauses = CreateMultiSortRegistry().Normalize(findFilter.Sorts);
-        var primarySort = sortClauses.FirstOrDefault();
-        var sort = primarySort?.Key ?? findFilter.Sort;
-        var descending = primarySort?.Direction == Cove.Core.Enums.SortDirection.Desc
-            || (primarySort is null && findFilter.Direction == Cove.Core.Enums.SortDirection.Desc);
-        ExpandedHierarchyCriterion? expandedTags = null;
-        if (HierarchicalCriterionExpander.RequiresExpansion(req.ObjectFilter?.TagsCriterion))
-        {
-            expandedTags = await HierarchicalCriterionExpander.ExpandTagsAsync(db, req.ObjectFilter!.TagsCriterion!, ct);
-            req.ObjectFilter.TagsCriterion = expandedTags.Criterion;
-        }
-        ExpandedHierarchyCriterion? expandedStudios = null;
-        if (HierarchicalCriterionExpander.RequiresExpansion(req.ObjectFilter?.StudiosCriterion))
-        {
-            expandedStudios = await HierarchicalCriterionExpander.ExpandStudiosAsync(db, req.ObjectFilter!.StudiosCriterion!, ct);
-            req.ObjectFilter.StudiosCriterion = expandedStudios.Criterion;
-        }
-        ExpandedHierarchyCriterion? expandedPerformerTags = null;
-        if (HierarchicalCriterionExpander.RequiresExpansion(req.ObjectFilter?.PerformerTagsCriterion))
-        {
-            expandedPerformerTags = await HierarchicalCriterionExpander.ExpandTagsAsync(db, req.ObjectFilter!.PerformerTagsCriterion!, ct);
-            req.ObjectFilter.PerformerTagsCriterion = expandedPerformerTags.Criterion;
-        }
-
-        var query = db.TextDocuments.AsNoTracking().AsQueryable();
-
-        var textBase = query;
-        var textQuery = FullTextSearchHelpers.Apply(db, textBase, findFilter.Q,
-            text => text.Title,
-            text => text.Code,
-            text => text.Details,
-            text => text.FileSearchText,
-            text => text.SearchText);
-        query = FullTextSearchHelpers.ApplyRelationalMatches(textQuery, textBase, findFilter.Q,
-            tagSelectors: [text => text.TextTags.Where(tt => tt.Tag != null).Select(tt => tt.Tag!)],
-            performerSelectors: [text => text.TextPerformers.Where(tp => tp.Performer != null).Select(tp => tp.Performer!)]);
-        query = FullTextSearchHelpers.ApplyFilePathMatch(query, textBase, findFilter.Q, text => text.Files);
-
-        query = ApplyFilter(query, req.ObjectFilter, expandedTags?.ValueGroups, expandedTags?.RequiredIdGroups, expandedStudios?.ValueGroups, expandedStudios?.RequiredIdGroups, expandedPerformerTags?.ValueGroups);
-        query = await RelatedFilterQuery.ApplyToTextsAsync(db, query, req.ObjectFilter?.PerformerFilterCriterion, ct);
-        query = ApplySort(query, sort, descending, findFilter.Seed, sortClauses);
-        if (FullTextSearchHelpers.ShouldOrderByRelevance(db, findFilter.Q, sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(db, query, findFilter.Q, text => text.Title);
-
-        var totalCount = await query.CountAsync(ct);
-        var pagedIds = await query
-            .Skip((page - 1) * perPage)
-            .Take(perPage)
-            .Select(text => text.Id)
-            .ToListAsync(ct);
-
-        var items = await LoadListItemsAsync(pagedIds, ct);
+        findFilter.Page = Math.Max(1, findFilter.Page);
+        findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, 250);
+        var (items, totalCount) = await Texts.FindAsync(req.ObjectFilter, findFilter, ct, req.FilterExpression);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var dtos = items.Select(text => MapToDto(text, favorites, null, null, effectiveTags)).ToList();
-        return Ok(new PaginatedResponse<TextDocumentDto>(dtos, totalCount, page, perPage));
+        return Ok(new PaginatedResponse<TextDocumentDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
     [HttpPost("aggregate")]
     public async Task<ActionResult<TextAggregate>> Aggregate([FromBody] FilteredQueryRequest<TextDocumentFilter> req, CancellationToken ct)
     {
-        using var relativeDates = RelativeDateEvaluation.Begin();
-        var findFilter = req.FindFilter ?? new FindFilter();
-        ExpandedHierarchyCriterion? expandedTags = null;
-        if (HierarchicalCriterionExpander.RequiresExpansion(req.ObjectFilter?.TagsCriterion))
-        {
-            expandedTags = await HierarchicalCriterionExpander.ExpandTagsAsync(db, req.ObjectFilter!.TagsCriterion!, ct);
-            req.ObjectFilter.TagsCriterion = expandedTags.Criterion;
-        }
-        ExpandedHierarchyCriterion? expandedStudios = null;
-        if (HierarchicalCriterionExpander.RequiresExpansion(req.ObjectFilter?.StudiosCriterion))
-        {
-            expandedStudios = await HierarchicalCriterionExpander.ExpandStudiosAsync(db, req.ObjectFilter!.StudiosCriterion!, ct);
-            req.ObjectFilter.StudiosCriterion = expandedStudios.Criterion;
-        }
-        ExpandedHierarchyCriterion? expandedPerformerTags = null;
-        if (HierarchicalCriterionExpander.RequiresExpansion(req.ObjectFilter?.PerformerTagsCriterion))
-        {
-            expandedPerformerTags = await HierarchicalCriterionExpander.ExpandTagsAsync(db, req.ObjectFilter!.PerformerTagsCriterion!, ct);
-            req.ObjectFilter.PerformerTagsCriterion = expandedPerformerTags.Criterion;
-        }
-
-        var textBase = db.TextDocuments.AsNoTracking().AsQueryable();
-        var textQuery = FullTextSearchHelpers.Apply(db, textBase, findFilter.Q,
-            text => text.Title, text => text.Code, text => text.Details,
-            text => text.FileSearchText, text => text.SearchText);
-        var query = FullTextSearchHelpers.ApplyRelationalMatches(textQuery, textBase, findFilter.Q,
-            tagSelectors: [text => text.TextTags.Where(link => link.Tag != null).Select(link => link.Tag!)],
-            performerSelectors: [text => text.TextPerformers.Where(link => link.Performer != null).Select(link => link.Performer!)]);
-        query = FullTextSearchHelpers.ApplyFilePathMatch(query, textBase, findFilter.Q, text => text.Files);
-        query = ApplyFilter(query, req.ObjectFilter, expandedTags?.ValueGroups, expandedTags?.RequiredIdGroups, expandedStudios?.ValueGroups, expandedStudios?.RequiredIdGroups, expandedPerformerTags?.ValueGroups);
-        query = await RelatedFilterQuery.ApplyToTextsAsync(db, query, req.ObjectFilter?.PerformerFilterCriterion, ct);
-        if (req.Ids is { Count: > 0 }) query = query.Where(text => req.Ids.Contains(text.Id));
-
-        return Ok(await query.GroupBy(_ => 1)
-            .Select(group => new TextAggregate(group.Count(), group.Sum(text => text.MaxFileSize)))
-            .SingleOrDefaultAsync(ct)
-            ?? new TextAggregate(0, 0));
+        if (!FilterExpressionQuery.TryValidate(req.FilterExpression, out var expressionError))
+            return BadRequest(new { message = expressionError });
+        return Ok(await Texts.AggregateAsync(req.ObjectFilter, req.FindFilter, req.Ids, ct, req.FilterExpression));
     }
 
     [HttpGet("{id:int}")]
     [AllowShareLinkAccess]
     public async Task<ActionResult<TextDocumentDto>> GetById(int id, CancellationToken ct)
     {
-        var text = await db.TextDocuments.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.TextTags).ThenInclude(link => link.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Include(item => item.TextPerformers).ThenInclude(link => link.Performer)
-            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        var text = await Texts.GetByIdWithRelationsAsync(id, ct);
         if (text == null)
         {
             return NotFound();
@@ -385,13 +270,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
             return BadRequest(new { error = "A valid file path is required." });
 
         var textDocumentId = await scanService.ImportDownloadedTextAsync(filePath, textDocumentId: null, ct);
-        var text = await db.TextDocuments.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.TextTags).ThenInclude(link => link.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Include(item => item.TextPerformers).ThenInclude(link => link.Performer)
-            .FirstOrDefaultAsync(item => item.Id == textDocumentId, ct);
+        var text = await Texts.GetByIdWithRelationsAsync(textDocumentId, ct);
         if (text == null) return NotFound();
 
         return CreatedAtAction(nameof(GetById), new { id = textDocumentId }, await MapToDetailDtoAsync(text, ct));
@@ -492,13 +371,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
             await db.SaveChangesAsync(ct);
         }
 
-        var updated = await db.TextDocuments.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Files)
-            .Include(item => item.Urls)
-            .Include(item => item.TextTags).ThenInclude(link => link.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Include(item => item.TextPerformers).ThenInclude(link => link.Performer)
-            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        var updated = await Texts.GetByIdWithRelationsAsync(id, ct);
         if (updated == null)
         {
             return NotFound();
@@ -662,171 +535,6 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         }
     }
 
-    private async Task<List<TextDocument>> LoadListItemsAsync(IReadOnlyList<int> pagedIds, CancellationToken ct)
-    {
-        if (pagedIds.Count == 0)
-            return [];
-
-        var items = await db.TextDocuments.AsNoTracking()
-            .Include(text => text.Studio)
-            .Include(text => text.Urls)
-            .Include(text => text.Files)
-            .Include(text => text.TextTags).ThenInclude(link => link.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Include(text => text.TextPerformers).ThenInclude(link => link.Performer)
-            .Where(text => pagedIds.Contains(text.Id))
-            .AsSplitQuery()
-            .ToListAsync(ct);
-
-        var orderMap = pagedIds.Select((id, index) => (id, index)).ToDictionary(item => item.id, item => item.index);
-        return items.OrderBy(text => orderMap.GetValueOrDefault(text.Id, int.MaxValue)).ToList();
-    }
-
-    private IQueryable<TextDocument> ApplySort(
-        IQueryable<TextDocument> query,
-        string? sort,
-        bool descending,
-        int? seed = null,
-        IEnumerable<SortClause>? sorts = null)
-    {
-        var multiSortRegistry = CreateMultiSortRegistry();
-        var clauses = multiSortRegistry.Normalize(sorts);
-        if (clauses.Count > 1)
-            return ApplyMultiSort(query, clauses, multiSortRegistry);
-
-        if (FilterHelpers.TryParseCustomFieldSort(sort, out _, out _))
-            return query.ApplyCustomFieldSort(db, CustomFieldEntityTypes.Text, sort, descending);
-
-        return (sort ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "random" => Cove.Data.Repositories.SeededRandomOrdering.OrderBy(query, seed, text => text.Id, descending),
-            "title" => descending ? query.OrderByDescending(text => NaturalSort.Key(text.Title)).ThenByDescending(text => text.Id) : query.OrderBy(text => NaturalSort.Key(text.Title)).ThenBy(text => text.Id),
-            "date" => descending ? query.OrderByDescending(text => text.Date).ThenByDescending(text => text.Id) : query.OrderBy(text => text.Date).ThenBy(text => text.Id),
-            "words" => descending ? query.OrderByDescending(text => text.MaxWordCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxWordCount).ThenBy(text => text.Id),
-            "pages" => descending ? query.OrderByDescending(text => text.MaxPageCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxPageCount).ThenBy(text => text.Id),
-            "rating" => EngagementQueryHelpers.ApplyRatingSort(db, query, EngagementQueryHelpers.CurrentUserId(db), RatingHostType.Text, descending),
-            "play_count" or "read_count" => EngagementQueryHelpers.ApplyAffinityIntSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.ViewCount), descending),
-            "like_counter" => EngagementQueryHelpers.ApplyAffinityIntSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.LikeCount), descending),
-            "play_duration" or "read_duration" => EngagementQueryHelpers.ApplyAffinityDoubleSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.TotalConsumedSec), descending),
-            "last_read_at" or "last_played_at" => EngagementQueryHelpers.ApplyAffinityTimestampSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.LastConsumedAt), descending),
-            "file_size" => descending ? query.OrderByDescending(text => text.MaxFileSize).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxFileSize).ThenBy(text => text.Id),
-            "file_mod_time" => descending ? query.OrderByDescending(text => text.MaxFileModTime).ThenByDescending(text => text.Id) : query.OrderBy(text => text.MaxFileModTime).ThenBy(text => text.Id),
-            "file_count" => descending ? query.OrderByDescending(text => text.FileCount).ThenByDescending(text => text.Id) : query.OrderBy(text => text.FileCount).ThenBy(text => text.Id),
-            "path" => descending ? query.OrderByDescending(text => NaturalSort.Key(text.MaxPath)).ThenByDescending(text => text.Id) : query.OrderBy(text => NaturalSort.Key(text.MinPath)).ThenBy(text => text.Id),
-            "tag_count" => descending ? query.OrderByDescending(text => text.TextTags.Count).ThenByDescending(text => text.Id) : query.OrderBy(text => text.TextTags.Count).ThenBy(text => text.Id),
-            "performer_count" => descending ? query.OrderByDescending(text => text.TextPerformers.Count).ThenByDescending(text => text.Id) : query.OrderBy(text => text.TextPerformers.Count).ThenBy(text => text.Id),
-            "updatedat" or "updated_at" => descending ? query.OrderByDescending(text => text.UpdatedAt).ThenByDescending(text => text.Id) : query.OrderBy(text => text.UpdatedAt).ThenBy(text => text.Id),
-            "createdat" => descending ? query.OrderByDescending(text => text.CreatedAt).ThenByDescending(text => text.Id) : query.OrderBy(text => text.CreatedAt).ThenBy(text => text.Id),
-            "created_at" => descending ? query.OrderByDescending(text => text.CreatedAt).ThenByDescending(text => text.Id) : query.OrderBy(text => text.CreatedAt).ThenBy(text => text.Id),
-            _ => descending ? query.OrderByDescending(text => text.UpdatedAt).ThenByDescending(text => text.Id) : query.OrderBy(text => text.UpdatedAt).ThenBy(text => text.Id),
-        };
-    }
-
-    private static CompoundSortRegistry<TextDocument> CreateMultiSortRegistry()
-        => new(new Dictionary<string, Action<CompoundSortQuery<TextDocument>, bool>>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["title"] = (compound, desc) =>
-            {
-                compound.Append(text => text.Title == null ? 1 : 0, false);
-                compound.Append(text => text.Title, desc);
-            },
-            ["rating"] = (compound, desc) => compound.AppendRating(desc),
-            ["read_count"] = (compound, desc) => compound.AppendAffinityInt(nameof(UserEntityAffinity.ViewCount), desc),
-            ["like_counter"] = (compound, desc) => compound.AppendAffinityInt(nameof(UserEntityAffinity.LikeCount), desc),
-            ["read_duration"] = (compound, desc) => compound.AppendAffinityDouble(nameof(UserEntityAffinity.TotalConsumedSec), desc),
-            ["last_read_at"] = (compound, desc) => compound.AppendAffinityTimestamp(nameof(UserEntityAffinity.LastConsumedAt), desc),
-            ["date"] = (compound, desc) =>
-            {
-                compound.Append(text => text.Date == null ? 1 : 0, false);
-                compound.Append(text => text.Date, desc);
-            },
-            ["words"] = (compound, desc) => compound.Append(text => text.MaxWordCount, desc),
-            ["pages"] = (compound, desc) => compound.Append(text => text.MaxPageCount, desc),
-            ["file_size"] = (compound, desc) => compound.Append(text => text.MaxFileSize, desc),
-            ["file_mod_time"] = (compound, desc) =>
-            {
-                compound.Append(text => text.MaxFileModTime == null ? 1 : 0, false);
-                compound.Append(text => text.MaxFileModTime, desc);
-            },
-            ["file_count"] = (compound, desc) => compound.Append(text => text.FileCount, desc),
-            ["path"] = (compound, desc) => compound.Append(text => desc ? text.MaxPath : text.MinPath, desc),
-            ["tag_count"] = (compound, desc) => compound.Append(text => text.TextTags.Count, desc),
-            ["performer_count"] = (compound, desc) => compound.Append(text => text.TextPerformers.Count, desc),
-            ["createdAt"] = (compound, desc) => compound.Append(text => text.CreatedAt, desc),
-            ["created_at"] = (compound, desc) => compound.Append(text => text.CreatedAt, desc),
-            ["updatedAt"] = (compound, desc) => compound.Append(text => text.UpdatedAt, desc),
-            ["updated_at"] = (compound, desc) => compound.Append(text => text.UpdatedAt, desc),
-        });
-
-    private IQueryable<TextDocument> ApplyMultiSort(IQueryable<TextDocument> query, IReadOnlyList<SortClause> clauses, CompoundSortRegistry<TextDocument> registry)
-    {
-        var userId = EngagementQueryHelpers.CurrentUserId(db);
-        var compound = CompoundSortQuery<TextDocument>.Create(
-            db, query, userId, AffinityHostType.Text, RatingHostType.Text,
-            includeAffinity: clauses.Any(clause => AffinityMultiSortKeys.Contains(clause.Key)),
-            includeRating: clauses.Any(clause => clause.Key.Equals("rating", StringComparison.OrdinalIgnoreCase)));
-        registry.Apply(compound, clauses);
-
-        return compound.Finish(text => text.Id, clauses[0].Direction == Cove.Core.Enums.SortDirection.Desc);
-    }
-
-    private IQueryable<TextDocument> ApplyFilter(IQueryable<TextDocument> query, TextDocumentFilter? filter, IReadOnlyList<int[]>? hierarchicalTagGroups = null, IReadOnlyList<int[]>? requiredTagGroups = null, IReadOnlyList<int[]>? hierarchicalStudioGroups = null, IReadOnlyList<int[]>? requiredStudioGroups = null, IReadOnlyList<int[]>? performerTagGroups = null)
-    {
-        if (filter == null)
-            return query;
-
-        query = EngagementQueryHelpers.ApplyRatingCriterion(db, query, EngagementQueryHelpers.CurrentUserId(db), RatingHostType.Text, filter.RatingCriterion);
-        query = EngagementQueryHelpers.ApplyFavoriteCriterion(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, filter.FavoriteCriterion);
-        query = EngagementQueryHelpers.ApplyAffinityIntCriterion(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.ViewCount), filter.PlayCountCriterion);
-        query = EngagementQueryHelpers.ApplyAffinityIntCriterion(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.LikeCount), filter.LikeCounterCriterion);
-        query = EngagementQueryHelpers.ApplyAffinityDoubleAsIntCriterion(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.TotalConsumedSec), filter.PlayDurationCriterion);
-        query = EngagementQueryHelpers.ApplyAffinityTimestampCriterion(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Text, nameof(UserEntityAffinity.LastConsumedAt), filter.LastReadAtCriterion);
-        query = FilterHelpers.ApplyString(query, filter.TitleCriterion, text => text.Title);
-        query = FilterHelpers.ApplyString(query, filter.CodeCriterion, text => text.Code);
-        query = FilterHelpers.ApplyString(query, filter.DetailsCriterion, text => text.Details);
-        query = FilterHelpers.ApplyString(query, filter.ContentCriterion, text => text.SearchText);
-        query = FilterHelpers.ApplyFilePath(query, filter.PathCriterion, text => text.Files);
-        query = ApplyTextFileStringCriterion(query, filter.FormatCriterion);
-        query = FilterHelpers.ApplyStringCollection(query, filter.UrlCriterion, text => text.Urls.Select(url => url.Url));
-        query = FilterHelpers.ApplyBool(query, filter.OrganizedCriterion, text => text.Organized);
-        query = FilterHelpers.ApplyBool(query, filter.HasCoverCriterion, text => text.ImageBlobId != null && text.ImageBlobId != string.Empty);
-        query = FilterHelpers.ApplyDate(query, filter.DateCriterion, text => text.Date);
-        query = FilterHelpers.ApplyInt(query, filter.WordCountCriterion, text => text.MaxWordCount ?? 0);
-        query = FilterHelpers.ApplyInt(query, filter.PageCountCriterion, text => text.MaxPageCount ?? 0);
-        query = FilterHelpers.ApplyLong(query, filter.FileSizeCriterion, text => text.MaxFileSize);
-        query = FilterHelpers.ApplyNullableTimestamp(query, filter.FileModTimeCriterion, text => text.MaxFileModTime);
-        query = FilterHelpers.ApplyInt(query, filter.FileCountCriterion, text => text.FileCount);
-        query = FilterHelpers.ApplyInt(query, filter.TagCountCriterion, text => text.TextTags.Count);
-        query = FilterHelpers.ApplyInt(query, filter.PerformerCountCriterion, text => text.TextPerformers.Count);
-        query = FilterHelpers.ApplyMultiId(query, filter.TagsCriterion, text => text.TextTags.Select(link => link.TagId), hierarchicalTagGroups, requiredTagGroups);
-        query = FilterHelpers.ApplyMultiId(query, filter.PerformersCriterion, text => text.TextPerformers.Select(link => link.PerformerId));
-        query = PerformerOccurrenceTagQuery.Apply(db, query, AffinityHostType.Text, filter.PerformerTagsCriterion, GetIncludedPerformerIds(filter), performerTagGroups);
-        query = FilterHelpers.ApplyStudioCriterion(query, filter.StudiosCriterion, text => text.StudioId, hierarchicalStudioGroups, requiredStudioGroups);
-        query = FilterHelpers.ApplyMultiId(query, filter.GroupsCriterion, text => db.GroupItems
-            .Where(item => item.HostType == "text" && item.HostId == text.Id && item.Kind == GroupItemKind.Text)
-            .Select(item => item.GroupId));
-        query = FilterHelpers.ApplyTimestamp(query, filter.CreatedAtCriterion, text => text.CreatedAt);
-        query = FilterHelpers.ApplyTimestamp(query, filter.UpdatedAtCriterion, text => text.UpdatedAt);
-        query = query.ApplyCustomFieldCriteria(db, CustomFieldEntityTypes.Text, filter.CustomFieldCriterion, filter.CustomFieldCriteria);
-
-        return query;
-    }
-
-    private static IQueryable<TextDocument> ApplyTextFileStringCriterion(IQueryable<TextDocument> query, StringCriterion? criterion)
-        => FilterHelpers.ApplyStringCollection(query, criterion, text => text.Files.Select(file => file.Format));
-
-    private static int[] GetIncludedPerformerIds(TextDocumentFilter filter)
-    {
-        var ids = new HashSet<int>();
-        if (filter.PerformersCriterion?.Value is { Count: > 0 }
-            && filter.PerformersCriterion.Modifier is CriterionModifier.Includes or CriterionModifier.IncludesAll)
-            ids.UnionWith(filter.PerformersCriterion.Value.Where(id => id > 0));
-
-        if (filter.PerformersCriterion?.RequiredIds is { Count: > 0 })
-            ids.UnionWith(filter.PerformersCriterion.RequiredIds.Where(id => id > 0));
-
-        return ids.ToArray();
-    }
-
     private async Task<TextDocumentDto> MapToDetailDtoAsync(TextDocument text, CancellationToken ct)
     {
         var groups = await GetGroupsAsync(text.Id, ct);
@@ -913,13 +621,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
     }
 
     private async Task<TextDocument?> GetTextForDtoAsync(int id, CancellationToken ct)
-        => await db.TextDocuments.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.TextTags).ThenInclude(link => link.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Include(item => item.TextPerformers).ThenInclude(link => link.Performer)
-            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        => await Texts.GetByIdWithRelationsAsync(id, ct);
 
     private async Task<List<GroupSummaryDto>> GetGroupsAsync(int textDocumentId, CancellationToken ct)
         => await db.GroupItems.AsNoTracking()

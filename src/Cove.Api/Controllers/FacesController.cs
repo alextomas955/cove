@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Data;
-using System.Linq.Expressions;
 using System.Text.Json;
 using Cove.Api.Services;
 using Cove.Core.Auth;
@@ -38,13 +37,17 @@ public class FacesController(
     BulkDeletionJobService? bulkDeletionJobService = null,
     BulkEntityDeletionService? bulkEntityDeletionService = null,
     IThumbnailService? thumbnailService = null,
-    IStreamService? streamService = null) : ControllerBase
+    IStreamService? streamService = null,
+    IFaceRepository? faceRepository = null) : ControllerBase
 {
     private const int TopSuggestionCandidateCount = 3;
     // Hosts a batch link stages before saving and clearing the change tracker. Each staged host also holds an advisory
     // lock during the save, and PostgreSQL's lock table is shared server-wide and sized in the thousands by default.
     private const int BatchLinkSaveHostBudget = 2500;
     private bool CanReadFiles => principalAccessor?.Current?.Has(Permissions.FilesRead) == true;
+    // Tests and older call sites construct the controller without a repository, so fall back to the
+    // same implementation DI would hand us for this request's context.
+    private readonly IFaceRepository _faceRepository = faceRepository ?? new FaceRepository(db);
 
     // Extensions live in isolated DI containers since the extensions-runtime redesign and surface
     // their face contributions through the cross-extension service exchange. The host-injected
@@ -218,151 +221,62 @@ public class FacesController(
         if (pathCriterion is not null && !CanReadFiles)
             return Forbid();
 
+        var filter = new FaceFilter
+        {
+            PerformerId = performerId,
+            PerformersCriterion = BuildIncludesCriterion(ParseIntList(performerIds)),
+            LinkedCriterion = BuildBoolCriterion(linked),
+            IgnoredCriterion = BuildBoolCriterion(ignored),
+            MergedIntoFaceId = mergedIntoFaceId,
+            LabelCriterion = BuildStringCriterion(label, labelModifier),
+            PrimarySourceKeyCriterion = BuildStringCriterion(primarySourceKey, primarySourceKeyModifier),
+            PathCriterion = pathCriterion,
+            HasCoverCriterion = BuildBoolCriterion(hasCover),
+            DetectionCountCriterion = BuildIntCriterion(detectionCount, detectionCount2, detectionCountModifier),
+            AppearanceCountCriterion = BuildIntCriterion(appearanceCount, appearanceCount2, appearanceCountModifier),
+            FrameSampleCountCriterion = BuildIntCriterion(frameSampleCount, frameSampleCount2, frameSampleCountModifier),
+            VideoCountCriterion = BuildIntCriterion(videoCount, videoCount2, videoCountModifier),
+            ImageCountCriterion = BuildIntCriterion(imageCount, imageCount2, imageCountModifier),
+            MinSuggestionConfidence = minSuggestionConfidence,
+            SuggestionConfidenceCriterion = BuildConfidenceCriterion(suggestionConfidence, suggestionConfidence2, suggestionConfidenceModifier),
+            TopSuggestionPerformersCriterion = BuildIncludesCriterion(ParseIntList(topSuggestionPerformerIds)),
+            CustomFieldCriteria = ParseCustomFieldCriteria(customFieldCriteria),
+        };
+        var findFilter = new FindFilter
+        {
+            Q = q,
+            Sort = sort,
+            Direction = direction,
+            Seed = seed,
+            Page = page,
+            PerPage = perPage,
+        };
+
+        return Ok(await FindFacePageAsync(filter, findFilter, cancellationToken));
+    }
+
+    /// <summary>POST-based filtered query supporting advanced criteria (JSON body).</summary>
+    [HttpPost("find")]
+    public async Task<ActionResult<PaginatedResponse<FaceDto>>> FindPost([FromBody] FilteredQueryRequest<FaceFilter> req, CancellationToken cancellationToken)
+    {
+        var filter = req.ObjectFilter ?? new FaceFilter();
+        if (filter.PathCriterion is not null && !CanReadFiles)
+            return Forbid();
+
+        var findFilter = req.FindFilter ?? new FindFilter();
+        findFilter.Page = Math.Max(findFilter.Page, 1);
+        // PerPage <= 0 is a count-only request; otherwise the page is capped like the GET list.
+        if (findFilter.PerPage > 0)
+            findFilter.PerPage = Math.Min(findFilter.PerPage, 250);
+
+        return Ok(await FindFacePageAsync(filter, findFilter, cancellationToken));
+    }
+
+    private async Task<PaginatedResponse<FaceDto>> FindFacePageAsync(FaceFilter filter, FindFilter findFilter, CancellationToken cancellationToken)
+    {
         var totalSw = Stopwatch.StartNew();
-        var phaseSw = new Stopwatch();
-
-        var baseQuery = db.Faces
-            .AsNoTracking()
-            .Include(face => face.Performer)
-            .AsQueryable();
-
-        var query = FullTextSearchHelpers.Apply(db, baseQuery, q,
-            face => face.Label,
-            face => face.PrimarySourceKey,
-            face => face.SearchText,
-            face => face.Performer != null ? face.Performer.Name : null);
-
-        // Postgres full-text matches only the face's own SearchVector, which does not include a *linked*
-        // performer's name — so a search by performer name wouldn't surface that performer's faces (and
-        // the merge dialog, which searches faces the same way, couldn't find a face by who it's linked
-        // to). Union linked performer name/alias matches, mirroring how video search includes performers.
-        var faceSearchTerm = q?.Trim();
-        if (!string.IsNullOrWhiteSpace(faceSearchTerm))
-        {
-            var performerTerm = faceSearchTerm.ToLowerInvariant();
-            query = query.Concat(baseQuery.Where(face => face.Performer != null && (
-                    face.Performer.Name.ToLower().Contains(performerTerm)
-                    || face.Performer.Aliases.Any(alias => alias.Alias.ToLower().Contains(performerTerm)))))
-                .Distinct();
-        }
-
-        if (performerId.HasValue)
-            query = query.Where(face => face.PerformerId == performerId.Value);
-
-        var parsedPerformerIds = ParseIntList(performerIds);
-        if (parsedPerformerIds.Count > 0)
-            query = query.Where(face => face.PerformerId.HasValue && parsedPerformerIds.Contains(face.PerformerId.Value));
-
-        if (linked.HasValue)
-            query = linked.Value
-                ? query.Where(face => face.PerformerId != null)
-                : query.Where(face => face.PerformerId == null);
-
-        if (ignored.HasValue)
-            query = query.Where(face => face.Ignored == ignored.Value);
-
-        // A merged face is absorbed into its surviving target, so it must never surface in the faces list
-        // — regardless of the merged / mergedIntoFaceId params. Otherwise a cluster appears twice (the
-        // merged "loser" plus its target) and per-performer counts/numbering look wrong. The tombstone row
-        // is retained only for AI re-scan redirect and un-merge; it is intentionally invisible to the list.
-        query = query.Where(face => face.MergedIntoFaceId == null);
-
-        query = FilterHelpers.ApplyString(query, BuildStringCriterion(label, labelModifier), face => face.Label);
-        query = FilterHelpers.ApplyString(query, BuildStringCriterion(primarySourceKey, primarySourceKeyModifier), face => face.PrimarySourceKey);
-        query = ApplyAppearancePathCriterion(query, pathCriterion);
-        query = FilterHelpers.ApplyInt(query, BuildIntCriterion(detectionCount, detectionCount2, detectionCountModifier), face => face.DetectionCount);
-        query = FilterHelpers.ApplyInt(query, BuildIntCriterion(appearanceCount, appearanceCount2, appearanceCountModifier), face => face.AppearanceCount);
-        query = FilterHelpers.ApplyInt(query, BuildIntCriterion(frameSampleCount, frameSampleCount2, frameSampleCountModifier), face => face.FrameSampleCount);
-        query = FilterHelpers.ApplyInt(query, BuildIntCriterion(videoCount, videoCount2, videoCountModifier), face => face.VideoCount);
-        query = FilterHelpers.ApplyInt(query, BuildIntCriterion(imageCount, imageCount2, imageCountModifier), face => face.ImageCount);
-        query = query.ApplyCustomFieldCriteria(db, CustomFieldEntityTypes.Face, null, ParseCustomFieldCriteria(customFieldCriteria));
-
-        if (hasCover.HasValue)
-            query = hasCover.Value
-                ? query.Where(face => face.CoverBlobId != null && face.CoverBlobId != "")
-                : query.Where(face => face.CoverBlobId == null || face.CoverBlobId == "");
-
-        var sortedQuery = FullTextSearchHelpers.ShouldOrderByRelevance(db, q, sort)
-            ? FullTextSearchHelpers.OrderByRelevance(db, query, q)
-            : ApplyFaceSort(db, query, sort, direction == SortDirection.Desc, seed);
-
-        var parsedTopSuggestionPerformerIds = ParseIntList(topSuggestionPerformerIds);
-        var hasTopSuggestionFilter = minSuggestionConfidence.HasValue || suggestionConfidence.HasValue || parsedTopSuggestionPerformerIds.Count > 0;
-        if (hasTopSuggestionFilter)
-        {
-            // Suggestion confidence and suggested-performer are filtered and sorted directly on the
-            // materialized Face.TopSuggestion* columns, so this stays an indexed, paginated SQL query
-            // no matter how many unlinked faces exist. (This branch previously loaded every matching
-            // face and computed suggestions for all of them on the request thread — the O(N) cost.)
-            phaseSw.Restart();
-            var min = minSuggestionConfidence.HasValue ? NormalizeConfidenceThreshold(minSuggestionConfidence.Value) : (float?)null;
-            var val = suggestionConfidence.HasValue ? NormalizeConfidenceThreshold(suggestionConfidence.Value) : (float?)null;
-            var val2 = suggestionConfidence2.HasValue ? NormalizeConfidenceThreshold(suggestionConfidence2.Value) : (float?)null;
-            var modifier = NormalizeCriterionModifier(suggestionConfidenceModifier)
-                ?? (minSuggestionConfidence.HasValue ? "GREATER_THAN" : null);
-
-            // Only unlinked faces carry a materialized suggestion.
-            var suggestionQuery = query.Where(face => face.PerformerId == null && face.TopSuggestionPerformerId != null);
-
-            // The materialized columns hold the *global* top suggestion, so a face whose cached top this
-            // user has already decided on (rejected/accepted) no longer shows that performer — see
-            // ResolveDecidedTopSuggestionsAsync. Filtering and sorting those faces on the stored value
-            // would contradict the suggestion the row actually renders, so keep them out of this branch.
-            if (principalAccessor?.Current?.UserId is int decisionUserId)
-                suggestionQuery = suggestionQuery.Where(face => !db.FaceSuggestionDecisions.Any(decision =>
-                    decision.FaceId == face.Id
-                    && decision.UserId == decisionUserId
-                    && decision.PerformerId == face.TopSuggestionPerformerId));
-
-            if (parsedTopSuggestionPerformerIds.Count > 0)
-                suggestionQuery = suggestionQuery.Where(face => face.TopSuggestionLocalPerformerId != null && parsedTopSuggestionPerformerIds.Contains(face.TopSuggestionLocalPerformerId.Value));
-
-            if (min.HasValue)
-                suggestionQuery = suggestionQuery.Where(face => face.TopSuggestionConfidence >= min.Value);
-
-            suggestionQuery = ApplyStoredConfidenceCriterion(suggestionQuery, modifier, val, val2);
-
-            var sortedFiltered = IsSuggestionConfidenceSort(sort)
-                ? suggestionQuery
-                    .OrderByDescending(face => face.TopSuggestionConfidence ?? -1f)
-                    .ThenByDescending(face => face.UpdatedAt)
-                    .ThenBy(face => face.Id)
-                : ApplyFaceSort(db, suggestionQuery, sort, direction == SortDirection.Desc, seed);
-
-            var totalFilteredCount = await sortedFiltered.CountAsync(cancellationToken);
-            var filteredPage = await sortedFiltered
-                .Skip((page - 1) * perPage)
-                .Take(perPage)
-                .ToListAsync(cancellationToken);
-            logger.LogDebug("Faces.List (filtered) DB query: {Ms}ms (page={Count}, total={TotalMs}ms)", phaseSw.ElapsedMilliseconds, filteredPage.Count, totalSw.ElapsedMilliseconds);
-            var filteredComputedCounts = await LoadComputedCountsAsync(filteredPage.Select(face => face.Id).ToArray(), cancellationToken);
-            var filteredOrdinals = await LoadPerformerFaceOrdinalsAsync(filteredPage, cancellationToken);
-            var filteredCoverFallbacks = await LoadFaceCoverFallbackUrlsAsync(filteredPage, cancellationToken);
-            var filteredDecided = await ResolveDecidedTopSuggestionsAsync(filteredPage, cancellationToken);
-
-            return Ok(new PaginatedResponse<FaceDto>(
-                filteredPage.Select(face => MapToDto(
-                    face,
-                    filteredComputedCounts.TryGetValue(face.Id, out var counts) ? counts : null,
-                    ResolveTopSuggestion(face, filteredDecided),
-                    performerFaceOrdinal: filteredOrdinals.TryGetValue(face.Id, out var ord) ? ord : null,
-                    coverFallbackUrl: filteredCoverFallbacks.GetValueOrDefault(face.Id))).ToList(),
-                totalFilteredCount,
-                page,
-                perPage));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        phaseSw.Restart();
-        // sortedQuery already orders by the stored TopSuggestionConfidence when sort=suggestion_confidence
-        // (see ApplyFaceSort), so the page is paginated in SQL and the top suggestion is read straight
-        // off the materialized columns — no per-request suggestion compute.
-        var items = await sortedQuery
-            .Skip((page - 1) * perPage)
-            .Take(perPage)
-            .ToListAsync(cancellationToken);
-        logger.LogDebug("Faces.List DB page query: {Ms}ms (items={Count})", phaseSw.ElapsedMilliseconds, items.Count);
+        var (items, totalCount) = await _faceRepository.FindAsync(filter, findFilter, cancellationToken);
+        logger.LogDebug("Faces.List DB query: {Ms}ms (items={Count}, total={Total})", totalSw.ElapsedMilliseconds, items.Count, totalCount);
 
         var computedCounts = await LoadComputedCountsAsync(items.Select(face => face.Id).ToArray(), cancellationToken);
         var ordinals = await LoadPerformerFaceOrdinalsAsync(items, cancellationToken);
@@ -370,7 +284,7 @@ public class FacesController(
         var decided = await ResolveDecidedTopSuggestionsAsync(items, cancellationToken);
         logger.LogDebug("Faces.List total: {Ms}ms", totalSw.ElapsedMilliseconds);
 
-        return Ok(new PaginatedResponse<FaceDto>(
+        return new PaginatedResponse<FaceDto>(
             items.Select(face => MapToDto(
                 face,
                 computedCounts.TryGetValue(face.Id, out var counts) ? counts : null,
@@ -378,8 +292,8 @@ public class FacesController(
                 performerFaceOrdinal: ordinals.TryGetValue(face.Id, out var ord) ? ord : null,
                 coverFallbackUrl: coverFallbacks.GetValueOrDefault(face.Id))).ToList(),
             totalCount,
-            page,
-            perPage));
+            findFilter.Page,
+            findFilter.PerPage);
     }
 
     private static List<int> ParseIntList(string? value)
@@ -449,38 +363,19 @@ public class FacesController(
             : new StringCriterion { Value = value.Trim(), Modifier = parsedModifier };
     }
 
-    // A face has no file of its own, so a path criterion matches the files of the videos and images the face
-    // appears in. Negated modifiers exclude a face seen in *any* matching file: "not under D:\Videos\Jane"
-    // means "never appears in Jane's folder", not "also appears somewhere else".
-    private IQueryable<Face> ApplyAppearancePathCriterion(IQueryable<Face> query, StringCriterion? criterion)
-    {
-        if (criterion is null)
-            return query;
+    private static BoolCriterion? BuildBoolCriterion(bool? value)
+        => value.HasValue ? new BoolCriterion { Value = value.Value } : null;
 
-        var positiveModifier = criterion.Modifier switch
-        {
-            CriterionModifier.NotEquals => CriterionModifier.Equals,
-            CriterionModifier.Excludes => CriterionModifier.Includes,
-            CriterionModifier.NotMatchesRegex => CriterionModifier.MatchesRegex,
-            CriterionModifier.NotUnderPath => CriterionModifier.UnderPath,
-            var modifier => modifier,
-        };
-        var negated = positiveModifier != criterion.Modifier;
-        var matching = new StringCriterion { Value = criterion.Value, Modifier = positiveModifier };
+    private static MultiIdCriterion? BuildIncludesCriterion(List<int> ids)
+        => ids.Count > 0 ? new MultiIdCriterion { Value = ids, Modifier = CriterionModifier.Includes } : null;
 
-        var videoIds = FilterHelpers.ApplyFilePath(db.Videos.AsNoTracking(), matching, video => video.Files).Select(video => video.Id);
-        var imageIds = FilterHelpers.ApplyFilePath(db.Images.AsNoTracking(), matching, image => image.Files).Select(image => image.Id);
-        var matchingFaceIds = db.FaceAppearances
-            .AsNoTracking()
-            .Where(appearance =>
-                (appearance.HostType == FaceAppearanceHostType.Video && videoIds.Contains(appearance.HostId))
-                || (appearance.HostType == FaceAppearanceHostType.Image && imageIds.Contains(appearance.HostId)))
-            .Select(appearance => appearance.FaceId);
-
-        return negated
-            ? query.Where(face => !matchingFaceIds.Contains(face.Id))
-            : query.Where(face => matchingFaceIds.Contains(face.Id));
-    }
+    // The confidence params are percents (or a 0..1 fraction from older clients, which the repository
+    // normalizes). A modifier without a value has nothing to compare against and is ignored, as the
+    // list always did; without a modifier the value is a lower bound.
+    private static DoubleCriterion? BuildConfidenceCriterion(float? value, float? value2, string? modifier)
+        => value.HasValue
+            ? new DoubleCriterion { Value = value.Value, Value2 = value2, Modifier = ParseCriterionModifier(modifier) ?? CriterionModifier.GreaterThan }
+            : null;
 
     private static IntCriterion? BuildIntCriterion(int? value, int? value2, string? modifier)
     {
@@ -1496,7 +1391,7 @@ public class FacesController(
             similarFaceQuery = linked.Value
                 ? similarFaceQuery.Where(face => face.PerformerId != null)
                 : similarFaceQuery.Where(face => face.PerformerId == null);
-        similarFaceQuery = ApplyAppearancePathCriterion(similarFaceQuery, pathCriterion);
+        similarFaceQuery = FaceQueryHelpers.ApplyAppearancePathCriterion(db, similarFaceQuery, pathCriterion);
 
         var faces = await similarFaceQuery.ToDictionaryAsync(face => face.Id, cancellationToken);
 
@@ -1601,62 +1496,6 @@ public class FacesController(
             return resolved.Length == 0 ? null : resolved.Max();
         }
     }
-
-    private static IQueryable<Face> ApplyFaceSort(CoveContext db, IQueryable<Face> query, string? sort, bool descending, int? seed = null)
-    {
-        var rawSort = (sort ?? string.Empty).Trim();
-        if (FilterHelpers.TryParseCustomFieldSort(rawSort, out _, out _))
-            return query.ApplyCustomFieldSort(db, CustomFieldEntityTypes.Face, rawSort, descending);
-
-        var normalized = rawSort.ToLowerInvariant();
-
-        // Back-compat: older clients baked the direction into the sort key (e.g. "video_count_desc",
-        // "label_asc"). Strip the trailing direction suffix and let it drive the descending flag so the
-        // single-key sorts + the shared asc/desc toggle behave the same as every other list in the app.
-        if (normalized.EndsWith("_asc", StringComparison.Ordinal))
-        {
-            normalized = normalized[..^"_asc".Length];
-            descending = false;
-        }
-        else if (normalized.EndsWith("_desc", StringComparison.Ordinal))
-        {
-            normalized = normalized[..^"_desc".Length];
-            descending = true;
-        }
-
-        return normalized switch
-        {
-            "label" => OrderFacesBy(query, face => NaturalSort.Key(face.Label ?? (face.Performer != null ? face.Performer.Name : string.Empty)), descending),
-            "performer_name" => descending
-                ? query.OrderByDescending(face => NaturalSort.Key(face.Performer != null ? face.Performer.Name : string.Empty)).ThenByDescending(face => NaturalSort.Key(face.Label)).ThenByDescending(face => face.Id)
-                : query.OrderBy(face => NaturalSort.Key(face.Performer != null ? face.Performer.Name : string.Empty)).ThenBy(face => NaturalSort.Key(face.Label)).ThenBy(face => face.Id),
-            "primary_source_key" => OrderFacesBy(query, face => face.PrimarySourceKey ?? string.Empty, descending),
-            "ignored" => OrderFacesBy(query, face => face.Ignored, descending),
-            "merged" => OrderFacesBy(query, face => face.MergedIntoFaceId != null, descending),
-            "cover_present" => OrderFacesBy(query, face => face.CoverBlobId != null && face.CoverBlobId != string.Empty, descending),
-            "detection_count" => OrderFacesBy(query, face => face.DetectionCount, descending),
-            "appearance_count" => OrderFacesBy(query, face => face.AppearanceCount, descending),
-            "frame_sample_count" => OrderFacesBy(query, face => face.FrameSampleCount, descending),
-            "video_count" => OrderFacesBy(query, face => face.VideoCount, descending),
-            "image_count" => OrderFacesBy(query, face => face.ImageCount, descending),
-            "random" => SeededRandomOrdering.OrderBy(query, seed, face => face.Id, descending),
-            "created" or "created_at" => OrderFacesBy(query, face => face.CreatedAt, descending),
-            "updated" or "updated_at" => OrderFacesBy(query, face => face.UpdatedAt, descending),
-            // Composite "best ordering" sort used as the default surface; intentionally direction-agnostic.
-            "appearance" => query.OrderBy(face => face.MergedIntoFaceId != null).ThenByDescending(face => face.AppearanceCount).ThenByDescending(face => face.FrameSampleCount).ThenBy(face => face.Label).ThenBy(face => face.Id),
-            // Suggestion review ordering: unlinked faces with the strongest suggestions first; direction-agnostic.
-            "suggestion_confidence" => query.OrderBy(face => face.PerformerId != null).ThenByDescending(face => face.TopSuggestionConfidence ?? -1f).ThenByDescending(face => face.UpdatedAt).ThenBy(face => face.Id),
-            _ => query.OrderBy(face => face.MergedIntoFaceId != null).ThenByDescending(face => face.AppearanceCount).ThenByDescending(face => face.FrameSampleCount).ThenBy(face => face.Label).ThenBy(face => face.Id),
-        };
-    }
-
-    private static IQueryable<Face> OrderFacesBy<TKey>(IQueryable<Face> query, Expression<Func<Face, TKey>> keySelector, bool descending)
-        => descending
-            ? query.OrderByDescending(keySelector).ThenByDescending(face => face.Id)
-            : query.OrderBy(keySelector).ThenBy(face => face.Id);
-
-    private static bool IsSuggestionConfidenceSort(string? sort)
-        => string.Equals(sort?.Trim(), "suggestion_confidence", StringComparison.OrdinalIgnoreCase);
 
     private async Task<List<FaceAppearanceDto>> LoadFaceAppearanceItemsAsync(int faceId, CancellationToken cancellationToken)
     {
@@ -1987,9 +1826,6 @@ public class FacesController(
     private static int? ResolveLocalPerformerId(FaceSuggestionDto suggestion)
         => suggestion.LocalPerformerId ?? (suggestion.PerformerId > 0 ? suggestion.PerformerId : null);
 
-    private static float NormalizeConfidenceThreshold(float confidence)
-        => confidence <= 1f ? confidence * 100f : confidence;
-
     // Reads the materialized top suggestion straight off the Face row. Linked faces never surface a
     // suggestion; an unmaterialized face (no stored top yet) returns null until the background
     // materializer computes it.
@@ -2065,52 +1901,6 @@ public class FacesController(
         => decidedOverrides.TryGetValue(face.Id, out var replacement)
             ? replacement
             : MapStoredTopSuggestion(face);
-
-    // Translates the suggestion-confidence criterion onto the stored Face.TopSuggestionConfidence column
-    // so filtering happens in SQL. Mirrors MatchesConfidenceCriterion's modifier semantics. Values are
-    // already normalized to the 0..100 scale by the caller.
-    private static IQueryable<Face> ApplyStoredConfidenceCriterion(IQueryable<Face> query, string? modifier, float? value, float? value2)
-    {
-        if (modifier is null && !value.HasValue)
-            return query;
-
-        switch (modifier)
-        {
-            case "IS_NULL":
-                // A materialized suggestion is required upstream, so "is null" matches nothing.
-                return query.Where(face => face.TopSuggestionPerformerId == null);
-            case "NOT_NULL":
-                return query;
-            case "NOT_EQUALS":
-                return value.HasValue
-                    ? query.Where(face => face.TopSuggestionConfidence < value.Value - 0.0001f || face.TopSuggestionConfidence > value.Value + 0.0001f)
-                    : query;
-            case "LESS_THAN":
-                return value.HasValue ? query.Where(face => face.TopSuggestionConfidence < value.Value) : query;
-            case "BETWEEN":
-                if (value.HasValue && value2.HasValue)
-                {
-                    var lo = Math.Min(value.Value, value2.Value);
-                    var hi = Math.Max(value.Value, value2.Value);
-                    return query.Where(face => face.TopSuggestionConfidence >= lo && face.TopSuggestionConfidence <= hi);
-                }
-                return query;
-            case "NOT_BETWEEN":
-                if (value.HasValue && value2.HasValue)
-                {
-                    var lo = Math.Min(value.Value, value2.Value);
-                    var hi = Math.Max(value.Value, value2.Value);
-                    return query.Where(face => face.TopSuggestionConfidence < lo || face.TopSuggestionConfidence > hi);
-                }
-                return query;
-            case "EQUALS":
-                return value.HasValue
-                    ? query.Where(face => face.TopSuggestionConfidence >= value.Value - 0.0001f && face.TopSuggestionConfidence <= value.Value + 0.0001f)
-                    : query;
-            default:
-                return value.HasValue ? query.Where(face => face.TopSuggestionConfidence >= value.Value) : query;
-        }
-    }
 
     private Task InvalidateSuggestionForLinkChangeAsync(int faceId, CancellationToken cancellationToken)
         => suggestionMaintenance?.InvalidateForLinkChangeAsync(faceId, cancellationToken) ?? Task.CompletedTask;

@@ -17,6 +17,8 @@ vi.mock("../api/client", () => ({
     distinctKinds: vi.fn().mockResolvedValue([]),
     distinctSourceKeys: vi.fn().mockResolvedValue([]),
     list: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 24 }),
+    findFiltered: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 24 }),
+    aggregate: vi.fn().mockResolvedValue({ count: 0, duration: 0 }),
   },
   segmentSpans: {
     search: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 24, hasMore: false }),
@@ -54,7 +56,8 @@ vi.mock("../pages/segments/useDerivedSpansQuery", () => ({
   useDerivedSpansQuery: () => ({ data: { items: [], totalCount: 0 }, isLoading: false }),
   useDerivedSpansCountQuery: () => ({ data: { totalCount: 0, duration: 0 }, isLoading: false }),
 }));
-vi.mock("../pages/segments/useRawSegmentsQuery", () => ({
+vi.mock("../pages/segments/useRawSegmentsQuery", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../pages/segments/useRawSegmentsQuery")>()),
   useRawSegmentsQuery: () => ({ data: { items: [], totalCount: 0, duration: 3600 }, isLoading: false }),
 }));
 vi.mock("../pages/segments/SegmentsPageList", () => ({ SegmentsPageList: () => null }));
@@ -79,7 +82,7 @@ function renderPage() {
 describe("SegmentsPage infinite random seed", () => {
   beforeEach(() => {
     infiniteQueryOptions.length = 0;
-    vi.mocked(segmentLibrary.list).mockClear();
+    vi.mocked(segmentLibrary.findFiltered).mockClear();
     vi.mocked(segmentSpans.search).mockClear();
     localStorage.clear();
   });
@@ -90,8 +93,10 @@ describe("SegmentsPage infinite random seed", () => {
 
     await latestInfiniteQuery("raw").queryFn(2, 40);
 
-    expect(segmentLibrary.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sort: "random", seed: 1357, page: 2, perPage: 40 }),
+    expect(segmentLibrary.findFiltered).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        findFilter: expect.objectContaining({ sort: "random", seed: 1357, page: 2, perPage: 40 }),
+      }),
     );
   });
 

@@ -19,6 +19,8 @@ vi.mock("../api/client", () => ({
     distinctKinds: vi.fn().mockResolvedValue([]),
     distinctSourceKeys: vi.fn().mockResolvedValue([]),
     list: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 24 }),
+    findFiltered: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 24 }),
+    aggregate: vi.fn().mockResolvedValue({ count: 0, duration: 0 }),
   },
   segmentSpans: { search: vi.fn().mockResolvedValue({ items: [], totalCount: 0 }) },
 }));

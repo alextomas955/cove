@@ -173,6 +173,8 @@ import type {
   PerformerScrapeRequest,
   FilteredQueryRequest,
   VideoFilteredQueryRequest,
+  SegmentFilteredQueryRequest,
+  SegmentAggregate,
   PerformerFilteredQueryRequest,
   AudioFilteredQueryRequest,
   VideoAggregate,
@@ -529,7 +531,7 @@ function buildAiDataQuery(selector?: AiDataSelector): string {
   return query ? `?${query}` : "";
 }
 
-function normalizeCriterionPayload<T>(value: T): T {
+export function normalizeCriterionPayload<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((item) => normalizeCriterionPayload(item)) as T;
   }
@@ -877,6 +879,17 @@ export const segmentLibrary = {
     updatedAtModifier?: string;
     includeAggregate?: boolean;
   }) => request<PaginatedResponse<SegmentRecord>>(`/segments${buildQuery(undefined, opts)}`),
+  /** The list as a body: the filter dialog's criteria plus search, sort and paging, as the videos list sends them. */
+  findFiltered: (req: SegmentFilteredQueryRequest) =>
+    request<PaginatedResponse<SegmentRecord>>("/segments/find", {
+      method: "POST",
+      body: JSON.stringify(normalizeCriterionPayload(req)),
+    }),
+  aggregate: (req: SegmentFilteredQueryRequest) =>
+    request<SegmentAggregate>("/segments/aggregate", {
+      method: "POST",
+      body: JSON.stringify(normalizeCriterionPayload(req)),
+    }),
   get: (id: number) => requestOptional<SegmentRecord>(`/segments/${id}`),
   removeTag: (data: { tagId: number; ids: number[] }) =>
     request<{ count: number }>("/segments/bulk/remove-tag", { method: "POST", body: JSON.stringify(data) }),

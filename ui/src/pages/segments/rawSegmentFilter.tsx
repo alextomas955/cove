@@ -15,6 +15,8 @@ import {
   type SegmentTimestampCriterionValue,
 } from "./segmentCriteriaDefinitions";
 
+export type { SegmentNumberCriterionValue, SegmentStringCriterionValue, SegmentTimestampCriterionValue };
+
 export interface RawSegmentFilterValue {
   sourceCategory?: "user" | "extensions";
   sourceKey?: string;

@@ -37,7 +37,7 @@ import {
 import { buildSpanTitle } from "./segments/segmentDisplayUtils";
 import { SegmentsPageList } from "./segments/SegmentsPageList";
 import { useDerivedSpansQuery, useDerivedSpansCountQuery } from "./segments/useDerivedSpansQuery";
-import { useRawSegmentsQuery } from "./segments/useRawSegmentsQuery";
+import { buildSegmentFilteredQuery, useRawSegmentsQuery } from "./segments/useRawSegmentsQuery";
 import type { DerivedSpanItem, RawSegmentItem, SegmentsPageContentView } from "./segments/types";
 import { LOCATION_CHANGE_EVENT, buildCurrentUrl, navigateToUrl } from "../router/location";
 import { getLoadError } from "../utils/queryLoadState";
@@ -539,59 +539,23 @@ export function SegmentsPage({ onNavigate }: Props) {
 
   const queryRawSegmentsPage = useCallback(
     async (page: number, pageSize: number) => {
-      const response = await segmentLibrary.list({
-        q: q || undefined,
-        ids: rawSegmentIds.length > 0 ? rawSegmentIds.join(",") : undefined,
-        videoIds: videoSelection.includeIds.length > 0 ? videoSelection.includeIds.join(",") : undefined,
-        excludeVideoIds: videoSelection.excludeIds.length > 0 ? videoSelection.excludeIds.join(",") : undefined,
-        videoTitle: videoTitle || undefined,
-        videoTagIds: videoTagIds.length > 0 ? videoTagIds.join(",") : undefined,
-        videoTagDepth,
-        tagIds: combinedRawSegmentFilter.tagIds.length > 0 ? combinedRawSegmentFilter.tagIds.join(",") : undefined,
-        tagDepth: combinedRawSegmentFilter.tagDepth,
-        kind: combinedRawSegmentFilter.kind,
-        sourceKey: combinedRawSegmentFilter.sourceKey,
-        sourceCategory: combinedRawSegmentFilter.sourceCategory,
-        title: combinedRawSegmentFilter.titleCriterion?.value,
-        titleModifier: combinedRawSegmentFilter.titleCriterion?.modifier,
-        hostType: combinedRawSegmentFilter.hostType,
-        sourceRunId: combinedRawSegmentFilter.sourceRunCriterion?.value,
-        sourceRunIdModifier: combinedRawSegmentFilter.sourceRunCriterion?.modifier,
-        colorHint: combinedRawSegmentFilter.colorHintCriterion?.value,
-        colorHintModifier: combinedRawSegmentFilter.colorHintCriterion?.modifier,
-        hasImage: combinedRawSegmentFilter.hasImage,
-        hasPayload: combinedRawSegmentFilter.hasPayload,
-        startSec: combinedRawSegmentFilter.startSecCriterion?.value,
-        startSec2: combinedRawSegmentFilter.startSecCriterion?.value2,
-        startSecModifier: combinedRawSegmentFilter.startSecCriterion?.modifier,
-        endSec: combinedRawSegmentFilter.endSecCriterion?.value,
-        endSec2: combinedRawSegmentFilter.endSecCriterion?.value2,
-        endSecModifier: combinedRawSegmentFilter.endSecCriterion?.modifier,
-        createdAt: combinedRawSegmentFilter.createdAtCriterion?.value,
-        createdAt2: combinedRawSegmentFilter.createdAtCriterion?.value2,
-        createdAtModifier: combinedRawSegmentFilter.createdAtCriterion?.modifier,
-        updatedAt: combinedRawSegmentFilter.updatedAtCriterion?.value,
-        updatedAt2: combinedRawSegmentFilter.updatedAtCriterion?.value2,
-        updatedAtModifier: combinedRawSegmentFilter.updatedAtCriterion?.modifier,
-        refIds: combinedRawSegmentFilter.faceIds.length > 0 ? combinedRawSegmentFilter.faceIds.join(",") : undefined,
-        performerIds:
-          combinedRawSegmentFilter.performerIds.length > 0
-            ? combinedRawSegmentFilter.performerIds.join(",")
-            : undefined,
-        minConfidence: combinedRawSegmentFilter.minConfidence,
-        minDurationSec: combinedRawSegmentFilter.minDurationSec,
-        confidence: combinedRawSegmentFilter.confidenceCriterion?.value,
-        confidence2: combinedRawSegmentFilter.confidenceCriterion?.value2,
-        confidenceModifier: combinedRawSegmentFilter.confidenceCriterion?.modifier,
-        durationSec: combinedRawSegmentFilter.durationCriterion?.value,
-        durationSec2: combinedRawSegmentFilter.durationCriterion?.value2,
-        durationModifier: combinedRawSegmentFilter.durationCriterion?.modifier,
-        sort,
-        direction,
-        seed,
-        page,
-        perPage: pageSize,
-      });
+      const response = await segmentLibrary.findFiltered(
+        buildSegmentFilteredQuery({
+          pageNumber: page,
+          perPage: pageSize,
+          q,
+          videoTitle,
+          videoTagIds,
+          videoTagDepth,
+          sort,
+          direction,
+          seed,
+          includeVideoIds: videoSelection.includeIds,
+          excludeVideoIds: videoSelection.excludeIds,
+          rawSegmentIds,
+          rawFilter: combinedRawSegmentFilter,
+        }),
+      );
 
       return {
         items: response.items.map((item) => ({

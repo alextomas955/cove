@@ -18,7 +18,7 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.SegmentsRead)]
-public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver, IMemoryCache memoryCache, IFieldProvenanceService? fieldProvenanceService = null) : ControllerBase
+public class SegmentsController(CoveContext db, ISegmentRepository segments, SegmentSpanResolver spanResolver, IMemoryCache memoryCache, IFieldProvenanceService? fieldProvenanceService = null) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PaginatedResponse<SegmentRecordDto>>> List(
@@ -76,226 +76,94 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
         [FromQuery] bool includeAggregate = false,
         CancellationToken cancellationToken = default)
     {
-        using var relativeDates = RelativeDateEvaluation.Begin();
-        (createdAt, createdAt2) = ResolveRelativeTimestamp(createdAt, createdAt2);
-        (updatedAt, updatedAt2) = ResolveRelativeTimestamp(updatedAt, updatedAt2);
-        page = Math.Max(page, 1);
-        perPage = Math.Clamp(perPage, 1, 250);
-        var sortKey = NormalizeSort(sort);
-        var descending = !string.Equals(direction, "asc", StringComparison.OrdinalIgnoreCase);
+        // The library only ever lists video-hosted segments; another host type matches nothing.
+        if (!string.IsNullOrWhiteSpace(hostType)
+            && (!Enum.TryParse<SegmentHostType>(hostType, true, out var parsedHostType) || parsedHostType != SegmentHostType.Video))
+            return Ok(new PaginatedResponse<SegmentRecordDto>([], 0, Math.Max(page, 1), Math.Clamp(perPage, 1, 250), includeAggregate ? 0 : null));
 
-        // Segment-only predicates are applied to a bare Segments query BEFORE the display joins are
-        // added. The joins (video/tag/face/performer) exist purely to decorate the returned page, but
-        // when they sit underneath the filter chain the COUNT has to drag all five of them across
-        // every matching row — on a multi-million-row segments table that costs seconds. Filtering
-        // first lets the unfiltered COUNT run against segments alone (see the countQuery below).
-        var segmentQuery = db.Segments.AsNoTracking().Where(segment => segment.HostType == SegmentHostType.Video);
-
-        var parsedIds = ParseIdList(ids);
-        if (parsedIds.Count > 0)
-            segmentQuery = segmentQuery.Where(segment => parsedIds.Contains(segment.Id));
-
-        var parsedVideoIds = ParseIdList(videoIds);
-        var parsedExcludeVideoIds = ParseIdList(excludeVideoIds);
-        var parsedVideoTagIds = ParseIdList(videoTagIds);
-        if (videoTagDepth == -1 && parsedVideoTagIds.Count > 0)
+        // The flat query parameters are the original wire shape of the list; they map onto the same
+        // SegmentFilter the POST /find body carries, so both go through one repository query.
+        var filter = new SegmentFilter
         {
-            parsedVideoTagIds = (await HierarchicalCriterionExpander.ExpandTagsAsync(db,
-                new MultiIdCriterion { Value = parsedVideoTagIds.ToList(), Modifier = CriterionModifier.Includes, Depth = -1 },
-                cancellationToken)).Criterion.Value.ToList();
-        }
-        if (videoId.HasValue)
-            segmentQuery = segmentQuery.Where(segment => segment.HostId == videoId.Value);
-        else if (parsedVideoIds.Count > 0)
-            segmentQuery = segmentQuery.Where(segment => parsedVideoIds.Contains(segment.HostId));
-
-        if (parsedExcludeVideoIds.Count > 0)
-            segmentQuery = segmentQuery.Where(segment => !parsedExcludeVideoIds.Contains(segment.HostId));
-        if (parsedVideoTagIds.Count > 0)
+            Ids = IdList(ids),
+            HostId = videoId,
+            VideoIds = IdList(videoIds),
+            ExcludeVideoIds = IdList(excludeVideoIds),
+            VideoTagIds = IdList(videoTagIds),
+            VideoTagDepth = videoTagDepth,
+            TagIds = IdList(tagIds),
+            TagsCriterion = tagId.HasValue ? new MultiIdCriterion { Value = [tagId.Value], Modifier = CriterionModifier.Includes, Depth = tagDepth } : null,
+            KindCriterion = ContainsCriterion(kind),
+            SourceKeyCriterion = ContainsCriterion(sourceKey),
+            SourceCategory = sourceCategory,
+            RefIds = ParseLongIdList(refIds) is { Count: > 0 } parsedRefIds ? parsedRefIds : null,
+            PerformerIds = IdList(performerIds),
+            Tagged = tagged,
+            MinConfidence = minConfidence,
+            MinDurationSec = minDurationSec,
+            ConfidenceCriterion = DoubleCriterionOrNull(confidence, confidence2, confidenceModifier),
+            DurationCriterion = DoubleCriterionOrNull(durationSec, durationSec2, durationModifier),
+            TitleCriterion = StringCriterionOrNull(title, titleModifier),
+            SourceRunIdCriterion = StringCriterionOrNull(sourceRunId, sourceRunIdModifier),
+            ColorHintCriterion = StringCriterionOrNull(colorHint, colorHintModifier),
+            VideoTitleCriterion = ContainsCriterion(videoTitle),
+            HasImageCriterion = hasImage is { } hasImageValue ? new BoolCriterion { Value = hasImageValue } : null,
+            HasPayloadCriterion = hasPayload is { } hasPayloadValue ? new BoolCriterion { Value = hasPayloadValue } : null,
+            StartSecCriterion = DoubleCriterionOrNull(startSec, startSec2, startSecModifier),
+            EndSecCriterion = DoubleCriterionOrNull(endSec, endSec2, endSecModifier),
+            CreatedAtCriterion = TimestampCriterionOrNull(createdAt, createdAt2, createdAtModifier),
+            UpdatedAtCriterion = TimestampCriterionOrNull(updatedAt, updatedAt2, updatedAtModifier),
+        };
+        var findFilter = new FindFilter
         {
-            var effectiveVideoTags = EffectiveHostTagQuery.ForHostType(db, AffinityHostType.Video);
-            segmentQuery = segmentQuery.Where(segment => effectiveVideoTags.Any(tag => tag.HostId == segment.HostId && parsedVideoTagIds.Contains(tag.TagId)));
-        }
+            Q = q,
+            Page = page,
+            PerPage = perPage,
+            Sort = sort,
+            // The segment list has always defaulted to descending; only an explicit "asc" flips it.
+            Direction = string.Equals(direction, "asc", StringComparison.OrdinalIgnoreCase) ? Cove.Core.Enums.SortDirection.Asc : Cove.Core.Enums.SortDirection.Desc,
+            Seed = seed,
+        };
 
-        var parsedTagIds = ParseIdList(tagIds);
-        IReadOnlyCollection<int>? requiredTagIds = null;
-        if (tagDepth == -1 && tagId.HasValue)
-        {
-            requiredTagIds = (await HierarchicalCriterionExpander.ExpandTagsAsync(db,
-                new MultiIdCriterion { Value = [tagId.Value], Modifier = CriterionModifier.Includes, Depth = -1 },
-                cancellationToken)).Criterion.Value;
-            tagId = null;
-        }
-        if (tagId.HasValue)
-            segmentQuery = segmentQuery.Where(segment => segment.TagId == tagId.Value);
-        if (requiredTagIds is { Count: > 0 })
-            segmentQuery = segmentQuery.Where(segment => segment.TagId.HasValue && requiredTagIds.Contains(segment.TagId.Value));
-        if (parsedTagIds.Count > 0)
-            segmentQuery = segmentQuery.Where(segment => segment.TagId.HasValue && parsedTagIds.Contains(segment.TagId.Value));
-
-        if (!string.IsNullOrWhiteSpace(kind))
-        {
-            var normalizedKind = kind.Trim().ToLowerInvariant();
-            segmentQuery = segmentQuery.Where(segment => segment.Kind != null && segment.Kind.ToLower().Contains(normalizedKind));
-        }
-
-        if (!string.IsNullOrWhiteSpace(sourceKey))
-        {
-            var normalizedSourceKey = sourceKey.Trim().ToLowerInvariant();
-            segmentQuery = segmentQuery.Where(segment => segment.SourceKey.ToLower().Contains(normalizedSourceKey));
-        }
-
-        if (!string.IsNullOrWhiteSpace(sourceCategory))
-        {
-            var normalizedSourceCategory = sourceCategory.Trim().ToLowerInvariant();
-            segmentQuery = normalizedSourceCategory switch
-            {
-                "extensions" => segmentQuery.Where(segment => segment.SourceKey.StartsWith("ext:")),
-                "user" => segmentQuery.Where(segment => segment.SourceKey == "user"),
-                _ => segmentQuery,
-            };
-        }
-
-        var parsedRefIds = ParseLongIdList(refIds);
-        if (parsedRefIds.Count > 0)
-            segmentQuery = segmentQuery.Where(segment => segment.RefId.HasValue
-                && parsedRefIds.Contains(segment.RefId.Value)
-                && segment.Kind != null
-                && segment.Kind.ToLower() == "face");
-
-        if (tagged.HasValue)
-            segmentQuery = tagged.Value
-                ? segmentQuery.Where(segment => segment.TagId != null)
-                : segmentQuery.Where(segment => segment.TagId == null);
-
-        if (minConfidence.HasValue)
-            segmentQuery = segmentQuery.Where(segment => segment.Confidence.HasValue && segment.Confidence.Value >= minConfidence.Value);
-
-        if (confidence.HasValue)
-            segmentQuery = ApplyConfidenceCriterion(segmentQuery, confidence.Value, confidence2, confidenceModifier);
-
-        if (minDurationSec.HasValue)
-            segmentQuery = segmentQuery.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) >= minDurationSec.Value);
-
-        if (durationSec.HasValue)
-            segmentQuery = ApplyDurationCriterion(segmentQuery, durationSec.Value, durationSec2, durationModifier);
-
-        segmentQuery = ApplyStringCriterion(segmentQuery, title, titleModifier, segment => segment.Title);
-        segmentQuery = ApplyStringCriterion(segmentQuery, sourceRunId, sourceRunIdModifier, segment => segment.SourceRunId);
-        segmentQuery = ApplyStringCriterion(segmentQuery, colorHint, colorHintModifier, segment => segment.ColorHint);
-
-        if (!string.IsNullOrWhiteSpace(hostType) && Enum.TryParse<SegmentHostType>(hostType, true, out var parsedHostType))
-            segmentQuery = segmentQuery.Where(segment => segment.HostType == parsedHostType);
-
-        if (hasImage.HasValue)
-            segmentQuery = hasImage.Value
-                ? segmentQuery.Where(segment => segment.ImageBlobId != null && segment.ImageBlobId != string.Empty)
-                : segmentQuery.Where(segment => segment.ImageBlobId == null || segment.ImageBlobId == string.Empty);
-
-        if (hasPayload.HasValue)
-            segmentQuery = hasPayload.Value
-                ? segmentQuery.Where(segment => segment.Payload != null)
-                : segmentQuery.Where(segment => segment.Payload == null);
-
-        if (startSec.HasValue)
-            segmentQuery = ApplyDoubleCriterion(segmentQuery, startSec.Value, startSec2, startSecModifier, segment => segment.StartSec);
-
-        if (endSec.HasValue)
-            segmentQuery = ApplyDoubleCriterion(segmentQuery, endSec.Value, endSec2, endSecModifier, segment => segment.EndSec ?? segment.StartSec);
-
-        if (TryParseDateTime(createdAt, out var createdAtValue))
-            segmentQuery = ApplyDateTimeCriterion(segmentQuery, createdAtValue, createdAt2, createdAtModifier, segment => segment.CreatedAt);
-
-        if (TryParseDateTime(updatedAt, out var updatedAtValue))
-            segmentQuery = ApplyDateTimeCriterion(segmentQuery, updatedAtValue, updatedAt2, updatedAtModifier, segment => segment.UpdatedAt);
-
-        // Now add the display joins. Every join key is the target table's primary key, so none of them
-        // can fan out a segment into multiple rows — the row count of `query` equals the row count of
-        // `segmentQuery` restricted to segments whose host video still exists.
-        var query =
-            from segment in segmentQuery
-            join video in db.Videos.AsNoTracking() on segment.HostId equals video.Id
-            join tag in db.Tags.AsNoTracking() on segment.TagId equals tag.Id into tagJoin
-            from tag in tagJoin.DefaultIfEmpty()
-            join face in db.Faces.AsNoTracking() on segment.RefId equals (long?)face.Id into faceJoin
-            from face in faceJoin.DefaultIfEmpty()
-            join facePerformer in db.Performers.AsNoTracking() on face!.PerformerId equals (int?)facePerformer.Id into facePerformerJoin
-            from facePerformer in facePerformerJoin.DefaultIfEmpty()
-            join directPerformer in db.Performers.AsNoTracking() on segment.RefId equals (long?)directPerformer.Id into directPerformerJoin
-            from directPerformer in directPerformerJoin.DefaultIfEmpty()
-            select new SegmentLibraryRow
-            {
-                Segment = segment,
-                VideoTitle = video.Title,
-                TagName = tag != null ? tag.Name : null,
-                RefLabel = face != null ? (facePerformer != null ? facePerformer!.Name : face.Label) : segment.Kind != null && segment.Kind!.ToLower() == "performer" && directPerformer != null ? directPerformer!.Name : null,
-                FaceId = face != null ? face!.Id : null,
-                FacePerformerId = facePerformer != null ? facePerformer!.Id : null,
-                DirectPerformerId = segment.Kind != null && segment.Kind!.ToLower() == "performer" && directPerformer != null ? directPerformer!.Id : null,
-                PerformerId = segment.Kind != null && segment.Kind!.ToLower() == "performer" && directPerformer != null ? directPerformer!.Id : facePerformer != null ? facePerformer!.Id : null,
-                PerformerName = segment.Kind != null && segment.Kind!.ToLower() == "performer" && directPerformer != null ? directPerformer!.Name : facePerformer != null ? facePerformer!.Name : null,
-            };
-
-        // The three filters below read joined columns, so they can only be applied after the join and
-        // they force the COUNT onto the joined query.
-        var requiresJoinedCount = false;
-
-        if (!string.IsNullOrWhiteSpace(videoTitle))
-        {
-            var normalizedVideoTitle = videoTitle.Trim().ToLowerInvariant();
-            query = query.Where(item => item.VideoTitle != null && item.VideoTitle.ToLower().Contains(normalizedVideoTitle));
-            requiresJoinedCount = true;
-        }
-
-        var parsedPerformerIds = ParseIdList(performerIds);
-        if (parsedPerformerIds.Count > 0)
-        {
-            query = query.Where(item =>
-                (item.DirectPerformerId.HasValue && parsedPerformerIds.Contains(item.DirectPerformerId.Value)) ||
-                (item.FacePerformerId.HasValue && parsedPerformerIds.Contains(item.FacePerformerId.Value)));
-            requiresJoinedCount = true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            requiresJoinedCount = true;
-            var term = q.Trim();
-            var normalizedTerm = term.ToLowerInvariant();
-            query = query.Where(item =>
-                (item.Segment.Title != null && item.Segment.Title.ToLower().Contains(normalizedTerm)) ||
-                (item.Segment.Kind != null && item.Segment.Kind.ToLower().Contains(normalizedTerm)) ||
-                (item.TagName != null && item.TagName.ToLower().Contains(normalizedTerm)) ||
-                (item.Segment.TagId.HasValue && db.Set<TagAlias>().Any(alias => alias.TagId == item.Segment.TagId.Value && alias.Alias.ToLower().Contains(normalizedTerm))) ||
-                (item.RefLabel != null && item.RefLabel.ToLower().Contains(normalizedTerm)) ||
-                (item.PerformerName != null && item.PerformerName.ToLower().Contains(normalizedTerm)) ||
-                (item.FacePerformerId.HasValue && db.Set<PerformerAlias>().Any(alias => alias.PerformerId == item.FacePerformerId.Value && alias.Alias.ToLower().Contains(normalizedTerm))) ||
-                (item.DirectPerformerId.HasValue && db.Set<PerformerAlias>().Any(alias => alias.PerformerId == item.DirectPerformerId.Value && alias.Alias.ToLower().Contains(normalizedTerm))) ||
-                (item.VideoTitle != null && item.VideoTitle.ToLower().Contains(normalizedTerm)) ||
-                item.Segment.SourceKey.ToLower().Contains(normalizedTerm));
-        }
-
-        // When no join-dependent filter is active the joins cannot change the row count, so the COUNT
-        // runs against segments alone with an existence check standing in for the inner join to videos.
-        // That is the difference between a multi-second count and a single index scan on large libraries.
-        var totalCount = requiresJoinedCount
-            ? await query.CountAsync(cancellationToken)
-            : await segmentQuery
-                .Where(segment => db.Videos.Any(video => video.Id == segment.HostId))
-                .CountAsync(cancellationToken);
+        var (items, totalCount) = await segments.FindAsync(filter, findFilter, cancellationToken);
         double? aggregateDuration = includeAggregate
-            ? await query.SumAsync(
-                item => Math.Max(0, (item.Segment.EndSec ?? item.Segment.StartSec) - item.Segment.StartSec),
-                cancellationToken)
+            ? (await segments.AggregateAsync(filter, findFilter, cancellationToken)).Duration
             : null;
 
+        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, Math.Max(page, 1), Math.Clamp(perPage, 1, 250), aggregateDuration));
+    }
 
-        var orderedQuery = ApplyOrdering(query, sortKey, descending, seed);
-        var items = await orderedQuery
-            .Skip((page - 1) * perPage)
-            .Take(perPage)
-            .ToListAsync(cancellationToken);
+    /// <summary>
+    /// The list as a body: the filter dialog's criteria as a <see cref="SegmentFilter"/> plus search, sort
+    /// and paging in a <see cref="FindFilter"/>, the way <c>POST /api/videos/find</c> takes them. Filter
+    /// expressions are not supported for segments.
+    /// </summary>
+    [HttpPost("find")]
+    public async Task<ActionResult<PaginatedResponse<SegmentRecordDto>>> FindPost([FromBody] FilteredQueryRequest<SegmentFilter> req, CancellationToken cancellationToken)
+    {
+        if (req.FilterExpression is { Children.Count: > 0 })
+            return BadRequest(new { message = "Filter expressions are not supported for segments." });
 
-        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, page, perPage, aggregateDuration));
+        var findFilter = req.FindFilter ?? new FindFilter();
+        var filter = req.ObjectFilter ?? new SegmentFilter();
+        if (req.Ids is { Count: > 0 })
+            filter.Ids = req.Ids;
+
+        var (items, totalCount) = await segments.FindAsync(filter, findFilter, cancellationToken);
+        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, Math.Max(findFilter.Page, 1), Math.Clamp(findFilter.PerPage, 1, 250), null));
+    }
+
+    [HttpPost("aggregate")]
+    public async Task<ActionResult<SegmentAggregate>> Aggregate([FromBody] FilteredQueryRequest<SegmentFilter> req, CancellationToken cancellationToken)
+    {
+        if (req.FilterExpression is { Children.Count: > 0 })
+            return BadRequest(new { message = "Filter expressions are not supported for segments." });
+
+        var filter = req.ObjectFilter ?? new SegmentFilter();
+        if (req.Ids is { Count: > 0 })
+            filter.Ids = req.Ids;
+
+        return Ok(await segments.AggregateAsync(filter, req.FindFilter, cancellationToken));
     }
 
     [HttpGet("{id:int}")]
@@ -314,7 +182,7 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
             join directPerformer in db.Performers.AsNoTracking() on segment.RefId equals (long?)directPerformer.Id into directPerformerJoin
             from directPerformer in directPerformerJoin.DefaultIfEmpty()
             where segment.HostType == SegmentHostType.Video && segment.Id == id
-            select new SegmentLibraryRow
+            select new SegmentLibraryItem
             {
                 Segment = segment,
                 VideoTitle = video.Title,
@@ -428,83 +296,8 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
         return Ok(items);
     }
 
-    private static SegmentRecordDto MapToDto(SegmentLibraryRow item, IReadOnlyList<FieldProvenanceDto>? fieldProvenance = null) => new(
-        item.Segment.Id,
-        item.Segment.HostType,
-        item.Segment.HostId,
-        item.VideoTitle,
-        item.Segment.StartSec,
-        item.Segment.EndSec,
-        item.Segment.TagId,
-        item.TagName,
-        item.Segment.Kind,
-        item.Segment.RefId,
-        item.RefLabel,
-        item.PerformerId,
-        item.PerformerName,
-        item.Segment.Payload != null ? item.Segment.Payload.RootElement.Clone() : (JsonElement?)null,
-        item.Segment.SourceKey,
-        item.Segment.SourceRunId,
-        item.Segment.Confidence,
-        item.Segment.Title,
-        item.Segment.ColorHint,
-        item.Segment.CreatedAt.ToString("o"),
-        item.Segment.UpdatedAt.ToString("o"),
-        fieldProvenance?.ToList());
-
-    private static string NormalizeSort(string? sort)
-    {
-        if (string.IsNullOrWhiteSpace(sort))
-            return "updated_at";
-
-        return sort.Trim().ToLowerInvariant();
-    }
-
-    private static IQueryable<Segment> ApplyConfidenceCriterion(IQueryable<Segment> query, float value, float? value2, string? modifier)
-    {
-        return NormalizeCriterionModifier(modifier) switch
-        {
-            "NOT_EQUALS" => query.Where(segment => !segment.Confidence.HasValue || segment.Confidence.Value != value),
-            "LESS_THAN" => query.Where(segment => segment.Confidence.HasValue && segment.Confidence.Value < value),
-            "BETWEEN" when value2.HasValue => query.Where(segment => segment.Confidence.HasValue && segment.Confidence.Value >= Math.Min(value, value2.Value) && segment.Confidence.Value <= Math.Max(value, value2.Value)),
-            "NOT_BETWEEN" when value2.HasValue => query.Where(segment => !segment.Confidence.HasValue || segment.Confidence.Value < Math.Min(value, value2.Value) || segment.Confidence.Value > Math.Max(value, value2.Value)),
-            "EQUALS" => query.Where(segment => segment.Confidence.HasValue && segment.Confidence.Value == value),
-            _ => query.Where(segment => segment.Confidence.HasValue && segment.Confidence.Value > value),
-        };
-    }
-
-    private static IQueryable<Segment> ApplyDurationCriterion(IQueryable<Segment> query, double value, double? value2, string? modifier)
-    {
-        return NormalizeCriterionModifier(modifier) switch
-        {
-            "NOT_EQUALS" => query.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) != value),
-            "LESS_THAN" => query.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) < value),
-            "BETWEEN" when value2.HasValue => query.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) >= Math.Min(value, value2.Value) && ((segment.EndSec ?? segment.StartSec) - segment.StartSec) <= Math.Max(value, value2.Value)),
-            "NOT_BETWEEN" when value2.HasValue => query.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) < Math.Min(value, value2.Value) || ((segment.EndSec ?? segment.StartSec) - segment.StartSec) > Math.Max(value, value2.Value)),
-            "EQUALS" => query.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) == value),
-            _ => query.Where(segment => ((segment.EndSec ?? segment.StartSec) - segment.StartSec) > value),
-        };
-    }
-
-    private static IQueryable<TRow> ApplyDoubleCriterion<TRow>(
-        IQueryable<TRow> query,
-        double value,
-        double? value2,
-        string? modifier,
-        Expression<Func<TRow, double>> selector)
-    {
-        var normalized = NormalizeCriterionModifier(modifier);
-        var upper = value2 ?? value;
-        return normalized switch
-        {
-            "NOT_EQUALS" => WhereCompare(query, selector, value, ExpressionType.NotEqual),
-            "LESS_THAN" => WhereCompare(query, selector, value, ExpressionType.LessThan),
-            "BETWEEN" => WhereBetween(query, selector, Math.Min(value, upper), Math.Max(value, upper)),
-            "NOT_BETWEEN" => WhereNotBetween(query, selector, Math.Min(value, upper), Math.Max(value, upper)),
-            "EQUALS" => WhereCompare(query, selector, value, ExpressionType.Equal),
-            _ => WhereCompare(query, selector, value, ExpressionType.GreaterThan),
-        };
-    }
+    private static SegmentRecordDto MapToDto(SegmentLibraryItem item, IReadOnlyList<FieldProvenanceDto>? fieldProvenance = null)
+        => SegmentRecordDto.FromLibraryItem(item, fieldProvenance);
 
     internal static IQueryable<TRow> ApplyDateTimeCriterion<TRow>(
         IQueryable<TRow> query,
@@ -524,59 +317,6 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
             "EQUALS" => WhereCompare(query, selector, value, ExpressionType.Equal),
             _ => WhereCompare(query, selector, value, ExpressionType.GreaterThan),
         };
-    }
-
-    private static IQueryable<TRow> ApplyStringCriterion<TRow>(
-        IQueryable<TRow> query,
-        string? value,
-        string? modifier,
-        Expression<Func<TRow, string?>> selector)
-    {
-        var normalized = NormalizeCriterionModifier(modifier);
-        if (normalized is "IS_NULL" or "NOT_NULL")
-        {
-            var param = selector.Parameters[0];
-            var valueOrEmpty = Expression.Coalesce(selector.Body, Expression.Constant(string.Empty));
-            var hasValue = Expression.NotEqual(valueOrEmpty, Expression.Constant(string.Empty));
-            Expression nullCheck = normalized == "IS_NULL"
-                ? Expression.Not(hasValue)
-                : hasValue;
-            return query.Where(Expression.Lambda<Func<TRow, bool>>(nullCheck, param));
-        }
-
-        if (string.IsNullOrWhiteSpace(value))
-            return query;
-
-        var normalizedValue = value.Trim().ToLowerInvariant();
-        var parameter = selector.Parameters[0];
-        var body = Expression.Coalesce(selector.Body, Expression.Constant(string.Empty));
-        var lowered = Expression.Call(body, typeof(string).GetMethod(nameof(string.ToLower), Type.EmptyTypes)!);
-        var constant = Expression.Constant(normalizedValue);
-        var contains = Expression.Call(lowered, typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!, constant);
-        var equals = Expression.Equal(lowered, constant);
-
-        Expression? predicate = normalized switch
-        {
-            "EQUALS" => equals,
-            "NOT_EQUALS" => Expression.Not(equals),
-            "INCLUDES" => contains,
-            "EXCLUDES" => Expression.Not(contains),
-            "MATCHES_REGEX" => Expression.Call(
-                typeof(Regex).GetMethod(nameof(Regex.IsMatch), [typeof(string), typeof(string), typeof(RegexOptions)])!,
-                body,
-                Expression.Constant(value.Trim()),
-                Expression.Constant(RegexOptions.IgnoreCase)),
-            "NOT_MATCHES_REGEX" => Expression.Not(Expression.Call(
-                typeof(Regex).GetMethod(nameof(Regex.IsMatch), [typeof(string), typeof(string), typeof(RegexOptions)])!,
-                body,
-                Expression.Constant(value.Trim()),
-                Expression.Constant(RegexOptions.IgnoreCase))),
-            _ => null,
-        };
-
-        if (predicate == null)
-            return query;
-        return query.Where(Expression.Lambda<Func<TRow, bool>>(predicate, parameter));
     }
 
     private static IQueryable<TRow> WhereCompare<TRow, T>(IQueryable<TRow> query, Expression<Func<TRow, T>> selector, T value, ExpressionType comparison)
@@ -647,49 +387,32 @@ public class SegmentsController(CoveContext db, SegmentSpanResolver spanResolver
             .ToList();
     }
 
-    private static IOrderedQueryable<SegmentLibraryRow> ApplyOrdering(IQueryable<SegmentLibraryRow> query, string sort, bool descending, int? seed)
+    private static List<int>? IdList(string? raw)
+        => ParseIdList(raw) is { Count: > 0 } ids ? ids : null;
+
+    private static StringCriterion? ContainsCriterion(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : new StringCriterion { Value = value.Trim(), Modifier = CriterionModifier.Includes };
+
+    // A string parameter only filters with a modifier it understands; IS_NULL and NOT_NULL need no value.
+    private static StringCriterion? StringCriterionOrNull(string? value, string? modifier)
     {
-        return sort switch
-        {
-            "random" => (IOrderedQueryable<SegmentLibraryRow>)SeededRandomOrdering.OrderBy(query, seed, item => item.Segment.Id, descending),
-            "created_at" => OrderBy(query, item => item.Segment.CreatedAt, descending),
-            "start_sec" => OrderBy(query, item => item.Segment.StartSec, descending),
-            "end_sec" => OrderBy(query, item => item.Segment.EndSec ?? item.Segment.StartSec, descending),
-            "duration" => OrderBy(query, item => (item.Segment.EndSec ?? item.Segment.StartSec) - item.Segment.StartSec, descending),
-            "confidence" => OrderBy(query, item => item.Segment.Confidence ?? -1f, descending),
-            "title" => OrderBy(query, item => NaturalSort.Key(item.Segment.Title ?? item.Segment.Kind ?? item.TagName ?? string.Empty), descending),
-            "video_title" => OrderBy(query, item => NaturalSort.Key(item.VideoTitle ?? string.Empty), descending),
-            "kind" => OrderBy(query, item => NaturalSort.Key(item.Segment.Kind ?? string.Empty), descending),
-            "source_key" => OrderBy(query, item => NaturalSort.Key(item.Segment.SourceKey), descending),
-            "tag_name" => OrderBy(query, item => NaturalSort.Key(item.TagName ?? string.Empty), descending),
-            "performer" => OrderBy(query, item => NaturalSort.Key(item.PerformerName ?? string.Empty), descending),
-            "ref" => OrderBy(query, item => NaturalSort.Key(item.RefLabel ?? item.PerformerName ?? string.Empty), descending),
-            _ => OrderBy(query, item => item.Segment.UpdatedAt, descending),
-        };
+        var parsed = ParseModifier(modifier);
+        if (parsed is CriterionModifier.IsNull or CriterionModifier.NotNull)
+            return new StringCriterion { Value = string.Empty, Modifier = parsed.Value };
+        if (string.IsNullOrWhiteSpace(value) || parsed is null)
+            return null;
+        return new StringCriterion { Value = value.Trim(), Modifier = parsed.Value };
     }
 
-    private static IOrderedQueryable<SegmentLibraryRow> OrderBy<T>(
-        IQueryable<SegmentLibraryRow> query,
-        Expression<Func<SegmentLibraryRow, T>> keySelector,
-        bool descending)
-    {
-        return descending
-            ? query.OrderByDescending(keySelector).ThenByDescending(item => item.Segment.Id)
-            : query.OrderBy(keySelector).ThenBy(item => item.Segment.Id);
-    }
+    // Number and timestamp parameters without a modifier have always meant "greater than".
+    private static DoubleCriterion? DoubleCriterionOrNull(double? value, double? value2, string? modifier)
+        => value.HasValue ? new DoubleCriterion { Value = value.Value, Value2 = value2, Modifier = ParseModifier(modifier) ?? CriterionModifier.GreaterThan } : null;
 
-    private sealed class SegmentLibraryRow
-    {
-        public required Segment Segment { get; init; }
-        public string? VideoTitle { get; init; }
-        public string? TagName { get; init; }
-        public string? RefLabel { get; init; }
-        public int? FaceId { get; init; }
-        public int? FacePerformerId { get; init; }
-        public int? DirectPerformerId { get; init; }
-        public int? PerformerId { get; init; }
-        public string? PerformerName { get; init; }
-    }
+    private static TimestampCriterion? TimestampCriterionOrNull(string? value, string? value2, string? modifier)
+        => string.IsNullOrWhiteSpace(value) ? null : new TimestampCriterion { Value = value, Value2 = value2, Modifier = ParseModifier(modifier) ?? CriterionModifier.GreaterThan };
+
+    private static CriterionModifier? ParseModifier(string? modifier)
+        => !string.IsNullOrWhiteSpace(modifier) && Enum.TryParse<CriterionModifier>(modifier.Replace("_", string.Empty), ignoreCase: true, out var parsed) ? parsed : null;
 
     public sealed record SegmentTagBulkRemoveRequest(int TagId, IReadOnlyList<int>? Ids);
 

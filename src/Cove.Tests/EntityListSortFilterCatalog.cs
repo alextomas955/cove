@@ -26,6 +26,8 @@ public static class EntityListSortFilterCatalog
         ["performers"] = typeof(PerformerFilter),
         ["studios"] = typeof(StudioFilter),
         ["tags"] = typeof(TagFilter),
+        ["segments"] = typeof(SegmentFilter),
+        ["faces"] = typeof(FaceFilter),
     };
 
     public static IReadOnlyList<string> Entities { get; } =
@@ -295,38 +297,18 @@ public static class EntityListSortFilterCatalog
         }
 
         rows.AddRange([
+            // The faces list's criterion filters come from FaceFilter above; these are its plain GET-only
+            // scoping parameters.
             new EntityListFilterDefinition("faces", "performerId", "query-param:int", ["equals"]),
-            new EntityListFilterDefinition("faces", "linked", "query-param:bool", ["true", "false"]),
-            new EntityListFilterDefinition("faces", "ignored", "query-param:bool", ["true", "false"]),
             new EntityListFilterDefinition("faces", "merged", "query-param:bool", ["true", "false"]),
             new EntityListFilterDefinition("faces", "mergedIntoFaceId", "query-param:int", ["equals"]),
-            new EntityListFilterDefinition("faces", "label", "query-param:string", ["equals", "not_equals", "includes", "excludes", "matches_regex", "not_matches_regex", "is_null", "not_null"]),
-            new EntityListFilterDefinition("faces", "primarySourceKey", "query-param:string", ["equals", "not_equals", "includes", "excludes", "matches_regex", "not_matches_regex", "is_null", "not_null"]),
-            new EntityListFilterDefinition("faces", "hasCover", "query-param:bool", ["true", "false"]),
-            new EntityListFilterDefinition("faces", "detectionCount", "query-param:int", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("faces", "appearanceCount", "query-param:int", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("faces", "frameSampleCount", "query-param:int", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("faces", "videoCount", "query-param:int", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("faces", "imageCount", "query-param:int", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
             new EntityListFilterDefinition("segments", "ids", "query-param:int-list", ["includes"]),
             new EntityListFilterDefinition("segments", "videoId", "query-param:int", ["equals"]),
             new EntityListFilterDefinition("segments", "videoIds", "query-param:int-list", ["includes"]),
             new EntityListFilterDefinition("segments", "excludeVideoIds", "query-param:int-list", ["excludes"]),
-            new EntityListFilterDefinition("segments", "videoTitle", "query-param:string", ["includes"]),
             new EntityListFilterDefinition("segments", "tagId", "query-param:int", ["equals"]),
             new EntityListFilterDefinition("segments", "tagIds", "query-param:int-list", ["includes"]),
-            new EntityListFilterDefinition("segments", "kind", "query-param:string", ["includes"]),
-            new EntityListFilterDefinition("segments", "sourceKey", "query-param:string", ["includes"]),
-            new EntityListFilterDefinition("segments", "title", "query-param:string", ["equals", "not_equals", "includes", "excludes", "is_null", "not_null"]),
             new EntityListFilterDefinition("segments", "hostType", "query-param:enum", ["equals"]),
-            new EntityListFilterDefinition("segments", "sourceRunId", "query-param:string", ["equals", "not_equals", "includes", "excludes", "is_null", "not_null"]),
-            new EntityListFilterDefinition("segments", "colorHint", "query-param:string", ["equals", "not_equals", "includes", "excludes", "is_null", "not_null"]),
-            new EntityListFilterDefinition("segments", "hasImage", "query-param:bool", ["true", "false"]),
-            new EntityListFilterDefinition("segments", "hasPayload", "query-param:bool", ["true", "false"]),
-            new EntityListFilterDefinition("segments", "startSec", "query-param:number", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("segments", "endSec", "query-param:number", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("segments", "createdAt", "query-param:timestamp", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
-            new EntityListFilterDefinition("segments", "updatedAt", "query-param:timestamp", ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"]),
             new EntityListFilterDefinition("segments", "tagged", "query-param:bool", ["true", "false"]),
             new EntityListFilterDefinition("segments", "minConfidence", "query-param:number", ["greater_than_or_equal"]),
             new EntityListFilterDefinition("segments", "minDurationSec", "query-param:number", ["greater_than_or_equal"]),
@@ -354,6 +336,13 @@ public static class EntityListSortFilterCatalog
         if (type == typeof(IntCriterion))
         {
             criterionType = nameof(IntCriterion);
+            operators = ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"];
+            return true;
+        }
+
+        if (type == typeof(DoubleCriterion))
+        {
+            criterionType = nameof(DoubleCriterion);
             operators = ["equals", "not_equals", "greater_than", "less_than", "between", "not_between"];
             return true;
         }

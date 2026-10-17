@@ -19,16 +19,13 @@ namespace Cove.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [RequiresPermission(Permissions.AudiosRead)]
-public class AudiosController(CoveContext db, CustomFieldService customFields, IScanService scanService, IThumbnailService thumbnailService, IBlobService blobService, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, IUserEngagementService? engagementService = null, BulkDeletionJobService? bulkDeletionJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, ITagProvenanceService? tagProvenanceService = null) : ControllerBase
+public class AudiosController(CoveContext db, CustomFieldService customFields, IScanService scanService, IThumbnailService thumbnailService, IBlobService blobService, ICurrentPrincipalAccessor? principalAccessor = null, IFieldProvenanceService? fieldProvenanceService = null, IUserEngagementService? engagementService = null, BulkDeletionJobService? bulkDeletionJobService = null, BulkEntityDeletionService? bulkEntityDeletionService = null, PhysicalFileDeletionRecoverySignal? physicalFileDeletionRecoverySignal = null, ITagProvenanceService? tagProvenanceService = null, IAudioRepository? audioRepository = null) : ControllerBase
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
-    private static readonly HashSet<string> AffinityMultiSortKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "play_count", "like_counter", "play_duration", "last_played_at",
-    };
 
     private bool CanReadFiles => principalAccessor?.Current?.Has(Permissions.FilesRead) == true;
     private IUserEngagementService EngagementService => engagementService ?? new UserEngagementService(db, principalAccessor ?? new CurrentPrincipalAccessor());
+    private IAudioRepository Audios => audioRepository ?? new AudioRepository(db);
 
     [HttpGet]
     [OutputCache(PolicyName = "ShortCache")]
@@ -44,38 +41,17 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
     {
         page = Math.Max(1, page);
         perPage = Math.Clamp(perPage, 1, 250);
-        var sortClauses = SortClause.Parse(sorts);
-        var primarySort = sortClauses.FirstOrDefault();
-        sort = primarySort?.Key ?? sort;
-        var descending = primarySort?.Direction == Cove.Core.Enums.SortDirection.Desc
-            || (primarySort is null && string.Equals(direction, "desc", StringComparison.OrdinalIgnoreCase));
-
-        var query = db.Audios.AsNoTracking().AsQueryable();
-
-        var audioBase = query;
-        var audioText = FullTextSearchHelpers.Apply(db, audioBase, q,
-            audio => audio.Title,
-            audio => audio.Code,
-            audio => audio.Details,
-            audio => audio.FileSearchText,
-            audio => audio.SearchText);
-        query = FullTextSearchHelpers.ApplyRelationalMatches(audioText, audioBase, q,
-            tagSelectors: [audio => audio.AudioTags.Where(at => at.Tag != null).Select(at => at.Tag!)],
-            performerSelectors: [audio => audio.AudioPerformers.Where(ap => ap.Performer != null).Select(ap => ap.Performer!)]);
-        query = FullTextSearchHelpers.ApplyFilePathMatch(query, audioBase, q, audio => audio.Files);
-
-        query = ApplySort(query, sort, descending, seed, sortClauses);
-        if (FullTextSearchHelpers.ShouldOrderByRelevance(db, q, sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(db, query, q, audio => audio.Title);
-
-        var totalCount = await query.CountAsync(ct);
-        var pagedIds = await query
-            .Skip((page - 1) * perPage)
-            .Take(perPage)
-            .Select(audio => audio.Id)
-            .ToListAsync(ct);
-
-        var items = await LoadListItemsAsync(pagedIds, ct);
+        var findFilter = new FindFilter
+        {
+            Q = q,
+            Page = page,
+            PerPage = perPage,
+            Sort = sort,
+            Direction = string.Equals(direction, "desc", StringComparison.OrdinalIgnoreCase) ? Cove.Core.Enums.SortDirection.Desc : Cove.Core.Enums.SortDirection.Asc,
+            Sorts = SortClause.Parse(sorts),
+            Seed = seed,
+        };
+        var (items, totalCount) = await Audios.FindAsync(null, findFilter, ct);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
@@ -89,31 +65,14 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         if (!FilterExpressionQuery.TryValidate(req.FilterExpression, out var expressionError))
             return BadRequest(new { message = expressionError });
         var findFilter = req.FindFilter ?? new FindFilter();
-        var page = Math.Max(1, findFilter.Page);
-        var perPage = Math.Clamp(findFilter.PerPage, 1, 250);
-        var sortClauses = CreateMultiSortRegistry().Normalize(findFilter.Sorts);
-        var primarySort = sortClauses.FirstOrDefault();
-        var sort = primarySort?.Key ?? findFilter.Sort;
-        var descending = primarySort?.Direction == Cove.Core.Enums.SortDirection.Desc
-            || (primarySort is null && findFilter.Direction == Cove.Core.Enums.SortDirection.Desc);
-        var query = await AudioFilterQuery.BuildAsync(db, req.ObjectFilter, findFilter, ct: ct, expression: req.FilterExpression);
-        query = ApplySort(query, sort, descending, findFilter.Seed, sortClauses);
-        if (FullTextSearchHelpers.ShouldOrderByRelevance(db, findFilter.Q, sort))
-            query = FullTextSearchHelpers.OrderByExactThenRelevance(db, query, findFilter.Q, audio => audio.Title);
-
-        var totalCount = await query.CountAsync(ct);
-        var pagedIds = await query
-            .Skip((page - 1) * perPage)
-            .Take(perPage)
-            .Select(audio => audio.Id)
-            .ToListAsync(ct);
-
-        var items = await LoadListItemsAsync(pagedIds, ct);
+        findFilter.Page = Math.Max(1, findFilter.Page);
+        findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, 250);
+        var (items, totalCount) = await Audios.FindAsync(req.ObjectFilter, findFilter, ct, req.FilterExpression);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var dtos = items.Select(audio => MapToDto(audio, favorites, null, null, effectiveTags)).ToList();
-        return Ok(new PaginatedResponse<AudioDto>(dtos, totalCount, page, perPage));
+        return Ok(new PaginatedResponse<AudioDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
     [HttpPost("aggregate")]
@@ -121,28 +80,14 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
     {
         if (!FilterExpressionQuery.TryValidate(req.FilterExpression, out var expressionError))
             return BadRequest(new { message = expressionError });
-        var findFilter = req.FindFilter ?? new FindFilter();
-        var query = await AudioFilterQuery.BuildAsync(db, req.ObjectFilter, findFilter, ct: ct, expression: req.FilterExpression);
-        if (req.Ids is { Count: > 0 }) query = query.Where(audio => req.Ids.Contains(audio.Id));
-
-        return Ok(await query.GroupBy(_ => 1)
-            .Select(group => new AudioAggregate(group.Count(), group.Sum(audio => audio.MaxDuration), group.Sum(audio => audio.MaxFileSize)))
-            .SingleOrDefaultAsync(ct)
-            ?? new AudioAggregate(0, 0, 0));
+        return Ok(await Audios.AggregateAsync(req.ObjectFilter, req.FindFilter, req.Ids, ct, req.FilterExpression));
     }
 
     [HttpGet("{id:int}")]
     [AllowShareLinkAccess]
     public async Task<ActionResult<AudioDto>> GetById(int id, CancellationToken ct)
     {
-        var audio = await db.Audios.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.AudioTags).ThenInclude(link => link.Tag)
-            .Include(item => item.AudioPerformers).ThenInclude(link => link.Performer)
-            .Include(item => item.Tracks)
-            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        var audio = await Audios.GetByIdWithRelationsAsync(id, ct);
         if (audio == null)
         {
             return NotFound();
@@ -331,14 +276,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             return BadRequest(new { error = "A valid file path is required." });
 
         var audioId = await scanService.ImportDownloadedAudioAsync(filePath, audioId: null, ct);
-        var audio = await db.Audios.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.AudioTags).ThenInclude(link => link.Tag)
-            .Include(item => item.AudioPerformers).ThenInclude(link => link.Performer)
-            .Include(item => item.Tracks)
-            .FirstOrDefaultAsync(item => item.Id == audioId, ct);
+        var audio = await Audios.GetByIdWithRelationsAsync(audioId, ct);
         if (audio == null) return NotFound();
 
         return CreatedAtAction(nameof(GetById), new { id = audioId }, await MapToDetailDtoAsync(audio, ct));
@@ -416,14 +354,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             await db.SaveChangesAsync(ct);
         }
 
-        var updated = await db.Audios.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.AudioTags).ThenInclude(link => link.Tag)
-            .Include(item => item.AudioPerformers).ThenInclude(link => link.Performer)
-            .Include(item => item.Tracks)
-            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        var updated = await Audios.GetByIdWithRelationsAsync(id, ct);
         if (updated == null)
         {
             return NotFound();
@@ -634,118 +565,6 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
 
     private sealed class AudioFileDeleteException(string message, Exception innerException) : Exception(message, innerException);
 
-    private async Task<List<Audio>> LoadListItemsAsync(IReadOnlyList<int> pagedIds, CancellationToken ct)
-    {
-        if (pagedIds.Count == 0)
-            return [];
-
-        var items = await db.Audios.AsNoTracking()
-            .Include(audio => audio.Studio)
-            .Include(audio => audio.Urls)
-            .Include(audio => audio.Files)
-            .Include(audio => audio.AudioTags).ThenInclude(link => link.Tag)
-            .Include(audio => audio.AudioPerformers).ThenInclude(link => link.Performer)
-            .Include(audio => audio.Tracks)
-            .Where(audio => pagedIds.Contains(audio.Id))
-            .AsSplitQuery()
-            .ToListAsync(ct);
-
-        var orderMap = pagedIds.Select((id, index) => (id, index)).ToDictionary(item => item.id, item => item.index);
-        return items.OrderBy(audio => orderMap.GetValueOrDefault(audio.Id, int.MaxValue)).ToList();
-    }
-
-    private IQueryable<Audio> ApplySort(
-        IQueryable<Audio> query,
-        string? sort,
-        bool descending,
-        int? seed = null,
-        IEnumerable<SortClause>? sorts = null)
-    {
-        var multiSortRegistry = CreateMultiSortRegistry();
-        var clauses = multiSortRegistry.Normalize(sorts);
-        if (clauses.Count > 1)
-            return ApplyMultiSort(query, clauses, multiSortRegistry);
-
-        if (FilterHelpers.TryParseCustomFieldSort(sort, out _, out _))
-            return query.ApplyCustomFieldSort(db, CustomFieldEntityTypes.Audio, sort, descending);
-
-        return (sort ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "random" => Cove.Data.Repositories.SeededRandomOrdering.OrderBy(query, seed, audio => audio.Id, descending),
-            "title" => descending ? query.OrderByDescending(audio => NaturalSort.Key(audio.Title)).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => NaturalSort.Key(audio.Title)).ThenBy(audio => audio.Id),
-            "date" => descending ? query.OrderByDescending(audio => audio.Date).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Date).ThenBy(audio => audio.Id),
-            "duration" => descending ? query.OrderByDescending(audio => audio.MaxDuration).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxDuration).ThenBy(audio => audio.Id),
-            "rating" => EngagementQueryHelpers.ApplyRatingSort(db, query, EngagementQueryHelpers.CurrentUserId(db), RatingHostType.Audio, descending),
-            "play_count" => EngagementQueryHelpers.ApplyAffinityIntSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Audio, nameof(UserEntityAffinity.ViewCount), descending),
-            "like_counter" => EngagementQueryHelpers.ApplyAffinityIntSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Audio, nameof(UserEntityAffinity.LikeCount), descending),
-            "play_duration" => EngagementQueryHelpers.ApplyAffinityDoubleSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Audio, nameof(UserEntityAffinity.TotalConsumedSec), descending),
-            "last_played_at" => EngagementQueryHelpers.ApplyAffinityTimestampSort(db, query, EngagementQueryHelpers.CurrentUserId(db), AffinityHostType.Audio, nameof(UserEntityAffinity.LastConsumedAt), descending),
-            "file_size" => descending ? query.OrderByDescending(audio => audio.MaxFileSize).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxFileSize).ThenBy(audio => audio.Id),
-            "file_mod_time" => descending ? query.OrderByDescending(audio => audio.MaxFileModTime).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxFileModTime).ThenBy(audio => audio.Id),
-            "file_count" => descending ? query.OrderByDescending(audio => audio.FileCount).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.FileCount).ThenBy(audio => audio.Id),
-            "path" => descending ? query.OrderByDescending(audio => NaturalSort.Key(audio.MaxPath)).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => NaturalSort.Key(audio.MinPath)).ThenBy(audio => audio.Id),
-            "bitrate" or "bit_rate" => descending ? query.OrderByDescending(audio => audio.MaxBitRate).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.MaxBitRate).ThenBy(audio => audio.Id),
-            "has_video" or "has_video_files" => descending ? query.OrderByDescending(audio => audio.HasVideoFiles).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.HasVideoFiles).ThenBy(audio => audio.Id),
-            "track_count" => descending ? query.OrderByDescending(audio => audio.Tracks.Count).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.Tracks.Count).ThenBy(audio => audio.Id),
-            "tag_count" => descending ? query.OrderByDescending(audio => audio.AudioTags.Count).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.AudioTags.Count).ThenBy(audio => audio.Id),
-            "performer_count" => descending ? query.OrderByDescending(audio => audio.AudioPerformers.Count).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.AudioPerformers.Count).ThenBy(audio => audio.Id),
-            "updatedat" or "updated_at" => descending ? query.OrderByDescending(audio => audio.UpdatedAt).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.UpdatedAt).ThenBy(audio => audio.Id),
-            "createdat" => descending ? query.OrderByDescending(audio => audio.CreatedAt).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.CreatedAt).ThenBy(audio => audio.Id),
-            "created_at" => descending ? query.OrderByDescending(audio => audio.CreatedAt).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.CreatedAt).ThenBy(audio => audio.Id),
-            _ => descending ? query.OrderByDescending(audio => audio.UpdatedAt).ThenByDescending(audio => audio.Id) : query.OrderBy(audio => audio.UpdatedAt).ThenBy(audio => audio.Id),
-        };
-    }
-
-    private static CompoundSortRegistry<Audio> CreateMultiSortRegistry()
-        => new(new Dictionary<string, Action<CompoundSortQuery<Audio>, bool>>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["title"] = (compound, desc) =>
-            {
-                compound.Append(audio => audio.Title == null ? 1 : 0, false);
-                compound.Append(audio => audio.Title, desc);
-            },
-            ["rating"] = (compound, desc) => compound.AppendRating(desc),
-            ["play_count"] = (compound, desc) => compound.AppendAffinityInt(nameof(UserEntityAffinity.ViewCount), desc),
-            ["like_counter"] = (compound, desc) => compound.AppendAffinityInt(nameof(UserEntityAffinity.LikeCount), desc),
-            ["play_duration"] = (compound, desc) => compound.AppendAffinityDouble(nameof(UserEntityAffinity.TotalConsumedSec), desc),
-            ["last_played_at"] = (compound, desc) => compound.AppendAffinityTimestamp(nameof(UserEntityAffinity.LastConsumedAt), desc),
-            ["date"] = (compound, desc) =>
-            {
-                compound.Append(audio => audio.Date == null ? 1 : 0, false);
-                compound.Append(audio => audio.Date, desc);
-            },
-            ["duration"] = (compound, desc) => compound.Append(audio => audio.MaxDuration, desc),
-            ["file_size"] = (compound, desc) => compound.Append(audio => audio.MaxFileSize, desc),
-            ["file_mod_time"] = (compound, desc) =>
-            {
-                compound.Append(audio => audio.MaxFileModTime == null ? 1 : 0, false);
-                compound.Append(audio => audio.MaxFileModTime, desc);
-            },
-            ["file_count"] = (compound, desc) => compound.Append(audio => audio.FileCount, desc),
-            ["path"] = (compound, desc) => compound.Append(audio => desc ? audio.MaxPath : audio.MinPath, desc),
-            ["bitrate"] = (compound, desc) => compound.Append(audio => audio.MaxBitRate, desc),
-            ["has_video_files"] = (compound, desc) => compound.Append(audio => audio.HasVideoFiles, desc),
-            ["track_count"] = (compound, desc) => compound.Append(audio => audio.Tracks.Count, desc),
-            ["tag_count"] = (compound, desc) => compound.Append(audio => audio.AudioTags.Count, desc),
-            ["performer_count"] = (compound, desc) => compound.Append(audio => audio.AudioPerformers.Count, desc),
-            ["createdAt"] = (compound, desc) => compound.Append(audio => audio.CreatedAt, desc),
-            ["created_at"] = (compound, desc) => compound.Append(audio => audio.CreatedAt, desc),
-            ["updatedAt"] = (compound, desc) => compound.Append(audio => audio.UpdatedAt, desc),
-            ["updated_at"] = (compound, desc) => compound.Append(audio => audio.UpdatedAt, desc),
-        });
-
-    private IQueryable<Audio> ApplyMultiSort(IQueryable<Audio> query, IReadOnlyList<SortClause> clauses, CompoundSortRegistry<Audio> registry)
-    {
-        var userId = EngagementQueryHelpers.CurrentUserId(db);
-        var compound = CompoundSortQuery<Audio>.Create(
-            db, query, userId, AffinityHostType.Audio, RatingHostType.Audio,
-            includeAffinity: clauses.Any(clause => AffinityMultiSortKeys.Contains(clause.Key)),
-            includeRating: clauses.Any(clause => clause.Key.Equals("rating", StringComparison.OrdinalIgnoreCase)));
-        registry.Apply(compound, clauses);
-
-        return compound.Finish(audio => audio.Id, clauses[0].Direction == Cove.Core.Enums.SortDirection.Desc);
-    }
-
     private async Task<AudioDto> MapToDetailDtoAsync(Audio audio, CancellationToken ct)
     {
         var groups = await GetGroupsAsync(audio.Id, ct);
@@ -836,14 +655,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             : audio.AudioTags.Where(link => link.Tag != null).Select(link => TagDtoMapping.MapTagDto(link.Tag!, favorites)).OrderForDisplay().ToList();
 
     private async Task<Audio?> GetAudioForDtoAsync(int id, CancellationToken ct)
-        => await db.Audios.AsNoTracking()
-            .Include(item => item.Studio)
-            .Include(item => item.Urls)
-            .Include(item => item.Files)
-            .Include(item => item.AudioTags).ThenInclude(link => link.Tag)
-            .Include(item => item.AudioPerformers).ThenInclude(link => link.Performer)
-            .Include(item => item.Tracks)
-            .FirstOrDefaultAsync(item => item.Id == id, ct);
+        => await Audios.GetByIdWithRelationsAsync(id, ct);
 
     private async Task<List<GroupSummaryDto>> GetGroupsAsync(int audioId, CancellationToken ct)
         => await db.GroupItems.AsNoTracking()

@@ -208,32 +208,32 @@ public class EntityListSortBehaviorHarnessTests
             _ => [701])];
 
         yield return [new FilterProbe(
-            "filter:segments:kind/includes",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: "beat", sourceKey: null, tagged: null, minConfidence: null, minDurationSec: null, excludeVideoIds: null),
+            "filter:segments:KindCriterion/includes",
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { KindCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = "beat" } }),
             _ => [1002])];
         yield return [new FilterProbe(
             "filter:segments:minConfidence/greater_than_or_equal",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: null, sourceKey: null, tagged: null, minConfidence: 0.5f, minDurationSec: null, excludeVideoIds: null),
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { MinConfidence = 0.5f }),
             _ => [1002, 1003])];
         yield return [new FilterProbe(
-            "filter:segments:title/includes",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: null, sourceKey: null, tagged: null, minConfidence: null, minDurationSec: null, excludeVideoIds: null, title: "Beta", titleModifier: "INCLUDES"),
+            "filter:segments:TitleCriterion/includes",
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { TitleCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = "Beta" } }),
             _ => [1002])];
         yield return [new FilterProbe(
-            "filter:segments:startSec/greater_than",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: null, sourceKey: null, tagged: null, minConfidence: null, minDurationSec: null, excludeVideoIds: null, startSec: 4, startSecModifier: "GREATER_THAN"),
+            "filter:segments:StartSecCriterion/greater_than",
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { StartSecCriterion = new DoubleCriterion { Modifier = CriterionModifier.GreaterThan, Value = 4 } }),
             _ => [1002, 1003])];
         yield return [new FilterProbe(
-            "filter:segments:createdAt/greater_than",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: null, sourceKey: null, tagged: null, minConfidence: null, minDurationSec: null, excludeVideoIds: null, createdAt: "2024-03-21T00:00:00Z", createdAtModifier: "GREATER_THAN"),
+            "filter:segments:CreatedAtCriterion/greater_than",
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { CreatedAtCriterion = new TimestampCriterion { Modifier = CriterionModifier.GreaterThan, Value = "2024-03-21T00:00:00Z" } }),
             _ => [1002, 1003])];
         yield return [new FilterProbe(
-            "filter:segments:hasImage/true",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: null, sourceKey: null, tagged: null, minConfidence: null, minDurationSec: null, excludeVideoIds: null, hasImage: true),
+            "filter:segments:HasImageCriterion/true",
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { HasImageCriterion = new BoolCriterion { Value = true } }),
             _ => [1002])];
         yield return [new FilterProbe(
-            "filter:segments:hasPayload/true",
-            fixture => QuerySegmentIdsAsync(fixture.Context, q: null, ids: null, videoId: null, videoIds: null, videoTitle: null, tagId: null, tagIds: null, kind: null, sourceKey: null, tagged: null, minConfidence: null, minDurationSec: null, excludeVideoIds: null, hasPayload: true),
+            "filter:segments:HasPayloadCriterion/true",
+            fixture => QuerySegmentIdsAsync(fixture.Context, new SegmentFilter { HasPayloadCriterion = new BoolCriterion { Value = true } }),
             _ => [1003])];
 
         yield return [new FilterProbe(
@@ -284,36 +284,36 @@ public class EntityListSortBehaviorHarnessTests
             // Performer 302 belongs to the merged face 1102, which is intentionally hidden from the list
             // (a merged face is a tombstone). Target the non-merged 1101 (performer 301) so this still
             // positively exercises the performerId filter.
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: 301, linked: null, ignored: null, merged: null),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { PerformerId = 301 }),
             _ => [1101])];
         yield return [new FilterProbe(
-            "filter:faces:linked/true",
+            "filter:faces:LinkedCriterion/true",
             // 1102 is linked to a performer but merged, so it never surfaces.
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: null, linked: true, ignored: null, merged: null),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { LinkedCriterion = new BoolCriterion { Value = true } }),
             _ => [1101, 1103])];
         yield return [new FilterProbe(
-            "filter:faces:label/includes",
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: null, linked: null, ignored: null, merged: null, label: "Gamma", labelModifier: "INCLUDES"),
+            "filter:faces:LabelCriterion/includes",
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { LabelCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = "Gamma" } }),
             _ => [1103])];
         yield return [new FilterProbe(
-            "filter:faces:ignored/true",
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: null, linked: null, ignored: true, merged: null),
+            "filter:faces:IgnoredCriterion/true",
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { IgnoredCriterion = new BoolCriterion { Value = true } }),
             _ => [1103])];
         yield return [new FilterProbe(
-            "filter:faces:merged/true",
-            // The merged param is intentionally inert: merged faces are tombstones hidden from the list,
-            // so merged=true still returns only the non-merged visible faces (the merged 1102 never
-            // surfaces). This guards that the blanket exclusion overrides the merged param.
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: null, linked: null, ignored: null, merged: true),
+            "filter:faces:IsMerged/true",
+            // IsMerged is intentionally inert for the list: merged faces are tombstones hidden from it,
+            // so IsMerged=true still returns only the non-merged visible faces (the merged 1102 never
+            // surfaces). This guards that the blanket exclusion overrides the flag.
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { IsMerged = true }),
             _ => [1101, 1103])];
         yield return [new FilterProbe(
-            "filter:faces:hasCover/true",
+            "filter:faces:HasCoverCriterion/true",
             // 1102 has a cover but is merged (hidden); only the non-merged 1103 surfaces.
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: null, linked: null, ignored: null, merged: null, hasCover: true),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { HasCoverCriterion = new BoolCriterion { Value = true } }),
             _ => [1103])];
         yield return [new FilterProbe(
-            "filter:faces:detectionCount/greater_than",
-            fixture => QueryFaceIdsAsync(fixture.Context, performerId: null, linked: null, ignored: null, merged: null, detectionCount: 4, detectionCountModifier: "GREATER_THAN"),
+            "filter:faces:DetectionCountCriterion/greater_than",
+            fixture => QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { DetectionCountCriterion = new IntCriterion { Modifier = CriterionModifier.GreaterThan, Value = 4 } }),
             _ => [1103])];
     }
 
@@ -769,13 +769,7 @@ public class EntityListSortBehaviorHarnessTests
         var audioSortedIds = await QueryAudioIdsAsync(fixture.Context, "custom:number:extension_score", CoveSortDirection.Desc);
         Assert.Equal([803, 801, 802], audioSortedIds);
 
-        var faceFilteredIds = await QueryFaceIdsAsync(
-            fixture.Context,
-            performerId: null,
-            linked: null,
-            ignored: null,
-            merged: null,
-            customFieldCriteria: "[{\"key\":\"extension_score\",\"type\":\"number\",\"modifier\":\"GREATER_THAN\",\"value\":\"15\"}]");
+        var faceFilteredIds = await QueryFilteredIdsAsync(fixture.Context, "faces", new FaceFilter { CustomFieldCriteria = [criterion] });
         Assert.Equal([1101, 1103], faceFilteredIds.OrderBy(id => id).ToArray());
 
         var faceSortedIds = await QueryFaceIdsAsync(fixture.Context, "custom:number:extension_score", CoveSortDirection.Desc);
@@ -869,210 +863,31 @@ public class EntityListSortBehaviorHarnessTests
 
     private static async Task<IReadOnlyList<int>> QueryAudioIdsAsync(CoveContext context, string sortKey, CoveSortDirection direction)
     {
-        var controller = new AudiosController(context, null!, null!, null!, null!, null);
-        var response = await controller.Find(null, 1, 50, sortKey, DirectionValue(direction));
-        return ExtractItems(response).Select(item => item.Id).ToArray();
+        var findFilter = new FindFilter { Page = 1, PerPage = 50, Sort = sortKey, Direction = direction };
+        return (await new AudioRepository(context).FindAsync(null, findFilter)).Items.Select(item => item.Id).ToArray();
     }
 
     private static async Task<IReadOnlyList<int>> QueryTextIdsAsync(CoveContext context, string sortKey, CoveSortDirection direction)
     {
-        var controller = new TextsController(context, null!, null!, null!, null!, null!, null);
-        var response = await controller.Find(null, 1, 50, sortKey, DirectionValue(direction));
-        return ExtractItems(response).Select(item => item.Id).ToArray();
+        var findFilter = new FindFilter { Page = 1, PerPage = 50, Sort = sortKey, Direction = direction };
+        return (await new TextDocumentRepository(context).FindAsync(null, findFilter)).Items.Select(item => item.Id).ToArray();
     }
 
     private static async Task<IReadOnlyList<int>> QuerySegmentIdsAsync(CoveContext context, string sortKey, CoveSortDirection direction)
+        => await QuerySegmentIdsAsync(context, new SegmentFilter(), new FindFilter { Page = 1, PerPage = 50, Sort = sortKey, Direction = direction });
+
+    private static async Task<IReadOnlyList<int>> QuerySegmentIdsAsync(CoveContext context, SegmentFilter filter, FindFilter? findFilter = null)
     {
-        var controller = new SegmentsController(context, null!, new MemoryCache(new MemoryCacheOptions()));
-        var response = await controller.List(
-            q: null,
-            ids: null,
-            videoId: null,
-            videoIds: null,
-            videoTitle: null,
-            tagId: null,
-            tagIds: null,
-            kind: null,
-            sourceKey: null,
-            sourceCategory: null,
-            refIds: null,
-            performerIds: null,
-            tagged: null,
-            minConfidence: null,
-            minDurationSec: null,
-            confidence: null,
-            confidence2: null,
-            confidenceModifier: null,
-            durationSec: null,
-            durationSec2: null,
-            durationModifier: null,
-            sort: sortKey,
-            direction: DirectionValue(direction),
-            excludeVideoIds: null,
-            page: 1,
-            perPage: 50);
-
-        return ExtractItems(response).Select(item => item.Id).ToArray();
-    }
-
-    private static async Task<IReadOnlyList<int>> QuerySegmentIdsAsync(
-        CoveContext context,
-        string? q,
-        string? ids,
-        int? videoId,
-        string? videoIds,
-        string? videoTitle,
-        int? tagId,
-        string? tagIds,
-        string? kind,
-        string? sourceKey,
-        bool? tagged,
-        float? minConfidence,
-        double? minDurationSec,
-        string? excludeVideoIds,
-        string? title = null,
-        string? titleModifier = null,
-        double? startSec = null,
-        string? startSecModifier = null,
-        string? createdAt = null,
-        string? createdAtModifier = null,
-        bool? hasImage = null,
-        bool? hasPayload = null)
-    {
-        var controller = new SegmentsController(context, null!, new MemoryCache(new MemoryCacheOptions()));
-        var response = await controller.List(
-            q,
-            ids,
-            videoId,
-            videoIds,
-            videoTitle,
-            tagId,
-            tagIds,
-            kind,
-            sourceKey,
-            sourceCategory: null,
-            refIds: null,
-            performerIds: null,
-            tagged,
-            minConfidence,
-            minDurationSec,
-            confidence: null,
-            confidence2: null,
-            confidenceModifier: null,
-            durationSec: null,
-            durationSec2: null,
-            durationModifier: null,
-            sort: "updated_at",
-            direction: "asc",
-            excludeVideoIds: excludeVideoIds,
-            title: title,
-            titleModifier: titleModifier,
-            hasImage: hasImage,
-            hasPayload: hasPayload,
-            startSec: startSec,
-            startSecModifier: startSecModifier,
-            createdAt: createdAt,
-            createdAtModifier: createdAtModifier,
-            page: 1,
-            perPage: 50);
-
-        return ExtractItems(response).Select(item => item.Id).ToArray();
+        findFilter ??= new FindFilter { Page = 1, PerPage = 50, Sort = "updated_at", Direction = CoveSortDirection.Desc };
+        var (items, _) = await new SegmentRepository(context).FindAsync(filter, findFilter);
+        return items.Select(item => item.Segment.Id).ToArray();
     }
 
     private static async Task<IReadOnlyList<int>> QueryFaceIdsAsync(CoveContext context, string sortKey, CoveSortDirection direction = CoveSortDirection.Desc)
     {
-        var controller = new FacesController(context, null!, null!, null!, [], NullLogger<FacesController>.Instance, [], null);
-        var response = await controller.List(
-            q: null,
-            performerId: null,
-            performerIds: null,
-            linked: null,
-            ignored: null,
-            merged: null,
-            minSuggestionConfidence: null,
-            suggestionConfidence: null,
-            suggestionConfidence2: null,
-            suggestionConfidenceModifier: null,
-            topSuggestionPerformerIds: null,
-            sort: sortKey,
-            direction: direction,
-            customFieldCriteria: null,
-            page: 1,
-            perPage: 50);
-
-        return ExtractItems(response).Select(item => item.Id).ToArray();
-    }
-
-    private static async Task<IReadOnlyList<int>> QueryFaceIdsAsync(
-        CoveContext context,
-        int? performerId,
-        bool? linked,
-        bool? ignored,
-        bool? merged,
-        int? mergedIntoFaceId = null,
-        string? label = null,
-        string? labelModifier = null,
-        string? primarySourceKey = null,
-        string? primarySourceKeyModifier = null,
-        bool? hasCover = null,
-        int? detectionCount = null,
-        int? detectionCount2 = null,
-        string? detectionCountModifier = null,
-        int? appearanceCount = null,
-        int? appearanceCount2 = null,
-        string? appearanceCountModifier = null,
-        int? frameSampleCount = null,
-        int? frameSampleCount2 = null,
-        string? frameSampleCountModifier = null,
-        int? videoCount = null,
-        int? videoCount2 = null,
-        string? videoCountModifier = null,
-        int? imageCount = null,
-        int? imageCount2 = null,
-        string? imageCountModifier = null,
-        string? customFieldCriteria = null)
-    {
-        var controller = new FacesController(context, null!, null!, null!, [], NullLogger<FacesController>.Instance, [], null);
-        var response = await controller.List(
-            q: null,
-            performerId: performerId,
-            performerIds: null,
-            linked: linked,
-            ignored: ignored,
-            merged: merged,
-            mergedIntoFaceId: mergedIntoFaceId,
-            label: label,
-            labelModifier: labelModifier,
-            primarySourceKey: primarySourceKey,
-            primarySourceKeyModifier: primarySourceKeyModifier,
-            hasCover: hasCover,
-            detectionCount: detectionCount,
-            detectionCount2: detectionCount2,
-            detectionCountModifier: detectionCountModifier,
-            appearanceCount: appearanceCount,
-            appearanceCount2: appearanceCount2,
-            appearanceCountModifier: appearanceCountModifier,
-            frameSampleCount: frameSampleCount,
-            frameSampleCount2: frameSampleCount2,
-            frameSampleCountModifier: frameSampleCountModifier,
-            videoCount: videoCount,
-            videoCount2: videoCount2,
-            videoCountModifier: videoCountModifier,
-            imageCount: imageCount,
-            imageCount2: imageCount2,
-            imageCountModifier: imageCountModifier,
-            minSuggestionConfidence: null,
-            suggestionConfidence: null,
-            suggestionConfidence2: null,
-            suggestionConfidenceModifier: null,
-            topSuggestionPerformerIds: null,
-            sort: "created_desc",
-            direction: CoveSortDirection.Desc,
-            customFieldCriteria: customFieldCriteria,
-            page: 1,
-            perPage: 50);
-
-        return ExtractItems(response).Select(item => item.Id).ToArray();
+        // No seed: ProjectFaceIds' random projection assumes the repository's default seed.
+        var findFilter = new FindFilter { Page = 1, PerPage = 50, Sort = sortKey, Direction = direction };
+        return (await new FaceRepository(context).FindAsync(null, findFilter)).Items.Select(face => face.Id).ToArray();
     }
 
     private static async Task<IReadOnlyList<int>> QueryFilteredIdsAsync(CoveContext context, string entity, object filter)
@@ -1089,23 +904,16 @@ public class EntityListSortBehaviorHarnessTests
             ("tags", TagFilter tagFilter) => (await new TagRepository(context).FindAsync(tagFilter, findFilter)).Items.Select(item => item.Id).ToArray(),
             ("audios", AudioFilter audioFilter) => await QueryFilteredAudioIdsAsync(context, audioFilter, findFilter),
             ("texts", TextDocumentFilter textFilter) => await QueryFilteredTextIdsAsync(context, textFilter, findFilter),
+            ("faces", FaceFilter faceFilter) => (await new FaceRepository(context).FindAsync(faceFilter, findFilter)).Items.Select(item => item.Id).ToArray(),
             _ => throw new InvalidOperationException($"No filter behavior query configured for entity '{entity}'."),
         };
     }
 
     private static async Task<IReadOnlyList<int>> QueryFilteredAudioIdsAsync(CoveContext context, AudioFilter filter, FindFilter findFilter)
-    {
-        var controller = new AudiosController(context, null!, null!, null!, null!, null);
-        var response = await controller.FindPost(new FilteredQueryRequest<AudioFilter> { ObjectFilter = filter, FindFilter = findFilter }, CancellationToken.None);
-        return ExtractItems(response).Select(item => item.Id).ToArray();
-    }
+        => (await new AudioRepository(context).FindAsync(filter, findFilter)).Items.Select(item => item.Id).ToArray();
 
     private static async Task<IReadOnlyList<int>> QueryFilteredTextIdsAsync(CoveContext context, TextDocumentFilter filter, FindFilter findFilter)
-    {
-        var controller = new TextsController(context, null!, null!, null!, null!, null!, null);
-        var response = await controller.FindPost(new FilteredQueryRequest<TextDocumentFilter> { ObjectFilter = filter, FindFilter = findFilter }, CancellationToken.None);
-        return ExtractItems(response).Select(item => item.Id).ToArray();
-    }
+        => (await new TextDocumentRepository(context).FindAsync(filter, findFilter)).Items.Select(item => item.Id).ToArray();
 
     private static IReadOnlyList<T> ExtractItems<T>(ActionResult<PaginatedResponse<T>> actionResult)
     {
@@ -1389,7 +1197,7 @@ public class EntityListSortBehaviorHarnessTests
 
     private static IReadOnlyList<int> ProjectFaceIds(SortHarnessFixture fixture, string sortKey, bool descending)
     {
-        // Merged faces are tombstones hidden from the list (see FacesController's blanket exclusion),
+        // Merged faces are tombstones hidden from the list (see FaceRepository.FindAsync's blanket exclusion),
         // so the expected ordering must exclude them too.
         var faces = fixture.Faces.Where(face => face.MergedIntoFaceId == null).ToArray();
         return sortKey switch

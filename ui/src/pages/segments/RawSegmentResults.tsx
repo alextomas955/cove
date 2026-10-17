@@ -98,13 +98,7 @@ export function RawSegmentResults({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="hidden grid-cols-[minmax(0,1.3fr)_140px_minmax(0,1fr)_120px_120px] gap-3 border-b border-border bg-surface/70 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted lg:grid">
-        <span>Segment</span>
-        <span>Range</span>
-        <span>Video</span>
-        <span>Source</span>
-        <span>Updated</span>
-      </div>
+      <RawSegmentListHeader />
       <div className="divide-y divide-border">
         {items.map((item) => (
           <RawSegmentListRow
@@ -123,7 +117,20 @@ export function RawSegmentResults({
   );
 }
 
-function RawSegmentListRow({
+/** The column headings of the raw segment list; extensions that list segments as rows share it. */
+export function RawSegmentListHeader() {
+  return (
+    <div className="hidden grid-cols-[minmax(0,1.3fr)_140px_minmax(0,1fr)_120px_120px] gap-3 border-b border-border bg-surface/70 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted lg:grid">
+      <span>Segment</span>
+      <span>Range</span>
+      <span>Video</span>
+      <span>Source</span>
+      <span>Updated</span>
+    </div>
+  );
+}
+
+export function RawSegmentListRow({
   item,
   canReadVideos,
   onNavigate,

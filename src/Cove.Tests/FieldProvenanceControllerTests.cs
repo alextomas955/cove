@@ -4,6 +4,7 @@ using Cove.Core.DTOs;
 using Cove.Core.Entities;
 using Cove.Core.Interfaces;
 using Cove.Data;
+using Cove.Data.Repositories;
 using Cove.Data.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -71,7 +72,7 @@ public class FieldProvenanceControllerTests
         await fieldProvenance.RecordAsync(AffinityHostType.Segment, segment.Id, "title", "Detected beat", "ext:test", cancellationToken: CancellationToken.None);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var controller = new SegmentsController(db, null!, new MemoryCache(new MemoryCacheOptions()), fieldProvenance);
+        var controller = new SegmentsController(db, new SegmentRepository(db), null!, new MemoryCache(new MemoryCacheOptions()), fieldProvenance);
 
         var result = await controller.GetById(segment.Id, CancellationToken.None);
         var ok = Assert.IsType<OkObjectResult>(result.Result);

@@ -1640,4 +1640,78 @@ public static class FilterHelpers
             normalized = normalized[..^1];
         return normalized;
     }
+
+    /// <summary>Number criterion over a fractional column (seconds, 0..1 confidences); the <see cref="ApplyInt{T}"/> rules with doubles.</summary>
+    public static IQueryable<T> ApplyDouble<T>(IQueryable<T> query, DoubleCriterion? criterion, Expression<Func<T, double>> selector)
+    {
+        if (criterion == null) return query;
+        var val = criterion.Value;
+        var val2 = criterion.Value2 ?? val;
+        var lower = Math.Min(val, val2);
+        var upper = Math.Max(val, val2);
+        var param = selector.Parameters[0];
+        var body = selector.Body;
+
+        return criterion.Modifier switch
+        {
+            CriterionModifier.Equals => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.Equal(body, Expression.Constant(val)), param)),
+            CriterionModifier.NotEquals => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.NotEqual(body, Expression.Constant(val)), param)),
+            CriterionModifier.GreaterThan => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.GreaterThan(body, Expression.Constant(val)), param)),
+            CriterionModifier.LessThan => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.LessThan(body, Expression.Constant(val)), param)),
+            CriterionModifier.Between => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.AndAlso(
+                    Expression.GreaterThanOrEqual(body, Expression.Constant(lower)),
+                    Expression.LessThanOrEqual(body, Expression.Constant(upper))), param)),
+            CriterionModifier.NotBetween => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.OrElse(
+                    Expression.LessThan(body, Expression.Constant(lower)),
+                    Expression.GreaterThan(body, Expression.Constant(upper))), param)),
+            _ => query,
+        };
+    }
+
+    /// <summary>
+    /// <see cref="ApplyDouble{T}"/> for a column that may be null. A row without a value never satisfies a
+    /// bound, but it does satisfy the negative modifiers (NotEquals, NotBetween), which is how the segment
+    /// library has always treated a missing confidence.
+    /// </summary>
+    public static IQueryable<T> ApplyNullableDouble<T>(IQueryable<T> query, DoubleCriterion? criterion, Expression<Func<T, double?>> selector)
+    {
+        if (criterion == null) return query;
+        var val = criterion.Value;
+        var val2 = criterion.Value2 ?? val;
+        var lower = Math.Min(val, val2);
+        var upper = Math.Max(val, val2);
+        var param = selector.Parameters[0];
+        var body = selector.Body;
+        var isNull = Expression.Equal(body, Expression.Constant(null, typeof(double?)));
+        static ConstantExpression Bound(double value) => Expression.Constant(value, typeof(double?));
+
+        return criterion.Modifier switch
+        {
+            CriterionModifier.Equals => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.Equal(body, Bound(val)), param)),
+            CriterionModifier.NotEquals => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.OrElse(isNull, Expression.NotEqual(body, Bound(val))), param)),
+            CriterionModifier.GreaterThan => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.GreaterThan(body, Bound(val)), param)),
+            CriterionModifier.LessThan => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.LessThan(body, Bound(val)), param)),
+            CriterionModifier.Between => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.AndAlso(
+                    Expression.GreaterThanOrEqual(body, Bound(lower)),
+                    Expression.LessThanOrEqual(body, Bound(upper))), param)),
+            CriterionModifier.NotBetween => query.Where(Expression.Lambda<Func<T, bool>>(
+                Expression.OrElse(
+                    isNull,
+                    Expression.OrElse(
+                        Expression.LessThan(body, Bound(lower)),
+                        Expression.GreaterThan(body, Bound(upper)))), param)),
+            _ => query,
+        };
+    }
 }
