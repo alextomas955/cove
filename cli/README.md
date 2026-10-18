@@ -113,6 +113,15 @@ A token acts as its owner. Its effective permissions are the intersection of the
 
 Cove expands implied permissions, so a scope key also grants what it implies: `--scope images.delete.file` reaches `images.delete` and `images.read` as well. List read keys only when a token should stay read-only. A scope that includes a permission the current identity does not hold is reported before the request is sent; in `--json` and `--jsonl` output a preset is never narrowed silently, so name the permissions explicitly when the identity holds only part of a preset.
 
+Install extension packages from local ZIP files or package URLs:
+
+```sh
+cove-cli extensions install ./cove.example-0.8.1-dev.20261018143000.zip --trust-unverified
+cove-cli extensions install core.zip faces.zip --trust-unverified --profile personal
+```
+
+An installed extension with the same ID is replaced. Packages are installed in the order given, so list dependencies first; the first failure stops the run and names the packages already installed. Cove downloads a URL itself, so it must be reachable from the server. `--trust-unverified` is required because these packages are not verified by an extension registry.
+
 ## Develop
 
 Run the CLI directly from the checkout:

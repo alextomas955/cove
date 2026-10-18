@@ -10,10 +10,11 @@ import { CoveClient } from "./client";
 import { parseCompletionShell, renderCompletion, setCompletionChoices } from "./completions";
 import { ConfigStore, normalizeServer, resolveProfile, selectedProfileName } from "./config";
 import { CliError, toCliError } from "./errors";
+import { installExtensionPackages } from "./extensions";
 import { listEntities, mergeObjectFilters } from "./entity-list";
 import { filterByCompletionValues, filterByObjectFilter } from "./filter-by";
 import type { FilterByResource } from "./filter-by";
-import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderGalleries, renderGlobalSearch, renderGroupDeleted, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTagGroup, renderTagGroupAssignment, renderTagGroupDeleted, renderTagGroups, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
+import { renderApiTokenRevoked, renderApiTokens, renderAudio, renderAudios, renderAuthSummary, renderCatalogDetail, renderExtensionsInstalled, renderGalleries, renderGlobalSearch, renderGroupDeleted, renderGroupItems, renderGroups, renderImages, renderIssuedApiToken, renderLoginSummary, renderLogoutSummary, renderPerformer, renderPerformers, renderProfileChange, renderProfiles, renderSavedFilters, renderSegments, renderSimilarImages, renderSimilarVideos, renderStudios, renderTagGroup, renderTagGroupAssignment, renderTagGroupDeleted, renderTagGroups, renderTags, renderTexts, renderVideo, renderVideoResults } from "./output";
 import type { CatalogEntityKind, RenderContext } from "./output";
 import { resolveResultWindow } from "./pagination";
 import type { ResultWindowOptions } from "./pagination";
@@ -1208,6 +1209,20 @@ export function createProgram(store = new ConfigStore(), helpColor = terminalCol
       const result = await client.get<unknown>(`logs?${query}`);
       print(result, global, () => renderMutation("Recent logs", result), Array.isArray(result) ? result : undefined);
     });
+
+  const extensions = program.command("extensions").description("Install extension packages").helpGroup("Manage:");
+  withExamples(extensions.command("install <packages...>")
+    .description("Install extension ZIPs or package URLs, replacing installed copies of the same extensions")
+    .requiredOption("--trust-unverified", "confirm that these packages are not verified by an extension registry"), [
+    "cove-cli extensions install ./artifacts/packages/cove.example-0.8.1-dev.20261018143000.zip --trust-unverified",
+    "cove-cli extensions install core.zip faces.zip --trust-unverified --profile personal",
+    "cove-cli extensions install https://example.com/cove.example-1.2.0.zip --trust-unverified --json",
+  ]).action(async (packages: string[], _options, command: Command) => {
+    const global = globals(command);
+    const { client } = await clientFor(store, global);
+    const installed = await installExtensionPackages(client, packages);
+    print({ installed }, global, () => renderExtensionsInstalled(installed, renderFor(global)), installed);
+  });
 
   const media = program.command("media").description("Download authenticated media and API files").helpGroup("Manage:");
   media.command("download <kind> <id>").description("Download an original video, image, audio, or text file").requiredOption("--file <path>", "destination file path").option("--force", "replace an existing file")
