@@ -646,8 +646,12 @@ public class GitHubExtensionRegistry : IExtensionRegistry
     };
 
     /// <summary>Returns true if <paramref name="candidate"/> is a newer semver than <paramref name="current"/>.</summary>
-    private static bool IsNewerVersion(string candidate, string current)
+    internal static bool IsNewerVersion(string candidate, string current)
     {
+        // SemVer precedence keeps a release offered over its own prerelease build, e.g. 0.8.1 over 0.8.1-dev.5.
+        if (CoveVersionCompatibility.TryParse(candidate, out var candidateSemver)
+            && CoveVersionCompatibility.TryParse(current, out var currentSemver))
+            return candidateSemver.CompareTo(currentSemver) > 0;
         if (Version.TryParse(candidate.TrimStart('v'), out var c) && Version.TryParse(current.TrimStart('v'), out var cur))
             return c > cur;
         return string.Compare(candidate, current, StringComparison.OrdinalIgnoreCase) > 0;
