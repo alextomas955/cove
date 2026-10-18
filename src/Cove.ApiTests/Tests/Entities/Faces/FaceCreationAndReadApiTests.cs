@@ -1,6 +1,7 @@
 using Cove.ApiTests.Builders;
 using Cove.ApiTests.Infrastructure;
 using Cove.Core.DTOs;
+using Cove.Core.Interfaces;
 
 namespace Cove.ApiTests.Tests.Entities.Faces;
 
@@ -67,5 +68,35 @@ public sealed class FaceCreationAndReadApiTests(
         // Assert
         await action.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*returned 404 (NotFound)*");
+    }
+
+    [Fact]
+    [CoversEndpoint("POST", "/api/faces/find")]
+    public async Task GivenMatchingFaces_WhenFilteredAndPaged_ThenOnlyTheRequestedPageIsReturned()
+    {
+        // Arrange
+        var suffix = Guid.NewGuid().ToString("N");
+        var first = await AsUser().CreateFaceAsync(new FaceCreateDto($"A filtered face {suffix}", null, false, null), TestContext.Current.CancellationToken);
+        var second = await AsUser().CreateFaceAsync(new FaceCreateDto($"B filtered face {suffix}", null, false, null), TestContext.Current.CancellationToken);
+        await AsUser().CreateFaceAsync(new FaceCreateDto($"C ignored face {suffix}", null, true, null), TestContext.Current.CancellationToken);
+        var request = new FilteredQueryRequest<FaceFilter>
+        {
+            ObjectFilter = new FaceFilter
+            {
+                LabelCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = suffix },
+                IgnoredCriterion = new BoolCriterion { Value = false },
+            },
+            FindFilter = new FindFilter { Page = 2, PerPage = 1, Sort = "label" },
+        };
+
+        // Act
+        var result = await AsUser(ApiTestUsers.Eva).FindFacesAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.TotalCount.Should().Be(2);
+        result.Page.Should().Be(2);
+        result.PerPage.Should().Be(1);
+        result.Items.Should().ContainSingle().Which.Id.Should().Be(second.Id);
+        result.Items.Should().NotContain(candidate => candidate.Id == first.Id);
     }
 }
