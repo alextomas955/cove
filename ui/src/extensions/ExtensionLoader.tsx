@@ -49,15 +49,16 @@ import type {
 } from "../api/types";
 import {
   FALLBACK_DEFAULT_THEME,
-  STYLE_OPTION_CSS_VARS,
   THEME_BOOT_VERSION,
+  applyStyleOption,
+  themeVariableDeclarations,
   clearThemeBootArtifacts,
   clearThemeBootSnapshot,
   readThemeBootSnapshot,
-  styleOptionDatasetKey,
   writeThemeBootSnapshot,
   type ThemeBootSnapshot,
 } from "../theme/themeBoot";
+import { applyPatternCss } from "../theme/patternSource";
 import { ExtensionComponentRegistry, type ExtensionComponent } from "./ExtensionComponentRegistry";
 import { ExtensionComponentOverrideHost } from "./ExtensionComponentOverrideHost";
 import {
@@ -924,10 +925,7 @@ export function ExtensionLoaderProvider({
       if (Object.keys(customThemeColors).length > 0) {
         const style = document.createElement("style");
         style.id = "cove-theme-override";
-        const vars = Object.entries(customThemeColors)
-          .map(([key, val]) => `  ${key}: ${val};`)
-          .join("\n");
-        style.textContent = `:root {\n${vars}\n}`;
+        style.textContent = `:root {\n${themeVariableDeclarations(customThemeColors).join("\n")}\n}`;
         document.head.appendChild(style);
       }
       return () => {
@@ -956,10 +954,7 @@ export function ExtensionLoaderProvider({
     if (theme.cssVariables && Object.keys(theme.cssVariables).length > 0) {
       const style = document.createElement("style");
       style.id = "cove-theme-override";
-      const vars = Object.entries(theme.cssVariables)
-        .map(([key, val]) => `  ${key}: ${val};`)
-        .join("\n");
-      style.textContent = `:root {\n${vars}\n}`;
+      style.textContent = `:root {\n${themeVariableDeclarations(theme.cssVariables).join("\n")}\n}`;
       document.head.appendChild(style);
     }
 
@@ -1080,11 +1075,8 @@ export function ExtensionLoaderProvider({
       }
       for (const [styleId, opts] of Object.entries(raw)) {
         for (const [key, val] of Object.entries(opts as Record<string, string>)) {
-          document.documentElement.dataset[styleOptionDatasetKey(styleId, key)] = val;
-          const cssVar = STYLE_OPTION_CSS_VARS[styleId]?.[key];
-          if (cssVar) {
-            document.documentElement.style.setProperty(cssVar, val);
-          }
+          applyStyleOption(document.documentElement, styleId, key, val);
+          if (styleId === "pattern" && key === "css") applyPatternCss(document, val);
         }
       }
     } catch {

@@ -613,7 +613,7 @@ function AppShell({ route, navigate }: { route: Route; navigate: (r: Route) => v
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="cove-app-shell min-h-screen bg-background text-foreground">
       <Navbar currentPage={route.page} navigate={navigate} />
       <main className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-5">
         <ErrorBoundary>

@@ -913,6 +913,15 @@ public record UIThemeDefinition(
 )
 {
     public string? ExtensionId { get; init; }
+
+    /// <summary>
+    /// Recommended options for component styles, keyed by style id then option key (e.g.
+    /// <c>["pattern"]["opacity"] = "4"</c>). Applied when the user picks this theme, together with
+    /// <see cref="ComponentStyle"/>; the user can change or turn them off afterwards. An init
+    /// property rather than a positional parameter, so extensions built against older versions keep
+    /// binding to the existing constructor.
+    /// </summary>
+    public Dictionary<string, Dictionary<string, string>>? StyleOptions { get; init; }
 }
 
 /// <summary>Built-in component style presets (Layer 2).</summary>

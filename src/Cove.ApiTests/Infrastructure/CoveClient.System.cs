@@ -129,6 +129,13 @@ public sealed partial class CoveClient
         CancellationToken cancellationToken = default)
         => UploadSystemUiAssetAsync("/api/system/ui/logo", content, fileName, mediaType, cancellationToken);
 
+    public Task<SystemUiAssetUploadResult> UploadBackgroundAsync(
+        byte[] content,
+        string fileName,
+        string mediaType = "image/png",
+        CancellationToken cancellationToken = default)
+        => UploadSystemUiAssetAsync("/api/system/ui/background", content, fileName, mediaType, cancellationToken);
+
     public Task<IReadOnlyList<RoleDto>> GetRolesAsync(
         CancellationToken cancellationToken = default)
         => SendAsync<IReadOnlyList<RoleDto>>(

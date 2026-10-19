@@ -150,7 +150,7 @@ public class ThemeSystemTests
         var manifest = ext.GetUIManifest();
 
         // Keep this in sync with ThemeCollectionExtension built-ins.
-        Assert.Equal(20, manifest.Themes.Count);
+        Assert.Equal(35, manifest.Themes.Count);
     }
 
     [Theory]
@@ -164,6 +164,21 @@ public class ThemeSystemTests
     [InlineData("copper-noir")]
     [InlineData("golden-hour")]
     [InlineData("signal-dark")]
+    [InlineData("groove")]
+    [InlineData("lounge")]
+    [InlineData("broadcast")]
+    [InlineData("espresso")]
+    [InlineData("reel")]
+    [InlineData("terminal")]
+    [InlineData("federation")]
+    [InlineData("sakura")]
+    [InlineData("after-dark")]
+    [InlineData("velvet")]
+    [InlineData("burgundy")]
+    [InlineData("honeycomb")]
+    [InlineData("abyss")]
+    [InlineData("nebula")]
+    [InlineData("rainfall")]
     [InlineData("rainbow")]
     [InlineData("liquid-glass")]
     [InlineData("neon-glow")]
@@ -204,6 +219,99 @@ public class ThemeSystemTests
 
         Assert.NotNull(theme.CssVariables);
         Assert.Equal(expectedAccent, theme.CssVariables["--color-accent"]);
+    }
+
+    [Theory]
+    [InlineData("groove")]
+    [InlineData("lounge")]
+    [InlineData("broadcast")]
+    [InlineData("espresso")]
+    [InlineData("reel")]
+    [InlineData("terminal")]
+    [InlineData("federation")]
+    [InlineData("after-dark")]
+    [InlineData("velvet")]
+    public void CleanThemes_AreFlatPalettesOnly(string themeId)
+    {
+        var ext = new ThemeCollectionExtension();
+        var manifest = ext.GetUIManifest();
+        var theme = manifest.Themes.First(t => t.Id == themeId);
+
+        Assert.Null(theme.ComponentStyle);
+        Assert.Null(theme.LayoutStyle);
+        Assert.Null(theme.BackgroundAnimation);
+        Assert.Null(theme.ColorScheme);
+        Assert.Null(theme.StyleOptions);
+    }
+
+    [Fact]
+    public void Abyss_IsABlueOnlyGlowOverNearBlack()
+    {
+        var ext = new ThemeCollectionExtension();
+        var theme = ext.GetUIManifest().Themes.First(t => t.Id == "abyss");
+
+        Assert.NotNull(theme.CssVariables);
+        Assert.Equal("#050a14", theme.CssVariables["--color-background"]);
+        // The glow is a gradient layer of its own, so a Pattern on top does not remove it.
+        Assert.StartsWith("radial-gradient(", theme.CssVariables["--theme-bg-glow"]);
+        Assert.False(theme.CssVariables.ContainsKey("--theme-bg-image"));
+        Assert.Null(theme.ComponentStyle);
+        Assert.Null(theme.BackgroundAnimation);
+    }
+
+    [Fact]
+    public void Themes_AreListedSimplestFirst()
+    {
+        // Settings shows themes in manifest order: flat palettes, then a little extra, then
+        // gradient/animated, then patterns, then photos.
+        var ids = new ThemeCollectionExtension().GetUIManifest().Themes.Select(t => t.Id).ToList();
+        int Pos(string id) => ids.IndexOf(id);
+
+        Assert.Equal("default", ids[0]);
+        Assert.True(Pos("velvet") < Pos("abyss"));
+        Assert.True(Pos("cinema-dark") < Pos("rainbow"));
+        Assert.True(Pos("ember") < Pos("honeycomb"));
+        Assert.True(Pos("burgundy") < Pos("nebula"));
+        Assert.Equal("rainfall", ids[^1]);
+    }
+
+    [Theory]
+    [InlineData("nebula")]
+    [InlineData("rainfall")]
+    public void PictureThemes_DefaultToFloatingCardsOverACoverPhoto(string themeId)
+    {
+        var theme = new ThemeCollectionExtension().GetUIManifest().Themes.First(t => t.Id == themeId);
+
+        Assert.Equal(["floating", "pattern"], (theme.ComponentStyle ?? "").Split(' '));
+        Assert.NotNull(theme.StyleOptions);
+        Assert.Equal("cover", theme.StyleOptions["pattern"]["fit"]);
+        Assert.True(File.Exists(Path.Combine(FindRepoRoot(), "ui", "public", "backgrounds", $"{themeId}.jpg")));
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "ui", "public"))) dir = dir.Parent;
+        return dir?.FullName ?? throw new InvalidOperationException("Repository root not found.");
+    }
+
+    [Theory]
+    [InlineData("honeycomb", "kind", "hex")]
+    [InlineData("sakura", "source", "/patterns/sakura-branches.svg")]
+    [InlineData("burgundy", "sourcekind", "image")]
+    [InlineData("nebula", "source", "/backgrounds/nebula.jpg")]
+    [InlineData("rainfall", "source", "/backgrounds/rainfall.jpg")]
+    public void PatternThemes_RecommendThePatternStyleWithTheirOwnOptions(string themeId, string option, string expected)
+    {
+        var ext = new ThemeCollectionExtension();
+        var manifest = ext.GetUIManifest();
+        var theme = manifest.Themes.First(t => t.Id == themeId);
+
+        // The pattern is a recommendation the user can turn off, not baked into the palette.
+        Assert.Contains("pattern", (theme.ComponentStyle ?? "").Split(' '));
+        Assert.False(theme.CssVariables?.ContainsKey("--theme-bg-image") ?? false);
+        Assert.NotNull(theme.StyleOptions);
+        Assert.Equal(expected, theme.StyleOptions["pattern"][option]);
     }
 
     [Fact]

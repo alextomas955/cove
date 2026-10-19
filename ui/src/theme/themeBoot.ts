@@ -53,7 +53,37 @@ export const STYLE_OPTION_CSS_VARS: Record<string, Record<string, string>> = {
     buttonopacity: "--sv-button-opacity",
   },
   animated: { hover: "--sv-hover-glow" },
+  pattern: {
+    opacity: "--sv-pattern-opacity",
+    scale: "--sv-pattern-scale",
+    dim: "--sv-pattern-dim",
+  },
 };
+
+/** Options that carry data (an image URL, CSS, the saved list) rather than a mode CSS selects on: no data attribute. */
+const DATA_ONLY_STYLE_OPTIONS: Record<string, readonly string[]> = { pattern: ["source", "css", "library"] };
+
+/** The CSS <image> for a stored pattern source URL (see patternSource.ts, which normalises it). */
+export function patternCssImage(url: string | undefined): string {
+  return url ? `url("${url.replace(/"/g, "%22")}")` : "none";
+}
+
+/** Writes one style option to the document: a data attribute for CSS to select on, plus any custom property it drives. */
+export function applyStyleOption(root: HTMLElement, styleId: string, key: string, value: string): void {
+  if (!DATA_ONLY_STYLE_OPTIONS[styleId]?.includes(key)) root.dataset[styleOptionDatasetKey(styleId, key)] = value;
+  const cssVar = STYLE_OPTION_CSS_VARS[styleId]?.[key];
+  if (cssVar) root.style.setProperty(cssVar, value);
+  // The pattern's image and tile width. An empty value unsets the property rather than writing
+  // "none", so the stylesheet falls back to its default dots instead of a solid layer.
+  // "css" (a pure-CSS pattern) is applied by patternSource.ts's applyPatternCss once the app runs,
+  // not here: it would not fit this script's size budget, and a late pattern only fades in.
+  const isImage = key === "source";
+  if (styleId !== "pattern" || (!isImage && key !== "sourcewidth")) return;
+  const name = isImage ? "--sv-pattern-custom-image" : "--sv-pattern-custom-tile";
+  const css = isImage ? value && patternCssImage(value) : Number(value) > 0 ? `${value}px` : "";
+  if (css) root.style.setProperty(name, css);
+  else root.style.removeProperty(name);
+}
 
 /** `("gradient", "cards")` -> `styleGradientCards`, the dataset key both passes write. */
 export function styleOptionDatasetKey(styleId: string, optionKey: string): string {
@@ -234,15 +264,26 @@ export function applyThemeBootSnapshot(doc: Document, snapshot: ThemeBootSnapsho
 
   for (const [styleId, options] of Object.entries(snapshot.styleOptions)) {
     for (const [key, value] of Object.entries(options)) {
-      root.dataset[styleOptionDatasetKey(styleId, key)] = value;
-      const cssVar = STYLE_OPTION_CSS_VARS[styleId]?.[key];
-      if (cssVar) root.style.setProperty(cssVar, value);
+      applyStyleOption(root, styleId, key, value);
     }
   }
 }
 
+/**
+ * A theme's variables as `:root` declarations. Each `--color-*` also gets an untouched
+ * `--theme-color-*` copy: component styles such as Glass redefine `--color-card` and friends, and
+ * need the theme's own value to blend from -- a variable cannot read its own previous value.
+ */
+export function themeVariableDeclarations(vars: Record<string, string>): string[] {
+  return Object.entries(vars).flatMap(([name, value]) =>
+    name.startsWith("--color-")
+      ? [`  ${name}: ${value};`, `  --theme-${name.slice(2)}: ${value};`]
+      : [`  ${name}: ${value};`],
+  );
+}
+
 function applyCanvas(doc: Document, snapshot: ThemeBootSnapshot): void {
-  const declarations = Object.entries(snapshot.vars).map(([name, value]) => `  ${name}: ${value};`);
+  const declarations = themeVariableDeclarations(snapshot.vars);
   // Colours `html` directly as well as through the variables, so the literal fallback in index.html
   // is replaced before index.css exists. --color-background is what the app's full-height container
   // paints, i.e. what actually fills the viewport -- `body`'s own colour is never visible.

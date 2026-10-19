@@ -1887,6 +1887,21 @@ export const system = {
     }
     return res.json() as Promise<{ path: string; fileName: string }>;
   },
+  /** A photo for the Pattern style's custom background; any signed-in user may upload one. */
+  uploadBackground: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await authedFetch(`${API_BASE}/system/ui/background`, {
+      method: "POST",
+      body: form,
+      timeoutMs: UPLOAD_REQUEST_TIMEOUT_MS,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API Error ${res.status}: ${text}`);
+    }
+    return res.json() as Promise<{ path: string; fileName: string }>;
+  },
   listScrapers: () => request<ScraperSummary[]>("/system/scrapers"),
   reloadScrapers: () => request<ScraperSummary[]>("/system/scrapers/reload", { method: "POST" }),
   scrapeUrl: (scraperId: string, entityType: string, url: string) =>

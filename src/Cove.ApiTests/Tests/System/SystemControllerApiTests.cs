@@ -210,6 +210,37 @@ public sealed class SystemControllerApiTests(ITestOutputHelper output, CoveApiTe
     }
 
     [Fact]
+    [CoversEndpoint("POST", "/api/system/ui/background")]
+    public async Task GivenNonAdminUploadsPatternBackgrounds_WhenAnonymousClientReadsThem_ThenTheyAreServedSandboxed()
+    {
+        var eva = AsUser(ApiTestUsers.Eva);
+        var bytes = ApiTestImages.RedPixelPng();
+
+        // Theme preferences are per user, so a user without settings permissions can still upload one.
+        var background = await eva.UploadBackgroundAsync(bytes, $"pattern-{Guid.NewGuid():N}.png", cancellationToken: TestContext.Current.CancellationToken);
+
+        background.FileName.Should().StartWith("background-").And.EndWith(".png");
+        background.Path.Should().Be($"/api/system/ui-assets/{background.FileName}");
+        using var anonymous = new HttpClient { BaseAddress = ApiUri };
+        await AssertAnonymousPngAssetAsync(anonymous, background.Path, bytes);
+
+        // SVGs too large to keep inline are uploaded too. They are user content that could carry script,
+        // so the asset is served with a sandboxing CSP.
+        var svgBytes = "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"u8.ToArray();
+        var svg = await eva.UploadBackgroundAsync(svgBytes, $"pattern-{Guid.NewGuid():N}.svg", "image/svg+xml", TestContext.Current.CancellationToken);
+        svg.FileName.Should().EndWith(".svg");
+        using var svgResponse = await anonymous.GetAsync(svg.Path, TestContext.Current.CancellationToken);
+        svgResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        svgResponse.Content.Headers.ContentType?.MediaType.Should().Be("image/svg+xml");
+        string.Join(";", svgResponse.Headers.GetValues("Content-Security-Policy")).Should().Contain("sandbox");
+
+        var text = () => eva.UploadBackgroundAsync("not an image"u8.ToArray(), $"pattern-{Guid.NewGuid():N}.txt", "text/plain");
+        var empty = () => eva.UploadBackgroundAsync([], $"pattern-{Guid.NewGuid():N}.png");
+        await text.Should().ThrowAsync<InvalidOperationException>().WithMessage("*returned 400 (BadRequest)*");
+        await empty.Should().ThrowAsync<InvalidOperationException>().WithMessage("*returned 400 (BadRequest)*");
+    }
+
+    [Fact]
     [CoversEndpoint("POST", "/api/system/maintenance/recompute-derived-counts")]
     public async Task GivenStaleStudioRollups_WhenOwnerRecomputesDerivedCounts_ThenPublicVideoCountOrderingIsRepaired()
     {

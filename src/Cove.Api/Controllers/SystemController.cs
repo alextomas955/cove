@@ -50,6 +50,16 @@ public class SystemController(
         [".svg"] = "image/svg+xml",
     };
 
+    private const long MaxBackgroundUploadBytes = 20 * 1024 * 1024;
+
+    // An SVG is drawn on every page, so a huge one costs on every load; real patterns are far smaller.
+    private const long MaxBackgroundSvgBytes = 2 * 1024 * 1024;
+
+    private static readonly HashSet<string> BackgroundImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".webp", ".svg",
+    };
+
     [HttpGet("status")]
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<ActionResult<SystemStatusDto>> GetStatus()
@@ -462,6 +472,41 @@ public class SystemController(
         return Ok(new { path = $"/api/system/ui-assets/{fileName}", fileName });
     }
 
+    /// <summary>
+    /// An image for the Pattern style's custom background: a photo, or an SVG too large to keep
+    /// inline in the user's preferences (small SVGs never come here). Theme preferences belong to
+    /// each user, so any signed-in user may upload. SVGs can carry script, so <see cref="GetUiAsset"/>
+    /// serves every asset sandboxed; as a CSS background or mask an SVG never runs script anyway.
+    /// </summary>
+    [HttpPost("ui/background")]
+    [AllowWithoutPermission]
+    [RequestSizeLimit(MaxBackgroundUploadBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxBackgroundUploadBytes + 64 * 1024)]
+    public async Task<ActionResult<object>> UploadBackground([FromForm] IFormFile file, CancellationToken ct)
+    {
+        if (file.Length == 0)
+            return BadRequest(new { error = "Background image is empty." });
+        if (file.Length > MaxBackgroundUploadBytes)
+            return BadRequest(new { error = $"Background image must be {MaxBackgroundUploadBytes / (1024 * 1024)} MB or smaller." });
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!BackgroundImageExtensions.Contains(extension))
+            return BadRequest(new { error = "Background image must be a png, jpg, webp, or svg file." });
+        if (extension == ".svg" && file.Length > MaxBackgroundSvgBytes)
+            return BadRequest(new { error = $"SVG backgrounds must be {MaxBackgroundSvgBytes / (1024 * 1024)} MB or smaller." });
+
+        var assetDir = CoveDefaultPaths.GetDataSubdirectory("ui-assets");
+        Directory.CreateDirectory(assetDir);
+
+        // Users upload independently, so a timestamp alone could collide; the suffix keeps names unique.
+        var fileName = $"background-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..44] + extension;
+        var filePath = Path.Combine(assetDir, fileName);
+        await using (var output = System.IO.File.Create(filePath))
+            await file.CopyToAsync(output, ct);
+
+        return Ok(new { path = $"/api/system/ui-assets/{fileName}", fileName });
+    }
+
     [HttpGet("ui-assets/{fileName}")]
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public IActionResult GetUiAsset(string fileName)
@@ -498,6 +543,10 @@ public class SystemController(
         }
 
         Response.Headers["Cache-Control"] = "public, max-age=86400";
+        // Uploaded SVGs are user content. Opened directly, an SVG is a document that could run script
+        // on Cove's origin; the sandbox stops that. Used as an <img> or CSS image it is unaffected.
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
         var result = File(stream, contentType);
         result.LastModified = lastModified;
         return result;
