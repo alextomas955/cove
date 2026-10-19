@@ -188,17 +188,19 @@ export function PatternStyleSettings({ options, onChange }: PatternStyleSettings
             />
           ))}
           {/* Themes used to save their textures here before they were built in. */}
-          {saved.filter((pattern) => !BUILT_IN_URLS.has(pattern.url)).map((pattern) => (
-            <Swatch
-              key={patternKey(pattern)}
-              source={pattern}
-              label={savedLabel(pattern)}
-              active={isActiveSaved(pattern)}
-              keepColors={options.keepcolors === "on"}
-              onSelect={() => void applyCustom(pattern)}
-              onRemove={() => removeSaved(patternKey(pattern))}
-            />
-          ))}
+          {saved
+            .filter((pattern) => !BUILT_IN_URLS.has(pattern.url))
+            .map((pattern) => (
+              <Swatch
+                key={patternKey(pattern)}
+                source={pattern}
+                label={savedLabel(pattern)}
+                active={isActiveSaved(pattern)}
+                keepColors={options.keepcolors === "on"}
+                onSelect={() => void applyCustom(pattern)}
+                onRemove={() => removeSaved(patternKey(pattern))}
+              />
+            ))}
         </div>
       </div>
 

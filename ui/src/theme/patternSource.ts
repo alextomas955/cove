@@ -168,17 +168,15 @@ const BUILT_IN_IMAGE_PATTERNS: BuiltInPattern[] = [
 ];
 
 export const BUILT_IN_PATTERNS: BuiltInPattern[] = [
-  ...BUILT_IN_PATTERN_MARKUP.map(
-    ({ id, label, width, height, body }): BuiltInPattern => ({
-      id,
-      label,
-      kind: "svg",
-      width,
-      url: `data:image/svg+xml,${encodeURIComponent(
-        `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'>${body}</svg>`,
-      )}`,
-    }),
-  ),
+  ...BUILT_IN_PATTERN_MARKUP.map(({ id, label, width, height, body }): BuiltInPattern => ({
+    id,
+    label,
+    kind: "svg",
+    width,
+    url: `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'>${body}</svg>`,
+    )}`,
+  })),
   ...BUILT_IN_IMAGE_PATTERNS,
 ];
 
