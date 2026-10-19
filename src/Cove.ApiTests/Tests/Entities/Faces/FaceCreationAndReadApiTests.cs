@@ -1,6 +1,7 @@
 using Cove.ApiTests.Builders;
 using Cove.ApiTests.Infrastructure;
 using Cove.Core.DTOs;
+using Cove.Core.Interfaces;
 
 namespace Cove.ApiTests.Tests.Entities.Faces;
 
@@ -8,6 +9,34 @@ public sealed class FaceCreationAndReadApiTests(
     ITestOutputHelper output,
     CoveApiTestFixture fixture) : ApiTest(output, fixture)
 {
+    [Fact]
+    [CoversEndpoint("POST", "/api/faces/find")]
+    public async Task GivenLinkedAndUnlinkedFaces_WhenFoundByBodyFilter_ThenOnlyMatchingFacesAreReturned()
+    {
+        // Arrange
+        var suffix = Guid.NewGuid().ToString("N");
+        var performer = await AsUser().CreatePerformerAsync(new PerformerBuilder().Build(), TestContext.Current.CancellationToken);
+        var first = await AsUser().CreateFaceAsync(new FaceCreateDto($"Body find linked a {suffix}", performer.Id, false, null), TestContext.Current.CancellationToken);
+        var second = await AsUser().CreateFaceAsync(new FaceCreateDto($"Body find linked b {suffix}", performer.Id, false, null), TestContext.Current.CancellationToken);
+        var unlinked = await AsUser().CreateFaceAsync(new FaceCreateDto($"Body find unlinked {suffix}", null, false, null), TestContext.Current.CancellationToken);
+        var request = new FilteredQueryRequest<FaceFilter>
+        {
+            ObjectFilter = new FaceFilter
+            {
+                LabelCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = suffix },
+                LinkedCriterion = new BoolCriterion { Value = true },
+            },
+        };
+
+        // Act
+        var result = await AsUser(ApiTestUsers.Eva).FindFacesAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(face => face.Id).Should().BeEquivalentTo([first.Id, second.Id]);
+        result.Items.Should().NotContain(face => face.Id == unlinked.Id);
+    }
+
     [Fact]
     [CoversEndpoint("POST", "/api/faces")]
     [CoversEndpoint("GET", "/api/faces/{id:int}")]

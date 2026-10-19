@@ -56,7 +56,7 @@ public sealed class ExtensionLifecycleApiTests(
         manifest.JsBundleUrl.Should().BeNull();
         manifest.CssBundleUrl.Should().BeNull();
         manifest.ComponentStyles.Select(style => style.Id).Should().Equal(
-            "default", "glass", "rounded", "gradient", "animated", "floating");
+            "default", "glass", "rounded", "gradient", "animated", "floating", "pattern");
         manifest.LayoutStyles.Select(style => style.Id).Should().Equal(
             "default", "detail-theater", "detail-tabs");
         manifest.Themes.Select(theme => theme.Id).Should().Contain(["default", "legacy", "light", "dark-midnight"]);

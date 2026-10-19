@@ -8,6 +8,20 @@ namespace Cove.Api.Extensions;
 // ============================================================================
 public class ThemeCollectionExtension : IExtension, IUIExtension
 {
+    /// <summary>
+    /// Glass settings for themes with an animated background: nearly clear surfaces and stronger blur,
+    /// so the moving colour shows through. Ordinary Glass slider values the user can change.
+    /// </summary>
+    private static Dictionary<string, Dictionary<string, string>> AnimatedBackgroundGlassOptions() => new()
+    {
+        ["glass"] = new()
+        {
+            ["opacity"] = "12",
+            ["cardopacity"] = "10",
+            ["surfaceblur"] = "60",
+        },
+    };
+
     public string Id => "com.cove.themes";
     public string Name => "Theme Collection";
     public string Version => "1.0.0";
@@ -560,7 +574,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#bf5af2",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "neon-glow",
                 Name: "Neon Glow",
@@ -652,7 +669,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#ffe45c",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "deep-space",
                 Name: "Deep Space",
@@ -675,7 +695,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#a78bfa",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "synthwave",
                 Name: "Synthwave",
@@ -698,7 +721,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#ffb86b",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "ember",
                 Name: "Ember",
@@ -721,7 +747,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#ef4444",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             // === Patterns: the Pattern style on by default ===
             new UIThemeDefinition(
                 Id: "honeycomb",
@@ -825,9 +854,7 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                 {
                     ["pattern"] = new()
                     {
-                        ["kind"] = "custom",
-                        ["source"] = "https://transparenttextures.com/patterns/argyle.png",
-                        ["sourcekind"] = "image",
+                        ["kind"] = "argyle",
                         ["fit"] = "tile",
                         ["opacity"] = "50",
                         ["scale"] = "125",

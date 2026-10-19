@@ -295,10 +295,28 @@ public class ThemeSystemTests
         return dir?.FullName ?? throw new InvalidOperationException("Repository root not found.");
     }
 
+    [Fact]
+    public void AnimatedBackgroundThemes_RecommendNearlyClearGlass()
+    {
+        var themes = new ThemeCollectionExtension().GetUIManifest().Themes
+            .Where(t => t.BackgroundAnimation is not null)
+            .ToList();
+
+        Assert.Equal(["liquid-glass", "cyberpunk", "deep-space", "synthwave", "ember"], themes.Select(t => t.Id));
+        foreach (var theme in themes)
+        {
+            // Their surfaces follow the Glass sliders like any other theme; these values keep the
+            // moving background visible through them.
+            Assert.NotNull(theme.StyleOptions);
+            Assert.Equal("12", theme.StyleOptions["glass"]["opacity"]);
+            Assert.Equal("10", theme.StyleOptions["glass"]["cardopacity"]);
+        }
+    }
+
     [Theory]
     [InlineData("honeycomb", "kind", "hex")]
     [InlineData("sakura", "source", "/patterns/sakura-branches.svg")]
-    [InlineData("burgundy", "sourcekind", "image")]
+    [InlineData("burgundy", "kind", "argyle")]
     [InlineData("nebula", "source", "/backgrounds/nebula.jpg")]
     [InlineData("rainfall", "source", "/backgrounds/rainfall.jpg")]
     public void PatternThemes_RecommendThePatternStyleWithTheirOwnOptions(string themeId, string option, string expected)

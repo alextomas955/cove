@@ -169,6 +169,25 @@ describe("theme recommendations", () => {
     expect(patch).toMatchObject({ keepcolors: "off", dim: "0", css: "" });
   });
 
+  it("fills in a built-in texture as an image without adding it to My patterns", async () => {
+    const current = { library: JSON.stringify([{ url: "/old.png", kind: "image" }]) };
+    const patch = await resolveRecommendedPatternOptions(
+      { kind: "argyle", fit: "tile", opacity: "50", scale: "125", dim: "25" },
+      current,
+    );
+    const argyle = BUILT_IN_PATTERNS.find((pattern) => pattern.id === "argyle")!;
+
+    expect(patch).toMatchObject({
+      kind: "argyle",
+      source: argyle.url,
+      sourcekind: "image",
+      sourcewidth: "106",
+      scale: "125",
+      dim: "25",
+    });
+    expect(patch.library).toBeUndefined();
+  });
+
   it("adds a recommended custom source to My patterns", async () => {
     const current = { library: JSON.stringify([{ url: "/old.png", kind: "image" }]) };
     const patch = await resolveRecommendedPatternOptions(

@@ -35,6 +35,8 @@ const KIND_DEFAULTS: Record<PatternSourceKind, Record<string, string>> = {
   css: { opacity: "30", scale: "100" },
 };
 
+const BUILT_IN_URLS = new Set(BUILT_IN_PATTERNS.flatMap((pattern) => [pattern.url, ...(pattern.formerUrls ?? [])]));
+
 type Status = { tone: "info" | "error"; text: string } | null;
 
 interface PatternStyleSettingsProps {
@@ -54,7 +56,7 @@ export function PatternStyleSettings({ options, onChange }: PatternStyleSettings
   const activeKind = options.kind ?? "dots";
   const isCustom = activeKind === "custom";
   const sourceKind: PatternSourceKind =
-    isCustom && (options.sourcekind === "image" || options.sourcekind === "css") ? options.sourcekind : "svg";
+    options.sourcekind === "image" || (isCustom && options.sourcekind === "css") ? options.sourcekind : "svg";
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
@@ -170,20 +172,23 @@ export function PatternStyleSettings({ options, onChange }: PatternStyleSettings
               source={pattern}
               label={pattern.label}
               active={activeKind === pattern.id}
+              tiled
               onSelect={() => {
                 onChange({
                   kind: pattern.id,
                   source: pattern.url,
                   css: "",
-                  sourcekind: "svg",
-                  sourcewidth: String(pattern.width),
-                  ...(sourceKind !== "svg" ? { opacity: "12", scale: "100" } : {}),
+                  sourcekind: pattern.kind,
+                  sourcewidth: pattern.width ? String(pattern.width) : "",
+                  ...(pattern.kind === "svg" && sourceKind !== "svg" ? { opacity: "12", scale: "100", dim: "0" } : {}),
+                  ...pattern.defaults,
                 });
                 setStatus(null);
               }}
             />
           ))}
-          {saved.map((pattern) => (
+          {/* Themes used to save their textures here before they were built in. */}
+          {saved.filter((pattern) => !BUILT_IN_URLS.has(pattern.url)).map((pattern) => (
             <Swatch
               key={patternKey(pattern)}
               source={pattern}
@@ -373,6 +378,7 @@ function Swatch({
   label,
   active,
   keepColors = false,
+  tiled = false,
   onSelect,
   onRemove,
 }: {
@@ -380,6 +386,8 @@ function Swatch({
   label: string;
   active: boolean;
   keepColors?: boolean;
+  /** Preview an image as repeating tiles rather than one cover photo. */
+  tiled?: boolean;
   onSelect: () => void;
   onRemove?: () => void;
 }) {
@@ -389,7 +397,11 @@ function Swatch({
       ? // Shrunk so a few repeats fit in the swatch.
         ({ ...cssPatternStyle(source.css ?? ""), "--sv-pattern-scale": "40" } as CSSProperties)
       : source.kind === "image"
-        ? { backgroundImage: patternCssImage(source.url), backgroundSize: "cover", backgroundPosition: "center" }
+        ? {
+            backgroundImage: patternCssImage(source.url),
+            backgroundSize: tiled ? tile : "cover",
+            backgroundPosition: "center",
+          }
         : keepColors && onRemove
           ? { backgroundImage: patternCssImage(source.url), backgroundSize: tile }
           : {
