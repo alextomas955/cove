@@ -75,6 +75,13 @@ const { state, mocks } = vi.hoisted(() => ({
     videosFind: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
     videosFindFiltered: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
     performersFind: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
+    segmentSpansSearch: vi.fn(async (_request?: any): Promise<any> => ({
+      items: [],
+      totalCount: 0,
+      page: 1,
+      perPage: 25,
+    })),
+    segmentSpansCount: vi.fn(async (_request?: any): Promise<any> => ({ totalCount: 0, duration: 0 })),
     groupsFind: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0 })),
     groupItemsPage: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0, page: 1, perPage: 12 })),
     groupGet: vi.fn(),
@@ -89,12 +96,14 @@ vi.mock("../api/client", () => ({
     find: mocks.videosFind,
     findFiltered: mocks.videosFindFiltered,
     screenshotUrl: (id: number) => `/api/stream/video/${id}/screenshot`,
+    streamUrl: (id: number) => `/api/stream/video/${id}`,
   },
   performers: { find: mocks.performersFind, findFiltered: vi.fn() },
   studios: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   tags: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   galleries: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   images: { thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
+  entityImages: { segmentCoverUrl: (id: number) => `/api/segments/${id}/cover` },
   groups: {
     find: mocks.groupsFind,
     findFiltered: mocks.groupsFindFiltered,
@@ -102,6 +111,7 @@ vi.mock("../api/client", () => ({
     items: { list: vi.fn(async () => []), page: mocks.groupItemsPage },
   },
   savedFilters: { get: mocks.savedFilterGet, list: mocks.savedFiltersList },
+  segmentSpans: { search: mocks.segmentSpansSearch, count: mocks.segmentSpansCount },
   dashboards: {
     bootstrap: mocks.bootstrap,
     list: mocks.list,
@@ -271,6 +281,8 @@ describe("HomePage dashboards", () => {
     mocks.videosFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
     mocks.videosFindFiltered.mockImplementation(async () => ({ items: [], totalCount: 0 }));
     mocks.performersFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
+    mocks.segmentSpansSearch.mockImplementation(async () => ({ items: [], totalCount: 0, page: 1, perPage: 25 }));
+    mocks.segmentSpansCount.mockImplementation(async () => ({ totalCount: 0, duration: 0 }));
     mocks.groupsFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
     mocks.groupItemsPage.mockImplementation(async () => ({ items: [], totalCount: 0, page: 1, perPage: 12 }));
     mocks.groupsFindFiltered.mockImplementation(async () => ({
@@ -783,6 +795,171 @@ describe("HomePage dashboards", () => {
 
     expect(onNavigate).toHaveBeenCalledWith({ page: "performer", id: 41 });
     expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("none");
+  });
+
+  it("shows how many videos a row's query matches beside its title", async () => {
+    mocks.videosFind.mockResolvedValue({ items: videoPage(100, 25), totalCount: 30961 });
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "collection",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Recent videos",
+        configuration: {
+          source: "premade",
+          mode: "videos",
+          sortBy: "date",
+          direction: "desc",
+          header: "Recent videos",
+        },
+      },
+    ]);
+
+    renderHome();
+
+    const heading = await screen.findByRole("heading", { name: "Recent videos" });
+    const label = `${(30961).toLocaleString()} matches`;
+    expect(await within(heading.parentElement!).findByTitle(label)).toHaveTextContent(label);
+  });
+
+  it("shows a group row's total items rather than the page it shows", async () => {
+    mocks.groupItemsPage.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          groupId: 9,
+          orderIndex: 0,
+          kind: "video",
+          videoId: 501,
+          hostType: "video",
+          hostId: 501,
+          videoTitle: "Grouped video",
+        },
+      ],
+      totalCount: 40,
+      page: 1,
+      perPage: 25,
+    });
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "group",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Weekend queue",
+        configuration: { source: "group", groupId: 9 },
+      },
+    ]);
+
+    renderHome();
+
+    const heading = await screen.findByRole("heading", { name: "Weekend queue" });
+    expect(await within(heading.parentElement!).findByTitle("40 items")).toHaveTextContent("40 items");
+  });
+
+  it("counts a segment row whose search stopped early through the span count", async () => {
+    const savedFilter = {
+      id: 5,
+      name: "Tagged segments",
+      mode: "segments",
+      findFilter: "{}",
+      objectFilter: "{}",
+      uiOptions: JSON.stringify({ profileId: 2 }),
+    };
+    mocks.viewSavedFilters = [savedFilter];
+    mocks.savedFilterGet.mockImplementation(async () => savedFilter);
+    mocks.segmentSpansSearch.mockResolvedValue({
+      items: [
+        {
+          videoId: 601,
+          videoTitle: "Spanned video",
+          profileId: 2,
+          span: {
+            spanKey: "s1",
+            hostType: "video",
+            hostId: 601,
+            startSec: 10,
+            endSec: 20,
+            collapsedToInstant: false,
+            segmentIds: [9],
+          },
+        },
+      ],
+      totalCount: -1,
+      hasMore: true,
+      page: 1,
+      perPage: 25,
+    });
+    let resolveCount!: (value: { totalCount: number; duration: number }) => void;
+    mocks.segmentSpansCount.mockImplementation(() => new Promise((resolve) => (resolveCount = resolve)));
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "saved",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Saved",
+        configuration: { source: "saved", savedFilterId: 5 },
+      },
+    ]);
+
+    renderHome();
+
+    const heading = await screen.findByRole("heading", { name: "Tagged segments" });
+    // The cards don't wait for the count, and an uncounted total shows nothing meanwhile.
+    expect(await screen.findByText(/Spanned video/)).toBeInTheDocument();
+    expect(within(heading.parentElement!).queryByText(/match/)).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.segmentSpansCount).toHaveBeenCalledTimes(1));
+    expect(mocks.segmentSpansCount).toHaveBeenCalledWith(mocks.segmentSpansSearch.mock.calls[0][0]);
+    resolveCount({ totalCount: 1234, duration: 0 });
+    const label = `${(1234).toLocaleString()} matches`;
+    expect(await within(heading.parentElement!).findByTitle(label)).toHaveTextContent(label);
+  });
+
+  it("skips the span count when a segment search already counted its matches", async () => {
+    const savedFilter = {
+      id: 5,
+      name: "Counted segments",
+      mode: "segments",
+      findFilter: "{}",
+      objectFilter: "{}",
+      uiOptions: JSON.stringify({ profileId: 2 }),
+    };
+    mocks.viewSavedFilters = [savedFilter];
+    mocks.savedFilterGet.mockImplementation(async () => savedFilter);
+    mocks.segmentSpansSearch.mockResolvedValue({
+      items: [
+        {
+          videoId: 601,
+          profileId: 2,
+          span: {
+            spanKey: "s1",
+            hostType: "video",
+            hostId: 601,
+            startSec: 10,
+            endSec: 20,
+            collapsedToInstant: false,
+            segmentIds: [9],
+          },
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+      perPage: 25,
+    });
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "saved",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Saved",
+        configuration: { source: "saved", savedFilterId: 5 },
+      },
+    ]);
+
+    renderHome();
+
+    const heading = await screen.findByRole("heading", { name: "Counted segments" });
+    expect(await within(heading.parentElement!).findByTitle("1 match")).toHaveTextContent("1 match");
+    expect(mocks.segmentSpansCount).not.toHaveBeenCalled();
   });
 
   it("shows and retries a failed Continue Watching widget", async () => {
