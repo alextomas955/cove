@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { createRouteLinkProps } from "../components/cardNavigation";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
+import { useVideoQueueNavigation } from "../hooks/useVideoQueueNavigation";
 import { readAuthenticatedUserHomePageContent } from "../utils/userUiPreferences";
 import { getGalleryDisplayTitle } from "../utils/galleryDisplay";
 import { withSeededRandomSort } from "../utils/seededRandomSort";
@@ -2077,6 +2078,15 @@ function CustomFilterRecommendationRow({
     engagementHostType ?? "video",
     engagementHostType ? items.map((item: any) => item.id) : [],
   );
+  const queryVideoPage = useCallback((page: FindFilter) => videos.find(page), []);
+  const { navigateFromList } = useVideoQueueNavigation({
+    items: filter.mode === "videos" ? items : [],
+    filter: findFilter,
+    totalCount: data?.totalCount,
+    infinitePageSize: false,
+    queryPage: queryVideoPage,
+    onNavigate,
+  });
   if (query.isError)
     return (
       <WidgetLoadError
@@ -2106,7 +2116,7 @@ function CustomFilterRecommendationRow({
           item={item}
           engagement={engagementById.get(item.id)}
           mode={filter.mode}
-          onNavigate={onNavigate}
+          onNavigate={navigateFromList}
           imageLoading={cardImageLoading(imagePriority, index)}
         />
       ))}
@@ -2175,12 +2185,16 @@ function SavedFilterRecommendationRow({
     );
   }, [mode, parsedFilter]);
 
+  const queryVideoPage = useCallback(
+    (page: FindFilter) =>
+      hasObjectFilter ? videos.findFiltered({ findFilter: page, objectFilter: parsedObjectFilter }) : videos.find(page),
+    [hasObjectFilter, parsedObjectFilter],
+  );
+
   const fetchFn = useMemo((): (() => Promise<any>) => {
     if (!mode) return () => Promise.resolve({ items: [], totalCount: 0 });
     const fetchMap: Record<string, () => Promise<any>> = {
-      videos: hasObjectFilter
-        ? () => videos.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => videos.find(findFilter),
+      videos: () => queryVideoPage(findFilter!),
       performers: hasObjectFilter
         ? () => performers.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
         : () => performers.find(findFilter),
@@ -2287,7 +2301,7 @@ function SavedFilterRecommendationRow({
       },
     };
     return fetchMap[mode] ?? (() => Promise.resolve({ items: [], totalCount: 0 }));
-  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId]);
+  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId, queryVideoPage]);
 
   const itemQuery = useQuery<any>({
     queryKey: ["front-page-saved", principalKey, savedFilterId, mode, findFilter, parsedObjectFilter, segmentProfileId],
@@ -2302,6 +2316,14 @@ function SavedFilterRecommendationRow({
     engagementHostType ?? "video",
     engagementHostType ? items.map((item: any) => item.id) : [],
   );
+  const { navigateFromList } = useVideoQueueNavigation({
+    items: mode === "videos" ? items : [],
+    filter: findFilter ?? {},
+    totalCount: data?.totalCount,
+    infinitePageSize: false,
+    queryPage: queryVideoPage,
+    onNavigate,
+  });
   if (isApiNotFoundError(filterQuery.error)) {
     return <MissingSourceWidget label={errorLabel} reason="The saved filter was deleted." onRemove={onRemove} />;
   }
@@ -2365,7 +2387,7 @@ function SavedFilterRecommendationRow({
           item={item}
           engagement={engagementById.get(item.id)}
           mode={mode!}
-          onNavigate={onNavigate}
+          onNavigate={navigateFromList}
           imageLoading={cardImageLoading(imagePriority, index)}
         />
       ))}

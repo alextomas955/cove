@@ -9,6 +9,7 @@ import { prefetchDashboardPage } from "../pages/dashboardPageQuery";
 import { navigateToUrl } from "../router/location";
 import type { Route } from "../router/location";
 import { RouteRegistryProvider } from "../router/RouteRegistry";
+import { VideoQueueProvider, useVideoQueue } from "../state/VideoQueueContext";
 
 const { state, mocks } = vi.hoisted(() => ({
   state: {
@@ -71,7 +72,9 @@ const { state, mocks } = vi.hoisted(() => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    videosFind: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0 })),
+    videosFind: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
+    videosFindFiltered: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
+    performersFind: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
     groupsFind: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0 })),
     groupItemsPage: vi.fn(async (): Promise<any> => ({ items: [], totalCount: 0, page: 1, perPage: 12 })),
     groupGet: vi.fn(),
@@ -84,10 +87,10 @@ const { state, mocks } = vi.hoisted(() => ({
 vi.mock("../api/client", () => ({
   videos: {
     find: mocks.videosFind,
-    findFiltered: vi.fn(),
+    findFiltered: mocks.videosFindFiltered,
     screenshotUrl: (id: number) => `/api/stream/video/${id}/screenshot`,
   },
-  performers: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
+  performers: { find: mocks.performersFind, findFiltered: vi.fn() },
   studios: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   tags: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   galleries: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
@@ -168,6 +171,45 @@ function renderHome(
   };
 }
 
+function QueueProbe() {
+  const queue = useVideoQueue();
+  return (
+    <div>
+      <output aria-label="Queue position">
+        {queue.queueLength > 0 ? `${queue.currentPosition}/${queue.queueLength}` : "none"}
+      </output>
+      <button type="button" onClick={() => void queue.goNext()}>
+        Queue next
+      </button>
+    </div>
+  );
+}
+
+function renderHomeWithQueue(onNavigate = vi.fn()) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return {
+    onNavigate,
+    ...render(
+      <QueryClientProvider client={client}>
+        <VideoQueueProvider>
+          <HomePage onNavigate={onNavigate} />
+          <QueueProbe />
+        </VideoQueueProvider>
+      </QueryClientProvider>,
+    ),
+  };
+}
+
+function videoPage(firstId: number, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: firstId + index,
+    title: `Queued video ${firstId + index}`,
+    files: [],
+    tags: [],
+    performers: [],
+  }));
+}
+
 function findCurrentDashboard(name: string) {
   return screen.findByRole("link", { name, current: "page" });
 }
@@ -176,6 +218,7 @@ describe("HomePage dashboards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     state.legacyContent = "[]";
     state.userId = "7";
     state.dashboardDefinitions = [];
@@ -225,6 +268,9 @@ describe("HomePage dashboards", () => {
       uiOptions: "{}",
     }));
     mocks.savedFiltersList.mockImplementation(async () => state.savedFilters);
+    mocks.videosFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
+    mocks.videosFindFiltered.mockImplementation(async () => ({ items: [], totalCount: 0 }));
+    mocks.performersFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
     mocks.groupsFind.mockImplementation(async () => ({ items: [], totalCount: 0 }));
     mocks.groupItemsPage.mockImplementation(async () => ({ items: [], totalCount: 0, page: 1, perPage: 12 }));
     mocks.groupsFindFiltered.mockImplementation(async () => ({
@@ -594,6 +640,149 @@ describe("HomePage dashboards", () => {
 
     expect(await screen.findByText("Recovered video")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("queues a built-in video row's whole query when one of its videos is opened", async () => {
+    mocks.videosFind.mockResolvedValueOnce({ items: videoPage(100, 25), totalCount: 30 });
+    mocks.videosFind.mockResolvedValueOnce({ items: videoPage(125, 5), totalCount: 30 });
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "collection",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Recent videos",
+        configuration: {
+          source: "premade",
+          mode: "videos",
+          sortBy: "date",
+          direction: "desc",
+          header: "Recent videos",
+        },
+      },
+    ]);
+
+    const { onNavigate } = renderHomeWithQueue();
+    fireEvent.click(await screen.findByRole("link", { name: /Queued video 124/ }));
+
+    expect(onNavigate).toHaveBeenCalledWith({ page: "video", id: 124 });
+    expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("25/30");
+    fireEvent.click(screen.getByRole("button", { name: "Queue next" }));
+    await waitFor(() =>
+      expect(mocks.videosFind).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, perPage: 25, sort: "date", direction: "desc" }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("26/30"));
+  });
+
+  it("queues a saved video filter's later pages with the same object filter", async () => {
+    const objectFilter = { tags: { value: [7], modifier: "INCLUDES" } };
+    const savedFilter = {
+      id: 5,
+      name: "Tagged videos",
+      mode: "videos",
+      findFilter: JSON.stringify({ sort: "title", direction: "asc" }),
+      objectFilter: JSON.stringify(objectFilter),
+      uiOptions: "{}",
+    };
+    mocks.viewSavedFilters = [savedFilter];
+    mocks.savedFilterGet.mockImplementation(async () => savedFilter);
+    mocks.videosFindFiltered.mockImplementation(async ({ findFilter }: { findFilter: { page?: number } }) =>
+      findFilter.page === 2
+        ? { items: videoPage(225, 1), totalCount: 26 }
+        : { items: videoPage(200, 25), totalCount: 26 },
+    );
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "saved",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Saved",
+        configuration: { source: "saved", savedFilterId: 5 },
+      },
+    ]);
+
+    renderHomeWithQueue();
+    fireEvent.click(await screen.findByRole("link", { name: /Queued video 224/ }));
+
+    expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("25/26");
+    fireEvent.click(screen.getByRole("button", { name: "Queue next" }));
+    await waitFor(() =>
+      expect(mocks.videosFindFiltered).toHaveBeenLastCalledWith({
+        findFilter: expect.objectContaining({ page: 2, perPage: 25, sort: "title", direction: "asc" }),
+        objectFilter,
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("26/26"));
+  });
+
+  it("pages a saved random video filter like its row, keeping the row's seed", async () => {
+    const savedFilter = {
+      id: 5,
+      name: "Random videos",
+      mode: "videos",
+      // The row always shows the first 25, whatever page and size the saved filter last used.
+      findFilter: JSON.stringify({ sort: "random", direction: "asc", page: 3, perPage: 40 }),
+      objectFilter: "{}",
+      uiOptions: "{}",
+    };
+    mocks.viewSavedFilters = [savedFilter];
+    mocks.savedFilterGet.mockImplementation(async () => savedFilter);
+    mocks.videosFind.mockImplementation(async (filter: { page?: number }) =>
+      filter.page === 2 ? { items: videoPage(325, 1), totalCount: 26 } : { items: videoPage(300, 25), totalCount: 26 },
+    );
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "saved",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Saved",
+        configuration: { source: "saved", savedFilterId: 5 },
+      },
+    ]);
+
+    renderHomeWithQueue();
+    fireEvent.click(await screen.findByRole("link", { name: /Queued video 324/ }));
+
+    expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("25/26");
+    const rowSeed = (mocks.videosFind.mock.calls.at(-1) as unknown as [{ seed?: number }])[0].seed;
+    expect(rowSeed).toEqual(expect.any(Number));
+    fireEvent.click(screen.getByRole("button", { name: "Queue next" }));
+    await waitFor(() =>
+      expect(mocks.videosFind).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, perPage: 25, sort: "random", seed: rowSeed }),
+      ),
+    );
+    expect(mocks.videosFindFiltered).not.toHaveBeenCalled();
+  });
+
+  it("leaves the play queue alone when a saved filter row is not videos", async () => {
+    const savedFilter = {
+      id: 5,
+      name: "Performers",
+      mode: "performers",
+      findFilter: "{}",
+      objectFilter: "{}",
+      uiOptions: "{}",
+    };
+    mocks.viewSavedFilters = [savedFilter];
+    mocks.savedFilterGet.mockImplementation(async () => savedFilter);
+    mocks.performersFind.mockResolvedValue({ items: [{ id: 41, name: "Queued performer" }], totalCount: 1 });
+    state.active = dashboard(1, "Home", true, [
+      {
+        instanceId: "saved",
+        owner: "cove.core",
+        widgetKey: "collection",
+        label: "Saved",
+        configuration: { source: "saved", savedFilterId: 5 },
+      },
+    ]);
+
+    const { onNavigate } = renderHomeWithQueue();
+    fireEvent.click(await screen.findByRole("link", { name: /Queued performer/ }));
+
+    expect(onNavigate).toHaveBeenCalledWith({ page: "performer", id: 41 });
+    expect(screen.getByRole("status", { name: "Queue position" })).toHaveTextContent("none");
   });
 
   it("shows and retries a failed Continue Watching widget", async () => {
