@@ -8,6 +8,20 @@ namespace Cove.Api.Extensions;
 // ============================================================================
 public class ThemeCollectionExtension : IExtension, IUIExtension
 {
+    /// <summary>
+    /// Glass settings for themes with an animated background: nearly clear surfaces and stronger blur,
+    /// so the moving colour shows through. Ordinary Glass slider values the user can change.
+    /// </summary>
+    private static Dictionary<string, Dictionary<string, string>> AnimatedBackgroundGlassOptions() => new()
+    {
+        ["glass"] = new()
+        {
+            ["opacity"] = "12",
+            ["cardopacity"] = "10",
+            ["surfaceblur"] = "60",
+        },
+    };
+
     public string Id => "com.cove.themes";
     public string Name => "Theme Collection";
     public string Version => "1.0.0";
@@ -29,6 +43,7 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
             new UIComponentStyleDef("gradient", "Gradient", "Accent-driven gradients across cards, surfaces, and the background"),
             new UIComponentStyleDef("animated", "Animated", "Lift, shimmer, and accent trails on interactive surfaces"),
             new UIComponentStyleDef("floating", "Floating", "Frameless media-first cards that sit directly on the page"),
+            new UIComponentStyleDef("pattern", "Pattern", "A repeating pattern or your own image behind the page, on any theme"),
         ],
         LayoutStyles =
         [
@@ -38,6 +53,7 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
         ],
         Themes =
         [
+            // === Simple: flat colour palettes ===
             new UIThemeDefinition(
                 Id: "default",
                 Name: "Default",
@@ -265,6 +281,255 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                 }
             ),
             new UIThemeDefinition(
+                Id: "groove",
+                Name: "Groove",
+                Description: "Near-black with a vivid green accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#121212",
+                    ["--color-nav"] = "#000000",
+                    ["--color-card"] = "#181818",
+                    ["--color-card-hover"] = "#282828",
+                    ["--color-surface"] = "#1a1a1a",
+                    ["--color-border"] = "#242424",
+                    ["--color-input"] = "#2a2a2a",
+                    ["--color-accent"] = "#1a9e48",
+                    ["--color-accent-hover"] = "#1ed760",
+                    ["--color-foreground"] = "#ffffff",
+                    ["--color-secondary"] = "#b3b3b3",
+                    ["--color-muted"] = "#7a7a7a",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.7)",
+                    ["--color-nav-active"] = "#1ed760",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "lounge",
+                Name: "Lounge",
+                Description: "Soft charcoal greys with a periwinkle-blue accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#313338",
+                    ["--color-nav"] = "#2b2d31",
+                    ["--color-card"] = "#2b2d31",
+                    ["--color-card-hover"] = "#35373c",
+                    ["--color-surface"] = "#2b2d31",
+                    ["--color-border"] = "#3f4147",
+                    ["--color-input"] = "#1e1f22",
+                    ["--color-accent"] = "#5865f2",
+                    ["--color-accent-hover"] = "#4752c4",
+                    ["--color-foreground"] = "#f2f3f5",
+                    ["--color-secondary"] = "#dbdee1",
+                    ["--color-muted"] = "#949ba4",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.7)",
+                    ["--color-nav-active"] = "#ffffff",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "broadcast",
+                Name: "Broadcast",
+                Description: "Deep black with an electric violet accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#0e0e10",
+                    ["--color-nav"] = "#18181b",
+                    ["--color-card"] = "#1f1f23",
+                    ["--color-card-hover"] = "#26262c",
+                    ["--color-surface"] = "#18181b",
+                    ["--color-border"] = "#35353b",
+                    ["--color-input"] = "#18181b",
+                    ["--color-accent"] = "#9147ff",
+                    ["--color-accent-hover"] = "#a970ff",
+                    ["--color-foreground"] = "#efeff1",
+                    ["--color-secondary"] = "#adadb8",
+                    ["--color-muted"] = "#7d7d8a",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.7)",
+                    ["--color-nav-active"] = "#bf94ff",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "espresso",
+                Name: "Espresso",
+                Description: "Warm coffee browns with a terracotta accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#1b1715",
+                    ["--color-nav"] = "#15110f",
+                    ["--color-card"] = "#262120",
+                    ["--color-card-hover"] = "#2f2927",
+                    ["--color-surface"] = "#201b19",
+                    ["--color-border"] = "#3a322e",
+                    ["--color-input"] = "rgba(0, 0, 0, 0.25)",
+                    ["--color-accent"] = "#c9683f",
+                    ["--color-accent-hover"] = "#d98257",
+                    ["--color-foreground"] = "#f1e9e1",
+                    ["--color-secondary"] = "#b9ada2",
+                    ["--color-muted"] = "#8a7d72",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.55)",
+                    ["--color-nav-active"] = "#d9a05b",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "reel",
+                Name: "Reel",
+                Description: "Cool slate with a fresh green accent and orange highlights",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#14181c",
+                    ["--color-nav"] = "#0e1114",
+                    ["--color-card"] = "#202830",
+                    ["--color-card-hover"] = "#2c3440",
+                    ["--color-surface"] = "#1b2129",
+                    ["--color-border"] = "#2c3440",
+                    ["--color-input"] = "#2c3440",
+                    ["--color-accent"] = "#00a832",
+                    ["--color-accent-hover"] = "#00e054",
+                    ["--color-foreground"] = "#ffffff",
+                    ["--color-secondary"] = "#99aabb",
+                    ["--color-muted"] = "#667788",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.7)",
+                    ["--color-nav-active"] = "#ff8000",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "terminal",
+                Name: "Terminal",
+                Description: "Warm olive charcoal with hot pink and lime highlights",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#272822",
+                    ["--color-nav"] = "#1e1f1c",
+                    ["--color-card"] = "#2d2e27",
+                    ["--color-card-hover"] = "#383830",
+                    ["--color-surface"] = "#23241f",
+                    ["--color-border"] = "#49483e",
+                    ["--color-input"] = "#1e1f1c",
+                    ["--color-accent"] = "#e5286a",
+                    ["--color-accent-hover"] = "#f92672",
+                    ["--color-foreground"] = "#f8f8f2",
+                    ["--color-secondary"] = "#c5c5bd",
+                    ["--color-muted"] = "#8f908a",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.6)",
+                    ["--color-nav-active"] = "#a6e22e",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "federation",
+                Name: "Federation",
+                Description: "Deep blue-grey with an indigo accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#191b22",
+                    ["--color-nav"] = "#15171c",
+                    ["--color-card"] = "#282c37",
+                    ["--color-card-hover"] = "#313543",
+                    ["--color-surface"] = "#1f232b",
+                    ["--color-border"] = "#393f4f",
+                    ["--color-input"] = "#1f232b",
+                    ["--color-accent"] = "#6364ff",
+                    ["--color-accent-hover"] = "#7b7cff",
+                    ["--color-foreground"] = "#ffffff",
+                    ["--color-secondary"] = "#d9e1e8",
+                    ["--color-muted"] = "#7c88a3",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.7)",
+                    ["--color-nav-active"] = "#d9e1e8",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "after-dark",
+                Name: "After Dark",
+                Description: "Inky black with a hot pink accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#0d0a0e",
+                    ["--color-nav"] = "#000000",
+                    ["--color-card"] = "#17121a",
+                    ["--color-card-hover"] = "#211a25",
+                    ["--color-surface"] = "#110d13",
+                    ["--color-border"] = "#2b2030",
+                    ["--color-input"] = "#0d0a0e",
+                    ["--color-accent"] = "#e6007a",
+                    ["--color-accent-hover"] = "#ff2d95",
+                    ["--color-foreground"] = "#f5eef3",
+                    ["--color-secondary"] = "#b59cab",
+                    ["--color-muted"] = "#7a6473",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.75)",
+                    ["--color-nav-active"] = "#ff6fb5",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "velvet",
+                Name: "Velvet",
+                Description: "Deep wine with rose accents",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#1a0d13",
+                    ["--color-nav"] = "#12080c",
+                    ["--color-card"] = "#28141d",
+                    ["--color-card-hover"] = "#331a26",
+                    ["--color-surface"] = "#20101a",
+                    ["--color-border"] = "#432538",
+                    ["--color-input"] = "#12080c",
+                    ["--color-accent"] = "#d6336c",
+                    ["--color-accent-hover"] = "#f0558a",
+                    ["--color-foreground"] = "#f8e9ef",
+                    ["--color-secondary"] = "#c9a3b3",
+                    ["--color-muted"] = "#8f6e7d",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.65)",
+                    ["--color-nav-active"] = "#f5c2d0",
+                }
+            ),
+            // === A little more: a background glow, or bundled styles and layouts ===
+            new UIThemeDefinition(
+                Id: "abyss",
+                Name: "Abyss",
+                Description: "Deep blue-black with a faint vignette for depth",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#050a14",
+                    ["--color-nav"] = "#06060b",
+                    ["--color-card"] = "#0b0b12",
+                    ["--color-card-hover"] = "#11111a",
+                    ["--color-surface"] = "#08080d",
+                    ["--color-border"] = "#16161f",
+                    ["--color-input"] = "#030306",
+                    ["--color-accent"] = "#0a84ff",
+                    ["--color-accent-hover"] = "#5ac8fa",
+                    ["--color-foreground"] = "#f0f0f3",
+                    ["--color-secondary"] = "#9a9aa0",
+                    ["--color-muted"] = "#66666b",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.6)",
+                    ["--color-nav-active"] = "#4da3ff",
+                    // Depth only, not a colour shift: a hint of lift at the top and a faint vignette at the
+                    // edges. Fixed to the viewport; it stays under a Pattern.
+                    ["--theme-bg-glow"] = "radial-gradient(ellipse 120% 80% at 50% 0%, rgba(255, 255, 255, 0.018) 0%, transparent 60%), radial-gradient(ellipse 140% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.28) 100%)",
+                }
+            ),
+            new UIThemeDefinition(
+                Id: "cinema-dark",
+                Name: "Cinema Dark",
+                Description: "Dark video-first browsing with red accents and floating media tiles",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#0f0f0f",
+                    ["--color-nav"] = "#111111",
+                    ["--color-card"] = "#181818",
+                    ["--color-card-hover"] = "#242424",
+                    ["--color-surface"] = "#1a1a1a",
+                    ["--color-border"] = "#303030",
+                    ["--color-input"] = "#121212",
+                    ["--color-accent"] = "#ff0033",
+                    ["--color-accent-hover"] = "#ff4e45",
+                    ["--color-foreground"] = "#f1f1f1",
+                    ["--color-secondary"] = "#c0c0c0",
+                    ["--color-muted"] = "#8b8b8b",
+                    ["--color-overlay"] = "rgba(0,0,0,0.7)",
+                    ["--color-nav-active"] = "#ffffff",
+                },
+                ComponentStyle: "floating",
+                LayoutStyle: "detail-theater detail-tabs"
+            ),
+            // === Gradient and animated backgrounds ===
+            new UIThemeDefinition(
                 Id: "rainbow",
                 Name: "Rainbow",
                 Description: "Vivid multi-color rainbow gradient with deep dark base",
@@ -309,8 +574,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#bf5af2",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
-            // === Animated themes ===
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "neon-glow",
                 Name: "Neon Glow",
@@ -380,7 +647,6 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                 },
                 ComponentStyle: "glass gradient animated"
             ),
-            // === Multi-color animated themes with background animations ===
             new UIThemeDefinition(
                 Id: "cyberpunk",
                 Name: "Cyberpunk",
@@ -403,7 +669,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#ffe45c",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "deep-space",
                 Name: "Deep Space",
@@ -426,8 +695,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#a78bfa",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
-            // === Complex multi-color themes ===
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "synthwave",
                 Name: "Synthwave",
@@ -450,7 +721,10 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#ffb86b",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
             new UIThemeDefinition(
                 Id: "ember",
                 Name: "Ember",
@@ -473,31 +747,200 @@ public class ThemeCollectionExtension : IExtension, IUIExtension
                     ["--color-nav-active"] = "#ef4444",
                 },
                 BackgroundAnimation: "liquid-drift"
-            ),
+            )
+            {
+                StyleOptions = AnimatedBackgroundGlassOptions(),
+            },
+            // === Patterns: the Pattern style on by default ===
             new UIThemeDefinition(
-                Id: "cinema-dark",
-                Name: "Cinema Dark",
-                Description: "Dark video-first browsing with red accents and floating media tiles",
+                Id: "honeycomb",
+                Name: "Honeycomb",
+                Description: "Charcoal and amber over a faint honeycomb",
                 CssVariables: new()
                 {
-                    ["--color-background"] = "#0f0f0f",
-                    ["--color-nav"] = "#111111",
-                    ["--color-card"] = "#181818",
-                    ["--color-card-hover"] = "#242424",
-                    ["--color-surface"] = "#1a1a1a",
-                    ["--color-border"] = "#303030",
-                    ["--color-input"] = "#121212",
-                    ["--color-accent"] = "#ff0033",
-                    ["--color-accent-hover"] = "#ff4e45",
-                    ["--color-foreground"] = "#f1f1f1",
-                    ["--color-secondary"] = "#c0c0c0",
-                    ["--color-muted"] = "#8b8b8b",
-                    ["--color-overlay"] = "rgba(0,0,0,0.7)",
-                    ["--color-nav-active"] = "#ffffff",
+                    ["--color-background"] = "#121214",
+                    ["--color-nav"] = "#0c0c0d",
+                    ["--color-card"] = "#1b1b1e",
+                    ["--color-card-hover"] = "#242428",
+                    ["--color-surface"] = "#161618",
+                    ["--color-border"] = "#2a2a2f",
+                    ["--color-input"] = "#0c0c0d",
+                    ["--color-accent"] = "#d97706",
+                    ["--color-accent-hover"] = "#f59e0b",
+                    ["--color-foreground"] = "#f4f4f5",
+                    ["--color-secondary"] = "#b4b4ba",
+                    ["--color-muted"] = "#7c7c84",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.7)",
+                    ["--color-nav-active"] = "#fbbf24",
                 },
-                ComponentStyle: "floating",
-                LayoutStyle: "detail-theater detail-tabs"
-            ),
+                ComponentStyle: "pattern"
+            )
+            {
+                StyleOptions = new()
+                {
+                    ["pattern"] = new()
+                    {
+                        ["kind"] = "hex",
+                        ["tint"] = "white",
+                        ["keepcolors"] = "off",
+                        ["opacity"] = "4",
+                        ["scale"] = "175",
+                    },
+                },
+            },
+            new UIThemeDefinition(
+                Id: "sakura",
+                Name: "Sakura",
+                Description: "Plum charcoal with blossom pinks and cherry branches",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#1e181d",
+                    ["--color-nav"] = "#171216",
+                    ["--color-card"] = "#2a2129",
+                    ["--color-card-hover"] = "#342a33",
+                    ["--color-surface"] = "#231c22",
+                    ["--color-border"] = "#3f3340",
+                    ["--color-input"] = "#171216",
+                    ["--color-accent"] = "#d9608f",
+                    ["--color-accent-hover"] = "#f08ab1",
+                    ["--color-foreground"] = "#f9eef4",
+                    ["--color-secondary"] = "#cbb3c1",
+                    ["--color-muted"] = "#917f8a",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.6)",
+                    ["--color-nav-active"] = "#ffb3d1",
+                },
+                ComponentStyle: "pattern"
+            )
+            {
+                StyleOptions = new()
+                {
+                    ["pattern"] = new()
+                    {
+                        ["kind"] = "custom",
+                        ["source"] = "/patterns/sakura-branches.svg",
+                        ["sourcekind"] = "svg",
+                        ["sourcewidth"] = "480",
+                        ["keepcolors"] = "on",
+                        ["opacity"] = "50",
+                        ["scale"] = "300",
+                    },
+                },
+            },
+            new UIThemeDefinition(
+                Id: "burgundy",
+                Name: "Burgundy",
+                Description: "Muted wine with antique gold and a soft argyle texture",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#1a1416",
+                    ["--color-nav"] = "#140f11",
+                    ["--color-card"] = "#241a1d",
+                    ["--color-card-hover"] = "#2d2125",
+                    ["--color-surface"] = "#1f1719",
+                    ["--color-border"] = "#3a2b2f",
+                    ["--color-input"] = "#140f11",
+                    ["--color-accent"] = "#933a48",
+                    ["--color-accent-hover"] = "#a84a59",
+                    ["--color-foreground"] = "#f0e6e6",
+                    ["--color-secondary"] = "#bfaeb0",
+                    ["--color-muted"] = "#8a7a7d",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.65)",
+                    ["--color-nav-active"] = "#c9a96e",
+                },
+                ComponentStyle: "pattern"
+            )
+            {
+                StyleOptions = new()
+                {
+                    ["pattern"] = new()
+                    {
+                        ["kind"] = "argyle",
+                        ["fit"] = "tile",
+                        ["opacity"] = "50",
+                        ["scale"] = "125",
+                        ["dim"] = "25",
+                    },
+                },
+            },
+            // === Pictures: a bundled photo behind floating cards (Unsplash Licence, ui/public/backgrounds) ===
+            new UIThemeDefinition(
+                Id: "nebula",
+                Name: "Nebula",
+                Description: "Deep-space navy over a dimmed star field, with a bright blue accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#0a0d14",
+                    ["--color-nav"] = "#080a10",
+                    ["--color-card"] = "#11151f",
+                    ["--color-card-hover"] = "#181d2a",
+                    ["--color-surface"] = "#0d1018",
+                    ["--color-border"] = "#222838",
+                    ["--color-input"] = "#080a10",
+                    ["--color-accent"] = "#1a8fd6",
+                    ["--color-accent-hover"] = "#45aaf0",
+                    ["--color-foreground"] = "#e8edf5",
+                    ["--color-secondary"] = "#a3adbd",
+                    ["--color-muted"] = "#6f7889",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.65)",
+                    ["--color-nav-active"] = "#ffb347",
+                },
+                ComponentStyle: "floating pattern"
+            )
+            {
+                StyleOptions = new()
+                {
+                    ["pattern"] = new()
+                    {
+                        ["kind"] = "custom",
+                        ["source"] = "/backgrounds/nebula.jpg",
+                        ["sourcekind"] = "image",
+                        ["sourcewidth"] = "1920",
+                        ["fit"] = "cover",
+                        ["opacity"] = "60",
+                        ["dim"] = "45",
+                        ["scale"] = "100",
+                    },
+                },
+            },
+            new UIThemeDefinition(
+                Id: "rainfall",
+                Name: "Rainfall",
+                Description: "Rain on glass over night-time city glow, with a teal accent",
+                CssVariables: new()
+                {
+                    ["--color-background"] = "#0a100f",
+                    ["--color-nav"] = "#070b0b",
+                    ["--color-card"] = "#111817",
+                    ["--color-card-hover"] = "#17201f",
+                    ["--color-surface"] = "#0d1312",
+                    ["--color-border"] = "#1f2a28",
+                    ["--color-input"] = "#070b0b",
+                    ["--color-accent"] = "#14b8a6",
+                    ["--color-accent-hover"] = "#2dd4bf",
+                    ["--color-foreground"] = "#ecece6",
+                    ["--color-secondary"] = "#aab0a8",
+                    ["--color-muted"] = "#757c75",
+                    ["--color-overlay"] = "rgba(0, 0, 0, 0.65)",
+                    ["--color-nav-active"] = "#7ee8d8",
+                },
+                ComponentStyle: "floating pattern"
+            )
+            {
+                StyleOptions = new()
+                {
+                    ["pattern"] = new()
+                    {
+                        ["kind"] = "custom",
+                        ["source"] = "/backgrounds/rainfall.jpg",
+                        ["sourcekind"] = "image",
+                        ["sourcewidth"] = "1920",
+                        ["fit"] = "cover",
+                        ["opacity"] = "70",
+                        ["dim"] = "35",
+                        ["scale"] = "100",
+                    },
+                },
+            },
         ]
     };
 }

@@ -46,6 +46,23 @@ html {
   background-color: var(--color-background);
 }
 
+/* A theme may paint behind the app shell with two layers. --theme-bg-image is a tiled pattern or
+   image (any CSS <image>, e.g. an inline SVG data URI); the Pattern style replaces it.
+   --theme-bg-glow is a gradient fixed to the viewport, part of the palette's look, so it stays
+   under a Pattern too. Unset = plain colour. The shell, not body, because the shell's
+   bg-background covers body entirely. */
+.cove-app-shell {
+  background-image: var(--theme-bg-image, none), var(--theme-bg-glow, none);
+  background-size:
+    var(--theme-bg-size, auto),
+    100% 100%;
+  background-repeat: var(--theme-bg-repeat, repeat), no-repeat;
+  background-attachment: var(--theme-bg-attachment, scroll), fixed;
+  background-position:
+    var(--theme-bg-position, 0 0),
+    0 0;
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
@@ -336,14 +353,22 @@ select {
  * IMPORTANT: Use only single-function backdrop-filter values (blur only) because
  * Lightning CSS strips spaces between chained functions like blur(x) saturate(y). */
 
-/* --- Component Style: Glass --- */
-/* Glass opacity is controlled by --sv-surface-opacity (0-100, default 40). */
+/* --- Component Style: Glass ---
+   Glass makes the theme's own nav, surface and card colours see-through; it does not replace them.
+   The opacity sliders (0-100) are the share of the theme colour kept, so 100% is the theme exactly.
+   --theme-color-* are untouched copies the theme writes next to each --color-* (see
+   themeVariableDeclarations); the fallbacks are the default theme's values. */
 html[data-component-style*="glass"] {
-  --_glass-alpha: calc(var(--sv-surface-opacity, 40) / 100);
-  --color-nav: rgb(18 18 24 / var(--_glass-alpha));
-  --color-surface: rgb(28 28 36 / calc(var(--_glass-alpha) * 0.75));
-  --color-card: rgb(36 36 46 / calc(var(--_glass-alpha) * 0.625));
-  --color-card-hover: rgb(48 48 58 / calc(var(--_glass-alpha) * 0.875));
+  --_glass-surface: calc(var(--sv-surface-opacity, 40) * 1%);
+  --_glass-card: calc(var(--sv-card-opacity, 40) * 1%);
+  --_glass-button: calc(var(--sv-button-opacity, 55) * 1%);
+  /* Blur sliders (0-100): cards up to 30px, surfaces (nav, panels, popups) up to 40px. */
+  --_glass-card-blur: calc(var(--sv-card-blur, 27) * 0.3px);
+  --_glass-surface-blur: calc(var(--sv-surface-blur, 50) * 0.4px);
+  --color-nav: color-mix(in srgb, var(--theme-color-nav, #111317) var(--_glass-surface), transparent);
+  --color-surface: color-mix(in srgb, var(--theme-color-surface, #1a1c23) var(--_glass-surface), transparent);
+  --color-card: color-mix(in srgb, var(--theme-color-card, #1e2028) var(--_glass-card), transparent);
+  --color-card-hover: color-mix(in srgb, var(--theme-color-card-hover, #252830) var(--_glass-card), transparent);
   --color-input: rgba(12, 12, 18, 0.25);
   --color-border: rgba(255, 255, 255, 0.12);
   --color-overlay: rgba(0, 0, 0, 0.4);
@@ -351,10 +376,6 @@ html[data-component-style*="glass"] {
 
 /* Light color scheme glass — uses data-color-scheme="light" set by ExtensionLoader */
 html[data-color-scheme="light"][data-component-style*="glass"] {
-  --color-nav: rgba(212, 218, 228, 0.6);
-  --color-surface: rgba(212, 218, 228, 0.45);
-  --color-card: rgba(212, 218, 228, 0.4);
-  --color-card-hover: rgba(212, 218, 228, 0.55);
   --color-input: rgba(212, 218, 228, 0.3);
   --color-border: rgba(0, 0, 0, 0.1);
   --color-overlay: rgba(0, 0, 0, 0.2);
@@ -363,14 +384,14 @@ html[data-color-scheme="light"][data-component-style*="glass"] {
 /* Glass: major surfaces get frosted blur — controlled by --sv-surface-blur (0-100, default 50 → 20px) */
 html[data-component-style*="glass"] .bg-surface,
 html[data-component-style*="glass"] .bg-surface\/50 {
-  -webkit-backdrop-filter: blur(calc(var(--sv-surface-blur, 50) * 0.4px));
-  backdrop-filter: blur(calc(var(--sv-surface-blur, 50) * 0.4px));
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
 }
 
 html[data-component-style*="glass"] .detail-hero-gradient {
-  -webkit-backdrop-filter: blur(calc(var(--sv-surface-blur, 50) * 0.4px));
-  backdrop-filter: blur(calc(var(--sv-surface-blur, 50) * 0.4px));
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 
 html[data-component-style*="glass"] .rounded-xl.border.border-border.bg-card {
@@ -379,8 +400,8 @@ html[data-component-style*="glass"] .rounded-xl.border.border-border.bg-card {
 }
 
 html[data-component-style*="glass"] .bg-nav {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
 }
 
@@ -393,28 +414,37 @@ html[data-component-style*="glass"] .bg-input {
 html[data-component-style*="glass"] .entity-card,
 html[data-component-style*="glass"] .video-card {
   contain: style;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(calc(var(--sv-card-blur, 27) * 0.3px));
-  backdrop-filter: blur(calc(var(--sv-card-blur, 27) * 0.3px));
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(var(--_glass-card-blur));
+  backdrop-filter: blur(var(--_glass-card-blur));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.25);
   transition:
     box-shadow 0.3s,
-    border-color 0.3s;
+    border-color 0.3s,
+    transform 0.3s;
 }
 
 html[data-component-style*="glass"] .entity-card:hover,
 html[data-component-style*="glass"] .video-card:hover {
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06),
+    0 16px 48px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-2px);
 }
 
-/* Glass: dropdowns/dialogs — semi-transparent frosted background */
+/* Glass: dropdowns/dialogs — the surface sliders, like every other panel */
 html[data-component-style*="glass"] .styled-dropdown-panel,
 html[data-component-style*="glass"] .filter-dialog,
 html[data-component-style*="glass"] [role="dialog"] {
-  background: rgba(20, 22, 28, 0.72) !important;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  background: color-mix(in srgb, var(--theme-color-surface, #1a1c23) var(--_glass-surface), transparent) !important;
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
 }
@@ -422,8 +452,8 @@ html[data-component-style*="glass"] [role="dialog"] {
 /* Glass: settings style option cards */
 html[data-component-style*="glass"] .settings-style-card {
   border-color: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(var(--_glass-card-blur));
+  backdrop-filter: blur(var(--_glass-card-blur));
 }
 html[data-component-style*="glass"] .settings-style-card.active {
   border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
@@ -439,8 +469,8 @@ html[data-component-style*="glass"] button[class*="text-accent transition-transf
 }
 
 html[data-component-style*="glass"] section.rounded-2xl {
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 
 html[data-component-style*="glass"] .rounded-full {
@@ -534,8 +564,8 @@ html[data-theme-bg-animation] .job-drawer {
   --job-drawer-secondary: #a0aab2;
   background: var(--job-drawer-surface) !important;
   color: var(--job-drawer-text) !important;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 html[data-color-scheme="light"][data-component-style*="gradient"] .job-drawer,
 html[data-color-scheme="light"][data-component-style*="animated"] .job-drawer,
@@ -559,9 +589,9 @@ html[data-theme-bg-animation] .job-drawer-card {
 
 /* Keyboard shortcuts dialog */
 html[data-component-style*="glass"] .shortcuts-dialog {
-  background: rgba(20, 22, 28, 0.72) !important;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  background: color-mix(in srgb, var(--theme-color-surface, #1a1c23) var(--_glass-surface), transparent) !important;
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
   border-color: rgba(255, 255, 255, 0.1);
 }
@@ -569,11 +599,7 @@ html[data-component-style*="glass"] .shortcuts-dialog-header {
   background: transparent !important;
 }
 html[data-color-scheme="light"][data-component-style*="glass"] .shortcuts-dialog {
-  background: rgba(245, 248, 250, 0.92) !important;
   border-color: rgba(0, 0, 0, 0.1);
-}
-html[data-color-scheme="light"][data-component-style*="glass"] .shortcuts-dialog-header {
-  background: rgba(245, 248, 250, 0.92) !important;
 }
 /* Gradient style: accent header border */
 html[data-component-style*="gradient"] .shortcuts-dialog-header {
@@ -609,11 +635,8 @@ html[data-component-style*="glass"] .border-t {
 
 /* BG Animation + Glass: extra translucent surfaces so blobs show through */
 html[data-theme-bg-animation][data-component-style*="glass"] {
+  /* Nav, surface and card stay on the Glass opacity sliders; these themes recommend low values. */
   --color-background: transparent;
-  --color-nav: rgba(20, 20, 30, 0.12);
-  --color-surface: rgba(24, 24, 36, 0.08);
-  --color-card: rgba(30, 30, 42, 0.08);
-  --color-card-hover: rgba(40, 40, 55, 0.15);
   --color-input: rgba(10, 10, 18, 0.12);
   --color-border: rgba(255, 255, 255, 0.2);
   --color-overlay: rgba(0, 0, 0, 0.25);
@@ -709,16 +732,16 @@ html[data-theme-bg-animation] ::-webkit-scrollbar-thumb {
 /* BG Animation + Glass: enhanced blur for surfaces (higher default than base glass) */
 html[data-theme-bg-animation][data-component-style*="glass"] .bg-surface,
 html[data-theme-bg-animation][data-component-style*="glass"] .bg-surface\/50 {
-  -webkit-backdrop-filter: blur(calc(var(--sv-surface-blur, 60) * 0.4px));
-  backdrop-filter: blur(calc(var(--sv-surface-blur, 60) * 0.4px));
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 /* BG Animation + Glass: navbar */
 html[data-theme-bg-animation][data-component-style*="glass"] .bg-nav {
-  -webkit-backdrop-filter: blur(30px);
-  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
@@ -743,17 +766,17 @@ html[data-theme-bg-animation][data-component-style*="glass"] .video-card:hover {
 html[data-theme-bg-animation][data-component-style*="glass"] .styled-dropdown-panel,
 html[data-theme-bg-animation][data-component-style*="glass"] .filter-dialog,
 html[data-theme-bg-animation][data-component-style*="glass"] [role="dialog"] {
-  background: rgba(14, 14, 22, 0.65) !important;
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  background: color-mix(in srgb, var(--theme-color-surface, #1a1c23) var(--_glass-surface), transparent) !important;
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
 }
 
 /* BG Animation + Glass: settings sections */
 html[data-theme-bg-animation][data-component-style*="glass"] section.rounded-2xl {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -761,8 +784,8 @@ html[data-theme-bg-animation][data-component-style*="glass"] section.rounded-2xl
 
 /* BG Animation + Glass: fixed panels */
 html[data-theme-bg-animation][data-component-style*="glass"] .fixed.right-0 {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border-left: 1px solid rgba(255, 255, 255, 0.15);
 }
 
@@ -775,8 +798,8 @@ html[data-theme-bg-animation][data-component-style*="glass"] .bg-input {
 
 /* BG Animation + Glass: button hover blur — only for nav buttons */
 html[data-theme-bg-animation][data-component-style*="glass"] .bg-nav button:not(.no-glass):hover {
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 
 /* BG Animation + Glass: pills/badges */
@@ -788,8 +811,8 @@ html[data-theme-bg-animation][data-component-style*="glass"] .rounded-full {
 
 /* BG Animation + Glass: popovers */
 html[data-theme-bg-animation][data-component-style*="glass"] .fixed.right-0.shadow-2xl {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 16px 64px rgba(0, 0, 0, 0.12);
 }
@@ -825,8 +848,8 @@ html[data-theme-bg-animation][data-component-style*="glass"] section.rounded-2xl
 /* BG Animation + Glass: detail page hero sections */
 html[data-theme-bg-animation][data-component-style*="glass"] .relative.overflow-hidden.border-b {
   background: rgba(10, 10, 18, 0.15) !important;
-  -webkit-backdrop-filter: blur(30px);
-  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 
 /* BG Animation: detail page hero gradient overlays — more translucent */
@@ -877,12 +900,12 @@ html[data-theme-bg-animation]:not([data-component-style*="glass"]) {
   --color-border: rgba(255, 255, 255, 0.12);
 }
 html[data-theme-bg-animation]:not([data-component-style*="glass"]) .bg-nav {
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 html[data-theme-bg-animation]:not([data-component-style*="glass"]) .bg-surface {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 html[data-theme-bg-animation]:not([data-component-style*="glass"]) .entity-card,
 html[data-theme-bg-animation]:not([data-component-style*="glass"]) .video-card {
@@ -994,6 +1017,18 @@ body.has-video-player {
   background-size: 100% 100% !important;
 }
 body.has-video-player::before {
+  animation: none !important;
+}
+
+/* PERF: no endless decorative animation behind a playing video or a fullscreen element. A
+   background-position / border-color loop repaints every frame even while a fullscreen player covers
+   it, which drops the browser off its fullscreen video fast path and makes playback stutter. */
+body.has-video-player nav.cove-navbar,
+body.has-video-player nav.bg-nav > div > .border-b,
+html:has(:fullscreen) nav.cove-navbar,
+html:has(:fullscreen) nav.bg-nav > div > .border-b,
+html:has(:fullscreen) body,
+html:has(:fullscreen) body::before {
   animation: none !important;
 }
 
@@ -1110,15 +1145,16 @@ html[data-component-style*="gradient"] textarea {
   }
 }
 
-/* Animated: card image zoom on hover */
+/* Animated: card image zoom on hover. `.group` is a generic Tailwind hook, so only clickable groups
+   zoom; static panels that happen to use it for group-hover styling stay still. */
 html[data-component-style*="animated"] .entity-card img,
 html[data-component-style*="animated"] .video-card img,
-html[data-component-style*="animated"] .group img {
+html[data-component-style*="animated"] :is(a.group, .group[role="button"], .group.cursor-pointer) img {
   transition: transform 0.3s ease;
 }
 html[data-component-style*="animated"] .entity-card:hover img,
 html[data-component-style*="animated"] .video-card:hover img,
-html[data-component-style*="animated"] .group:hover img {
+html[data-component-style*="animated"] :is(a.group, .group[role="button"], .group.cursor-pointer):hover img {
   transform: scale(1.05);
 }
 html[data-component-style*="animated"] .image-detail-viewer .image-detail-primary-image {
@@ -1160,18 +1196,18 @@ html[data-component-style*="animated"] .image-detail-viewer:hover .image-detail-
   }
 }
 
-/* Animated hover: pulse glow — continuous via --sv-hover-glow (0-100, default 67) */
+/* Animated hover: pulse glow — continuous via --sv-hover-glow (0-100, default 67). Hover only swaps
+   the glow slot of the card's animation list (see card-enter below); the entrance keeps running. */
 html[data-component-style*="animated"] .entity-card:hover,
 html[data-component-style*="animated"] .video-card:hover {
-  --_hover-dur: calc(max(1, 4 - var(--sv-hover-glow, 67) * 0.03) * 1s);
-  animation: pulse-glow var(--_hover-dur) ease-in-out infinite;
+  --_card-glow: pulse-glow;
   border-color: transparent !important;
   outline: 1px solid color-mix(in srgb, var(--color-accent) 20%, transparent);
   outline-offset: -1px;
 }
 html[data-style-animated-hover="0"] .entity-card:hover,
 html[data-style-animated-hover="0"] .video-card:hover {
-  animation: none;
+  --_card-glow: none;
   box-shadow: none;
 }
 
@@ -1191,7 +1227,10 @@ html[data-style-animated-shimmer="off"] nav.cove-navbar {
   animation: none;
 }
 
-html[data-component-style*="animated"] button:hover:not(.no-glass) {
+/* Only standalone buttons glow. Full-width rows (settings sidebar, menus, list rows), tabs, menu items
+   and disabled buttons keep their own hover styling instead of lighting up like a call to action. */
+html[data-component-style*="animated"]
+  button:hover:not(.no-glass, :disabled, .w-full, [role="tab"], [role="menuitem"], [role="option"]) {
   transition:
     box-shadow 0.2s ease,
     border-color 0.2s ease;
@@ -1200,9 +1239,84 @@ html[data-component-style*="animated"] button:hover:not(.no-glass) {
 }
 
 /* BG Animation + Animated: softer button glow (avoid stacking context issues) */
-html[data-theme-bg-animation][data-component-style*="animated"] button:hover:not(.no-glass) {
+html[data-theme-bg-animation][data-component-style*="animated"]
+  button:hover:not(.no-glass, :disabled, .w-full, [role="tab"], [role="menuitem"], [role="option"]) {
   border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
   box-shadow: 0 0 8px 0 color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+
+/* --- Component Style: Pattern ---
+   A fixed layer behind the app shell. The image comes from --sv-pattern-custom-image (a built-in or
+   custom SVG, or an uploaded photo; see theme/patternSource.ts) and its natural width from
+   --sv-pattern-custom-tile, which Scale multiplies. SVGs are masks, so only their shape is used and
+   Tint colours them; "Keep original colours" and photos paint the image itself. It replaces any
+   pattern the theme itself ships. With nothing chosen yet it shows faint dots. */
+html[data-component-style*="pattern"] .cove-app-shell {
+  isolation: isolate;
+  --theme-bg-image: none;
+}
+html[data-component-style*="pattern"] .cove-app-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --_pattern-image: var(
+    --sv-pattern-custom-image,
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='1.5'/></svg>")
+  );
+  --_pattern-size: calc(var(--sv-pattern-custom-tile, 24px) * var(--sv-pattern-scale, 100) / 100);
+  background-color: var(--_pattern-color, #ffffff);
+  -webkit-mask-image: var(--_pattern-image);
+  mask-image: var(--_pattern-image);
+  -webkit-mask-size: var(--_pattern-size) auto;
+  mask-size: var(--_pattern-size) auto;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  opacity: calc(var(--sv-pattern-opacity, 12) / 100);
+}
+html[data-style-pattern-tint="accent"] .cove-app-shell::before {
+  --_pattern-color: var(--color-accent);
+}
+html[data-style-pattern-tint="foreground"] .cove-app-shell::before {
+  --_pattern-color: var(--color-foreground);
+}
+/* Painted as itself: an SVG whose own colours were kept, or a photo. */
+html[data-component-style*="pattern"][data-style-pattern-sourcekind="svg"][data-style-pattern-keepcolors="on"]
+  .cove-app-shell::before,
+html[data-component-style*="pattern"][data-style-pattern-sourcekind="image"] .cove-app-shell::before {
+  -webkit-mask-image: none;
+  mask-image: none;
+  background-color: transparent;
+  background-image: var(--_pattern-image);
+  background-size: var(--_pattern-size) auto;
+  background-repeat: repeat;
+}
+/* A pure-CSS pattern paints its own gradients and colours; its declarations arrive in an injected
+   rule (applyStyleOption, key "css"). This only clears the mask so they show unmasked. */
+html[data-component-style*="pattern"][data-style-pattern-sourcekind="css"] .cove-app-shell::before {
+  -webkit-mask-image: none;
+  mask-image: none;
+  background-color: transparent;
+}
+/* Photos: Dim darkens them toward black so text and cards stay readable; Fit picks tile, fill or center. */
+html[data-component-style*="pattern"][data-style-pattern-sourcekind="image"] .cove-app-shell::before {
+  --_pattern-dim: rgb(0 0 0 / calc(var(--sv-pattern-dim, 0) * 1%));
+  background-image: linear-gradient(var(--_pattern-dim), var(--_pattern-dim)), var(--_pattern-image);
+  background-size:
+    auto,
+    var(--_pattern-size) auto;
+  background-repeat: no-repeat, repeat;
+  background-position: center;
+}
+html[data-component-style*="pattern"][data-style-pattern-sourcekind="image"][data-style-pattern-fit="cover"]
+  .cove-app-shell::before {
+  background-size: auto, cover;
+  background-repeat: no-repeat;
+}
+html[data-component-style*="pattern"][data-style-pattern-sourcekind="image"][data-style-pattern-fit="center"]
+  .cove-app-shell::before {
+  background-repeat: no-repeat;
 }
 
 /* --- Component Style: Rounded --- */
@@ -1408,9 +1522,20 @@ section.rounded-2xl .rounded-xl.border-accent:hover {
   }
 }
 
+/* Entrance and hover glow share one animation list, and :hover only fills the glow slot. Replacing
+   `animation` on hover dropped card-enter, so un-hovering re-added it and replayed the entrance from
+   opacity 0 — a black flash on every hover-off. `backwards`, not `both`: a held end state would pin
+   `transform` and fight the hover transition. */
 html[data-component-style*="animated"] .entity-card,
 html[data-component-style*="animated"] .video-card {
-  animation: card-enter 0.3s ease-out both;
+  --_card-enter: card-enter;
+  --_card-glow: none;
+  --_hover-dur: calc(max(1, 4 - var(--sv-hover-glow, 67) * 0.03) * 1s);
+  animation-name: var(--_card-enter), var(--_card-glow);
+  animation-duration: 0.3s, var(--_hover-dur);
+  animation-timing-function: ease-out, ease-in-out;
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: backwards, none;
 }
 
 @keyframes tab-slide {
@@ -1446,7 +1571,8 @@ html[data-component-style*="animated"] button[class*="border-b-2"][class*="borde
     box-shadow: 0 0 12px 2px color-mix(in srgb, var(--color-accent) 15%, transparent);
   }
 }
-html[data-component-style*="animated"] .bg-accent:hover {
+/* Clickable accent controls only — badges, progress fills and indicators also use bg-accent. */
+html[data-component-style*="animated"] :is(button, a, [role="button"]).bg-accent:hover:not(:disabled) {
   animation: button-glow 1.5s ease-in-out infinite;
 }
 
@@ -1484,7 +1610,7 @@ html[data-component-style*="animated"] nav.bg-nav > div > .border-b {
 /* Animated off options */
 html[data-style-animated-entrance="off"] .entity-card,
 html[data-style-animated-entrance="off"] .video-card {
-  animation: none;
+  --_card-enter: none;
 }
 html[data-style-animated-entrance="off"] main {
   animation: none;
@@ -1492,7 +1618,7 @@ html[data-style-animated-entrance="off"] main {
 html[data-style-animated-surfaceshimmer="off"] nav.bg-nav > div > .border-b {
   animation: none;
 }
-html[data-style-animated-buttonglow="off"] .bg-accent:hover {
+html[data-style-animated-buttonglow="off"] :is(button, a, [role="button"]).bg-accent:hover {
   animation: none;
 }
 /* Scrollbar */
@@ -1754,190 +1880,6 @@ html[data-color-scheme="light"] .settings-number-input {
  * Lightning CSS minification strips spaces between chained functions like
  * blur(x) saturate(y), producing invalid CSS. */
 
-/* --- Component Style: Glass --- */
-
-/*
- * Strategy: Override the CSS color variables to be translucent when glass is active,
- * then add backdrop-filter: blur() to elements that use these backgrounds.
- * This makes glass apply EVERYWHERE consistently without per-element selectors.
- */
-html[data-component-style*="glass"] {
-  --color-shell-nav: rgba(18, 18, 24, 0.4);
-  --color-shell-surface: rgba(28, 28, 36, 0.3);
-  --color-shell-card: rgba(36, 36, 46, 0.25);
-  --color-shell-card-hover: rgba(48, 48, 58, 0.35);
-  --color-shell-input: rgba(12, 12, 18, 0.25);
-  --color-shell-border: rgba(255, 255, 255, 0.12);
-  --color-shell-overlay: rgba(0, 0, 0, 0.4);
-}
-
-/* Light theme glass: use light translucent values instead */
-html[data-theme="light"][data-component-style*="glass"] {
-  --color-shell-nav: rgba(212, 218, 228, 0.6);
-  --color-shell-surface: rgba(212, 218, 228, 0.45);
-  --color-shell-card: rgba(212, 218, 228, 0.4);
-  --color-shell-card-hover: rgba(212, 218, 228, 0.55);
-  --color-shell-input: rgba(212, 218, 228, 0.3);
-  --color-shell-border: rgba(0, 0, 0, 0.1);
-  --color-shell-overlay: rgba(0, 0, 0, 0.2);
-}
-
-/* Global glass: major surfaces get frosted glass blur.
- * PERF: Only apply blur to key structural elements. Blur is GPU-expensive;
- * limit to navigation, surfaces, and detail page panels. */
-html[data-component-style*="glass"] .bg-shell-surface,
-html[data-component-style*="glass"] .bg-shell-surface\/50 {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 4px 24px rgba(0, 0, 0, 0.15);
-}
-
-/* Detail page: hero sections — only one blur layer, not stacked */
-html[data-component-style*="glass"] .detail-hero-gradient {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-}
-
-/* Detail page: metadata and info cards — no blur, just tinted translucent bg */
-html[data-component-style*="glass"] .rounded-xl.border.border-shell-border.bg-shell-card {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 4px 16px rgba(0, 0, 0, 0.15);
-}
-
-/* Navbar — one fixed element, OK to blur */
-html[data-component-style*="glass"] .bg-shell-nav {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
-  box-shadow:
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    0 4px 30px rgba(0, 0, 0, 0.3);
-}
-
-/* Input fields — no blur, translucent bg is sufficient */
-html[data-component-style*="glass"] .bg-shell-input {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-/* Entity cards — specular highlight edge + hover lift.
- * Card blur is configurable via glass settings (data-style-glass-cardblur).
- * Default: light (8px) for nice visual effect. Can be turned off for performance. */
-html[data-component-style*="glass"] .entity-card,
-html[data-component-style*="glass"] .video-card {
-  contain: layout style paint;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06),
-    0 8px 32px rgba(0, 0, 0, 0.25);
-  transition:
-    box-shadow 0.3s,
-    border-color 0.3s,
-    transform 0.3s;
-}
-
-/* Glass card blur: off */
-html[data-style-glass-cardblur="off"][data-component-style*="glass"] .entity-card,
-html[data-style-glass-cardblur="off"][data-component-style*="glass"] .video-card {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-/* Glass card blur: full */
-html[data-style-glass-cardblur="full"][data-component-style*="glass"] .entity-card,
-html[data-style-glass-cardblur="full"][data-component-style*="glass"] .video-card {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-}
-
-/* Glass surface blur: configurable via data-style-glass-surfaceblur */
-html[data-style-glass-surfaceblur="low"][data-component-style*="glass"] .bg-shell-surface,
-html[data-style-glass-surfaceblur="low"][data-component-style*="glass"] .bg-shell-surface\/50 {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-html[data-style-glass-surfaceblur="high"][data-component-style*="glass"] .bg-shell-surface,
-html[data-style-glass-surfaceblur="high"][data-component-style*="glass"] .bg-shell-surface\/50 {
-  -webkit-backdrop-filter: blur(32px);
-  backdrop-filter: blur(32px);
-}
-
-/* Glass opacity: light (more see-through) */
-html[data-style-glass-opacity="light"][data-component-style*="glass"] {
-  --color-shell-nav: rgba(18, 18, 24, 0.25);
-  --color-shell-surface: rgba(28, 28, 36, 0.15);
-  --color-shell-card: rgba(36, 36, 46, 0.12);
-  --color-shell-card-hover: rgba(48, 48, 58, 0.2);
-}
-/* Glass opacity: heavy (more opaque) */
-html[data-style-glass-opacity="heavy"][data-component-style*="glass"] {
-  --color-shell-nav: rgba(18, 18, 24, 0.65);
-  --color-shell-surface: rgba(28, 28, 36, 0.55);
-  --color-shell-card: rgba(36, 36, 46, 0.5);
-  --color-shell-card-hover: rgba(48, 48, 58, 0.6);
-}
-
-html[data-component-style*="glass"] .entity-card:hover,
-html[data-component-style*="glass"] .video-card:hover {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06),
-    0 16px 48px rgba(0, 0, 0, 0.35),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.18);
-  transform: translateY(-2px);
-}
-
-/* Dropdowns / dialogs — moderate blur (only a few on screen at once) */
-html[data-component-style*="glass"] .styled-dropdown-panel,
-html[data-component-style*="glass"] .filter-dialog,
-html[data-component-style*="glass"] [role="dialog"] {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 24px 80px rgba(0, 0, 0, 0.4);
-}
-
-/* Glass buttons — PERF: only blur on hover, not all buttons at rest.
- * Also exclude tab buttons, rating stars, and interactive inline buttons. */
-html[data-component-style*="glass"] button.no-glass,
-html[data-component-style*="glass"] button[class*="border-b-2"],
-html[data-component-style*="glass"] button[class*="text-shell-accent transition-transform"] {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-
-/* Settings section cards — one blur per page section */
-html[data-component-style*="glass"] section.rounded-2xl {
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-}
-
-/* Stat badges, filter pills, tag chips — PERF: no blur on small elements; just tint */
-html[data-component-style*="glass"] .rounded-full {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-/* PERF: Video player area — never apply glass blur. The bg-black container
- * that wraps <video> must not get any backdrop-filter or its children choke. */
-html[data-component-style*="glass"] .bg-black {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-html[data-component-style*="glass"] .bg-black * {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
-
 /* PERF: CSS containment on card grids for layout thrashing reduction */
 .entity-card,
 .video-card {
@@ -1956,17 +1898,6 @@ html[data-component-style*="glass"] .bg-black * {
     animation: none !important;
     background-size: 100% 100% !important;
   }
-}
-
-/* Border dividers — soften them */
-html[data-component-style*="glass"] .border-b {
-  border-color: rgba(255, 255, 255, 0.06);
-}
-html[data-component-style*="glass"] .border-l {
-  border-color: rgba(255, 255, 255, 0.06);
-}
-html[data-component-style*="glass"] .border-t {
-  border-color: rgba(255, 255, 255, 0.06);
 }
 
 /* ===================================================================
@@ -2046,8 +1977,8 @@ html[data-theme="liquid-glass"] ::-webkit-scrollbar-thumb {
 /* Liquid Glass: dramatically increased blur + bright glass edges */
 html[data-theme="liquid-glass"][data-component-style*="glass"] .bg-shell-surface,
 html[data-theme="liquid-glass"][data-component-style*="glass"] .bg-shell-surface\/50 {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.3),
@@ -2057,8 +1988,8 @@ html[data-theme="liquid-glass"][data-component-style*="glass"] .bg-shell-surface
 
 /* Liquid Glass: navbar */
 html[data-theme="liquid-glass"][data-component-style*="glass"] .bg-shell-nav {
-  -webkit-backdrop-filter: blur(30px);
-  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow:
     inset 0 -1px 0 rgba(255, 255, 255, 0.1),
@@ -2093,8 +2024,8 @@ html[data-theme="liquid-glass"][data-component-style*="glass"] .video-card:hover
 html[data-theme="liquid-glass"][data-component-style*="glass"] .styled-dropdown-panel,
 html[data-theme="liquid-glass"][data-component-style*="glass"] .filter-dialog,
 html[data-theme="liquid-glass"][data-component-style*="glass"] [role="dialog"] {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.3),
@@ -2103,8 +2034,8 @@ html[data-theme="liquid-glass"][data-component-style*="glass"] [role="dialog"] {
 
 /* Liquid Glass: settings sections */
 html[data-theme="liquid-glass"][data-component-style*="glass"] section.rounded-2xl {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 20px;
   box-shadow:
@@ -2114,8 +2045,8 @@ html[data-theme="liquid-glass"][data-component-style*="glass"] section.rounded-2
 
 /* Liquid Glass: fixed panels — moderate blur */
 html[data-theme="liquid-glass"][data-component-style*="glass"] .fixed.right-0 {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border-left: 1px solid rgba(255, 255, 255, 0.15);
 }
 
@@ -2130,8 +2061,8 @@ html[data-theme="liquid-glass"][data-component-style*="glass"] .bg-shell-input {
 /* Liquid Glass: buttons have glass tint */
 html[data-theme="liquid-glass"][data-component-style*="glass"]
   button:not(.no-glass):not(:empty):not([class*="border-b-2"]):not([class*="transition-transform"]):hover {
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
@@ -2146,8 +2077,8 @@ html[data-theme="liquid-glass"][data-component-style*="glass"] .rounded-full {
 
 /* Liquid Glass: popovers */
 html[data-theme="liquid-glass"][data-component-style*="glass"] .fixed.right-0.shadow-2xl {
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
@@ -2171,8 +2102,8 @@ html[data-theme="liquid-glass"] .border-r {
 /* Liquid Glass: detail page hero sections — let gradient show through */
 html[data-theme="liquid-glass"][data-component-style*="glass"] .relative.overflow-hidden.border-b {
   background: rgba(10, 10, 18, 0.15) !important;
-  -webkit-backdrop-filter: blur(30px);
-  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(var(--_glass-surface-blur));
+  backdrop-filter: blur(var(--_glass-surface-blur));
 }
 
 /* Liquid Glass: detail page hero gradient overlays — make them more translucent */
@@ -2716,37 +2647,12 @@ html[data-component-style*="gradient"] {
   }
 }
 
-html[data-component-style*="glass"] {
-  --_glass-alpha: calc(var(--sv-surface-opacity, 40) / 100);
-  --_glass-card-alpha: calc(var(--sv-card-opacity, 40) / 100);
-  --_glass-button-alpha: calc(var(--sv-button-opacity, 55) / 100);
-  --color-nav: rgb(18 18 24 / var(--_glass-alpha));
-  --color-surface: rgb(28 28 36 / calc(var(--_glass-alpha) * 0.75));
-  --color-card: rgb(36 36 46 / var(--_glass-card-alpha));
-  --color-card-hover: rgb(48 48 58 / var(--_glass-card-alpha));
-}
-
-html[data-color-scheme="light"][data-component-style*="glass"] {
-  --color-nav: rgb(212 218 228 / calc(var(--sv-surface-opacity, 40) / 100));
-  --color-surface: rgb(212 218 228 / calc((var(--sv-surface-opacity, 40) + 5) / 100));
-  --color-card: rgb(212 218 228 / calc(var(--sv-card-opacity, 40) / 100));
-  --color-card-hover: rgb(212 218 228 / calc(var(--sv-card-opacity, 40) / 100));
-}
-
 html[data-component-style*="glass"] .entity-card,
 html[data-component-style*="glass"] .video-card,
 html[data-component-style*="glass"] .settings-style-card,
 html[data-component-style*="glass"] .theme-option-card,
 html[data-component-style*="glass"] .layout-option-card {
-  background-color: rgb(36 36 46 / var(--_glass-card-alpha));
-}
-
-html[data-color-scheme="light"][data-component-style*="glass"] .entity-card,
-html[data-color-scheme="light"][data-component-style*="glass"] .video-card,
-html[data-color-scheme="light"][data-component-style*="glass"] .settings-style-card,
-html[data-color-scheme="light"][data-component-style*="glass"] .theme-option-card,
-html[data-color-scheme="light"][data-component-style*="glass"] .layout-option-card {
-  background-color: rgb(212 218 228 / var(--_glass-card-alpha));
+  background-color: var(--color-card);
 }
 
 html[data-component-style*="glass"] button.bg-card,
@@ -2756,7 +2662,7 @@ html[data-component-style*="glass"] button[class*="bg-surface"],
 html[data-component-style*="glass"] .theme-option-card,
 html[data-component-style*="glass"] .layout-option-card,
 html[data-component-style*="glass"] .settings-style-card > .flex > button {
-  background-color: rgb(28 28 36 / var(--_glass-button-alpha));
+  background-color: color-mix(in srgb, var(--theme-color-surface, #1a1c23) var(--_glass-button), transparent);
 }
 
 html[data-component-style*="floating"] .entity-card,
@@ -2880,9 +2786,13 @@ html[data-component-style*="animated"] .video-card::before {
   opacity: 0;
 }
 
+/* Grow in place rather than lift: a translateY moved the card's bottom edge out from under a cursor
+   resting there, un-hovering it, which dropped it back under the cursor — a hover/unhover flicker.
+   A pure scale only ever enlarges the hit area. */
 html[data-component-style*="animated"] .entity-card:hover,
 html[data-component-style*="animated"] .video-card:hover {
-  transform: translateY(-4px) scale(1.01);
+  z-index: 1;
+  transform: scale(1.02);
   box-shadow: 0 18px 42px color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
@@ -2891,12 +2801,7 @@ html[data-component-style*="animated"] .video-card:hover::before {
   animation: card-sheen-sweep 900ms ease-out;
 }
 
-html[data-component-style*="animated"] nav a:hover,
-html[data-component-style*="animated"] button:hover:not(.no-glass) {
-  transform: translateY(-1px);
-}
-
-html[data-component-style*="animated"] .bg-accent:hover {
+html[data-component-style*="animated"] :is(button, a, [role="button"]).bg-accent:hover:not(:disabled) {
   box-shadow: 0 12px 28px color-mix(in srgb, var(--color-accent) 26%, transparent);
 }
 

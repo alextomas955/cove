@@ -3970,6 +3970,8 @@ export interface ExtensionThemeDef {
   layoutStyle?: string;
   backgroundAnimation?: string;
   colorScheme?: string;
+  /** Recommended component-style options (style id → option key → value), applied when the theme is picked. */
+  styleOptions?: Record<string, Record<string, string>>;
 }
 
 export interface ExtensionComponentStyleDef {

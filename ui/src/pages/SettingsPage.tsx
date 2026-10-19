@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as signalR from "@microsoft/signalr";
 import { formatDate } from "../components/shared";
+import { applyStyleOption } from "../theme/themeBoot";
+import { applyPatternCss, resolveRecommendedPatternOptions } from "../theme/patternSource";
+import { PatternStyleSettings } from "./settings/PatternStyleSettings";
 import {
   ChevronDown,
   ChevronUp,
@@ -7173,13 +7176,17 @@ const MIGRATED_STYLE_DATASET_KEYS = ["styleGradientSpeed", "styleGradientCardstr
 // Apply a style option to the document as a data attribute for CSS targeting, plus its CSS custom
 // property for range-type configs.
 function applyStyleOptionToDocument(styleId: string, optionKey: string, value: string) {
-  document.documentElement.dataset[
-    `style${styleId.charAt(0).toUpperCase()}${styleId.slice(1)}${optionKey.charAt(0).toUpperCase()}${optionKey.slice(1)}`
-  ] = value;
+  applyStyleOption(document.documentElement, styleId, optionKey, value);
+  if (styleId === "pattern" && optionKey === "css") applyPatternCss(document, value);
   const cfg = styleConfigs[styleId]?.find((c) => c.key === optionKey);
   if (cfg && "cssVar" in cfg) {
     document.documentElement.style.setProperty(cfg.cssVar, value);
   }
+}
+
+/** The component styles a theme turns on, without "default". */
+function themeStyleIds(componentStyle: string | undefined): string[] {
+  return (componentStyle ?? "").split(/\s+/).filter((style) => style && style !== "default");
 }
 
 function applyStyleOptionsToDocument(styleOptions: Record<string, Record<string, string>>) {
@@ -7299,8 +7306,14 @@ function ThemeSelector() {
   const [styleOptions, setStyleOptionsState] = useState<Record<string, Record<string, string>>>(() => {
     return readPersistedStyleOptions();
   });
-  const setStyleOption = (styleId: string, optionKey: string, value: string) => {
-    const updated = { ...styleOptions, [styleId]: { ...styleOptions[styleId], [optionKey]: value } };
+  const setStyleOption = (styleId: string, optionKey: string, value: string) =>
+    setStyleOptions(styleId, { [optionKey]: value });
+  // Several keys at once, so related options (a pattern's source, kind and size) land in one write.
+  const setStyleOptions = (styleId: string, patch: Record<string, string>) => patchStyleOptions({ [styleId]: patch });
+  // Several styles at once, for a theme's recommendations; one write so none overwrites another.
+  const patchStyleOptions = (patches: Record<string, Record<string, string>>) => {
+    const updated = { ...styleOptions };
+    for (const [styleId, patch] of Object.entries(patches)) updated[styleId] = { ...updated[styleId], ...patch };
     setStyleOptionsState(updated);
     localStorage.setItem("cove-style-options", JSON.stringify(updated));
     updateAuthenticatedUserUiPreferences((current) => ({
@@ -7310,7 +7323,31 @@ function ThemeSelector() {
         styleOptions: updated,
       },
     }));
-    applyStyleOptionToDocument(styleId, optionKey, value);
+    for (const [styleId, patch] of Object.entries(patches)) {
+      for (const [key, value] of Object.entries(patch)) applyStyleOptionToDocument(styleId, key, value);
+    }
+  };
+
+  // Picking a theme applies what it recommends: its component styles (switching off the ones the
+  // previous theme turned on) and its style options. Everything stays adjustable afterwards.
+  const selectTheme = async (id: string) => {
+    const previous = availableThemes.find((theme) => theme.id === activeThemeId);
+    const next = availableThemes.find((theme) => theme.id === id);
+    setActiveTheme(id);
+    const previousStyles = themeStyleIds(previous?.componentStyle);
+    const nextStyles = themeStyleIds(next?.componentStyle);
+    for (const style of previousStyles) {
+      if (!nextStyles.includes(style) && activeComponentStyles.has(style)) toggleComponentStyle(style);
+    }
+    for (const style of nextStyles) if (!activeComponentStyles.has(style)) toggleComponentStyle(style);
+
+    if (!next?.styleOptions) return;
+    const patches: Record<string, Record<string, string>> = {};
+    for (const [styleId, options] of Object.entries(next.styleOptions)) {
+      patches[styleId] =
+        styleId === "pattern" ? await resolveRecommendedPatternOptions(options, styleOptions.pattern ?? {}) : options;
+    }
+    patchStyleOptions(patches);
   };
 
   useEffect(() => {
@@ -7388,7 +7425,7 @@ function ThemeSelector() {
             {availableThemes.map((theme) => (
               <button
                 key={theme.id}
-                onClick={() => setActiveTheme(theme.id)}
+                onClick={() => void selectTheme(theme.id)}
                 className={`theme-option-card rounded-xl border p-4 text-left transition-colors ${
                   activeThemeId === theme.id
                     ? "border-accent bg-accent/10"
@@ -7504,14 +7541,15 @@ function ThemeSelector() {
               {availableComponentStyles.map((style) => {
                 const isActive = activeComponentStyles.has(style.id);
                 const configs = styleConfigs[style.id];
-                const hasConfigs = isActive && configs && configs.length > 0;
+                const isPattern = style.id === "pattern";
+                const hasConfigs = isActive && (isPattern || (configs !== undefined && configs.length > 0));
                 const configExpanded = expandedConfigs.has(`style-${style.id}`);
                 return (
                   <div
                     key={style.id}
                     className={`settings-style-card rounded-xl border transition-colors ${
                       isActive ? "active border-accent bg-accent/10" : "border-border bg-card hover:border-accent/50"
-                    }`}
+                    } ${isPattern && hasConfigs && configExpanded ? "md:col-span-2 xl:col-span-3" : ""}`}
                   >
                     <div className="flex items-center">
                       <button onClick={() => toggleComponentStyle(style.id)} className="flex-1 p-4 text-left">
@@ -7544,7 +7582,15 @@ function ThemeSelector() {
                         </button>
                       )}
                     </div>
-                    {hasConfigs && configExpanded && (
+                    {hasConfigs && configExpanded && isPattern && (
+                      <div className="px-4 pb-4 pt-3 border-t border-border/50">
+                        <PatternStyleSettings
+                          options={styleOptions.pattern ?? {}}
+                          onChange={(patch) => setStyleOptions("pattern", patch)}
+                        />
+                      </div>
+                    )}
+                    {hasConfigs && configExpanded && !isPattern && configs && (
                       <div className="px-4 pb-3 pt-2 border-t border-border/50 space-y-3">
                         {configs.map((cfg) => {
                           if ("cssVar" in cfg) {
