@@ -1,5 +1,4 @@
 using Cove.Core.DTOs;
-using Cove.Core.Interfaces;
 
 namespace Cove.ApiTests.Infrastructure;
 
@@ -25,12 +24,6 @@ public sealed partial class CoveClient
 
     public Task<SegmentSpanSearchResponseDto> SearchResolvedSpansAsync(SegmentSpanSearchRequestDto request, CancellationToken cancellationToken = default)
         => SendAsync<SegmentSpanSearchResponseDto>(HttpMethod.Post, "/api/segments/spans/search", request, cancellationToken);
-
-    public Task<PaginatedResponse<SegmentRecordDto>> FindSegmentsAsync(FilteredQueryRequest<SegmentFilter> request, CancellationToken cancellationToken = default)
-        => SendAsync<PaginatedResponse<SegmentRecordDto>>(HttpMethod.Post, "/api/segments/find", request, cancellationToken);
-
-    public Task<SegmentAggregate> AggregateSegmentsAsync(FilteredQueryRequest<SegmentFilter> request, CancellationToken cancellationToken = default)
-        => SendAsync<SegmentAggregate>(HttpMethod.Post, "/api/segments/aggregate", request, cancellationToken);
 
     public Task<SegmentSpanCountResponseDto> CountResolvedSpansAsync(SegmentSpanSearchRequestDto request, CancellationToken cancellationToken = default)
         => SendAsync<SegmentSpanCountResponseDto>(HttpMethod.Post, "/api/segments/spans/count", request, cancellationToken);

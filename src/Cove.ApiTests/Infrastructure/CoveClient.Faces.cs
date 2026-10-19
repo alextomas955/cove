@@ -23,11 +23,6 @@ public sealed partial class CoveClient
             cancellationToken);
 
     public Task<PaginatedResponse<FaceDto>> FindFacesAsync(
-        FilteredQueryRequest<FaceFilter> request,
-        CancellationToken cancellationToken = default)
-        => SendAsync<PaginatedResponse<FaceDto>>(HttpMethod.Post, "/api/faces/find", request, cancellationToken);
-
-    public Task<PaginatedResponse<FaceDto>> FindFacesAsync(
         IReadOnlyList<CustomFieldCriterion>? customFieldCriteria = null,
         string? sort = null,
         string direction = "asc",
@@ -59,6 +54,15 @@ public sealed partial class CoveClient
             payload: null,
             cancellationToken);
     }
+
+    public Task<PaginatedResponse<FaceDto>> FindFacesAsync(
+        FilteredQueryRequest<FaceFilter> request,
+        CancellationToken cancellationToken = default)
+        => SendAsync<PaginatedResponse<FaceDto>>(
+            HttpMethod.Post,
+            "/api/faces/find",
+            request,
+            cancellationToken);
 
     public Task<PaginatedResponse<FaceDto>> FindFacesBySuggestionAsync(
         float? minSuggestionConfidence = null,

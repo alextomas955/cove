@@ -1958,6 +1958,7 @@ test("entity filters default returns only that view's account-backed default", a
   expect(JSON.parse(missingStdout)).toEqual({ defaultFilter: null });
 });
 
+// Spawns one CLI process per command, which outlasts the default 5s timeout.
 test("every actionable command shows inherited options and generic examples", async () => {
   const cases = [
     { command: ["auth", "login"], example: "cove-cli auth login --server https://cove.example --profile personal" },
@@ -2001,6 +2002,7 @@ test("every actionable command shows inherited options and generic examples", as
     { command: ["texts", "show"], example: "cove-cli texts show 42 --profile personal" },
     { command: ["segments", "list"], example: "cove-cli segments list --video 42" },
     { command: ["segments", "show"], example: "cove-cli segments show 42 --profile personal" },
+    { command: ["extensions", "install"], example: "cove-cli extensions install core.zip faces.zip --trust-unverified --profile personal" },
   ];
   for (const testCase of cases) {
     const processResult = Bun.spawn([process.execPath, "src/index.ts", ...testCase.command, "--help"], {
@@ -2026,7 +2028,7 @@ test("every actionable command shows inherited options and generic examples", as
       expect(stdout).not.toContain("title, rating, play_count");
     }
   }
-});
+}, 20_000);
 
 test("logout with a transient environment token leaves stored credentials untouched", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cove-cli-"));

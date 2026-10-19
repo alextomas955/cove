@@ -2031,6 +2031,46 @@ public class VideoFilterBehaviorTests
         Assert.Equal(["percent-match", "seconds-match"], items.Select(video => video.Title ?? string.Empty).ToArray());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TagsCriterion_Excludes_RemovesManualAndEffectiveDerivedTagsOnly(bool excludesModifier)
+    {
+        await using var context = CreateContext();
+        var tag = new Tag { Name = "Running", MinOccurrenceSec = 30, MinOccurrencePercent = 80 };
+        var performer = CreatePerformer("Performer", null);
+        var manualVideo = CreateVideoWithFile("manual");
+        manualVideo.VideoTags.Add(new VideoTag { Tag = tag });
+        var secondsVideo = CreateVideoWithFile("seconds-derived");
+        var percentVideo = CreateVideoWithFile("percent-derived");
+        var belowThresholdVideo = CreateVideoWithFile("below-threshold-derived");
+        var performerContextVideo = CreateVideoWithFile("performer-context", performer: performer);
+        var untaggedVideo = CreateVideoWithFile("untagged");
+
+        context.Tags.Add(tag);
+        context.Videos.AddRange(manualVideo, secondsVideo, percentVideo, belowThresholdVideo, performerContextVideo, untaggedVideo);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        context.TagApplications.AddRange(
+            CreateDurationApplication(secondsVideo.Id, tag.Id, totalDurationSec: 35, hostDurationSec: 100),
+            CreateDurationApplication(percentVideo.Id, tag.Id, totalDurationSec: 8, hostDurationSec: 10),
+            CreateDurationApplication(belowThresholdVideo.Id, tag.Id, totalDurationSec: 20, hostDurationSec: 100),
+            CreatePerformerOccurrenceApplication(AffinityHostType.Video, performerContextVideo.Id, performer.Id, tag.Id));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var filter = new VideoFilter
+        {
+            TagsCriterion = excludesModifier
+                ? new MultiIdCriterion { Value = [tag.Id], Modifier = CriterionModifier.Excludes }
+                : new MultiIdCriterion { Value = [], Excludes = [tag.Id], Modifier = CriterionModifier.Includes },
+        };
+
+        var (items, totalCount) = await new VideoRepository(context).FindAsync(filter, new FindFilter { Page = 1, PerPage = 50, Sort = "title" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, totalCount);
+        Assert.Equal(["below-threshold-derived", "performer-context", "untagged"], items.Select(video => video.Title ?? string.Empty).ToArray());
+    }
+
     [Fact]
     public async Task VideosController_GetById_MapsOnlyEffectiveDerivedTagsAsNonRemovable()
     {

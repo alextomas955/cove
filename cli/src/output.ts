@@ -2,6 +2,7 @@ import type { ApiTokenRecord, Audio, GalleryRecord, GlobalSearchResponse, GroupI
 import { savedFilterDefaultSort } from "./saved-filters";
 import { cleanInline as clean, colorizeHex, stripTerminalSequences, terminalColorsEnabled, terminalHyperlinksEnabled, uiPalette } from "./ui";
 import type { UiColor, UiPalette } from "./ui";
+import type { InstalledExtension } from "./extensions";
 
 export interface RenderContext {
   appliedFilterSummary?: string;
@@ -534,6 +535,15 @@ export function renderIssuedApiToken(token: IssuedApiToken, context: RenderConte
 
 export function renderApiTokenRevoked(id: string, context: RenderContext = {}): string {
   return renderStatusCard("API token revoked", [["ID", clean(id)]], "success", resolveRenderContext(context));
+}
+
+export function renderExtensionsInstalled(items: InstalledExtension[], context: RenderContext = {}): string {
+  const noun = items.length === 1 ? "extension" : "extensions";
+  const rows = items.map((item): [string, string] => {
+    const missing = item.missingDependencies.length ? ` · missing dependencies: ${item.missingDependencies.map(clean).join(", ")}` : "";
+    return [clean(item.extensionId), `v${clean(item.version)}${missing}`];
+  });
+  return renderStatusCard(`Installed ${formatCount(items.length)} ${noun}`, rows, "success", resolveRenderContext(context));
 }
 
 export function renderTagGroups(items: TagGroup[], context: RenderContext = {}): string {

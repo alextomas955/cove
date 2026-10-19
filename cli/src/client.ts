@@ -106,7 +106,8 @@ export class CoveClient {
     const requestUrl = this.url(path);
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/json");
-    if (init.body !== undefined) headers.set("Content-Type", "application/json");
+    // A FormData body sets its own multipart boundary.
+    if (typeof init.body === "string") headers.set("Content-Type", "application/json");
     const credential = this.profile.credential;
     if (credential?.type === "session") headers.set("Authorization", `Bearer ${credential.accessToken}`);
     if (credential?.type === "apiToken") headers.set("Authorization", `Bearer ${credential.token}`);

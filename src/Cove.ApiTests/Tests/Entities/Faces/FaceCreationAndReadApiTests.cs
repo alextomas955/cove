@@ -10,34 +10,6 @@ public sealed class FaceCreationAndReadApiTests(
     CoveApiTestFixture fixture) : ApiTest(output, fixture)
 {
     [Fact]
-    [CoversEndpoint("POST", "/api/faces/find")]
-    public async Task GivenLinkedAndUnlinkedFaces_WhenFoundByBodyFilter_ThenOnlyMatchingFacesAreReturned()
-    {
-        // Arrange
-        var suffix = Guid.NewGuid().ToString("N");
-        var performer = await AsUser().CreatePerformerAsync(new PerformerBuilder().Build(), TestContext.Current.CancellationToken);
-        var first = await AsUser().CreateFaceAsync(new FaceCreateDto($"Body find linked a {suffix}", performer.Id, false, null), TestContext.Current.CancellationToken);
-        var second = await AsUser().CreateFaceAsync(new FaceCreateDto($"Body find linked b {suffix}", performer.Id, false, null), TestContext.Current.CancellationToken);
-        var unlinked = await AsUser().CreateFaceAsync(new FaceCreateDto($"Body find unlinked {suffix}", null, false, null), TestContext.Current.CancellationToken);
-        var request = new FilteredQueryRequest<FaceFilter>
-        {
-            ObjectFilter = new FaceFilter
-            {
-                LabelCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = suffix },
-                LinkedCriterion = new BoolCriterion { Value = true },
-            },
-        };
-
-        // Act
-        var result = await AsUser(ApiTestUsers.Eva).FindFacesAsync(request, TestContext.Current.CancellationToken);
-
-        // Assert
-        result.TotalCount.Should().Be(2);
-        result.Items.Select(face => face.Id).Should().BeEquivalentTo([first.Id, second.Id]);
-        result.Items.Should().NotContain(face => face.Id == unlinked.Id);
-    }
-
-    [Fact]
     [CoversEndpoint("POST", "/api/faces")]
     [CoversEndpoint("GET", "/api/faces/{id:int}")]
     public async Task GivenFaceMetadata_WhenMemberCreatesAndReadsFace_ThenMetadataIsPersisted()
@@ -96,5 +68,35 @@ public sealed class FaceCreationAndReadApiTests(
         // Assert
         await action.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*returned 404 (NotFound)*");
+    }
+
+    [Fact]
+    [CoversEndpoint("POST", "/api/faces/find")]
+    public async Task GivenMatchingFaces_WhenFilteredAndPaged_ThenOnlyTheRequestedPageIsReturned()
+    {
+        // Arrange
+        var suffix = Guid.NewGuid().ToString("N");
+        var first = await AsUser().CreateFaceAsync(new FaceCreateDto($"A filtered face {suffix}", null, false, null), TestContext.Current.CancellationToken);
+        var second = await AsUser().CreateFaceAsync(new FaceCreateDto($"B filtered face {suffix}", null, false, null), TestContext.Current.CancellationToken);
+        await AsUser().CreateFaceAsync(new FaceCreateDto($"C ignored face {suffix}", null, true, null), TestContext.Current.CancellationToken);
+        var request = new FilteredQueryRequest<FaceFilter>
+        {
+            ObjectFilter = new FaceFilter
+            {
+                LabelCriterion = new StringCriterion { Modifier = CriterionModifier.Includes, Value = suffix },
+                IgnoredCriterion = new BoolCriterion { Value = false },
+            },
+            FindFilter = new FindFilter { Page = 2, PerPage = 1, Sort = "label" },
+        };
+
+        // Act
+        var result = await AsUser(ApiTestUsers.Eva).FindFacesAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.TotalCount.Should().Be(2);
+        result.Page.Should().Be(2);
+        result.PerPage.Should().Be(1);
+        result.Items.Should().ContainSingle().Which.Id.Should().Be(second.Id);
+        result.Items.Should().NotContain(candidate => candidate.Id == first.Id);
     }
 }

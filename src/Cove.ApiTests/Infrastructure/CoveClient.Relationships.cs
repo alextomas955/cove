@@ -596,6 +596,24 @@ public sealed partial class CoveClient
             payload: null,
             cancellationToken);
 
+    public Task<PaginatedResponse<SegmentRecordDto>> FindSegmentsAsync(
+        FilteredQueryRequest<SegmentFilter> request,
+        CancellationToken cancellationToken = default)
+        => SendAsync<PaginatedResponse<SegmentRecordDto>>(
+            HttpMethod.Post,
+            "/api/segments/find",
+            request,
+            cancellationToken);
+
+    public Task<SegmentAggregate> AggregateSegmentsAsync(
+        FilteredQueryRequest<SegmentFilter> request,
+        CancellationToken cancellationToken = default)
+        => SendAsync<SegmentAggregate>(
+            HttpMethod.Post,
+            "/api/segments/aggregate",
+            request,
+            cancellationToken);
+
     public async Task<int> RemoveTagFromSegmentsAsync(
         int tagId,
         IReadOnlyList<int>? segmentIds,
