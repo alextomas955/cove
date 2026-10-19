@@ -1060,8 +1060,12 @@ public class VideoRepository : IVideoRepository
         if (ids.Length == 0)
             return query;
 
-        var effectiveTags = EffectiveHostTagQuery.ForHostType(_db, AffinityHostType.Video);
-        return query.Where(video => !effectiveTags.Any(tag => tag.HostId == video.Id && ids.Contains(tag.TagId)));
+        // One NOT EXISTS per tag source rather than one over their union: Postgres rescanned the union's
+        // derived branch for every candidate video when it underestimated how many there were.
+        var manualTags = EffectiveHostTagQuery.ManualForHostType(_db, AffinityHostType.Video);
+        var derivedTags = EffectiveHostTagQuery.DerivedForHostType(_db, AffinityHostType.Video);
+        return query.Where(video => !manualTags.Any(tag => tag.HostId == video.Id && ids.Contains(tag.TagId))
+            && !derivedTags.Any(tag => tag.HostId == video.Id && ids.Contains(tag.TagId)));
     }
 
     private IQueryable<Video> ApplyEffectiveTagCountCriterion(IQueryable<Video> query, IntCriterion criterion)
