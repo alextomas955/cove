@@ -727,6 +727,7 @@ export function ActiveObjectFilterChips(props: ActiveObjectFilterChipsProps) {
         if ((def?.type === "multiId" || def?.type === "tagDuration") && def.entityType) types.add(def.entityType);
         if (def?.type === "remoteId") hasRemoteId = true;
         if (def?.type === "related" && value && typeof value === "object") {
+          if (def.relatedContextCriteria) inspect(def.relatedContextCriteria, value as Record<string, unknown>);
           const nestedFilter = (value as { objectFilter?: unknown }).objectFilter;
           if (nestedFilter && typeof nestedFilter === "object")
             inspect(def.relatedCriteria?.() ?? [], nestedFilter as Record<string, unknown>);
