@@ -147,11 +147,7 @@ export function MultiIdEditor({
     return selectedIds.filter((id) => !existingNames[String(id)] && !availableIds.has(id));
   }, [entities, existingNames, selectedIds]);
   const selectedEntityQueries = useQueries({
-    queries: missingSelectedIds.map((id) => ({
-      queryKey: ["multi-id-selector", entityType, "selected", id],
-      queryFn: () => getMultiIdEntityLabel(entityType, id),
-      staleTime: 60000,
-    })),
+    queries: missingSelectedIds.map((id) => multiIdEntityLabelQuery(entityType, id)),
   });
 
   // Build a name lookup from available entities
@@ -664,6 +660,15 @@ const MULTI_ID_ENTITY_LABELS: Record<EntityType, { singular: string; plural: str
 
 function getMultiIdEntityLabels(entityType: EntityType) {
   return MULTI_ID_ENTITY_LABELS[entityType];
+}
+
+/** Looks up one selected entity's label; filter chips share these cached results. */
+export function multiIdEntityLabelQuery(entityType: EntityType, id: number) {
+  return {
+    queryKey: ["multi-id-selector", entityType, "selected", id],
+    queryFn: () => getMultiIdEntityLabel(entityType, id),
+    staleTime: 60000,
+  };
 }
 
 async function getMultiIdEntityLabel(entityType: EntityType, id: number): Promise<{ id: number; label: string }> {

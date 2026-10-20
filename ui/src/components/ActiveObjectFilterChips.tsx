@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Film, Headphones, Users, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { groups, performers, studios, tagGroups, tags } from "../api/client";
 import { formatHumanDuration } from "../utils/durationFormat";
-import type { CriterionDefinition, FilterDialogCustomSection } from "./filterCriteriaTypes";
+import type { CriterionDefinition, EntityType, FilterDialogCustomSection } from "./filterCriteriaTypes";
+import { multiIdEntityLabelQuery } from "./MultiIdFilterEditor";
 import { supportsRelativeDateInput } from "./filterCriterionState";
 import { getMultiIdModifierLabel } from "../utils/filterModifierLabels";
 import type { MetadataServer, RatingSystemOptions } from "../api/types";
@@ -91,6 +92,31 @@ function formatChipEntityId(value: unknown, nameMap?: Map<number, string>): stri
     return candidate.id != null ? "Unavailable item" : "";
   }
   return String(value ?? "");
+}
+
+// Entity types whose chips look names up per ID instead of listing every entity.
+const ID_LOOKUP_ENTITY_TYPES: ReadonlySet<string> = new Set<EntityType>(["galleries", "videos", "audios", "faces"]);
+
+function unnamedCriterionIds(value: unknown): number[] {
+  if (!value || typeof value !== "object") return [];
+  const criterion = value as {
+    value?: unknown;
+    excludes?: unknown;
+    modifier?: string;
+    _names?: Record<string, string>;
+  };
+  if (criterion.modifier === "IS_NULL" || criterion.modifier === "NOT_NULL") return [];
+  // Items carrying their own label display it without a lookup.
+  const ids = [criterion.value, criterion.excludes].flatMap((list) =>
+    Array.isArray(list)
+      ? list.map((item) => {
+          if (typeof item === "number") return item;
+          const entity = item as { id?: unknown; label?: string; name?: string; title?: string } | null;
+          return (entity?.label ?? entity?.name ?? entity?.title) ? undefined : entity?.id;
+        })
+      : [],
+  );
+  return ids.filter((id): id is number => typeof id === "number" && !criterion._names?.[String(id)]);
 }
 
 function formatPercentChipValue(value: unknown): string {
@@ -710,6 +736,7 @@ export function ActiveObjectFilterChips(props: ActiveObjectFilterChipsProps) {
   const { criteriaDefinitions, objectFilter } = props;
   const dependencies = useMemo(() => {
     const types = new Set<string>();
+    const lookupIds: Record<string, number[]> = {};
     let hasRemoteId = false;
     const inspect = (definitions: CriterionDefinition[], filter: Record<string, unknown>) => {
       for (const [key, value] of Object.entries(filter)) {
@@ -725,8 +752,11 @@ export function ActiveObjectFilterChips(props: ActiveObjectFilterChipsProps) {
         }
         const def = findCriterionDefinition(definitions, key);
         if ((def?.type === "multiId" || def?.type === "tagDuration") && def.entityType) types.add(def.entityType);
+        if (def?.type === "multiId" && def.entityType && ID_LOOKUP_ENTITY_TYPES.has(def.entityType))
+          (lookupIds[def.entityType] ??= []).push(...unnamedCriterionIds(value));
         if (def?.type === "remoteId") hasRemoteId = true;
         if (def?.type === "related" && value && typeof value === "object") {
+          if (def.relatedContextCriteria) inspect(def.relatedContextCriteria, value as Record<string, unknown>);
           const nestedFilter = (value as { objectFilter?: unknown }).objectFilter;
           if (nestedFilter && typeof nestedFilter === "object")
             inspect(def.relatedCriteria?.() ?? [], nestedFilter as Record<string, unknown>);
@@ -734,13 +764,19 @@ export function ActiveObjectFilterChips(props: ActiveObjectFilterChipsProps) {
       }
     };
     inspect(criteriaDefinitions, objectFilter);
-    return { activeEntityTypes: types, hasRemoteId };
+    return { activeEntityTypes: types, lookupIds, hasRemoteId };
   }, [criteriaDefinitions, objectFilter]);
 
   if (Object.keys(objectFilter).length === 0) return null;
 
   if (dependencies.hasRemoteId) {
-    return <ActiveObjectFilterChipsWithMetadata {...props} activeEntityTypes={dependencies.activeEntityTypes} />;
+    return (
+      <ActiveObjectFilterChipsWithMetadata
+        {...props}
+        activeEntityTypes={dependencies.activeEntityTypes}
+        lookupIds={dependencies.lookupIds}
+      />
+    );
   }
 
   if (dependencies.activeEntityTypes.size === 0) {
@@ -751,12 +787,15 @@ export function ActiveObjectFilterChips(props: ActiveObjectFilterChipsProps) {
     <ActiveObjectFilterChipsWithEntityNames
       {...props}
       activeEntityTypes={dependencies.activeEntityTypes}
+      lookupIds={dependencies.lookupIds}
       metadataServers={[]}
     />
   );
 }
 
-function ActiveObjectFilterChipsWithMetadata(props: ActiveObjectFilterChipsProps & { activeEntityTypes: Set<string> }) {
+function ActiveObjectFilterChipsWithMetadata(
+  props: ActiveObjectFilterChipsProps & { activeEntityTypes: Set<string>; lookupIds: Record<string, number[]> },
+) {
   const appConfig = useOptionalAppConfig();
   const metadataServers = appConfig?.config?.scraping?.metadataServers ?? [];
   if (props.activeEntityTypes.size === 0) {
@@ -767,9 +806,13 @@ function ActiveObjectFilterChipsWithMetadata(props: ActiveObjectFilterChipsProps
 }
 
 function ActiveObjectFilterChipsWithEntityNames(
-  props: ActiveObjectFilterChipsProps & { activeEntityTypes: Set<string>; metadataServers: MetadataServer[] },
+  props: ActiveObjectFilterChipsProps & {
+    activeEntityTypes: Set<string>;
+    lookupIds: Record<string, number[]>;
+    metadataServers: MetadataServer[];
+  },
 ) {
-  const { activeEntityTypes } = props;
+  const { activeEntityTypes, lookupIds } = props;
   const { data: tagEntities } = useQuery({
     queryKey: ["tags", "all"],
     queryFn: async () =>
@@ -801,6 +844,15 @@ function ActiveObjectFilterChipsWithEntityNames(
     staleTime: 60000,
     enabled: activeEntityTypes.has("tagGroups"),
   });
+  // Galleries, videos, audios and faces are too many to list, so look up only the IDs a criterion names without a stored name.
+  const lookups = Object.entries(lookupIds).flatMap(([entityType, ids]) =>
+    [...new Set(ids)].map((id) => ({ entityType: entityType as EntityType, id })),
+  );
+  const lookupLabels = useQueries({
+    queries: lookups.map(({ entityType, id }) => multiIdEntityLabelQuery(entityType, id)),
+    combine: (results) =>
+      results.flatMap((result, index) => (result.data ? [{ ...lookups[index], label: result.data.label }] : [])),
+  });
 
   const entityNameMaps = useMemo(() => {
     const maps: Record<string, Map<number, string>> = {};
@@ -811,8 +863,9 @@ function ActiveObjectFilterChipsWithEntityNames(
     if (studioEntities) maps.studios = buildMap(studioEntities);
     if (groupEntities) maps.groups = buildMap(groupEntities);
     if (tagGroupEntities) maps.tagGroups = buildMap(tagGroupEntities);
+    for (const { entityType, id, label } of lookupLabels) (maps[entityType] ??= new Map()).set(id, label);
     return maps;
-  }, [groupEntities, performerEntities, studioEntities, tagEntities, tagGroupEntities]);
+  }, [groupEntities, lookupLabels, performerEntities, studioEntities, tagEntities, tagGroupEntities]);
 
   return <ActiveObjectFilterChipsContent {...props} entityNameMaps={entityNameMaps} />;
 }
