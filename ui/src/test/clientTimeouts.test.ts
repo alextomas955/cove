@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { database, extensions, scrapeAttempts, videoAlignments } from "../api/client";
+import { database, extensions, metadata, scrapeAttempts, videoAlignments } from "../api/client";
 import { resetServerAvailabilityForTests } from "../state/serverAvailability";
 
 function pendingJsonResponse() {
@@ -76,6 +76,23 @@ describe("API client timeout policies", () => {
     await vi.advanceTimersByTimeAsync(60 * 60_000);
 
     expect(fetchRequest.signal?.aborted).toBe(false);
+    fetchRequest.finish();
+    await request;
+  });
+
+  it.each([
+    ["library roots", () => metadata.libraryFolders(undefined, false)],
+    ["a library subfolder", () => metadata.libraryFolders("/media/large", true)],
+  ])("gives library folder listing of %s the long timeout", async (_label, list) => {
+    vi.useFakeTimers();
+    const fetchRequest = pendingJsonResponse();
+
+    const request = list();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchRequest.signal?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchRequest.signal?.aborted).toBe(true);
     fetchRequest.finish();
     await request;
   });
