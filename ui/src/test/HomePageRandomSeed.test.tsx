@@ -18,6 +18,15 @@ const { mockHomePageContent, mocks } = vi.hoisted(() => {
     },
     mocks: {
       videosFind: vi.fn(async () => emptyPage),
+      videoGet: vi.fn(async (id: number): Promise<any> => ({
+        id,
+        title: `Video #${id}`,
+        files: [],
+        tags: [],
+        performers: [],
+      })),
+      imageGet: vi.fn(async (id: number): Promise<any> => ({ id, title: `Image #${id}` })),
+      textGet: vi.fn(async (id: number): Promise<any> => ({ id, title: `Text #${id}` })),
       videosFindFiltered: vi.fn(async () => emptyPage),
       performersFind: vi.fn(async () => emptyPage),
       performersFindFiltered: vi.fn(async () => emptyPage),
@@ -57,6 +66,7 @@ vi.mock("../api/client", () => ({
   videos: {
     find: mocks.videosFind,
     findFiltered: mocks.videosFindFiltered,
+    get: mocks.videoGet,
     screenshotUrl: (id: number) => `/api/stream/video/${id}/screenshot`,
     streamUrl: (id: number) => `/api/stream/video/${id}`,
   },
@@ -76,7 +86,8 @@ vi.mock("../api/client", () => ({
     findFiltered: mocks.audiosFindFiltered,
     streamUrl: (id: number) => `/api/audios/${id}/stream`,
   },
-  texts: { find: mocks.textsFind, findFiltered: mocks.textsFindFiltered },
+  texts: { find: mocks.textsFind, findFiltered: mocks.textsFindFiltered, get: mocks.textGet },
+  images: { get: mocks.imageGet },
   faces: { list: vi.fn(async () => ({ items: [], totalCount: 0 })) },
   segmentSpans: { search: mocks.segmentSpansSearch },
   segmentLibrary: { list: mocks.segmentLibraryList },
@@ -121,6 +132,51 @@ vi.mock("../api/client", () => ({
     ),
   },
 }));
+
+// The dashboard renders the shared entity tiles; these stand-ins expose each tile's identity as a link.
+vi.mock("../components/EntityCards", () => {
+  const href = (route: any) =>
+    route.page === "video-span" ? `/video/${route.id}/span/${route.spanKey}` : `/${route.page}/${route.id}`;
+  const link = (label: string, route: any, onClick: () => void) => (
+    <a
+      href={href(route)}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick();
+      }}
+    >
+      {label}
+    </a>
+  );
+  return {
+    VideoCard: ({ video, onClick }: any) =>
+      link(video.title || `Video #${video.id}`, { page: "video", id: video.id }, onClick),
+    PerformerTile: ({ performer, onClick }: any) =>
+      link(performer.name, { page: "performer", id: performer.id }, onClick),
+    StudioTile: ({ studio, onClick }: any) => link(studio.name, { page: "studio", id: studio.id }, onClick),
+    TagTile: ({ tag, onClick }: any) => link(tag.name, { page: "tag", id: tag.id }, onClick),
+    GalleryTile: ({ gallery, onClick }: any) =>
+      link(gallery.title || `Gallery #${gallery.id}`, { page: "gallery", id: gallery.id }, onClick),
+    GroupTile: ({ group, onClick }: any) => link(group.name, { page: "group", id: group.id }, onClick),
+    AudioTile: ({ audio, onClick }: any) =>
+      link(audio.title || `Audio #${audio.id}`, { page: "audio", id: audio.id }, onClick),
+    TextTile: ({ text, onClick }: any) =>
+      link(text.title || `Text #${text.id}`, { page: "text", id: text.id }, onClick),
+    ImageTile: ({ image, onClick }: any) =>
+      link(image.title || `Image #${image.id}`, { page: "image", id: image.id }, onClick),
+    FaceTile: ({ face, onClick }: any) => link(`Face #${face.id}`, { page: "face", id: face.id }, onClick),
+    SegmentTile: ({ segment, route, label, eyebrow, onClick }: any) => (
+      <div>
+        {link(
+          label ?? segment.title ?? `Segment #${segment.id}`,
+          route ?? { page: "segment", id: segment.id },
+          onClick,
+        )}
+        {eyebrow ? <p>{eyebrow}</p> : null}
+      </div>
+    ),
+  };
+});
 
 vi.mock("../hooks/useEntityEngagementBatch", () => ({
   useEntityEngagementBatch: () => ({ engagementById: new Map() }),
@@ -209,25 +265,6 @@ describe("HomePage random rows", () => {
     });
   });
 
-  it("shows the video placeholder when a recommendation cover fails to load", async () => {
-    mockHomePageContent.value = JSON.stringify([
-      { type: "custom", mode: "videos", sortBy: "created_at", direction: "desc", header: "Recent Videos" },
-    ]);
-    mocks.videosFind.mockResolvedValueOnce({
-      items: [{ id: 101, title: "Video without a cover", files: [], tags: [], performers: [] }],
-      totalCount: 1,
-    });
-
-    const { container } = renderHomePage();
-    await screen.findByText("Video without a cover");
-    const cover = container.querySelector<HTMLImageElement>('img[src="/api/stream/video/101/screenshot"]')!;
-
-    fireEvent.error(cover);
-
-    expect(container.querySelector(".video-recommendation-cover-fallback")).toBeVisible();
-    expect(cover).not.toBeInTheDocument();
-  });
-
   it("requests only the Continue Watching items shown on the home page", async () => {
     const onNavigate = vi.fn();
     mockHomePageContent.value = JSON.stringify([{ type: "continueWatching" }]);
@@ -249,7 +286,7 @@ describe("HomePage random rows", () => {
     });
     expect(mocks.groupItemsList).not.toHaveBeenCalled();
     expect(await screen.findByText("Resume item")).toBeInTheDocument();
-    expect(screen.getByText("Resume")).toBeInTheDocument();
+    expect(mocks.videoGet).toHaveBeenCalledWith(10);
 
     fireEvent.click(screen.getByRole("button", { name: "View All" }));
     expect(onNavigate).toHaveBeenCalledWith({ page: "group", id: 3 });

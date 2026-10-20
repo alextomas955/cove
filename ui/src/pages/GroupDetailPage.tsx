@@ -2847,6 +2847,7 @@ function GroupVideosPanel({
       ]}
       zoomLevel={zoomLevel}
       onZoomChange={setZoomLevel}
+      cardSizeEntityType="videos"
       showSearch
       selectedCount={selectedIds.size}
       onSelectAll={selectAll}

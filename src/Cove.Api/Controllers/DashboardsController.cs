@@ -373,6 +373,8 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
                 return "Every widget must use a supported dashboard presentation.";
             if (widget.Presentation == DashboardWidgetPresentation.Canvas)
                 canvasWidgets++;
+            if (ValidateLayout(widget.Layout) is { } layoutError)
+                return layoutError;
 
             var configurationBytes = JsonSerializer.SerializeToUtf8Bytes(widget.Configuration, CoveJson.Default).Length;
             if (configurationBytes > MaxConfigurationBytes)
@@ -384,6 +386,21 @@ public sealed class DashboardsController(CoveContext db, ICurrentPrincipalAccess
             return "A Canvas widget must be the dashboard's only widget.";
 
         return totalBytes > MaxLayoutBytes ? $"Dashboard configuration cannot exceed {MaxLayoutBytes} bytes." : null;
+    }
+
+    private static string? ValidateLayout(DashboardWidgetLayoutDto? layout)
+    {
+        if (layout is null)
+            return null;
+        if (layout.Width is { } width && !DashboardWidgetLayoutDto.AllowedWidths.Contains(width))
+            return "Widget width must be 1 (full), 2 (half), 3 (third), 4 (quarter), or 5 (fifth).";
+        if (layout.Rows is { } rows && (rows < 1 || rows > DashboardWidgetLayoutDto.MaxRows))
+            return $"Widget rows must be between 1 and {DashboardWidgetLayoutDto.MaxRows}.";
+        if (layout.CardSize is { } cardSize && (cardSize < 0 || cardSize > DashboardWidgetLayoutDto.MaxCardSize))
+            return $"Widget card size must be between 0 and {DashboardWidgetLayoutDto.MaxCardSize}.";
+        if (layout.Pages is { } pages && (pages < 1 || pages > DashboardWidgetLayoutDto.MaxPages))
+            return $"Widget pages must be between 1 and {DashboardWidgetLayoutDto.MaxPages}.";
+        return null;
     }
 
     private static JsonDocument SerializeWidgets(IReadOnlyList<DashboardWidgetDto> widgets)
@@ -527,7 +544,23 @@ public sealed record DashboardWidgetDto(
     string WidgetKey,
     string Label,
     JsonElement Configuration,
-    DashboardWidgetPresentation Presentation = DashboardWidgetPresentation.Flow);
+    DashboardWidgetPresentation Presentation = DashboardWidgetPresentation.Flow,
+    DashboardWidgetLayoutDto? Layout = null);
+
+/// <summary>
+/// Host-owned sizing for a flow widget. <see cref="Width"/> is the denominator of the share of the
+/// dashboard row the widget takes on wide screens (1 = full, 2 = half, ... 5 = fifth); narrow screens
+/// always stack widgets full width. <see cref="Rows"/>, <see cref="CardSize"/>, and <see cref="Pages"/>
+/// (a cap on the pages shown; null shows every loaded item) only apply to card-grid widgets (the core
+/// collection widget); other widgets size their own content.
+/// </summary>
+public sealed record DashboardWidgetLayoutDto(int? Width = null, int? Rows = null, int? CardSize = null, int? Pages = null)
+{
+    public const int MaxPages = 20;
+    public static readonly int[] AllowedWidths = [1, 2, 3, 4, 5];
+    public const int MaxRows = 20;
+    public const int MaxCardSize = 8;
+}
 public sealed record DashboardDto(int Id, string Name, bool IsDefault, int Version, DateTime CreatedAt, DateTime UpdatedAt, IReadOnlyList<DashboardWidgetDto> Widgets);
 public sealed record DashboardSummaryDto(int Id, string Name, bool IsDefault, int Version, DateTime CreatedAt, DateTime UpdatedAt);
 public sealed record DashboardViewDto(

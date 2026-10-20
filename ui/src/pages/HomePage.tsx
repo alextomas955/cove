@@ -1,5 +1,18 @@
-import { useState, useRef, useEffect, useCallback, useMemo, useId } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useMemo,
+  useId,
+  createContext,
+  useContext,
+  Children,
+  isValidElement,
+} from "react";
+import type { CSSProperties } from "react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   videos,
   performers,
@@ -7,7 +20,6 @@ import {
   tags,
   galleries,
   groups,
-  images,
   audios,
   texts,
   faces,
@@ -18,67 +30,79 @@ import {
 } from "../api/client";
 import type {
   AffinityHostType,
-  Audio,
   EntityEngagement,
-  Video,
-  Performer,
-  Studio,
-  Tag,
-  Gallery,
   Group,
-  GroupItem,
   SavedFilter,
   FindFilter,
   Dashboard,
   DashboardSummary,
   DashboardWidget,
+  DashboardWidgetLayout,
   DashboardWidgetPresentation,
+  DashboardWidgetWidth,
   ExtensionDashboardWidgetContribution,
+  GroupItem,
   SegmentSpanSearchRequest,
-  TextDocument,
 } from "../api/types";
-import { formatDuration, getResolutionLabel } from "../components/shared";
-import { RatingBanner } from "../components/Rating";
 import {
   ChevronLeft,
   ChevronRight,
   Settings2,
   Plus,
   Trash2,
-  User,
-  Building2,
-  Tag as TagIcon,
-  Images,
-  Clapperboard,
   GripVertical,
-  Headphones,
-  Layers,
   Copy,
   Home,
   AlertTriangle,
   X,
   Check,
   RotateCcw,
-  FileText,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { createRouteLinkProps } from "../components/cardNavigation";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
 import { useVideoQueueNavigation } from "../hooks/useVideoQueueNavigation";
 import { readAuthenticatedUserHomePageContent } from "../utils/userUiPreferences";
-import { getGalleryDisplayTitle } from "../utils/galleryDisplay";
 import { withSeededRandomSort } from "../utils/seededRandomSort";
-import { VideoCoverImage } from "../components/VideoCoverImage";
-import { FadeInImage } from "../components/FadeInImage";
 import {
   DashboardSkeleton,
   RECOMMENDATION_CARD_SHAPES,
-  RECOMMENDATION_CARD_STATS_ROW,
+  RecommendationCardSkeleton,
   RecommendationRowSkeleton,
   recommendationCardSkeletons,
+  clampDashboardCardSize,
+  clampDashboardPages,
+  clampDashboardRows,
+  dashboardCardWidthPx,
+  dashboardCardWidthStyle,
+  dashboardPagedTrackStyle,
+  fitDashboardCards,
+  DEFAULT_DASHBOARD_CARD_SIZE,
+  MAX_DASHBOARD_CARD_SIZE,
+  MAX_DASHBOARD_PAGES,
+  MAX_DASHBOARD_ROWS,
+  MIN_DASHBOARD_CARD_SIZE,
+  MIN_DASHBOARD_PAGES,
+  MIN_DASHBOARD_ROWS,
   type RecommendationCardShape,
 } from "../components/DashboardSkeleton";
 import { SortableList } from "../components/SortableList";
 import { useExtensions } from "../extensions/ExtensionLoader";
+import {
+  AudioTile,
+  FaceTile,
+  GalleryTile,
+  GroupTile,
+  ImageTile,
+  PerformerTile,
+  SegmentTile,
+  StudioTile,
+  TagTile,
+  TextTile,
+  VideoCard,
+} from "../components/EntityCards";
+import { groupFeedItemKey, useGroupFeedEntities, type GroupFeedEntity } from "../components/GroupItemFeed";
 import { useAuth } from "../auth/AuthContext";
 import { canReadEntity } from "../auth/visibility";
 import { resolveGroupFeedHost } from "../components/GroupItemFeed";
@@ -88,12 +112,7 @@ import { emitLocationChange, registerNavigationBlocker, type Route } from "../ro
 import { buildSpanSearchRequest } from "./segments/useDerivedSpansQuery";
 import { buildRawSegmentListOptions } from "./segments/useRawSegmentsQuery";
 import { createDefaultRawSegmentFilter, readRawSegmentListFilter } from "./segments/rawSegmentFilter";
-import {
-  buildSpanTitle,
-  buildRawSegmentTitle,
-  formatSegmentCardEyebrow,
-  SegmentVideoPreview,
-} from "./segments/segmentDisplayUtils";
+import { buildSpanTitle, buildRawSegmentTitle, formatSegmentCardEyebrow } from "./segments/segmentDisplayUtils";
 import type { DerivedSpanItem, RawSegmentItem } from "./segments/types";
 import {
   buildAppliedDerivedQuery,
@@ -310,6 +329,234 @@ function definitionSupportsPresentation(
   return !!definition && getSupportedPresentations(definition).includes(presentation);
 }
 
+// ─── Widget Layout ──────────────────────────────────────────────────────────
+
+const DASHBOARD_WIDGET_WIDTHS: DashboardWidgetWidth[] = [1, 2, 3, 4, 5];
+const DASHBOARD_WIDGET_WIDTH_LABELS: Record<DashboardWidgetWidth, string> = {
+  1: "Full",
+  2: "Half",
+  3: "Third",
+  4: "Quarter",
+  5: "Fifth",
+};
+/** The dashboard grid has this many columns so every supported width divides it evenly. */
+const DASHBOARD_GRID_COLUMNS = 60;
+/** A row fetches this many items per visible row of cards. */
+const DASHBOARD_ROW_PAGE_SIZE = 25;
+const MAX_DASHBOARD_ROW_PAGE_SIZE = 500;
+
+interface ResolvedWidgetLayout {
+  width: DashboardWidgetWidth;
+  rows: number;
+  cardSize: number;
+  /** A cap on the pages shown, or undefined to show every loaded item. */
+  pages: number | undefined;
+  /**
+   * Card-grid widgets that share a dashboard row, card size, and row count line their card rows up;
+   * this names that group. Unset when the widget has nothing to line up with.
+   */
+  alignmentGroup?: string;
+}
+
+const DEFAULT_WIDGET_LAYOUT: ResolvedWidgetLayout = {
+  width: 1,
+  rows: MIN_DASHBOARD_ROWS,
+  cardSize: DEFAULT_DASHBOARD_CARD_SIZE,
+  pages: undefined,
+};
+
+function isDashboardWidgetWidth(value: unknown): value is DashboardWidgetWidth {
+  return typeof value === "number" && (DASHBOARD_WIDGET_WIDTHS as number[]).includes(value);
+}
+
+function getWidgetLayout(widget: DashboardWidget): ResolvedWidgetLayout {
+  const layout = widget.layout;
+  return {
+    width: getWidgetPresentation(widget) === "flow" && isDashboardWidgetWidth(layout?.width) ? layout.width : 1,
+    rows: clampDashboardRows(layout?.rows),
+    cardSize: clampDashboardCardSize(layout?.cardSize),
+    pages: clampDashboardPages(layout?.pages),
+  };
+}
+
+/** Card-grid widgets are the core collection rows; only they take rows and card size. */
+function isCardGridWidget(widget: DashboardWidget) {
+  return widgetToContent(widget) !== null;
+}
+
+/** How many items a row fetches per API page; the row keeps fetching pages as the user pages through it. */
+function dashboardRowPageSize({ rows }: Pick<ResolvedWidgetLayout, "rows">) {
+  return Math.min(MAX_DASHBOARD_ROW_PAGE_SIZE, DASHBOARD_ROW_PAGE_SIZE * clampDashboardRows(rows));
+}
+
+interface DashboardRowPage<TItem> {
+  items: TItem[];
+  /** A negative total means the source stopped counting; `hasMore` then says whether to keep paging. */
+  totalCount?: number;
+  hasMore?: boolean;
+}
+
+/**
+ * Pages through a row's source so "all pages" really means every matching item: the shell asks for
+ * the next API page as the user nears the end of what is loaded.
+ */
+function useDashboardRowPages<TItem>({
+  queryKey,
+  enabled = true,
+  fetchPage,
+}: {
+  queryKey: unknown[];
+  enabled?: boolean;
+  fetchPage: (page: number) => Promise<DashboardRowPage<TItem>>;
+}) {
+  const query = useInfiniteQuery({
+    queryKey,
+    enabled,
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => fetchPage(pageParam),
+    getNextPageParam: (last: DashboardRowPage<TItem>, all: DashboardRowPage<TItem>[]) => {
+      if (last.items.length === 0) return undefined;
+      if (typeof last.totalCount !== "number" || last.totalCount < 0) return last.hasMore ? all.length + 1 : undefined;
+      const loaded = all.reduce((count, page) => count + page.items.length, 0);
+      return loaded < last.totalCount ? all.length + 1 : undefined;
+    },
+  });
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
+  const { fetchNextPage } = query;
+  const loadMore = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
+  return {
+    items,
+    firstPage: query.data?.pages[0],
+    totalCount: query.data?.pages[0]?.totalCount,
+    isLoading: query.isLoading,
+    isSuccess: query.isSuccess,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+    hasMore: query.hasNextPage,
+    loadMore,
+    loadingMore: query.isFetchingNextPage,
+  };
+}
+
+function widgetSpanStyle(layout: ResolvedWidgetLayout) {
+  return { "--dashboard-widget-span": DASHBOARD_GRID_COLUMNS / layout.width } as CSSProperties;
+}
+
+const DashboardWidgetLayoutContext = createContext<ResolvedWidgetLayout>(DEFAULT_WIDGET_LAYOUT);
+
+function useDashboardWidgetLayout() {
+  return useContext(DashboardWidgetLayoutContext);
+}
+
+// ─── Row Alignment ──────────────────────────────────────────────────────────
+
+/**
+ * Card-grid widgets side by side on wide screens report their natural card-row heights here, and
+ * every member of a group gets the row-by-row maximum back, so their rows line up the way rows
+ * already do inside a single widget.
+ */
+interface DashboardRowAlignment {
+  report: (id: string, group: string, heights: number[]) => void;
+  remove: (id: string) => void;
+  heightsFor: (group: string) => number[] | undefined;
+}
+
+const DashboardRowAlignmentContext = createContext<DashboardRowAlignment | null>(null);
+
+/** Widgets only sit side by side from the md breakpoint up (see `.dashboard-widget-grid`). */
+const SIDE_BY_SIDE_QUERY = "(min-width: 48rem)";
+
+function sameHeights(a: number[], b: number[]) {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function DashboardRowAlignmentProvider({ children }: { children: React.ReactNode }) {
+  const [members, setMembers] = useState<Map<string, { group: string; heights: number[] }>>(() => new Map());
+  const [sideBySide, setSideBySide] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(SIDE_BY_SIDE_QUERY).matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(SIDE_BY_SIDE_QUERY);
+    const update = () => setSideBySide(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  // Stable callbacks: widgets subscribe to these in effects, so they must not change when heights do.
+  const report = useCallback(
+    (id: string, group: string, heights: number[]) =>
+      setMembers((current) => {
+        const existing = current.get(id);
+        if (existing && existing.group === group && sameHeights(existing.heights, heights)) return current;
+        const next = new Map(current);
+        next.set(id, { group, heights });
+        return next;
+      }),
+    [],
+  );
+  const remove = useCallback(
+    (id: string) =>
+      setMembers((current) => {
+        if (!current.has(id)) return current;
+        const next = new Map(current);
+        next.delete(id);
+        return next;
+      }),
+    [],
+  );
+  const value = useMemo<DashboardRowAlignment>(
+    () => ({
+      report,
+      remove,
+      heightsFor: (group) => {
+        if (!sideBySide) return undefined;
+        const group_members = [...members.values()].filter((member) => member.group === group);
+        if (group_members.length < 2) return undefined;
+        const rows = Math.max(...group_members.map((member) => member.heights.length));
+        return Array.from({ length: rows }, (_, row) =>
+          Math.max(...group_members.map((member) => member.heights[row] ?? 0)),
+        );
+      },
+    }),
+    [members, remove, report, sideBySide],
+  );
+
+  return <DashboardRowAlignmentContext.Provider value={value}>{children}</DashboardRowAlignmentContext.Provider>;
+}
+
+/**
+ * Which card-grid widgets share a dashboard row, following the grid's auto-placement: widgets fill a
+ * row left to right and wrap when the next one does not fit.
+ */
+function dashboardAlignmentGroups(widgets: DashboardWidget[]) {
+  const groups = new Map<string, string>();
+  let row = 0;
+  let column = 0;
+  for (const widget of widgets) {
+    const layout = getWidgetLayout(widget);
+    const span = DASHBOARD_GRID_COLUMNS / layout.width;
+    if (column + span > DASHBOARD_GRID_COLUMNS) {
+      row += 1;
+      column = 0;
+    }
+    if (isCardGridWidget(widget)) groups.set(widget.instanceId, `${row}:${layout.cardSize}:${layout.rows}`);
+    column += span;
+    if (column >= DASHBOARD_GRID_COLUMNS) {
+      row += 1;
+      column = 0;
+    }
+  }
+  return groups;
+}
+
 function cloneJsonConfiguration(value: unknown): unknown {
   const ancestors = new WeakSet<object>();
   const validate = (candidate: unknown): boolean => {
@@ -398,19 +645,6 @@ function widgetToContent(widget: DashboardWidget): FrontPageContent | null {
     direction: config.direction,
     header: typeof config.header === "string" ? config.header : widget.label,
   };
-}
-
-// ─── Card Loading ────────────────────────────────────────────────────────────
-
-// The first rows are on screen at load, so their first cards fetch images immediately instead of
-// waiting for the lazy-loading heuristics; everything further along stays lazy.
-const EAGER_IMAGE_WIDGET_COUNT = 2;
-const EAGER_IMAGE_CARD_COUNT = 6;
-
-type CardImageLoading = "eager" | "lazy";
-
-function cardImageLoading(imagePriority: boolean, index: number): CardImageLoading {
-  return imagePriority && index < EAGER_IMAGE_CARD_COUNT ? "eager" : "lazy";
 }
 
 function cardShapeForMode(mode: FilterMode): RecommendationCardShape {
@@ -548,13 +782,7 @@ export function HomePage({ onNavigate, dashboardId }: Props) {
     }
     await refresh();
   };
-  // Only recommendation rows take eager images; an extension widget at the top must not use up a slot.
-  const eagerImageWidgetIds = new Set(
-    dashboard.widgets
-      .filter((widget) => widgetToContent(widget) !== null)
-      .slice(0, EAGER_IMAGE_WIDGET_COUNT)
-      .map((widget) => widget.instanceId),
-  );
+  const alignmentGroups = dashboardAlignmentGroups(dashboard.widgets);
   return (
     <div className={presentation === "canvas" ? "space-y-3" : "space-y-5"} data-dashboard-presentation={presentation}>
       <DashboardHeader
@@ -569,38 +797,40 @@ export function HomePage({ onNavigate, dashboardId }: Props) {
         }}
         readOnly={readOnly}
       />
-      <div className={presentation === "canvas" ? "min-w-0" : "space-y-5"}>
-        {dashboard.widgets.map((widget) => (
-          <DashboardWidgetHost
-            key={widget.instanceId}
-            imagePriority={eagerImageWidgetIds.has(widget.instanceId)}
-            dashboardId={dashboard.id}
-            principalKey={principalKey}
-            widget={widget}
-            onNavigate={onNavigate}
-            onRemove={
-              readOnly
-                ? undefined
-                : async () => {
-                    await removeWidget(widget.instanceId);
-                  }
-            }
-          />
-        ))}
-        {dashboard.widgets.length === 0 && readOnly ? (
-          <div className="flex min-h-40 w-full items-center justify-center rounded-lg border border-dashed border-border bg-card/40 text-sm text-muted">
-            No dashboard widgets are available.
-          </div>
-        ) : dashboard.widgets.length === 0 ? (
-          <button
-            onClick={() => setEditingDashboard({ id: dashboard.id, selectName: false })}
-            className="flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card/40 text-muted hover:border-accent/50 hover:text-accent"
-          >
-            <Plus className="h-6 w-6" />
-            Add your first widget
-          </button>
-        ) : null}
-      </div>
+      <DashboardRowAlignmentProvider>
+        <div className={presentation === "canvas" ? "min-w-0" : "dashboard-widget-grid"}>
+          {dashboard.widgets.map((widget) => (
+            <DashboardWidgetHost
+              key={widget.instanceId}
+              dashboardId={dashboard.id}
+              principalKey={principalKey}
+              widget={widget}
+              alignmentGroup={alignmentGroups.get(widget.instanceId)}
+              onNavigate={onNavigate}
+              onRemove={
+                readOnly
+                  ? undefined
+                  : async () => {
+                      await removeWidget(widget.instanceId);
+                    }
+              }
+            />
+          ))}
+          {dashboard.widgets.length === 0 && readOnly ? (
+            <div className="flex min-h-40 w-full items-center justify-center rounded-lg border border-dashed border-border bg-card/40 text-sm text-muted">
+              No dashboard widgets are available.
+            </div>
+          ) : dashboard.widgets.length === 0 ? (
+            <button
+              onClick={() => setEditingDashboard({ id: dashboard.id, selectName: false })}
+              className="flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card/40 text-muted hover:border-accent/50 hover:text-accent"
+            >
+              <Plus className="h-6 w-6" />
+              Add your first widget
+            </button>
+          ) : null}
+        </div>
+      </DashboardRowAlignmentProvider>
     </div>
   );
 }
@@ -793,46 +1023,56 @@ function DashboardWidgetHost({
   dashboardId,
   principalKey,
   widget,
+  alignmentGroup,
   onNavigate,
   onRemove,
   editing = false,
-  imagePriority = false,
 }: {
   dashboardId: number;
   principalKey: string;
   widget: DashboardWidget;
+  alignmentGroup?: string;
   onNavigate: (route: any) => void;
   onRemove?: () => Promise<void>;
   editing?: boolean;
-  imagePriority?: boolean;
 }) {
   const content = widgetToContent(widget);
+  const layout = useMemo(
+    () => ({ ...getWidgetLayout(widget), alignmentGroup }),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- the layout derives from widget.layout and presentation only
+    [widget.layout, widget.presentation, alignmentGroup],
+  );
   if (content) {
     return (
-      <div style={{ containerType: "inline-size" }}>
-        <RecommendationRow
-          principalKey={principalKey}
-          content={content}
-          widgetLabel={widget.label}
-          onNavigate={onNavigate}
-          onRemove={onRemove}
-          editing={editing}
-          imagePriority={imagePriority}
-        />
-      </div>
+      <DashboardWidgetLayoutContext.Provider value={layout}>
+        <div style={{ containerType: "inline-size", ...widgetSpanStyle(layout) }}>
+          <RecommendationRow
+            principalKey={principalKey}
+            content={content}
+            widgetLabel={widget.label}
+            onNavigate={onNavigate}
+            onRemove={onRemove}
+            editing={editing}
+          />
+        </div>
+      </DashboardWidgetLayoutContext.Provider>
     );
   }
 
-  return <ExtensionDashboardWidgetHost dashboardId={dashboardId} widget={widget} onNavigate={onNavigate} />;
+  return (
+    <ExtensionDashboardWidgetHost dashboardId={dashboardId} widget={widget} layout={layout} onNavigate={onNavigate} />
+  );
 }
 
 function ExtensionDashboardWidgetHost({
   dashboardId,
   widget,
+  layout,
   onNavigate,
 }: {
   dashboardId: number;
   widget: DashboardWidget;
+  layout: ResolvedWidgetLayout;
   onNavigate: (route: any) => void;
 }) {
   const { manifest, extensionsSettling, resolveComponent, getExtensionRevision } = useExtensions();
@@ -854,7 +1094,12 @@ function ExtensionDashboardWidgetHost({
     // unavailable once they have settled.
     if (extensionsSettling) {
       return (
-        <div role="status" aria-busy="true" className="min-h-24 rounded-lg bg-card motion-safe:animate-pulse">
+        <div
+          role="status"
+          aria-busy="true"
+          style={widgetSpanStyle(layout)}
+          className="min-h-24 rounded-lg bg-card motion-safe:animate-pulse"
+        >
           <span className="sr-only">Loading widget</span>
         </div>
       );
@@ -864,7 +1109,7 @@ function ExtensionDashboardWidgetHost({
 
   return (
     <div
-      style={{ containerType: "inline-size" }}
+      style={{ containerType: "inline-size", ...widgetSpanStyle(layout) }}
       className={`dashboard-widget-container dashboard-widget-${presentation}`}
       data-widget-presentation={presentation}
     >
@@ -1183,6 +1428,15 @@ function DashboardEditor({
       ),
     }));
   };
+  const setWidgetLayout = (instanceId: string, patch: DashboardWidgetLayout) => {
+    if (busy) return;
+    setDraft((current) => ({
+      ...current,
+      widgets: current.widgets.map((widget) =>
+        widget.instanceId === instanceId ? { ...widget, layout: { ...widget.layout, ...patch } } : widget,
+      ),
+    }));
+  };
 
   const duplicateDashboard = async () => {
     if (!confirmDiscard()) return;
@@ -1350,6 +1604,11 @@ function DashboardEditor({
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{widget.label}</span>
               </div>
               <div className="flex flex-wrap items-center gap-1 sm:ml-auto sm:justify-end">
+                <WidgetLayoutControls
+                  widget={widget}
+                  disabled={busy}
+                  onChange={(patch) => setWidgetLayout(widget.instanceId, patch)}
+                />
                 <WidgetPresentationControl
                   widget={widget}
                   definition={definitions.find(
@@ -1455,6 +1714,105 @@ export function getWidgetRevealScrollDelta(
   if (rect.top < revealTop) return rect.top - revealTop;
   if (rect.bottom > revealBottom) return rect.bottom - revealBottom;
   return 0;
+}
+
+function WidgetLayoutControls({
+  widget,
+  disabled,
+  onChange,
+}: {
+  widget: DashboardWidget;
+  disabled: boolean;
+  onChange: (patch: DashboardWidgetLayout) => void;
+}) {
+  if (getWidgetPresentation(widget) !== "flow") return null;
+  const layout = getWidgetLayout(widget);
+  const cardGrid = isCardGridWidget(widget);
+  return (
+    <>
+      <label className="flex items-center gap-1 text-xs text-muted">
+        Width
+        <select
+          aria-label={`Width for ${widget.label}`}
+          value={layout.width}
+          disabled={disabled}
+          onChange={(event) => onChange({ width: Number(event.target.value) as DashboardWidgetWidth })}
+          className="rounded border border-border bg-input px-2 py-1 text-xs text-foreground"
+        >
+          {DASHBOARD_WIDGET_WIDTHS.map((width) => (
+            <option key={width} value={width}>
+              {DASHBOARD_WIDGET_WIDTH_LABELS[width]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {cardGrid ? (
+        <>
+          <label className="flex items-center gap-1 text-xs text-muted">
+            Rows
+            <input
+              type="number"
+              aria-label={`Rows for ${widget.label}`}
+              min={MIN_DASHBOARD_ROWS}
+              max={MAX_DASHBOARD_ROWS}
+              step={1}
+              value={layout.rows}
+              disabled={disabled}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (Number.isFinite(next)) onChange({ rows: clampDashboardRows(next) });
+              }}
+              className="w-14 rounded border border-border bg-input px-2 py-1 text-xs text-foreground"
+            />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-muted">
+            Pages
+            <select
+              aria-label={`Pages for ${widget.label}`}
+              value={layout.pages ?? ""}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  pages: event.target.value === "" ? undefined : clampDashboardPages(Number(event.target.value)),
+                })
+              }
+              className="rounded border border-border bg-input px-2 py-1 text-xs text-foreground"
+            >
+              <option value="">All</option>
+              {Array.from({ length: MAX_DASHBOARD_PAGES - MIN_DASHBOARD_PAGES + 1 }, (_, index) => {
+                const count = MIN_DASHBOARD_PAGES + index;
+                return (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <label className="flex items-center gap-1 text-xs text-muted" title={`Card size: ${layout.cardSize}`}>
+            <ZoomOut className="h-3 w-3" aria-hidden="true" />
+            <input
+              type="range"
+              aria-label={`Card size for ${widget.label}`}
+              min={MIN_DASHBOARD_CARD_SIZE}
+              max={MAX_DASHBOARD_CARD_SIZE}
+              step={1}
+              value={layout.cardSize}
+              disabled={disabled}
+              onChange={(event) => onChange({ cardSize: clampDashboardCardSize(Number(event.target.value)) })}
+              style={
+                {
+                  "--range-fill": `${((layout.cardSize - MIN_DASHBOARD_CARD_SIZE) / (MAX_DASHBOARD_CARD_SIZE - MIN_DASHBOARD_CARD_SIZE)) * 100}%`,
+                } as CSSProperties
+              }
+              className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
+            />
+            <ZoomIn className="h-3 w-3" aria-hidden="true" />
+          </label>
+        </>
+      ) : null}
+    </>
+  );
 }
 
 function WidgetPresentationControl({
@@ -1914,76 +2272,6 @@ function WidgetConfigurationDialog({
   );
 }
 
-function GroupItemRecommendationCard({
-  item,
-  badge,
-  onNavigate,
-  imageLoading,
-}: {
-  item: GroupItem;
-  badge?: string;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  // The route deliberately omits seekTo when the item has no position: continue-watching videos
-  // resume from the engagement resumeTime, and seekTo: 0 would force playback back to the start.
-  const host = resolveGroupFeedHost(item);
-  if (!host) return null;
-  const hostType = host.resource;
-  const route = host.route;
-  const videoId = item.videoId ?? (hostType === "video" ? host.id : 0);
-  const imageId = hostType === "image" ? host.id : 0;
-  const title = item.title || item.videoTitle || item.imageTitle || item.childGroupName || "Untitled";
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>(route, () => onNavigate(route));
-  const placeholder = (
-    <div className="flex h-full w-full items-center justify-center text-accent">
-      {hostType === "audio" ? (
-        <Headphones className="h-10 w-10" />
-      ) : hostType === "text" ? (
-        <FileText className="h-10 w-10" />
-      ) : (
-        <Layers className="h-10 w-10" />
-      )}
-    </div>
-  );
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.groupItem.width} cursor-pointer overflow-hidden rounded border border-border bg-card transition-colors hover:border-accent/50`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative ${RECOMMENDATION_CARD_SHAPES.groupItem.media} bg-surface`}>
-        {videoId > 0 ? (
-          <VideoCoverImage
-            src={`/api/stream/video/${videoId}/screenshot`}
-            alt={title}
-            className="h-full w-full object-cover"
-            fallbackClassName="video-recommendation-cover-fallback"
-            loading={imageLoading}
-            fadeIn
-          />
-        ) : imageId > 0 ? (
-          <FadeInImage
-            src={images.thumbnailUrl(imageId, 480)}
-            alt={title}
-            className="h-full w-full object-cover"
-            loading={imageLoading}
-            fallback={placeholder}
-          />
-        ) : (
-          placeholder
-        )}
-        {badge ? (
-          <div className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">{badge}</div>
-        ) : null}
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.groupItem.body}`}>
-        <p className="truncate text-sm font-medium text-foreground">{title}</p>
-      </div>
-    </a>
-  );
-}
-
 // ─── Recommendation Row (dispatcher) ────────────────────────────────────────
 
 function RecommendationRow({
@@ -1993,7 +2281,6 @@ function RecommendationRow({
   onNavigate,
   onRemove,
   editing = false,
-  imagePriority = false,
 }: {
   principalKey: string;
   content: FrontPageContent;
@@ -2001,7 +2288,6 @@ function RecommendationRow({
   onNavigate: (r: any) => void;
   onRemove?: () => Promise<void>;
   editing?: boolean;
-  imagePriority?: boolean;
 }) {
   if (content.type === "saved") {
     return (
@@ -2012,7 +2298,6 @@ function RecommendationRow({
         onNavigate={onNavigate}
         onRemove={onRemove}
         editing={editing}
-        imagePriority={imagePriority}
       />
     );
   }
@@ -2025,55 +2310,46 @@ function RecommendationRow({
         onNavigate={onNavigate}
         onRemove={onRemove}
         editing={editing}
-        imagePriority={imagePriority}
       />
     );
   }
-  return <CustomFilterRecommendationRow filter={content} onNavigate={onNavigate} imagePriority={imagePriority} />;
+  return <CustomFilterRecommendationRow filter={content} onNavigate={onNavigate} />;
 }
 
 // ─── Custom Filter Row ──────────────────────────────────────────────────────
 
-function CustomFilterRecommendationRow({
-  filter,
-  onNavigate,
-  imagePriority,
-}: {
-  filter: CustomFilter;
-  onNavigate: (r: any) => void;
-  imagePriority: boolean;
-}) {
+function CustomFilterRecommendationRow({ filter, onNavigate }: { filter: CustomFilter; onNavigate: (r: any) => void }) {
+  const perPage = dashboardRowPageSize(useDashboardWidgetLayout());
   const findFilter = useMemo(
-    () => withSeededRandomSort({}, { perPage: 25, sort: filter.sortBy, direction: filter.direction }),
-    [filter],
+    () => withSeededRandomSort({}, { perPage, sort: filter.sortBy, direction: filter.direction }),
+    [filter, perPage],
   );
 
-  const fetchFn = useMemo((): (() => Promise<any>) => {
+  const fetchFn = useMemo((): ((page: number) => Promise<any>) => {
     switch (filter.mode) {
       case "videos":
-        return () => videos.find(findFilter);
+        return (page: number) => videos.find({ ...findFilter, page });
       case "performers":
-        return () => performers.find(findFilter);
+        return (page: number) => performers.find({ ...findFilter, page });
       case "studios":
-        return () => studios.find(findFilter);
+        return (page: number) => studios.find({ ...findFilter, page });
       case "tags":
-        return () => tags.find(findFilter);
+        return (page: number) => tags.find({ ...findFilter, page });
       case "galleries":
-        return () => galleries.find(findFilter);
+        return (page: number) => galleries.find({ ...findFilter, page });
       case "groups":
-        return () => groups.find(findFilter);
+        return (page: number) => groups.find({ ...findFilter, page });
       default:
-        return () => Promise.resolve({ items: [], totalCount: 0 });
+        return async () => ({ items: [], totalCount: 0 });
     }
   }, [filter.mode, findFilter]);
 
-  const query = useQuery<any>({
+  const query = useDashboardRowPages<any>({
     queryKey: ["front-page", filter.mode, findFilter],
-    queryFn: fetchFn,
+    fetchPage: fetchFn,
   });
 
-  const { data, isLoading } = query;
-  const items = data?.items ?? [];
+  const { items, isLoading } = query;
   const engagementHostType = getRecommendationEngagementHostType(filter.mode);
   const { engagementById } = useEntityEngagementBatch(
     engagementHostType ?? "video",
@@ -2082,8 +2358,9 @@ function CustomFilterRecommendationRow({
   const queryVideoPage = useCallback((page: FindFilter) => videos.find(page), []);
   const { navigateFromList } = useVideoQueueNavigation({
     items: filter.mode === "videos" ? items : [],
-    filter: findFilter,
-    totalCount: data?.totalCount,
+    // The queue continues after everything the row has loaded so far, however many pages that is.
+    filter: { ...findFilter, page: 1, perPage: items.length || perPage },
+    totalCount: query.totalCount,
     infinitePageSize: false,
     queryPage: queryVideoPage,
     onNavigate,
@@ -2110,16 +2387,18 @@ function CustomFilterRecommendationRow({
       loading={isLoading}
       cardShape={cardShapeForMode(filter.mode)}
       count={items.length}
-      totalCount={data?.totalCount}
+      totalCount={query.totalCount}
+      hasMore={query.hasMore}
+      loadMore={query.loadMore}
+      loadingMore={query.loadingMore}
     >
-      {items.map((item: any, index: number) => (
+      {items.map((item: any) => (
         <EntityCard
           key={item.id}
           item={item}
           engagement={engagementById.get(item.id)}
           mode={filter.mode}
           onNavigate={navigateFromList}
-          imageLoading={cardImageLoading(imagePriority, index)}
         />
       ))}
     </RecommendationRowShell>
@@ -2135,7 +2414,6 @@ function SavedFilterRecommendationRow({
   onNavigate,
   onRemove,
   editing = false,
-  imagePriority = false,
 }: {
   principalKey: string;
   savedFilterId: number;
@@ -2143,7 +2421,6 @@ function SavedFilterRecommendationRow({
   onNavigate: (r: any) => void;
   onRemove?: () => Promise<void>;
   editing?: boolean;
-  imagePriority?: boolean;
 }) {
   const normalizedFallbackLabel = fallbackLabel?.trim();
   const errorLabel =
@@ -2173,6 +2450,7 @@ function SavedFilterRecommendationRow({
     parsedUIOptions.profileId > 0
       ? parsedUIOptions.profileId
       : undefined;
+  const perPage = dashboardRowPageSize(useDashboardWidgetLayout());
   const findFilter = useMemo((): FindFilter | undefined => {
     if (!mode) return undefined;
     return withSeededRandomSort(
@@ -2180,12 +2458,12 @@ function SavedFilterRecommendationRow({
       {
         ...parsedFilter,
         page: 1,
-        perPage: 25,
+        perPage,
         sort: parsedFilter.sort ?? DEFAULT_SORT_BY_MODE[mode],
         direction: parsedFilter.direction ?? "desc",
       },
     );
-  }, [mode, parsedFilter]);
+  }, [mode, parsedFilter, perPage]);
 
   const queryVideoPage = useCallback(
     (page: FindFilter) =>
@@ -2193,32 +2471,38 @@ function SavedFilterRecommendationRow({
     [hasObjectFilter, parsedObjectFilter],
   );
 
-  const fetchFn = useMemo((): (() => Promise<any>) => {
-    if (!mode) return () => Promise.resolve({ items: [], totalCount: 0 });
-    const fetchMap: Record<string, () => Promise<any>> = {
-      videos: () => queryVideoPage(findFilter!),
+  const fetchFn = useMemo((): ((page: number) => Promise<any>) => {
+    if (!mode) return async () => ({ items: [], totalCount: 0 });
+    const fetchMap: Record<string, (page: number) => Promise<any>> = {
+      videos: (page: number) => queryVideoPage({ ...findFilter!, page }),
       performers: hasObjectFilter
-        ? () => performers.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => performers.find(findFilter),
+        ? (page: number) =>
+            performers.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => performers.find({ ...findFilter, page }),
       studios: hasObjectFilter
-        ? () => studios.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => studios.find(findFilter),
+        ? (page: number) =>
+            studios.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => studios.find({ ...findFilter, page }),
       tags: hasObjectFilter
-        ? () => tags.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => tags.find(findFilter),
+        ? (page: number) => tags.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => tags.find({ ...findFilter, page }),
       galleries: hasObjectFilter
-        ? () => galleries.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => galleries.find(findFilter),
+        ? (page: number) =>
+            galleries.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => galleries.find({ ...findFilter, page }),
       groups: hasObjectFilter
-        ? () => groups.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => groups.find(findFilter),
+        ? (page: number) =>
+            groups.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => groups.find({ ...findFilter, page }),
       audios: hasObjectFilter
-        ? () => audios.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => audios.find(findFilter),
+        ? (page: number) =>
+            audios.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => audios.find({ ...findFilter, page }),
       texts: hasObjectFilter
-        ? () => texts.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => texts.find(findFilter),
-      segments: async () => {
+        ? (page: number) =>
+            texts.findFiltered({ findFilter: { ...findFilter, page }, objectFilter: parsedObjectFilter })
+        : (page: number) => texts.find({ ...findFilter, page }),
+      segments: async (page: number) => {
         if (segmentProfileId == null) return { items: [], totalCount: 0 };
         const criteria = readRawSegmentListFilter(parsedObjectFilter ?? {});
         const videoTagIds = readMultiIdCriterionIds(parsedObjectFilter?.videoTagsCriterion);
@@ -2236,8 +2520,8 @@ function SavedFilterRecommendationRow({
         const derivedQueryDescriptor = buildDerivedQueryDescriptor(derivedFilter);
         const spanRequest = buildSpanSearchRequest({
           activeProfileId: segmentProfileId,
-          pageNumber: 1,
-          perPage: 25,
+          pageNumber: page,
+          perPage,
           q: findFilter?.q?.trim() ?? "",
           videoTitle: criteria.videoTitle ?? "",
           videoTagIds,
@@ -2269,15 +2553,15 @@ function SavedFilterRecommendationRow({
           })),
         };
       },
-      rawsegments: async () => {
+      rawsegments: async (page: number) => {
         const criteria = readRawSegmentListFilter(parsedObjectFilter ?? {});
         const videoTagIds = readMultiIdCriterionIds(parsedObjectFilter?.videoTagsCriterion);
         const videoTagDepth = readMultiIdCriterionDepth(parsedObjectFilter?.videoTagsCriterion);
         const rawTagDepth = readMultiIdCriterionDepth(parsedObjectFilter?.rawTagsCriterion);
         const response = await segmentLibrary.list(
           buildRawSegmentListOptions({
-            pageNumber: 1,
-            perPage: 25,
+            pageNumber: page,
+            perPage,
             q: findFilter?.q?.trim() ?? "",
             videoTitle: criteria.videoTitle ?? "",
             videoTagIds,
@@ -2303,24 +2587,22 @@ function SavedFilterRecommendationRow({
         };
       },
     };
-    return fetchMap[mode] ?? (() => Promise.resolve({ items: [], totalCount: 0 }));
-  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId, queryVideoPage]);
+    return fetchMap[mode] ?? (async () => ({ items: [], totalCount: 0 }));
+  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId, perPage, queryVideoPage]);
 
-  const itemQuery = useQuery<any>({
+  const itemQuery = useDashboardRowPages<any>({
     queryKey: ["front-page-saved", principalKey, savedFilterId, mode, findFilter, parsedObjectFilter, segmentProfileId],
-    queryFn: fetchFn,
+    fetchPage: fetchFn,
     enabled: !!mode,
   });
-
-  const { data, isLoading } = itemQuery;
-  const items = (data as any)?.items ?? [];
-  const uncountedSpanRequest: SegmentSpanSearchRequest | undefined = data?.spanRequest;
+  const { items, isLoading } = itemQuery;
+  const uncountedSpanRequest: SegmentSpanSearchRequest | undefined = (itemQuery.firstPage as any)?.spanRequest;
   const spanCountQuery = useQuery({
     queryKey: ["front-page-saved-span-count", principalKey, uncountedSpanRequest],
     queryFn: () => segmentSpans.count(uncountedSpanRequest!),
     enabled: uncountedSpanRequest !== undefined,
   });
-  const totalCount: number | undefined = uncountedSpanRequest ? spanCountQuery.data?.totalCount : data?.totalCount;
+  const totalCount: number | undefined = uncountedSpanRequest ? spanCountQuery.data?.totalCount : itemQuery.totalCount;
   const engagementHostType = getRecommendationEngagementHostType(mode ?? undefined);
   const { engagementById } = useEntityEngagementBatch(
     engagementHostType ?? "video",
@@ -2328,8 +2610,8 @@ function SavedFilterRecommendationRow({
   );
   const { navigateFromList } = useVideoQueueNavigation({
     items: mode === "videos" ? items : [],
-    filter: findFilter ?? {},
-    totalCount: data?.totalCount,
+    filter: { ...findFilter, page: 1, perPage: items.length || perPage },
+    totalCount: itemQuery.totalCount,
     infinitePageSize: false,
     queryPage: queryVideoPage,
     onNavigate,
@@ -2391,15 +2673,17 @@ function SavedFilterRecommendationRow({
       cardShape={cardShapeForMode(mode)}
       count={items.length}
       totalCount={totalCount}
+      hasMore={itemQuery.hasMore}
+      loadMore={itemQuery.loadMore}
+      loadingMore={itemQuery.loadingMore}
     >
-      {items.map((item: any, index: number) => (
+      {items.map((item: any) => (
         <EntityCard
           key={item.id}
           item={item}
           engagement={engagementById.get(item.id)}
           mode={mode!}
           onNavigate={navigateFromList}
-          imageLoading={cardImageLoading(imagePriority, index)}
         />
       ))}
     </RecommendationRowShell>
@@ -2415,7 +2699,6 @@ function GroupRecommendationRow({
   onNavigate,
   onRemove,
   editing = false,
-  imagePriority = false,
 }: {
   principalKey: string;
   source: GroupRow;
@@ -2423,7 +2706,6 @@ function GroupRecommendationRow({
   onNavigate: (r: any) => void;
   onRemove?: () => Promise<void>;
   editing?: boolean;
-  imagePriority?: boolean;
 }) {
   const { hasPermission } = useAuth();
   const errorLabel = fallbackLabel?.trim() || `Group #${source.groupId}`;
@@ -2432,11 +2714,22 @@ function GroupRecommendationRow({
     queryFn: () => groups.get(source.groupId),
   });
   const groupId = groupQuery.data?.id;
-  const itemQuery = useQuery({
-    queryKey: ["front-page-group-items", principalKey, groupId],
-    queryFn: () => groups.items.page(groupId!, { page: 1, perPage: 25 }),
+  const perPage = dashboardRowPageSize(useDashboardWidgetLayout());
+  const itemQuery = useDashboardRowPages<GroupItem>({
+    queryKey: ["front-page-group-items", principalKey, groupId, perPage],
+    fetchPage: (page) => groups.items.page(groupId!, { page, perPage }),
     enabled: groupId !== undefined,
   });
+  const items = useMemo(
+    () =>
+      itemQuery.items.filter((item) => {
+        const host = resolveGroupFeedHost(item);
+        return !!host && canReadEntity(host.resource, hasPermission);
+      }),
+    [hasPermission, itemQuery.items],
+  );
+  // The same per-item hydration the group feed uses, so the row renders the shared entity tiles.
+  const entities = useGroupFeedEntities(items, hasPermission, principalKey);
   if (isApiNotFoundError(groupQuery.error)) {
     return (
       <MissingSourceWidget
@@ -2468,10 +2761,6 @@ function GroupRecommendationRow({
       />
     );
   if (!group) return <RecommendationRowSkeleton shape={RECOMMENDATION_CARD_SHAPES.groupItem} />;
-  const items = (itemQuery.data?.items ?? []).filter((item) => {
-    const host = resolveGroupFeedHost(item);
-    return !!host && canReadEntity(host.resource, hasPermission);
-  });
   if (itemQuery.isSuccess && items.length === 0) {
     if (!editing) return null;
     return (
@@ -2491,18 +2780,31 @@ function GroupRecommendationRow({
       loading={itemQuery.isLoading}
       cardShape={RECOMMENDATION_CARD_SHAPES.groupItem}
       count={items.length}
-      totalCount={itemQuery.data?.totalCount}
+      totalCount={itemQuery.totalCount}
       totalNoun={["item", "items"]}
+      hasMore={itemQuery.hasMore}
+      loadMore={itemQuery.loadMore}
+      loadingMore={itemQuery.loadingMore}
     >
-      {items.map((item, index) => (
-        <GroupItemRecommendationCard
-          key={`${item.kind}:${item.id}:${item.orderIndex}`}
-          item={item}
-          badge={group.querySourceKey === CONTINUE_WATCHING_SOURCE_KEY ? "Resume" : undefined}
-          onNavigate={onNavigate}
-          imageLoading={cardImageLoading(imagePriority, index)}
-        />
-      ))}
+      {items.map((item) => {
+        const host = resolveGroupFeedHost(item)!;
+        const state = entities.get(groupFeedItemKey(item));
+        if (state?.status === "error") return null;
+        if (!state || state.status === "loading") {
+          return (
+            <RecommendationCardSkeleton key={groupFeedItemKey(item)} shape={RECOMMENDATION_CARD_SHAPES.groupItem} />
+          );
+        }
+        return (
+          <GroupFeedEntityTile
+            key={groupFeedItemKey(item)}
+            entity={state.entity}
+            title={item.title}
+            onOpen={() => onNavigate(host.route)}
+            onNavigate={onNavigate}
+          />
+        );
+      })}
     </RecommendationRowShell>
   );
 }
@@ -2524,6 +2826,9 @@ function RecommendationRowShell({
   count,
   totalCount,
   totalNoun = ["match", "matches"],
+  hasMore = false,
+  loadMore,
+  loadingMore = false,
   children,
 }: {
   header: string;
@@ -2538,21 +2843,44 @@ function RecommendationRowShell({
   loading: boolean;
   cardShape: RecommendationCardShape;
   count: number;
-  /** Every match of the row's query, not just the cards it shows; a negative total means it went uncounted. */
+  /**
+   * Every match of the row's query, not just the cards it shows; it drives the page count past what is
+   * loaded and shows beside the title. A negative total means the source went uncounted.
+   */
   totalCount?: number;
   /** What the total counts, singular then plural. */
   totalNoun?: readonly [string, string];
+  hasMore?: boolean;
+  loadMore?: () => void;
+  loadingMore?: boolean;
   children: React.ReactNode;
 }) {
+  const { rows, cardSize, pages, alignmentGroup } = useDashboardWidgetLayout();
+  // The cards on screen are a lower bound, in case the total was counted before they were added.
+  const shownTotalCount = totalCount != null && totalCount >= 0 ? Math.max(totalCount, count) : undefined;
+  const totalLabel =
+    shownTotalCount != null
+      ? `${shownTotalCount.toLocaleString()} ${totalNoun[shownTotalCount === 1 ? 0 : 1]}`
+      : undefined;
+  const alignment = useContext(DashboardRowAlignmentContext);
+  const reportAlignment = alignment?.report;
+  const removeAlignment = alignment?.remove;
+  const alignmentId = useId();
+  // One row scrolls and swipes like a carousel. More rows page whole columns at a time instead, so
+  // no card is ever cut off at the edge.
+  const paged = rows > 1;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageDestinations, setPageDestinations] = useState([0]);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const [requestedPage, setRequestedPage] = useState(0);
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    setTrackWidth(el.clientWidth);
     setCanScrollLeft(el.scrollLeft > 5);
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 5);
     const destinations = getCarouselPageDestinations(el.scrollWidth, el.clientWidth);
@@ -2580,28 +2908,94 @@ function RecommendationRowShell({
         resizeObserver.disconnect();
       };
     }
-  }, [updateScrollState, count]);
+  }, [updateScrollState, count, rows, cardSize]);
 
-  // The cards on screen are a lower bound, in case the total was counted before they were added.
-  const shownTotalCount = totalCount != null && totalCount >= 0 ? Math.max(totalCount, count) : undefined;
-  const totalLabel =
-    shownTotalCount != null
-      ? `${shownTotalCount.toLocaleString()} ${totalNoun[shownTotalCount === 1 ? 0 : 1]}`
-      : undefined;
+  const { columns, cardWidthPx } = fitDashboardCards(trackWidth, dashboardCardWidthPx(cardSize));
+  const perPage = columns * rows;
+  // A page cap trims the items the widget shows, in both the carousel and the paged grid.
+  // Tiles fill whatever cell they are given, so each one gets a fixed-width cell in the track.
+  const childArray = useMemo(() => {
+    const all = Children.toArray(children).map((child) => (
+      <div
+        key={isValidElement(child) && child.key !== null ? child.key : undefined}
+        className="w-[var(--dashboard-card-width)] flex-shrink-0"
+        style={{ scrollSnapAlign: "start" }}
+      >
+        {child}
+      </div>
+    ));
+    return pages === undefined ? all : all.slice(0, pages * perPage);
+  }, [children, pages, perPage]);
+  const loadedCount = childArray.length;
+  const knownTotal = Math.max(loadedCount, totalCount ?? 0);
+  const itemLimit = pages === undefined ? knownTotal : Math.min(knownTotal, pages * perPage);
+  const pagedTotal = loading ? perPage : Math.max(1, itemLimit);
+  const pagedPageCount = Math.max(1, Math.ceil(pagedTotal / perPage));
+  const pagedPage = Math.min(requestedPage, pagedPageCount - 1);
+  // The last page backs up so it stays full, overlapping the previous page, instead of showing a
+  // lone partial column.
+  const pagedStart = Math.min(pagedPage * perPage, Math.max(0, childArray.length - perPage));
+  const pagedItems = loading
+    ? recommendationCardSkeletons(cardShape, rows).slice(0, perPage)
+    : childArray.slice(pagedStart, pagedStart + perPage);
 
-  const scroll = (dir: "left" | "right") => {
+  const pageCount = paged ? pagedPageCount : pageDestinations.length;
+  const activePage = paged ? pagedPage : currentPage;
+
+  // Line card rows up with the other card-grid widgets in this dashboard row: measure this widget's
+  // natural row heights (with any alignment lifted), report them, and apply the group maximum.
+  const aligned = alignmentGroup && alignment ? alignment.heightsFor(alignmentGroup) : undefined;
+  const alignedRows = aligned && paged ? aligned.map((height) => `${height}px`).join(" ") : undefined;
+  const alignedHeight = aligned && !paged ? `${aligned[0]}px` : undefined;
+  const alignedTrackStyle: CSSProperties = paged ? { gridTemplateRows: alignedRows } : { height: alignedHeight };
+  const naturalRows = paged ? `repeat(${rows}, auto)` : "";
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !reportAlignment || !alignmentGroup || loading) return;
+    if (paged) el.style.gridTemplateRows = naturalRows;
+    else el.style.height = "";
+    const heights = Array.from({ length: paged ? rows : 1 }, () => 0);
+    Array.from(el.children).forEach((cell, index) => {
+      const row = paged ? index % rows : 0;
+      heights[row] = Math.max(heights[row], cell.getBoundingClientRect().height);
+    });
+    reportAlignment(alignmentId, alignmentGroup, heights.map(Math.ceil));
+    if (paged) el.style.gridTemplateRows = alignedRows ?? naturalRows;
+    else el.style.height = alignedHeight ?? "";
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- re-measure only when the widget's own content or size changes
+  }, [reportAlignment, alignmentGroup, alignmentId, childArray, columns, loading, paged, rows, trackWidth]);
+  useEffect(() => () => removeAlignment?.(alignmentId), [removeAlignment, alignmentId]);
+
+  // Fetch the next API page once the user is within a page of the end of what is loaded.
+  useEffect(() => {
+    if (!hasMore || loadingMore || !loadMore || loading) return;
+    if (pages !== undefined && loadedCount >= pages * perPage) return;
+    const needed = paged ? (pagedPage + 2) * perPage : (currentPage + 2) * columns;
+    if (needed > loadedCount) loadMore();
+  }, [columns, currentPage, hasMore, loadMore, loadedCount, loading, loadingMore, paged, pagedPage, pages, perPage]);
+  const hasPrevious = paged ? pagedPage > 0 : canScrollLeft;
+  const hasNext = paged ? pagedPage < pagedPageCount - 1 : canScrollRight;
+
+  const goToPage = (page: number) => {
+    if (paged) {
+      setRequestedPage(Math.max(0, Math.min(pagedPageCount - 1, page)));
+      return;
+    }
     const el = scrollRef.current;
     if (!el) return;
-    const nextPage = Math.max(0, Math.min(pageDestinations.length - 1, currentPage + (dir === "left" ? -1 : 1)));
-    el.scrollTo({ left: pageDestinations[nextPage], behavior: "smooth" });
+    el.scrollTo({
+      left: pageDestinations[Math.max(0, Math.min(pageDestinations.length - 1, page))],
+      behavior: "smooth",
+    });
   };
+  const scroll = (dir: "left" | "right") => goToPage(activePage + (dir === "left" ? -1 : 1));
 
   return (
     <div className="recommendation-row">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 px-1">
+      <div className="flex items-center justify-between gap-3 mb-2 px-1">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="min-w-0 break-words text-base font-semibold text-foreground">{header}</h2>
+          <h2 className="min-w-0 truncate text-base font-semibold text-foreground">{header}</h2>
           {shownTotalCount != null && (
             <span className="shrink-0 text-xs text-muted tabular-nums" title={totalLabel}>
               {shownTotalCount.toLocaleString()}
@@ -2609,28 +3003,53 @@ function RecommendationRowShell({
             </span>
           )}
         </div>
-        <button
-          onClick={() =>
-            onNavigate({
-              page: viewAllPage,
-              ...(viewAllId !== undefined ? { id: viewAllId } : {}),
-              ...(viewAllFilter ? { listFilter: viewAllFilter } : {}),
-              ...(viewAllObjectFilter !== undefined ? { listObjectFilter: viewAllObjectFilter } : {}),
-              ...(viewAllView ? { listView: viewAllView } : {}),
-              ...(viewAllProfileId ? { profileId: viewAllProfileId } : {}),
-              ...(viewAllSegmentsView ? { segmentsView: viewAllSegmentsView } : {}),
-            })
-          }
-          className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-sm text-muted hover:text-accent sm:min-h-0 sm:px-0 sm:text-xs"
-        >
-          View All
-        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          {paged && pageCount > 1 ? (
+            <div className="flex items-center gap-0.5 text-xs text-muted" aria-label={`${header} pages`}>
+              <button
+                onClick={() => scroll("left")}
+                disabled={!hasPrevious}
+                aria-label={`Previous ${header} page`}
+                className="flex h-9 w-9 items-center justify-center rounded-md hover:text-accent disabled:opacity-30 disabled:hover:text-muted sm:h-6 sm:w-6"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="tabular-nums">
+                {activePage + 1} / {pageCount}
+              </span>
+              <button
+                onClick={() => scroll("right")}
+                disabled={!hasNext}
+                aria-label={`Next ${header} page`}
+                className="flex h-9 w-9 items-center justify-center rounded-md hover:text-accent disabled:opacity-30 disabled:hover:text-muted sm:h-6 sm:w-6"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : null}
+          <button
+            onClick={() =>
+              onNavigate({
+                page: viewAllPage,
+                ...(viewAllId !== undefined ? { id: viewAllId } : {}),
+                ...(viewAllFilter ? { listFilter: viewAllFilter } : {}),
+                ...(viewAllObjectFilter !== undefined ? { listObjectFilter: viewAllObjectFilter } : {}),
+                ...(viewAllView ? { listView: viewAllView } : {}),
+                ...(viewAllProfileId ? { profileId: viewAllProfileId } : {}),
+                ...(viewAllSegmentsView ? { segmentsView: viewAllSegmentsView } : {}),
+              })
+            }
+            className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-sm text-muted hover:text-accent sm:min-h-0 sm:px-0 sm:text-xs"
+          >
+            View All
+          </button>
+        </div>
       </div>
 
       {/* Scrollable cards */}
       <div className="relative group/row">
         {/* Left arrow */}
-        {canScrollLeft && (
+        {!paged && hasPrevious && (
           <button
             onClick={() => scroll("left")}
             aria-label={`Previous ${header} page`}
@@ -2640,17 +3059,31 @@ function RecommendationRowShell({
           </button>
         )}
 
-        <div
-          ref={scrollRef}
-          className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth px-1"
-          style={{ scrollSnapType: "x mandatory" }}
-          aria-busy={loading || undefined}
-        >
-          {loading ? recommendationCardSkeletons(cardShape) : children}
-        </div>
+        {paged ? (
+          <div
+            ref={scrollRef}
+            className="gap-2 overflow-hidden px-1"
+            style={{ ...dashboardPagedTrackStyle(rows), ...dashboardCardWidthStyle(cardWidthPx), ...alignedTrackStyle }}
+            data-dashboard-rows={rows}
+            data-dashboard-page={pagedPage}
+            aria-busy={loading || undefined}
+          >
+            {pagedItems}
+          </div>
+        ) : (
+          <div
+            ref={scrollRef}
+            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth px-1"
+            style={{ scrollSnapType: "x mandatory", ...dashboardCardWidthStyle(cardWidthPx), ...alignedTrackStyle }}
+            data-dashboard-rows={rows}
+            aria-busy={loading || undefined}
+          >
+            {loading ? recommendationCardSkeletons(cardShape) : childArray}
+          </div>
+        )}
 
         {/* Right arrow */}
-        {canScrollRight && (
+        {!paged && hasNext && (
           <button
             onClick={() => scroll("right")}
             aria-label={`Next ${header} page`}
@@ -2662,20 +3095,17 @@ function RecommendationRowShell({
       </div>
 
       {/* Page dots */}
-      {pageDestinations.length > 1 && (
+      {pageCount > 1 && pageCount <= MAX_CAROUSEL_DOTS && (
         <div className="mx-auto flex max-w-full justify-start gap-1.5 overflow-x-auto px-1 mt-2 scrollbar-hide sm:justify-center sm:overflow-visible">
-          {pageDestinations.map((destination, i) => (
+          {Array.from({ length: pageCount }, (_, i) => (
             <button
-              key={destination}
-              onClick={() => {
-                const el = scrollRef.current;
-                if (el) el.scrollTo({ left: destination, behavior: "smooth" });
-              }}
+              key={paged ? i : pageDestinations[i]}
+              onClick={() => goToPage(i)}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full sm:h-1 sm:w-6"
               aria-label={`Go to carousel page ${i + 1}`}
             >
               <span
-                className={`h-1.5 w-6 rounded-full transition-colors sm:h-full sm:w-full ${i === currentPage ? "bg-foreground" : "bg-muted/40"}`}
+                className={`h-1.5 w-6 rounded-full transition-colors sm:h-full sm:w-full ${i === activePage ? "bg-foreground" : "bg-muted/40"}`}
               />
             </button>
           ))}
@@ -2684,6 +3114,9 @@ function RecommendationRowShell({
     </div>
   );
 }
+
+/** Past this many pages the dots stop being useful; the arrows and header pager still work. */
+const MAX_CAROUSEL_DOTS = 20;
 
 export function getCarouselPageDestinations(scrollWidth: number, clientWidth: number) {
   if (clientWidth <= 0 || scrollWidth <= clientWidth) return [0];
@@ -2696,143 +3129,61 @@ export function getCarouselPageDestinations(scrollWidth: number, clientWidth: nu
   return destinations;
 }
 
-// ─── Entity Card (renders appropriate card based on mode) ───────────────────
+// ─── Entity Cards (the shared tiles every list page uses) ───────────────────
 
 function EntityCard({
   item,
   engagement,
   mode,
   onNavigate,
-  imageLoading,
 }: {
   item: any;
   engagement?: EntityEngagement;
   mode: FilterMode;
   onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
 }) {
-  const props = { engagement, onNavigate, imageLoading };
+  const open = (page: string) => () => onNavigate({ page, id: item.id });
   switch (mode) {
     case "videos":
-      return <VideoRecommendationCard video={item} {...props} />;
+      return <VideoCard video={item} engagement={engagement} onClick={open("video")} onNavigate={onNavigate} />;
     case "performers":
-      return <PerformerRecommendationCard performer={item} {...props} />;
+      return (
+        <PerformerTile performer={item} engagement={engagement} onClick={open("performer")} onNavigate={onNavigate} />
+      );
     case "studios":
-      return <StudioRecommendationCard studio={item} {...props} />;
+      return <StudioTile studio={item} engagement={engagement} onClick={open("studio")} onNavigate={onNavigate} />;
     case "tags":
-      return <TagRecommendationCard tag={item} onNavigate={onNavigate} imageLoading={imageLoading} />;
+      return <TagTile tag={item} engagement={engagement} onClick={open("tag")} onNavigate={onNavigate} />;
     case "galleries":
-      return <GalleryRecommendationCard gallery={item} {...props} />;
+      return <GalleryTile gallery={item} engagement={engagement} onClick={open("gallery")} onNavigate={onNavigate} />;
     case "groups":
-      return <GroupRecommendationCard group={item} {...props} />;
+      return <GroupTile group={item} engagement={engagement} onClick={open("group")} onNavigate={onNavigate} />;
     case "audios":
-      return <AudioRecommendationCard audio={item} {...props} />;
+      return <AudioTile audio={item} engagement={engagement} onClick={open("audio")} onNavigate={onNavigate} />;
     case "texts":
-      return <TextRecommendationCard text={item} {...props} />;
+      return <TextTile text={item} engagement={engagement} onClick={open("text")} onNavigate={onNavigate} />;
     case "segments":
-      return <DerivedSegmentRecommendationCard item={item} onNavigate={onNavigate} />;
-    case "rawsegments":
-      return <RawSegmentRecommendationCard item={item} engagement={engagement} onNavigate={onNavigate} />;
+      return <DerivedSegmentCard item={item} onNavigate={onNavigate} />;
+    case "rawsegments": {
+      const raw = item as RawSegmentItem;
+      const route = { page: "segment", id: raw.id };
+      return (
+        <SegmentTile
+          segment={raw}
+          route={route}
+          label={`Open raw segment ${buildRawSegmentTitle(raw)}`}
+          eyebrow={formatSegmentCardEyebrow(raw.startSec, raw.endSec)}
+          onClick={() => onNavigate(route)}
+        />
+      );
+    }
     default:
       return null;
   }
 }
 
-function AudioRecommendationCard({
-  audio,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  audio: Audio;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const title = audio.title?.trim() || audio.files?.[0]?.basename || "Untitled audio";
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "audio", id: audio.id }, () =>
-    onNavigate({ page: "audio", id: audio.id }),
-  );
-  return (
-    <a
-      {...linkProps}
-      className={`flex ${RECOMMENDATION_CARD_SHAPES.audio.width} flex-shrink-0 flex-col overflow-hidden rounded border border-border bg-card hover:border-accent/50`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative flex ${RECOMMENDATION_CARD_SHAPES.audio.media} items-center justify-center bg-surface`}>
-        {audio.imagePath ? (
-          <FadeInImage
-            src={audio.imagePath}
-            alt={title}
-            className="h-full w-full object-cover"
-            loading={imageLoading}
-            fallback={<Headphones className="h-10 w-10 text-muted" />}
-          />
-        ) : (
-          <Headphones className="h-10 w-10 text-muted" />
-        )}
-        <RatingBanner rating={engagement?.rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.audio.body}`}>
-        <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        {audio.date ? <p className="text-xs text-muted">{audio.date}</p> : null}
-      </div>
-    </a>
-  );
-}
-
-function TextRecommendationCard({
-  text,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  text: TextDocument;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const title = text.title?.trim() || text.files?.[0]?.basename || "Untitled text";
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "text", id: text.id }, () =>
-    onNavigate({ page: "text", id: text.id }),
-  );
-  return (
-    <a
-      {...linkProps}
-      className={`flex ${RECOMMENDATION_CARD_SHAPES.text.width} flex-shrink-0 flex-col overflow-hidden rounded border border-border bg-card hover:border-accent/50`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative flex ${RECOMMENDATION_CARD_SHAPES.text.media} items-center justify-center bg-surface`}>
-        {text.imagePath ? (
-          <FadeInImage
-            src={text.imagePath}
-            alt={title}
-            className="h-full w-full object-cover"
-            loading={imageLoading}
-            fallback={<FileText className="h-10 w-10 text-muted" />}
-          />
-        ) : (
-          <FileText className="h-10 w-10 text-muted" />
-        )}
-        <RatingBanner rating={engagement?.rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.text.body}`}>
-        <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        {text.date ? <p className="text-xs text-muted">{text.date}</p> : null}
-      </div>
-    </a>
-  );
-}
-
-function DerivedSegmentRecommendationCard({
-  item,
-  onNavigate,
-}: {
-  item: DerivedSpanItem;
-  onNavigate: (r: any) => void;
-}) {
+function DerivedSegmentCard({ item, onNavigate }: { item: DerivedSpanItem; onNavigate: (r: any) => void }) {
   const title = buildSpanTitle(item.span, item.videoTitle);
-  const primarySegmentId = item.span.segmentIds[0];
   const route = {
     page: "video-span",
     id: item.videoId,
@@ -2840,373 +3191,91 @@ function DerivedSegmentRecommendationCard({
     profileId: item.profileId,
     derivedQueryDescriptor: item.derivedQueryDescriptor,
   };
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>(route, () => onNavigate(route));
   return (
-    <a
-      {...linkProps}
-      className={`flex ${RECOMMENDATION_CARD_SHAPES.segment.width} flex-shrink-0 flex-col overflow-hidden rounded border border-border bg-card hover:border-accent/50`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`${RECOMMENDATION_CARD_SHAPES.segment.media} bg-black`}>
-        <SegmentVideoPreview
-          hostId={item.videoId}
-          segmentId={primarySegmentId}
-          updatedAt={item.videoUpdatedAt}
-          startSec={item.span.startSec}
-          endSec={item.span.endSec}
-          title={title}
-          imgClassName="h-full w-full object-cover"
+    <SegmentTile
+      segment={{
+        id: item.span.segmentIds[0] ?? item.id,
+        hostType: "video",
+        hostId: item.videoId,
+        startSec: item.span.startSec,
+        endSec: item.span.endSec,
+        tagName: item.span.tagName,
+        kind: item.span.kind,
+        sourceKey: item.span.sourceKey,
+        title,
+        updatedAt: item.videoUpdatedAt,
+        hostTitle: item.videoTitle,
+      }}
+      route={route}
+      label={`Open segment ${title}`}
+      eyebrow={formatSegmentCardEyebrow(item.span.startSec, item.span.endSec)}
+      onClick={() => onNavigate(route)}
+    />
+  );
+}
+
+/** A group item's hydrated host entity rendered with the same tile the list pages use for that type. */
+function GroupFeedEntityTile({
+  entity,
+  title,
+  onOpen,
+  onNavigate,
+}: {
+  entity: GroupFeedEntity;
+  /** The group item's own title, which overrides the entity's. */
+  title?: string;
+  onOpen: () => void;
+  onNavigate: (r: any) => void;
+}) {
+  const override = title?.trim();
+  switch (entity.type) {
+    case "video":
+      return (
+        <VideoCard
+          video={override ? { ...entity.value, title: override } : entity.value}
+          onClick={onOpen}
+          onNavigate={onNavigate}
         />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.segment.body}`}>
-        <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted">{formatSegmentCardEyebrow(item.span.startSec, item.span.endSec)}</p>
-      </div>
-    </a>
-  );
-}
-
-function RawSegmentRecommendationCard({
-  item,
-  engagement,
-  onNavigate,
-}: {
-  item: RawSegmentItem;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-}) {
-  const title = buildRawSegmentTitle(item);
-  const route = { page: "segment", id: item.id };
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>(route, () => onNavigate(route));
-  return (
-    <a
-      {...linkProps}
-      className={`flex ${RECOMMENDATION_CARD_SHAPES.segment.width} flex-shrink-0 flex-col overflow-hidden rounded border border-border bg-card hover:border-accent/50`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative ${RECOMMENDATION_CARD_SHAPES.segment.media} bg-black`}>
-        <SegmentVideoPreview
-          hostId={item.hostId}
-          segmentId={item.id}
-          updatedAt={item.updatedAt}
-          startSec={item.startSec}
-          endSec={item.endSec}
-          title={title}
-          imgClassName="h-full w-full object-cover"
+      );
+    case "image":
+      return (
+        <ImageTile
+          image={override ? { ...entity.value, title: override } : entity.value}
+          onClick={onOpen}
+          onNavigate={onNavigate}
         />
-        <RatingBanner rating={engagement?.rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.segment.body}`}>
-        <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted">{formatSegmentCardEyebrow(item.startSec, item.endSec)}</p>
-      </div>
-    </a>
-  );
-}
-
-// ─── Video Card ─────────────────────────────────────────────────────────────
-
-function VideoRecommendationCard({
-  video,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  video: Video;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const file = video.files[0];
-  const duration = file?.duration ?? 0;
-  const resLabel = file ? getResolutionLabel(file.width, file.height) : null;
-  const screenshotUrl = videos.screenshotUrl(video.id);
-  const screenshotAlt = video.imagePath ? video.title || "" : "";
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "video", id: video.id }, () =>
-    onNavigate({ page: "video", id: video.id }),
-  );
-  const rating = engagement?.rating;
-
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.video.width} cursor-pointer group rounded overflow-hidden bg-card border border-border hover:border-accent/50 transition-colors`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative ${RECOMMENDATION_CARD_SHAPES.video.media} bg-surface`}>
-        <VideoCoverImage
-          src={screenshotUrl}
-          alt={screenshotAlt}
-          className="h-full w-full object-cover"
-          fallbackClassName="video-recommendation-cover-fallback"
-          loading={imageLoading}
-          fadeIn
+      );
+    case "audio":
+      return (
+        <AudioTile
+          audio={override ? { ...entity.value, title: override } : entity.value}
+          onClick={onOpen}
+          onNavigate={onNavigate}
         />
-        {/* Resolution + duration overlay */}
-        <div className="absolute bottom-0 right-0 flex items-center gap-0.5 p-1 text-xs text-white">
-          {resLabel && <span className="bg-black/70 px-1 py-0.5 rounded font-bold">{resLabel}</span>}
-          {duration > 0 && <span className="bg-black/70 px-1 py-0.5 rounded">{formatDuration(duration)}</span>}
-        </div>
-        <RatingBanner rating={rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.video.body}`}>
-        <p className="text-sm font-medium text-foreground truncate group-hover:text-accent">
-          {video.title || file?.basename || "Untitled"}
-        </p>
-        {video.date && <p className="text-xs text-muted">{video.date}</p>}
-      </div>
-      {/* Bottom stats */}
-      <div className={`flex items-center gap-2 px-2 pb-1.5 text-xs text-muted ${RECOMMENDATION_CARD_STATS_ROW}`}>
-        {video.tags.length > 0 && (
-          <span className="flex items-center gap-0.5">
-            <TagIcon className="w-2.5 h-2.5" />
-            {video.tags.length}
-          </span>
-        )}
-        {video.performers.length > 0 && (
-          <span className="flex items-center gap-0.5">
-            <User className="w-2.5 h-2.5" />
-            {video.performers.length}
-          </span>
-        )}
-      </div>
-    </a>
-  );
-}
-
-// ─── Performer Card ─────────────────────────────────────────────────────────
-
-function PerformerRecommendationCard({
-  performer,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  performer: Performer;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "performer", id: performer.id }, () =>
-    onNavigate({ page: "performer", id: performer.id }),
-  );
-  const rating = engagement?.rating;
-  const performerPlaceholder = (
-    <div className="w-full h-full flex items-center justify-center">
-      <User className="w-10 h-10 text-muted" />
-    </div>
-  );
-
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.performer.width} cursor-pointer group rounded overflow-hidden bg-card border border-border hover:border-accent/50 transition-colors`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative ${RECOMMENDATION_CARD_SHAPES.performer.media} bg-surface`}>
-        {performer.imagePath ? (
-          <FadeInImage
-            src={performer.imagePath}
-            alt={performer.name}
-            className="w-full h-full object-cover"
-            loading={imageLoading}
-            fallback={performerPlaceholder}
-          />
-        ) : (
-          performerPlaceholder
-        )}
-        <RatingBanner rating={rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.performer.body}`}>
-        <p className="text-sm font-medium text-foreground truncate group-hover:text-accent">{performer.name}</p>
-        {performer.disambiguation && <p className="text-xs text-muted truncate">{performer.disambiguation}</p>}
-      </div>
-    </a>
-  );
-}
-
-// ─── Studio Card ────────────────────────────────────────────────────────────
-
-function StudioRecommendationCard({
-  studio,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  studio: Studio;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "studio", id: studio.id }, () =>
-    onNavigate({ page: "studio", id: studio.id }),
-  );
-  const rating = engagement?.rating;
-
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.studio.width} cursor-pointer group rounded overflow-hidden bg-card border border-border hover:border-accent/50 transition-colors`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div
-        className={`relative ${RECOMMENDATION_CARD_SHAPES.studio.media} bg-surface flex items-center justify-center p-4`}
-      >
-        {studio.imagePath ? (
-          <FadeInImage
-            src={studio.imagePath}
-            alt={studio.name}
-            className="h-full w-full object-contain"
-            loading={imageLoading}
-            fallback={<Building2 className="w-10 h-10 text-muted" />}
-          />
-        ) : (
-          <Building2 className="w-10 h-10 text-muted" />
-        )}
-        <RatingBanner rating={rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.studio.body}`}>
-        <p className="text-sm font-medium text-foreground truncate group-hover:text-accent">{studio.name}</p>
-      </div>
-    </a>
-  );
-}
-
-// ─── Tag Card ───────────────────────────────────────────────────────────────
-
-function TagRecommendationCard({
-  tag,
-  onNavigate,
-  imageLoading,
-}: {
-  tag: Tag;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "tag", id: tag.id }, () =>
-    onNavigate({ page: "tag", id: tag.id }),
-  );
-
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.tag.width} cursor-pointer group rounded overflow-hidden bg-card border border-border hover:border-accent/50 transition-colors`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative ${RECOMMENDATION_CARD_SHAPES.tag.media} bg-surface flex items-center justify-center`}>
-        {tag.imagePath ? (
-          <FadeInImage
-            src={tag.imagePath}
-            alt={tag.name}
-            className="max-w-full max-h-full object-contain"
-            loading={imageLoading}
-            fallback={<TagIcon className="w-8 h-8 text-muted" />}
-          />
-        ) : (
-          <TagIcon className="w-8 h-8 text-muted" />
-        )}
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.tag.body}`}>
-        <p className="text-sm font-medium text-foreground truncate group-hover:text-accent">{tag.name}</p>
-      </div>
-    </a>
-  );
-}
-
-// ─── Gallery Card ───────────────────────────────────────────────────────────
-
-function GalleryRecommendationCard({
-  gallery,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  gallery: Gallery;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "gallery", id: gallery.id }, () =>
-    onNavigate({ page: "gallery", id: gallery.id }),
-  );
-  const rating = engagement?.rating;
-
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.gallery.width} cursor-pointer group rounded overflow-hidden bg-card border border-border hover:border-accent/50 transition-colors`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div
-        className={`relative ${RECOMMENDATION_CARD_SHAPES.gallery.media} bg-surface flex items-center justify-center`}
-      >
-        {gallery.coverPath ? (
-          <FadeInImage
-            src={`/api/galleries/${gallery.id}/cover`}
-            alt={gallery.title || ""}
-            className="w-full h-full object-cover"
-            loading={imageLoading}
-            fallback={<Images className="w-8 h-8 text-muted" />}
-          />
-        ) : (
-          <Images className="w-8 h-8 text-muted" />
-        )}
-        <RatingBanner rating={rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.gallery.body}`}>
-        <p className="text-sm font-medium text-foreground truncate group-hover:text-accent">
-          {getGalleryDisplayTitle(gallery)}
-        </p>
-        {gallery.date && <p className="text-xs text-muted">{gallery.date}</p>}
-      </div>
-    </a>
-  );
-}
-
-// ─── Group Card ─────────────────────────────────────────────────────────────
-
-function GroupRecommendationCard({
-  group,
-  engagement,
-  onNavigate,
-  imageLoading,
-}: {
-  group: Group;
-  engagement?: EntityEngagement;
-  onNavigate: (r: any) => void;
-  imageLoading: CardImageLoading;
-}) {
-  const linkProps = createRouteLinkProps<HTMLAnchorElement>({ page: "group", id: group.id }, () =>
-    onNavigate({ page: "group", id: group.id }),
-  );
-  const rating = engagement?.rating;
-
-  return (
-    <a
-      {...linkProps}
-      className={`flex-shrink-0 ${RECOMMENDATION_CARD_SHAPES.group.width} cursor-pointer group rounded overflow-hidden bg-card border border-border hover:border-accent/50 transition-colors`}
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className={`relative ${RECOMMENDATION_CARD_SHAPES.group.media} bg-surface flex items-center justify-center`}>
-        {group.frontImagePath ? (
-          <FadeInImage
-            src={group.frontImagePath}
-            alt={group.name}
-            className="w-full h-full object-cover"
-            loading={imageLoading}
-            fallback={<Clapperboard className="w-8 h-8 text-muted" />}
-          />
-        ) : (
-          <Clapperboard className="w-8 h-8 text-muted" />
-        )}
-        <RatingBanner rating={rating} />
-      </div>
-      <div className={`px-2 py-1.5 ${RECOMMENDATION_CARD_SHAPES.group.body}`}>
-        <p className="text-sm font-medium text-foreground truncate group-hover:text-accent">{group.name}</p>
-        {group.date && <p className="text-xs text-muted">{group.date}</p>}
-      </div>
-    </a>
-  );
+      );
+    case "text":
+      return (
+        <TextTile
+          text={override ? { ...entity.value, title: override } : entity.value}
+          onClick={onOpen}
+          onNavigate={onNavigate}
+        />
+      );
+    case "group":
+      return <GroupTile group={entity.value} onClick={onOpen} onNavigate={onNavigate} />;
+    case "performer":
+      return <PerformerTile performer={entity.value} onClick={onOpen} onNavigate={onNavigate} />;
+    case "studio":
+      return <StudioTile studio={entity.value} onClick={onOpen} onNavigate={onNavigate} />;
+    case "tag":
+      return <TagTile tag={entity.value} onClick={onOpen} onNavigate={onNavigate} />;
+    case "gallery":
+      return <GalleryTile gallery={entity.value} onClick={onOpen} onNavigate={onNavigate} />;
+    case "face":
+      return <FaceTile face={entity.value} onClick={onOpen} />;
+    case "segment":
+      return <SegmentTile segment={entity.value} onClick={onOpen} />;
+  }
 }
 
 function getRecommendationEngagementHostType(mode: FilterMode | undefined): AffinityHostType | null {

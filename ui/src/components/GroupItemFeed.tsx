@@ -69,7 +69,7 @@ export interface GroupItemFeedProps {
   showGroupHeader?: boolean;
 }
 
-type GroupFeedEntity =
+export type GroupFeedEntity =
   | { type: "video"; value: Video }
   | { type: "image"; value: Image }
   | { type: "audio"; value: Audio }
@@ -82,7 +82,10 @@ type GroupFeedEntity =
   | { type: "face"; value: Face }
   | { type: "segment"; value: SegmentRecord };
 
-type GroupFeedEntityState = { status: "loading" } | { status: "error" } | { status: "ready"; entity: GroupFeedEntity };
+export type GroupFeedEntityState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; entity: GroupFeedEntity };
 
 interface GroupFeedHost {
   resource: EntityResource;
@@ -227,7 +230,7 @@ function GroupFeedMessage({ children }: { children: string }) {
   );
 }
 
-function useGroupFeedEntities(
+export function useGroupFeedEntities(
   items: GroupItem[],
   hasPermission: (permission: string) => boolean,
   principalKey: string,
@@ -666,7 +669,7 @@ function getGroupFeedDetails(entity?: GroupFeedEntity) {
   return value.details || value.description || undefined;
 }
 
-function groupFeedItemKey(item: GroupItem) {
+export function groupFeedItemKey(item: GroupItem) {
   return `${item.kind}:${item.id}:${item.orderIndex}`;
 }
 

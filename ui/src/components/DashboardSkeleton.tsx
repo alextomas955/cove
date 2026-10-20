@@ -1,10 +1,13 @@
 import { Plus, Settings2 } from "lucide-react";
+import type { CSSProperties } from "react";
+import { getEntityCardMinWidthPx } from "../hooks/useEntityCardSize";
 
 /**
  * The outer dimensions of a dashboard recommendation card. Real cards and their loading skeletons
  * share these, so a row keeps its height when data replaces the skeleton.
  */
 export interface RecommendationCardShape {
+  /** Width class; the row sets `--dashboard-card-width` from the widget's card size. */
   width: string;
   /** Aspect ratio of the cover image box. */
   media: string;
@@ -21,21 +24,102 @@ const TWO_LINE_BODY = "min-h-[3rem]";
 /** pb-1.5 plus one text-xs line. */
 export const RECOMMENDATION_CARD_STATS_ROW = "min-h-[1.375rem]";
 
+/** Every card reads its width from the row so a widget's card size applies to real cards and skeletons alike. */
+export const RECOMMENDATION_CARD_WIDTH_CLASS = "w-[var(--dashboard-card-width)]";
+
+const W = RECOMMENDATION_CARD_WIDTH_CLASS;
+
+/** Skeleton shapes approximating the shared entity tiles that replace them. */
 export const RECOMMENDATION_CARD_SHAPES = {
-  video: { width: "w-[200px]", media: "aspect-video", body: TWO_LINE_BODY, stats: true },
-  performer: { width: "w-[160px]", media: "aspect-[2/3]", body: TWO_LINE_BODY, stats: false },
-  studio: { width: "w-[200px]", media: "aspect-video", body: ONE_LINE_BODY, stats: false },
-  tag: { width: "w-[160px]", media: "aspect-video", body: ONE_LINE_BODY, stats: false },
-  gallery: { width: "w-[200px]", media: "aspect-video", body: TWO_LINE_BODY, stats: false },
-  group: { width: "w-[160px]", media: "aspect-[2/3]", body: TWO_LINE_BODY, stats: false },
-  audio: { width: "w-[200px]", media: "aspect-video", body: TWO_LINE_BODY, stats: false },
-  text: { width: "w-[200px]", media: "aspect-video", body: TWO_LINE_BODY, stats: false },
-  segment: { width: "w-[220px]", media: "aspect-video", body: TWO_LINE_BODY, stats: false },
-  groupItem: { width: "w-[220px]", media: "aspect-video", body: ONE_LINE_BODY, stats: false },
+  video: { width: W, media: "aspect-video", body: TWO_LINE_BODY, stats: true },
+  performer: { width: W, media: "aspect-[2/3]", body: TWO_LINE_BODY, stats: false },
+  studio: { width: W, media: "aspect-video", body: ONE_LINE_BODY, stats: false },
+  tag: { width: W, media: "aspect-video", body: ONE_LINE_BODY, stats: false },
+  gallery: { width: W, media: "aspect-video", body: TWO_LINE_BODY, stats: false },
+  group: { width: W, media: "aspect-[2/3]", body: TWO_LINE_BODY, stats: false },
+  audio: { width: W, media: "aspect-video", body: TWO_LINE_BODY, stats: false },
+  text: { width: W, media: "aspect-video", body: TWO_LINE_BODY, stats: false },
+  segment: { width: W, media: "aspect-video", body: TWO_LINE_BODY, stats: false },
+  groupItem: { width: W, media: "aspect-video", body: ONE_LINE_BODY, stats: false },
 } satisfies Record<string, RecommendationCardShape>;
 
-/** Enough placeholders to overflow a wide row, so its carousel page dots appear while loading too. */
-const SKELETON_CARD_COUNT = 10;
+/** Card size levels match the list pages' card size slider; level 1 is the historical card width. */
+export const MIN_DASHBOARD_CARD_SIZE = 0;
+export const MAX_DASHBOARD_CARD_SIZE = 8;
+export const DEFAULT_DASHBOARD_CARD_SIZE = 1;
+export const MIN_DASHBOARD_ROWS = 1;
+export const MAX_DASHBOARD_ROWS = 20;
+export const MIN_DASHBOARD_PAGES = 1;
+export const MAX_DASHBOARD_PAGES = 20;
+
+export function clampDashboardCardSize(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_DASHBOARD_CARD_SIZE;
+  return Math.min(MAX_DASHBOARD_CARD_SIZE, Math.max(MIN_DASHBOARD_CARD_SIZE, Math.round(value)));
+}
+
+/** A page limit, or undefined when the widget shows every item it loads. */
+export function clampDashboardPages(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.min(MAX_DASHBOARD_PAGES, Math.max(MIN_DASHBOARD_PAGES, Math.round(value)));
+}
+
+export function clampDashboardRows(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return MIN_DASHBOARD_ROWS;
+  return Math.min(MAX_DASHBOARD_ROWS, Math.max(MIN_DASHBOARD_ROWS, Math.round(value)));
+}
+
+/** Dashboard cards use the same size scale as every list page, so level N is the same width everywhere. */
+export function dashboardCardWidthPx(cardSize: number) {
+  return getEntityCardMinWidthPx(undefined, clampDashboardCardSize(cardSize));
+}
+
+/** Inline style for the element that hosts a row's cards. */
+export function dashboardCardWidthStyle(cardWidthPx: number) {
+  return { "--dashboard-card-width": `${cardWidthPx}px` } as CSSProperties;
+}
+
+/** The horizontal gap between cards (gap-2) and the track's total horizontal padding (px-1). */
+const CARD_GAP_PX = 8;
+const TRACK_PADDING_PX = 8;
+
+function fittedCardWidthPx(trackWidthPx: number, columns: number) {
+  return Math.floor((trackWidthPx - TRACK_PADDING_PX - CARD_GAP_PX * (columns - 1)) / columns);
+}
+
+/**
+ * Fits whole card columns across a row's track: the column count whose fitted card width is closest
+ * to the requested width, with the cards stretched so they fill the track exactly. Before the track
+ * is measured the requested width stands in.
+ */
+export function fitDashboardCards(trackWidthPx: number, requestedCardWidthPx: number) {
+  if (trackWidthPx <= 0) return { columns: 1, cardWidthPx: requestedCardWidthPx };
+  const columns = Math.max(
+    1,
+    Math.floor((trackWidthPx - TRACK_PADDING_PX + CARD_GAP_PX) / (requestedCardWidthPx + CARD_GAP_PX)),
+  );
+  const candidates = [columns, columns + 1]
+    .map((count) => ({ columns: count, cardWidthPx: fittedCardWidthPx(trackWidthPx, count) }))
+    .filter((candidate) => candidate.cardWidthPx > 0);
+  if (candidates.length === 0) return { columns: 1, cardWidthPx: requestedCardWidthPx };
+  return candidates.reduce((best, candidate) =>
+    Math.abs(candidate.cardWidthPx - requestedCardWidthPx) < Math.abs(best.cardWidthPx - requestedCardWidthPx)
+      ? candidate
+      : best,
+  );
+}
+
+/** A multi-row widget shows one page of whole columns at a time instead of scrolling sideways. */
+export function dashboardPagedTrackStyle(rows: number): CSSProperties {
+  return {
+    display: "grid",
+    gridAutoFlow: "column",
+    gridTemplateRows: `repeat(${clampDashboardRows(rows)}, auto)`,
+    gridAutoColumns: "max-content",
+  };
+}
+
+/** Enough placeholders per row to overflow a wide row, so its carousel page dots appear while loading too. */
+const SKELETON_CARDS_PER_ROW = 10;
 
 const PULSE = "motion-safe:animate-pulse";
 
@@ -44,7 +128,7 @@ export function RecommendationCardSkeleton({ shape }: { shape: RecommendationCar
     <div
       aria-hidden="true"
       data-card-skeleton=""
-      className={`${shape.width} flex-shrink-0 overflow-hidden rounded border border-border bg-card`}
+      className={`${shape.width} h-full flex-shrink-0 overflow-hidden rounded-lg border border-border bg-card`}
       // Snap like the real cards do, so the carousel settles at the same scroll offset.
       style={{ scrollSnapAlign: "start" }}
     >
@@ -59,8 +143,8 @@ export function RecommendationCardSkeleton({ shape }: { shape: RecommendationCar
   );
 }
 
-export function recommendationCardSkeletons(shape: RecommendationCardShape) {
-  return Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
+export function recommendationCardSkeletons(shape: RecommendationCardShape, rows = 1) {
+  return Array.from({ length: SKELETON_CARDS_PER_ROW * clampDashboardRows(rows) }, (_, index) => (
     <RecommendationCardSkeleton key={index} shape={shape} />
   ));
 }
@@ -87,7 +171,13 @@ export function RecommendationRowSkeleton({
           View All
         </span>
       </div>
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide px-1" style={{ scrollSnapType: "x mandatory" }}>
+      <div
+        className="flex gap-2 overflow-x-auto scrollbar-hide px-1"
+        style={{
+          scrollSnapType: "x mandatory",
+          ...dashboardCardWidthStyle(dashboardCardWidthPx(DEFAULT_DASHBOARD_CARD_SIZE)),
+        }}
+      >
         {recommendationCardSkeletons(shape)}
       </div>
       <div aria-hidden="true" className="mt-2 h-8 sm:h-1" />

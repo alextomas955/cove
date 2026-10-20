@@ -52,6 +52,22 @@ const ENTITY_ALIASES: Record<string, string> = {
   segment: "segment",
 };
 
+/**
+ * Standard entity cards share one size level everywhere (video list, group pages, detail tabs), so a
+ * video card looks the same on every page. Images and faces have their own aspect ratios and keep
+ * their own levels.
+ */
+const SEPARATELY_SIZED_ENTITY_TYPES = new Set(["image", "face"]);
+const GLOBAL_CARD_SIZE_STORAGE_KEY = "cove.cardSize";
+/** Before the shared level existed each entity type stored its own; the video level seeds the shared one. */
+const LEGACY_GLOBAL_SEED_STORAGE_KEY = "cove.cardSize.video";
+
+function cardSizeStorageKey(normalizedEntityType: string) {
+  return SEPARATELY_SIZED_ENTITY_TYPES.has(normalizedEntityType)
+    ? `cove.cardSize.${normalizedEntityType}`
+    : GLOBAL_CARD_SIZE_STORAGE_KEY;
+}
+
 export function clampCardSizeLevel(value: number) {
   return Math.min(MAX_CARD_SIZE_LEVEL, Math.max(MIN_CARD_SIZE_LEVEL, value));
 }
@@ -103,8 +119,10 @@ function readEntityCardSize(entityType?: string, legacyPageKey?: string, default
   }
 
   try {
-    const key = `cove.cardSize.${normalized}`;
-    const raw = localStorage.getItem(key);
+    const key = cardSizeStorageKey(normalized);
+    const raw =
+      localStorage.getItem(key) ??
+      (key === GLOBAL_CARD_SIZE_STORAGE_KEY ? localStorage.getItem(LEGACY_GLOBAL_SEED_STORAGE_KEY) : null);
     if (raw != null) {
       const parsed = Number(raw);
       return Number.isFinite(parsed)
@@ -140,7 +158,7 @@ export function useEntityCardSize(entityType?: string, legacyPageKey?: string, d
         const next = clampEntityCardSizeLevel(normalizedEntityType, nextValue);
         if (typeof window !== "undefined" && normalizedEntityType) {
           try {
-            localStorage.setItem(`cove.cardSize.${normalizedEntityType}`, String(next));
+            localStorage.setItem(cardSizeStorageKey(normalizedEntityType), String(next));
           } catch {
             // Ignore storage write failures.
           }

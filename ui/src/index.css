@@ -179,6 +179,29 @@ button {
   scrollbar-width: none;
 }
 
+/* Flow widgets stack full width on narrow screens. From the md breakpoint up the dashboard is a
+   60-column grid so a widget's width (full, half, third, quarter, fifth) spans it evenly; each
+   widget sets --dashboard-widget-span from its saved width. */
+.dashboard-widget-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 1.25rem;
+}
+@media (width >= 48rem) {
+  /* No column gap: 59 gaps would be wider than a narrow window. Each widget pads half the gutter on
+     both sides instead, and the grid pulls those edge halves back out to the page margin. */
+  .dashboard-widget-grid {
+    grid-template-columns: repeat(60, minmax(0, 1fr));
+    column-gap: 0;
+    margin-inline: -0.625rem;
+  }
+  .dashboard-widget-grid > * {
+    grid-column: span var(--dashboard-widget-span, 60);
+    min-width: 0;
+    padding-inline: 0.625rem;
+  }
+}
+
 /* Fade the dashboard switcher's edges while more names are scrolled out of view that way. Only
    narrow screens scroll the switcher; wider ones wrap it, so they never fade. */
 @media (width < 40rem) {

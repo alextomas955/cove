@@ -205,6 +205,37 @@ public sealed class DashboardsControllerTests
     }
 
     [Fact]
+    public async Task Update_validates_widget_layout_and_round_trips_it()
+    {
+        await using var scope = CreateScope();
+        var controller = scope.ControllerFor(7);
+        var dashboard = await BootstrapAsync(controller, []);
+        DashboardWidgetDto WithLayout(DashboardWidgetLayoutDto layout)
+            => Widget("row", "cove.core", "collection", "Collection", new { }) with { Layout = layout };
+
+        foreach (var invalid in new[] { new DashboardWidgetLayoutDto(Width: 6), new(Rows: 0), new(Rows: 21), new(CardSize: -1), new(CardSize: 9), new(Pages: 0), new(Pages: 21) })
+        {
+            var rejected = await controller.Update(
+                dashboard.Id,
+                new DashboardUpdateRequest("Home", dashboard.Version, [WithLayout(invalid)]),
+                TestContext.Current.CancellationToken);
+            Assert.IsType<BadRequestObjectResult>(rejected.Result);
+        }
+
+        var accepted = await controller.Update(
+            dashboard.Id,
+            new DashboardUpdateRequest("Home", dashboard.Version, [WithLayout(new DashboardWidgetLayoutDto(Width: 3, Rows: 4, CardSize: 2, Pages: 6))]),
+            TestContext.Current.CancellationToken);
+        var saved = Assert.IsType<DashboardDto>(Assert.IsType<OkObjectResult>(accepted.Result).Value);
+        var layout = Assert.Single(saved.Widgets).Layout;
+        Assert.NotNull(layout);
+        Assert.Equal((3, 4, 2, 6), (layout.Width, layout.Rows, layout.CardSize, layout.Pages));
+
+        var reloaded = await ViewAsync(controller, saved.Id);
+        Assert.Equal(layout, Assert.Single(reloaded.Dashboard!.Widgets).Layout);
+    }
+
+    [Fact]
     public void Legacy_widget_json_without_presentation_defaults_to_flow()
     {
         const string json = """
@@ -214,6 +245,7 @@ public sealed class DashboardsControllerTests
         var widget = Assert.Single(JsonSerializer.Deserialize<List<DashboardWidgetDto>>(json, CoveJson.Default)!);
 
         Assert.Equal(DashboardWidgetPresentation.Flow, widget.Presentation);
+        Assert.Null(widget.Layout);
     }
 
     [Fact]

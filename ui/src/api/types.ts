@@ -3810,6 +3810,21 @@ export interface ExtensionDashboardWidgetContribution {
 
 export type DashboardWidgetPresentation = "flow" | "canvas";
 
+/** The denominator of the share of a dashboard row a flow widget takes on wide screens. */
+export type DashboardWidgetWidth = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * Host-owned sizing for a flow widget. Narrow screens ignore `width` and stack widgets full width.
+ * `rows` and `cardSize` only apply to card-grid widgets (the core collection widget).
+ */
+export interface DashboardWidgetLayout {
+  width?: DashboardWidgetWidth;
+  rows?: number;
+  cardSize?: number;
+  /** Caps how many pages a card-grid widget shows; unset shows every item it loads. */
+  pages?: number;
+}
+
 export interface DashboardWidget {
   instanceId: string;
   owner: string;
@@ -3817,6 +3832,7 @@ export interface DashboardWidget {
   label: string;
   configuration: unknown;
   presentation?: DashboardWidgetPresentation;
+  layout?: DashboardWidgetLayout;
 }
 
 export interface DashboardSummary {

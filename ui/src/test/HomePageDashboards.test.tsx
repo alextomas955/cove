@@ -73,6 +73,15 @@ const { state, mocks } = vi.hoisted(() => ({
     update: vi.fn(),
     delete: vi.fn(),
     videosFind: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
+    videoGet: vi.fn(async (id: number): Promise<any> => ({
+      id,
+      title: `Video #${id}`,
+      files: [],
+      tags: [],
+      performers: [],
+    })),
+    imageGet: vi.fn(async (id: number): Promise<any> => ({ id, title: `Image #${id}` })),
+    textGet: vi.fn(async (id: number): Promise<any> => ({ id, title: `Text #${id}` })),
     videosFindFiltered: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
     performersFind: vi.fn(async (_request?: any): Promise<any> => ({ items: [], totalCount: 0 })),
     segmentSpansSearch: vi.fn(async (_request?: any): Promise<any> => ({
@@ -95,6 +104,7 @@ vi.mock("../api/client", () => ({
   videos: {
     find: mocks.videosFind,
     findFiltered: mocks.videosFindFiltered,
+    get: mocks.videoGet,
     screenshotUrl: (id: number) => `/api/stream/video/${id}/screenshot`,
     streamUrl: (id: number) => `/api/stream/video/${id}`,
   },
@@ -102,7 +112,8 @@ vi.mock("../api/client", () => ({
   studios: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   tags: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   galleries: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
-  images: { thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
+  images: { get: mocks.imageGet, thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
+  texts: { get: mocks.textGet },
   entityImages: { segmentCoverUrl: (id: number) => `/api/segments/${id}/cover` },
   groups: {
     find: mocks.groupsFind,
@@ -128,6 +139,51 @@ vi.mock("../api/client", () => ({
 vi.mock("../hooks/useEntityEngagementBatch", () => ({
   useEntityEngagementBatch: () => ({ engagementById: new Map() }),
 }));
+
+// The dashboard renders the shared entity tiles; these stand-ins expose each tile's identity as a link.
+vi.mock("../components/EntityCards", () => {
+  const href = (route: any) =>
+    route.page === "video-span" ? `/video/${route.id}/span/${route.spanKey}` : `/${route.page}/${route.id}`;
+  const link = (label: string, route: any, onClick: () => void) => (
+    <a
+      href={href(route)}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick();
+      }}
+    >
+      {label}
+    </a>
+  );
+  return {
+    VideoCard: ({ video, onClick }: any) =>
+      link(video.title || `Video #${video.id}`, { page: "video", id: video.id }, onClick),
+    PerformerTile: ({ performer, onClick }: any) =>
+      link(performer.name, { page: "performer", id: performer.id }, onClick),
+    StudioTile: ({ studio, onClick }: any) => link(studio.name, { page: "studio", id: studio.id }, onClick),
+    TagTile: ({ tag, onClick }: any) => link(tag.name, { page: "tag", id: tag.id }, onClick),
+    GalleryTile: ({ gallery, onClick }: any) =>
+      link(gallery.title || `Gallery #${gallery.id}`, { page: "gallery", id: gallery.id }, onClick),
+    GroupTile: ({ group, onClick }: any) => link(group.name, { page: "group", id: group.id }, onClick),
+    AudioTile: ({ audio, onClick }: any) =>
+      link(audio.title || `Audio #${audio.id}`, { page: "audio", id: audio.id }, onClick),
+    TextTile: ({ text, onClick }: any) =>
+      link(text.title || `Text #${text.id}`, { page: "text", id: text.id }, onClick),
+    ImageTile: ({ image, onClick }: any) =>
+      link(image.title || `Image #${image.id}`, { page: "image", id: image.id }, onClick),
+    FaceTile: ({ face, onClick }: any) => link(`Face #${face.id}`, { page: "face", id: face.id }, onClick),
+    SegmentTile: ({ segment, route, label, eyebrow, onClick }: any) => (
+      <div>
+        {link(
+          label ?? segment.title ?? `Segment #${segment.id}`,
+          route ?? { page: "segment", id: segment.id },
+          onClick,
+        )}
+        {eyebrow ? <p>{eyebrow}</p> : null}
+      </div>
+    ),
+  };
+});
 
 vi.mock("../components/Rating", () => ({
   RatingBanner: () => null,
@@ -1457,95 +1513,16 @@ describe("HomePage dashboards", () => {
     const skeletonMedia = skeleton.firstElementChild!;
     const skeletonBody = skeletonMedia.nextElementSibling!;
 
+    expect(skeletonMedia).toHaveClass("aspect-[2/3]");
+    expect(skeletonBody).not.toBeNull();
+
     await act(async () => resolveItems({ items: [{ id: 8, name: "Avery", imagePath: "/p/8.jpg" }], totalCount: 1 }));
     const card = await screen.findByRole("link", { name: /Avery/ });
-    const cardMedia = card.firstElementChild!;
-    const cardBody = cardMedia.nextElementSibling!;
-
-    const sizing = (element: Element) =>
-      [...element.classList].filter((name) => /^(w-\[|aspect-|min-h-)/.test(name)).sort();
-    expect(sizing(skeleton)).toEqual(["w-[160px]"]);
-    expect(sizing(card)).toEqual(sizing(skeleton));
-    expect(sizing(skeletonMedia)).toEqual(["aspect-[2/3]"]);
-    expect(sizing(cardMedia)).toEqual(sizing(skeletonMedia));
-    expect(sizing(cardBody)).toEqual(sizing(skeletonBody));
-    expect(sizing(cardBody)).toHaveLength(1);
-  });
-
-  it("shows a card's no-image placeholder when its image fails to load", async () => {
-    vi.mocked((await import("../api/client")).performers.find).mockResolvedValueOnce({
-      items: [{ id: 8, name: "Avery", imagePath: "/p/8.jpg" }],
-      totalCount: 1,
-    } as any);
-    state.active = dashboard(1, "Home", true, [
-      {
-        instanceId: "performers",
-        owner: "cove.core",
-        widgetKey: "collection",
-        label: "Performers",
-        configuration: { source: "premade", mode: "performers", sortBy: "name", direction: "asc", header: "People" },
-      },
-    ]);
-
-    renderHome();
-
-    const card = await screen.findByRole("link", { name: /Avery/ });
-    const image = card.querySelector("img")!;
-    expect(image).not.toBeNull();
-    fireEvent.error(image);
-    expect(card.querySelector("img")).toBeNull();
-    expect(card.querySelector("svg.lucide-user")).not.toBeNull();
-  });
-
-  it("fetches the first visible cards' images eagerly and fades them in once loaded", async () => {
-    const videoItems = Array.from({ length: 8 }, (_, index) => ({
-      id: index + 1,
-      title: `Clip ${index + 1}`,
-      files: [],
-      tags: [],
-      performers: [],
-    }));
-    mocks.videosFind.mockImplementation(async () => ({ items: videoItems, totalCount: videoItems.length }));
-    const premade = (instanceId: string, header: string) => ({
-      instanceId,
-      owner: "cove.core",
-      widgetKey: "collection",
-      label: header,
-      configuration: { source: "premade", mode: "videos", sortBy: "created_at", direction: "desc", header },
-    });
-    // An extension widget on top is not a row of images and must not take one of the eager slots.
-    const extensionWidget = {
-      instanceId: "ext",
-      owner: "example.extension",
-      widgetKey: "pulse",
-      label: "Library Pulse",
-      configuration: {},
-    };
-    state.active = dashboard(1, "Home", true, [
-      extensionWidget,
-      premade("a", "First"),
-      premade("b", "Second"),
-      premade("c", "Third"),
-    ]);
-
-    renderHome();
-
-    const rowImages = async (header: string) => {
-      const row = (await screen.findByRole("heading", { name: header })).closest(".recommendation-row")!;
-      await within(row as HTMLElement).findAllByRole("link", { name: /Clip/ });
-      return [...row.querySelectorAll("img")];
-    };
-    const first = await rowImages("First");
-    expect(first.map((image) => image.getAttribute("loading"))).toEqual([
-      ...Array(6).fill("eager"),
-      ...Array(2).fill("lazy"),
-    ]);
-    expect((await rowImages("Second"))[0]).toHaveAttribute("loading", "eager");
-    expect((await rowImages("Third")).every((image) => image.getAttribute("loading") === "lazy")).toBe(true);
-
-    expect(first[0]).toHaveClass("opacity-0");
-    fireEvent.load(first[0]);
-    expect(first[0]).toHaveClass("opacity-100");
+    // The shared tile fills a fixed-width cell that is sized exactly like the skeleton it replaced.
+    const cell = card.parentElement!;
+    const sizing = (element: Element) => [...element.classList].filter((name) => name.startsWith("w-[")).sort();
+    expect(sizing(skeleton)).toEqual(["w-[var(--dashboard-card-width)]"]);
+    expect(sizing(cell)).toEqual(sizing(skeleton));
   });
 
   it("does not duplicate a single-instance extension widget", async () => {

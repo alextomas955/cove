@@ -74,7 +74,7 @@ describe("DetailListToolbar", () => {
 
     await waitFor(() => expect(onZoomChange).toHaveBeenCalledWith(5.25));
     expect(onDisplayModeChange).toHaveBeenCalledWith("list");
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("5.25");
+    expect(localStorage.getItem("cove.cardSize")).toBe("5.25");
   });
 
   it("applies default zoom when the embedded list filter was resolved from the URL", async () => {
@@ -107,7 +107,7 @@ describe("DetailListToolbar", () => {
     );
 
     await waitFor(() => expect(onZoomChange).toHaveBeenCalledWith(5.25));
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("5.25");
+    expect(localStorage.getItem("cove.cardSize")).toBe("5.25");
     expect(onFilterChange).not.toHaveBeenCalled();
     expect(onDisplayModeChange).not.toHaveBeenCalled();
   });
@@ -510,7 +510,7 @@ describe("DetailListToolbar", () => {
   it("uses wall size levels for an embedded wall list", async () => {
     const user = userEvent.setup();
     const onZoomChange = vi.fn();
-    localStorage.setItem("cove.cardSize.video", "5");
+    localStorage.setItem("cove.cardSize", "5");
 
     renderWithQueryClient(
       <DetailListToolbar
@@ -535,7 +535,7 @@ describe("DetailListToolbar", () => {
     fireEvent.change(slider, { target: { value: "8" } });
 
     expect(onZoomChange).toHaveBeenCalledWith(8);
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("8");
+    expect(localStorage.getItem("cove.cardSize")).toBe("8");
   });
 
   it("hides the size slider for embedded modes without card sizing", () => {

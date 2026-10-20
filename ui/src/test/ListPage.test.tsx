@@ -1819,7 +1819,7 @@ describe("ListPage active filter chips", () => {
 
     await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("5.25"));
     expect(onDisplayModeChange).toHaveBeenCalledWith("list");
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("5.25");
+    expect(localStorage.getItem("cove.cardSize")).toBe("5.25");
   });
 
   it("applies each saved default zoom when a reused page changes filter modes", async () => {
@@ -1871,7 +1871,7 @@ describe("ListPage active filter chips", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("8"));
-    expect(localStorage.getItem("cove.cardSize.rawsegments")).toBe("8");
+    expect(localStorage.getItem("cove.cardSize")).toBe("8");
   });
 
   it("supports an extension saved-filter scope independently from entity filtering and card sizing", async () => {
@@ -1905,11 +1905,11 @@ describe("ListPage active filter chips", () => {
     expect(screen.getByTitle("Saved filters")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Filters/ })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("2.5"));
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("2.5");
+    expect(localStorage.getItem("cove.cardSize")).toBe("2.5");
   });
 
   it("ignores invalid saved-filter UI options", async () => {
-    localStorage.setItem("cove.cardSize.video", "2");
+    localStorage.setItem("cove.cardSize", "2");
     localStorage.setItem(
       "cove-default-filter-videos",
       JSON.stringify({
@@ -1943,7 +1943,7 @@ describe("ListPage active filter chips", () => {
 
     await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("2"));
     expect(onDisplayModeChange).not.toHaveBeenCalled();
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("2");
+    expect(localStorage.getItem("cove.cardSize")).toBe("2");
   });
 
   it("clamps a saved-filter zoom level to the entity card-size range", async () => {
@@ -1976,7 +1976,7 @@ describe("ListPage active filter chips", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("8"));
-    expect(localStorage.getItem("cove.cardSize.video")).toBe("8");
+    expect(localStorage.getItem("cove.cardSize")).toBe("8");
   });
 
   it("keeps an explicit URL display mode while applying the default zoom", async () => {
