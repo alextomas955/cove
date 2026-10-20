@@ -469,7 +469,7 @@ export function GlobalSearch({ navigate }: Props) {
           aria-activedescendant={activeResultIndex >= 0 ? `${searchId}-desktop-option-${activeResultIndex}` : undefined}
           aria-label="Search all..."
           placeholder="Search all..."
-          className="w-72 rounded-lg border border-border bg-input py-1.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+          className="w-56 lg:w-72 rounded-lg border border-border bg-input py-1.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
         />
       </div>
 

@@ -1,5 +1,13 @@
-import { Settings, BarChart3, Activity, HelpCircle, Menu, X } from "lucide-react";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Settings, BarChart3, Activity, HelpCircle, Menu, X, ChevronDown } from "lucide-react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { JobDrawer, useJobCount } from "./JobDrawer";
 import { GlobalSearch } from "./GlobalSearch";
 import { useRouteRegistry } from "../router/RouteRegistry";
@@ -11,6 +19,8 @@ import { openTutorialStoryboard } from "./TutorialStoryboardDialog";
 import { createManualOpenRequest } from "./ManualContext";
 import { buildRouteUrl, type Route } from "../router/location";
 import { BUILT_IN_NAVIGATION_ITEMS } from "./navigationItems";
+import { FloatingActionMenu } from "./FloatingActionMenu";
+import { countVisibleNavItems } from "./navOverflow";
 
 interface NavbarProps {
   currentPage: string;
@@ -31,6 +41,48 @@ const DETAIL_PARENT_PAGE: Record<string, string> = {
   group: "groups",
 };
 
+const NAV_LINK_CLASS =
+  "flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors cursor-pointer";
+
+/**
+ * Items of the "More" overflow menu. Mounts only once the floating menu has been positioned, so the
+ * mount effect can move focus into it; arrow keys, Home and End then move between the items.
+ */
+function NavOverflowMenuItems({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const menuItems = () => Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+
+  useEffect(() => {
+    const items = menuItems();
+    (items.find((item) => item.getAttribute("aria-current") === "page") ?? items[0])?.focus();
+  }, []);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = menuItems();
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    let next: number | null = null;
+    if (event.key === "ArrowDown") next = (index + 1) % items.length;
+    else if (event.key === "ArrowUp") next = (index - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    else if (event.key === "Escape" || event.key === "Tab") {
+      if (event.key === "Escape") event.preventDefault();
+      onClose();
+      return;
+    }
+    if (next === null || items.length === 0) return;
+    event.preventDefault();
+    items[next]?.focus();
+  };
+
+  return (
+    <div ref={listRef} onKeyDown={handleKeyDown}>
+      {children}
+    </div>
+  );
+}
+
 function shouldHandleClientNavigation(event: MouseEvent<HTMLAnchorElement>) {
   return (
     event.button === 0 &&
@@ -47,6 +99,11 @@ export function Navbar({ currentPage, navigate }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuToggleRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [visibleNavCount, setVisibleNavCount] = useState<number | null>(null);
+  const navLinksRef = useRef<HTMLDivElement>(null);
+  const navMeasureRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const jobCount = useJobCount();
   const { routes } = useRouteRegistry();
   const { config } = useAppConfig();
@@ -109,6 +166,50 @@ export function Navbar({ currentPage, navigate }: NavbarProps) {
       )[])
     : Array.from(allItemsMap.values());
 
+  // Keep as many desktop links inline as fit beside search and the actions; the rest go into the
+  // "More" menu. Widths come from an invisible copy of every link (plus the More button), so the
+  // decision does not depend on which items happen to be rendered inline right now.
+  const navItemsKey = allNavItems.map(({ page, label }) => `${page}\u0000${label}`).join("\u0001");
+  useLayoutEffect(() => {
+    const container = navLinksRef.current;
+    const measure = navMeasureRef.current;
+    if (!container || !measure) return;
+
+    const update = () => {
+      const availableWidth = container.clientWidth;
+      // Zero below the mobile breakpoint, where the desktop links are not displayed at all.
+      if (availableWidth <= 0) return;
+      const measured = Array.from(measure.children) as HTMLElement[];
+      const moreButton = measured.pop();
+      const gap = parseFloat(getComputedStyle(measure).columnGap) || 0;
+      setVisibleNavCount(
+        countVisibleNavItems(
+          measured.map((element) => element.getBoundingClientRect().width),
+          availableWidth,
+          moreButton?.getBoundingClientRect().width ?? 0,
+          gap,
+        ),
+      );
+    };
+
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [navItemsKey]);
+
+  const inlineNavItems = visibleNavCount === null ? allNavItems : allNavItems.slice(0, visibleNavCount);
+  const overflowNavItems = visibleNavCount === null ? [] : allNavItems.slice(visibleNavCount);
+  const activeInOverflow = overflowNavItems.some(({ page }) => page === activePage);
+  const showMoreMenu = moreMenuOpen && overflowNavItems.length > 0;
+
+  const closeMoreMenu = (restoreFocus: boolean) => {
+    setMoreMenuOpen(false);
+    if (restoreFocus) moreButtonRef.current?.focus();
+  };
+
   const handleAnchorNavigate = (event: MouseEvent<HTMLAnchorElement>, route: Route) => {
     if (!shouldHandleClientNavigation(event)) return;
     event.preventDefault();
@@ -161,15 +262,15 @@ export function Navbar({ currentPage, navigate }: NavbarProps) {
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          {/* Nav items - hidden on mobile */}
-          <div className="navbar-desktop-links min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
-            {allNavItems.map(({ page, label, icon: Icon }) => (
+          {/* Nav items - hidden on mobile; items that do not fit move into the More menu */}
+          <div ref={navLinksRef} className="navbar-desktop-links relative min-w-0 flex-1 items-center gap-0.5">
+            {inlineNavItems.map(({ page, label, icon: Icon }) => (
               <a
                 key={page}
                 href={buildRouteUrl({ page })}
                 onClick={(event) => handleAnchorNavigate(event, { page })}
                 aria-current={activePage === page ? "page" : undefined}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                className={`${NAV_LINK_CLASS} ${
                   activePage === page ? "text-accent" : "text-secondary hover:text-foreground"
                 }`}
               >
@@ -177,7 +278,74 @@ export function Navbar({ currentPage, navigate }: NavbarProps) {
                 {label}
               </a>
             ))}
+            {overflowNavItems.length > 0 && (
+              <button
+                ref={moreButtonRef}
+                type="button"
+                onClick={() => setMoreMenuOpen((open) => !open)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown" && !moreMenuOpen) {
+                    event.preventDefault();
+                    setMoreMenuOpen(true);
+                  }
+                }}
+                aria-haspopup="menu"
+                aria-expanded={showMoreMenu}
+                aria-label={activeInOverflow ? "More navigation, current page included" : "More navigation"}
+                className={`no-glass ${NAV_LINK_CLASS} ${
+                  activeInOverflow ? "text-accent" : "text-secondary hover:text-foreground"
+                }`}
+              >
+                More
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            )}
+            {/* Invisible copy of every link plus the More button, used only to measure widths */}
+            <div className="pointer-events-none invisible absolute inset-0 overflow-hidden" aria-hidden="true">
+              <div ref={navMeasureRef} className="flex w-max items-center gap-0.5">
+                {allNavItems.map(({ page, label, icon: Icon }) => (
+                  <span key={page} className={NAV_LINK_CLASS}>
+                    {Icon && <Icon className="w-4 h-4" />}
+                    {label}
+                  </span>
+                ))}
+                <span className={NAV_LINK_CLASS}>
+                  More
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </div>
+            </div>
           </div>
+          <FloatingActionMenu
+            open={showMoreMenu}
+            anchorRef={moreButtonRef}
+            onClose={() => closeMoreMenu(false)}
+            className="min-w-44 p-1"
+          >
+            <NavOverflowMenuItems onClose={() => closeMoreMenu(true)}>
+              {overflowNavItems.map(({ page, label, icon: Icon }) => (
+                <a
+                  key={page}
+                  role="menuitem"
+                  href={buildRouteUrl({ page })}
+                  onClick={(event) => {
+                    const clientNavigation = shouldHandleClientNavigation(event);
+                    handleAnchorNavigate(event, { page });
+                    if (clientNavigation) setMoreMenuOpen(false);
+                  }}
+                  aria-current={activePage === page ? "page" : undefined}
+                  className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-medium transition ${
+                    activePage === page
+                      ? "text-accent bg-accent/10"
+                      : "text-secondary hover:bg-card-hover hover:text-foreground focus-visible:bg-card-hover focus-visible:text-foreground focus-visible:outline-none"
+                  }`}
+                >
+                  {Icon && <Icon className="w-4 h-4" />}
+                  {label}
+                </a>
+              ))}
+            </NavOverflowMenuItems>
+          </FloatingActionMenu>
 
           {/* Spacer */}
           <div className="w-2 shrink-0" />
