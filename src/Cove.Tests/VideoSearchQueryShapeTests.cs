@@ -98,6 +98,46 @@ public sealed class VideoSearchQueryShapeTests
         Assert.Contains("TagId", sql, StringComparison.Ordinal);
     }
 
+    public static TheoryData<string, RelatedFilterCriterion<PerformerFilter>> ExcludesAllPerformerLinkCriteria => new()
+    {
+        {
+            "video occurrence tags",
+            new() { PerformerOccurrenceTagsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.ExcludesAll, Value = [21, 22] } }
+        },
+        {
+            "video performer ids",
+            new() { PerformerIdsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.ExcludesAll, Value = [11] } }
+        },
+        {
+            "audio occurrence tags",
+            new() { PerformerOccurrenceTagsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.ExcludesAll, Value = [21, 22] } }
+        },
+        {
+            "audio performer ids",
+            new() { PerformerIdsCriterion = new MultiIdCriterion { Modifier = CriterionModifier.ExcludesAll, Value = [11] } }
+        },
+    };
+
+    // Matching "all of" as a second copy of the links and excluding its members made PostgreSQL build that copy
+    // from every matching tag application's performer links before correlating it by host, which took seconds on
+    // a large library. Each link must be tested on its own, so only the host's link and the matching link appear.
+    [Theory]
+    [MemberData(nameof(ExcludesAllPerformerLinkCriteria))]
+    public async Task ExcludesAllPerformerLinkCriterion_TestsEachLinkWithoutASecondLinkCopy(
+        string criterionName,
+        RelatedFilterCriterion<PerformerFilter> criterion)
+    {
+        var host = criterionName.Split(' ')[0];
+        await using var db = CreatePostgresContext();
+        var sql = host == "video"
+            ? (await RelatedFilterQuery.ApplyToVideosAsync(db, db.Videos, criterion, TestContext.Current.CancellationToken))
+                .Select(video => video.Id).ToQueryString()
+            : (await RelatedFilterQuery.ApplyToAudiosAsync(db, db.Audios, criterion, TestContext.Current.CancellationToken))
+                .Select(audio => audio.Id).ToQueryString();
+
+        Assert.Equal(2, sql.Split($"FROM {host}_performers AS ").Length - 1);
+    }
+
     public static TheoryData<MultiIdCriterion, string> PerformerOccurrenceTagCriteria => new()
     {
         { new MultiIdCriterion { Modifier = CriterionModifier.IsNull }, "v.\"Id\" NOT IN (" },
