@@ -154,6 +154,46 @@ public class StablePaginationTests
         Assert.Equal(direction == SortDirection.Asc ? [2, 1] : new[] { 1, 2 }, ids);
     }
 
+    [Theory]
+    [InlineData("audios", 500, 500)]
+    [InlineData("audios", 1000, 1000)]
+    [InlineData("audios", 1001, ListPaging.MaxPerPage)]
+    [InlineData("texts", 500, 500)]
+    [InlineData("texts", 1000, 1000)]
+    [InlineData("texts", 1001, ListPaging.MaxPerPage)]
+    [InlineData("segments", 500, 500)]
+    [InlineData("segments", 1000, 1000)]
+    [InlineData("segments", 1001, ListPaging.MaxPerPage)]
+    [InlineData("faces", 500, 500)]
+    [InlineData("faces", 1000, 1000)]
+    [InlineData("faces", 1001, ListPaging.MaxPerPage)]
+    public async Task PageSizesOfferedByTheListToolbarAreHonoured(string entity, int perPage, int expectedItems)
+    {
+        // The list toolbar offers 500 and 1000 per page; these lists once returned only the first 250 (#698).
+        await using var context = new CoveContext(new DbContextOptionsBuilder<CoveContext>()
+            .UseInMemoryDatabase($"page-size-cap-{Guid.NewGuid():N}").Options);
+        if (entity == "segments")
+            context.Videos.Add(new Video { Id = 1, Title = "Segment host" });
+        const int seeded = 1001;
+        for (var id = 1; id <= seeded; id++)
+        {
+            context.Add<BaseEntity>(entity switch
+            {
+                "audios" => new Audio { Id = id, Title = $"Audio {id}" },
+                "texts" => new TextDocument { Id = id, Title = $"Text {id}" },
+                "segments" => new Segment { Id = id, Title = $"Segment {id}", HostType = SegmentHostType.Video, HostId = 1, StartSec = 1, EndSec = 2 },
+                "faces" => new Face { Id = id, Label = $"Face {id}" },
+                _ => throw new ArgumentOutOfRangeException(nameof(entity)),
+            });
+        }
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (items, total) = await FindAsync(context, entity, new FindFilter { Page = 1, PerPage = perPage });
+
+        Assert.Equal(seeded, total);
+        Assert.Equal(expectedItems, items.Length);
+    }
+
     private static async Task<(int[] Ids, int Total)> FindAsync(CoveContext context, string entity, FindFilter filter)
         => entity switch
         {

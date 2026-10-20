@@ -90,7 +90,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         CancellationToken ct = default)
     {
         var safePage = Math.Max(1, page);
-        var safePerPage = Math.Clamp(perPage, 1, 250);
+        var safePerPage = Math.Clamp(perPage, 1, ListPaging.MaxPerPage);
         var tagIdList = QueryParsing.ParseIntList(tagIds)?.ToList() ?? [];
         var performerIdList = QueryParsing.ParseIntList(performerIds)?.ToList() ?? [];
         var userId = principalAccessor?.Current?.UserId;

@@ -40,7 +40,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         CancellationToken ct = default)
     {
         page = Math.Max(1, page);
-        perPage = Math.Clamp(perPage, 1, 250);
+        perPage = Math.Clamp(perPage, 1, ListPaging.MaxPerPage);
         var findFilter = new FindFilter
         {
             Q = q,
@@ -66,7 +66,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
             return BadRequest(new { message = expressionError });
         var findFilter = req.FindFilter ?? new FindFilter();
         findFilter.Page = Math.Max(1, findFilter.Page);
-        findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, 250);
+        findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, ListPaging.MaxPerPage);
         var (items, totalCount) = await Audios.FindAsync(req.ObjectFilter, findFilter, ct, req.FilterExpression);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);

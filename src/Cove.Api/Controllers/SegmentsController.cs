@@ -79,7 +79,7 @@ public class SegmentsController(CoveContext db, ISegmentRepository segments, Seg
         // The library only ever lists video-hosted segments; another host type matches nothing.
         if (!string.IsNullOrWhiteSpace(hostType)
             && (!Enum.TryParse<SegmentHostType>(hostType, true, out var parsedHostType) || parsedHostType != SegmentHostType.Video))
-            return Ok(new PaginatedResponse<SegmentRecordDto>([], 0, Math.Max(page, 1), Math.Clamp(perPage, 1, 250), includeAggregate ? 0 : null));
+            return Ok(new PaginatedResponse<SegmentRecordDto>([], 0, Math.Max(page, 1), Math.Clamp(perPage, 1, ListPaging.MaxPerPage), includeAggregate ? 0 : null));
 
         // The flat query parameters are the original wire shape of the list; they map onto the same
         // SegmentFilter the POST /find body carries, so both go through one repository query.
@@ -130,7 +130,7 @@ public class SegmentsController(CoveContext db, ISegmentRepository segments, Seg
             ? (await segments.AggregateAsync(filter, findFilter, cancellationToken)).Duration
             : null;
 
-        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, Math.Max(page, 1), Math.Clamp(perPage, 1, 250), aggregateDuration));
+        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, Math.Max(page, 1), Math.Clamp(perPage, 1, ListPaging.MaxPerPage), aggregateDuration));
     }
 
     /// <summary>
@@ -150,7 +150,7 @@ public class SegmentsController(CoveContext db, ISegmentRepository segments, Seg
             filter.Ids = req.Ids;
 
         var (items, totalCount) = await segments.FindAsync(filter, findFilter, cancellationToken);
-        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, Math.Max(findFilter.Page, 1), Math.Clamp(findFilter.PerPage, 1, 250), null));
+        return Ok(new PaginatedResponse<SegmentRecordDto>(items.Select(item => MapToDto(item)).ToList(), totalCount, Math.Max(findFilter.Page, 1), Math.Clamp(findFilter.PerPage, 1, ListPaging.MaxPerPage), null));
     }
 
     [HttpPost("aggregate")]

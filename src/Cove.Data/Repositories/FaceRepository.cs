@@ -8,8 +8,8 @@ namespace Cove.Data.Repositories;
 
 public class FaceRepository : IFaceRepository
 {
-    // The faces list caps a page at 250 like the other entity lists.
-    private const int MaxPerPage = 250;
+    // The faces list caps a page like the other entity lists.
+    private const int MaxPerPage = ListPaging.MaxPerPage;
 
     private readonly CoveContext _db;
     public FaceRepository(CoveContext db) => _db = db;
