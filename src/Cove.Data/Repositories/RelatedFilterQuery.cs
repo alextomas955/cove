@@ -221,6 +221,31 @@ public static class RelatedFilterQuery
     private static IQueryable<T> Union<T>(IQueryable<T>? current, IQueryable<T> branch)
         => current == null ? branch : current.Union(branch);
 
+    // Excludes a link that meets every condition, testing the link itself. Matching the conditions as a second
+    // copy of the links and excluding its members let PostgreSQL build that copy from each matching tag
+    // application's performer links before correlating it by host, which took seconds on a large library.
+    private static IQueryable<TLink> WhereNotAll<TLink>(IQueryable<TLink> links, IEnumerable<Expression<Func<TLink, bool>>> conditions)
+    {
+        var link = Expression.Parameter(typeof(TLink), "link");
+        Expression? all = null;
+        foreach (var condition in conditions)
+        {
+            var body = new ParameterReplacer(condition.Parameters[0], link).Visit(condition.Body)!;
+            all = all == null ? body : Expression.AndAlso(all, body);
+        }
+
+        // Every link meets an empty set of conditions, so none survives.
+        return all == null
+            ? links.Where(_ => false)
+            : links.Where(Expression.Lambda<Func<TLink, bool>>(Expression.Not(all), link));
+    }
+
+    private sealed class ParameterReplacer(ParameterExpression from, ParameterExpression to) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node)
+            => node == from ? to : base.VisitParameter(node);
+    }
+
     private static bool HasMultiIdCondition(MultiIdCriterion? criterion)
         => criterion != null && (criterion.Modifier is CriterionModifier.IsNull or CriterionModifier.NotNull
             || criterion.Value.Any(id => id > 0)
@@ -269,12 +294,7 @@ public static class RelatedFilterQuery
             else if (criterion.Modifier == CriterionModifier.Excludes)
                 links = links.Where(link => !ids.Contains(link.PerformerId));
             else if (criterion.Modifier == CriterionModifier.ExcludesAll)
-            {
-                var matchingAll = links;
-                foreach (var id in ids)
-                    matchingAll = matchingAll.Where(link => link.PerformerId == id);
-                links = links.Where(link => !matchingAll.Any(match => match.VideoId == link.VideoId && match.PerformerId == link.PerformerId));
-            }
+                links = WhereNotAll(links, ids.Select(id => (Expression<Func<VideoPerformer, bool>>)(link => link.PerformerId == id)));
         }
 
         var excludedIds = criterion.Excludes?.Where(id => id > 0).Distinct().ToArray() ?? [];
@@ -329,16 +349,10 @@ public static class RelatedFilterQuery
                     && application.ContextId == link.PerformerId
                     && tagIds.Contains(application.TagId)));
             else if (criterion.Modifier == CriterionModifier.ExcludesAll)
-            {
-                var matchingAll = links;
-                foreach (var group in groups)
-                    matchingAll = matchingAll.Where(link => applications.Any(application =>
-                        application.HostId == link.VideoId
-                        && application.ContextId == link.PerformerId
-                        && group.Contains(application.TagId)));
-                links = links.Where(link => !matchingAll.Any(match =>
-                    match.VideoId == link.VideoId && match.PerformerId == link.PerformerId));
-            }
+                links = WhereNotAll(links, groups.Select(group => (Expression<Func<VideoPerformer, bool>>)(link => applications.Any(application =>
+                    application.HostId == link.VideoId
+                    && application.ContextId == link.PerformerId
+                    && group.Contains(application.TagId)))));
         }
 
         var excludedTagIds = criterion.Excludes?.Where(tagId => tagId > 0).Distinct().ToArray() ?? [];
@@ -501,12 +515,7 @@ public static class RelatedFilterQuery
             else if (criterion.Modifier == CriterionModifier.Excludes)
                 links = links.Where(link => !ids.Contains(link.PerformerId));
             else if (criterion.Modifier == CriterionModifier.ExcludesAll)
-            {
-                var matchingAll = links;
-                foreach (var id in ids)
-                    matchingAll = matchingAll.Where(link => link.PerformerId == id);
-                links = links.Where(link => !matchingAll.Any(match => match.AudioId == link.AudioId && match.PerformerId == link.PerformerId));
-            }
+                links = WhereNotAll(links, ids.Select(id => (Expression<Func<AudioPerformer, bool>>)(link => link.PerformerId == id)));
         }
 
         var excludedIds = criterion.Excludes?.Where(id => id > 0).Distinct().ToArray() ?? [];
@@ -561,16 +570,10 @@ public static class RelatedFilterQuery
                     && application.ContextId == link.PerformerId
                     && tagIds.Contains(application.TagId)));
             else if (criterion.Modifier == CriterionModifier.ExcludesAll)
-            {
-                var matchingAll = links;
-                foreach (var group in groups)
-                    matchingAll = matchingAll.Where(link => applications.Any(application =>
-                        application.HostId == link.AudioId
-                        && application.ContextId == link.PerformerId
-                        && group.Contains(application.TagId)));
-                links = links.Where(link => !matchingAll.Any(match =>
-                    match.AudioId == link.AudioId && match.PerformerId == link.PerformerId));
-            }
+                links = WhereNotAll(links, groups.Select(group => (Expression<Func<AudioPerformer, bool>>)(link => applications.Any(application =>
+                    application.HostId == link.AudioId
+                    && application.ContextId == link.PerformerId
+                    && group.Contains(application.TagId)))));
         }
 
         var excludedTagIds = criterion.Excludes?.Where(tagId => tagId > 0).Distinct().ToArray() ?? [];
