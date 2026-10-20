@@ -1,6 +1,8 @@
 using System.Globalization;
-using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Cove.ApiTests.Infrastructure;
+using Cove.Core.DTOs;
 
 namespace Cove.ApiTests.Tests.System;
 
@@ -18,8 +20,11 @@ public sealed class ConfigBackupRestoreApiTests(
         var configPath = Path.Combine(dataRoot, "cove-config.json");
         var configExisted = File.Exists(configPath);
         var priorConfig = configExisted ? await File.ReadAllBytesAsync(configPath, TestContext.Current.CancellationToken) : null;
-        var originalConfig = Encoding.UTF8.GetBytes($"{{\"apiTestMarker\":\"{Guid.NewGuid():N}\"}}");
-        var changedConfig = Encoding.UTF8.GetBytes($"{{\"apiTestMarker\":\"changed-{Guid.NewGuid():N}\"}}");
+        // Restoring applies the config to the running server, so the snapshots are the live config with
+        // one distinguishable setting rather than arbitrary JSON that would reset everything else.
+        var live = await AsUser().GetSystemConfigAsync(TestContext.Current.CancellationToken);
+        var originalConfig = SerializeConfig(live with { MaxConcurrentDownloads = live.MaxConcurrentDownloads + 1 });
+        var changedConfig = SerializeConfig(live with { MaxConcurrentDownloads = live.MaxConcurrentDownloads + 2 });
         var backupDirectory = Path.Combine(dataRoot, "backups");
 
         try
@@ -48,9 +53,13 @@ public sealed class ConfigBackupRestoreApiTests(
             await WaitForNextBackupTimestampAsync(backup.Timestamp);
             var beforeRestore = EnumerateConfigBackups(backupDirectory);
             var restored = await AsUser().RestoreConfigAsync(backup.BackupPath, TestContext.Current.CancellationToken);
-            restored.Message.Should().Be("Config restored successfully. Restart Cove for changes to take effect.");
+            restored.Message.Should().Be("Config restored and applied.");
             restored.BackupPath.Should().Be(backup.BackupPath);
+            restored.RestartRequired.Should().BeFalse();
+            restored.RestartRequiredSettings.Should().BeEmpty();
             (await File.ReadAllBytesAsync(configPath, TestContext.Current.CancellationToken)).Should().Equal(originalConfig);
+            (await AsUser().GetSystemConfigAsync(TestContext.Current.CancellationToken)).MaxConcurrentDownloads
+                .Should().Be(live.MaxConcurrentDownloads + 1);
 
             var afterRestore = EnumerateConfigBackups(backupDirectory);
             var preRestorePath = afterRestore.Except(beforeRestore, StringComparer.Ordinal).Should().ContainSingle().Which;
@@ -61,12 +70,27 @@ public sealed class ConfigBackupRestoreApiTests(
         }
         finally
         {
-            if (configExisted)
-                await File.WriteAllBytesAsync(configPath, priorConfig!, CancellationToken.None);
-            else if (File.Exists(configPath))
-                File.Delete(configPath);
+            try
+            {
+                await AsUser().SaveSystemConfigAsync(live, CancellationToken.None);
+            }
+            finally
+            {
+                if (configExisted)
+                    await File.WriteAllBytesAsync(configPath, priorConfig!, CancellationToken.None);
+                else if (File.Exists(configPath))
+                    File.Delete(configPath);
+            }
         }
     }
+
+    private static readonly JsonSerializerOptions ConfigJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
+
+    private static byte[] SerializeConfig(CoveConfigDto config)
+        => JsonSerializer.SerializeToUtf8Bytes(config, ConfigJsonOptions);
 
     private static string[] EnumerateConfigBackups(string directory)
         => Directory.Exists(directory)

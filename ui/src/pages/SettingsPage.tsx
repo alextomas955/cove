@@ -6289,9 +6289,10 @@ function DataManagementSection({ refetchJobs, mode }: { refetchJobs: () => void;
       if (!configRestoreConfirmed) throw new Error("Confirm that restoring will replace the current config first.");
       return database.restoreConfig(path);
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await queryClient.invalidateQueries();
-      window.location.reload();
+      // The restored config is already live. Keep the restart notice on screen instead of reloading it away.
+      if (!result.restartRequired) window.location.reload();
     },
   });
 
@@ -6562,12 +6563,17 @@ function DataManagementSection({ refetchJobs, mode }: { refetchJobs: () => void;
             />
             <TaskCard
               label="Restore Config"
-              description="Replace the current cove-config.json with a previously saved snapshot. Reloads Cove on success."
+              description="Replace the current cove-config.json with a previously saved snapshot and apply it. Reloads Cove on success."
               onRun={() => configRestoreMut.mutate()}
               isPending={configRestoreMut.isPending}
               statusMessage={
                 configRestoreMut.isSuccess
-                  ? { type: "success" as const, text: `Config restored from ${configRestorePath}. Reloading...` }
+                  ? {
+                      type: "success" as const,
+                      text: configRestoreMut.data.restartRequired
+                        ? `${configRestoreMut.data.message} Restored from ${configRestorePath}.`
+                        : `Config restored from ${configRestorePath}. Reloading...`,
+                    }
                   : configRestoreMut.isError
                     ? {
                         type: "error" as const,

@@ -18,6 +18,7 @@ public class DatabaseController(
     IBackupService backupService,
     CoveConfiguration config,
     ILogger<DatabaseController> logger,
+    ConfigService configService,
     NameRuleEnforcementService? nameRuleEnforcement = null,
     CustomFieldJsonIndexJobService? jsonIndexJobs = null) : ControllerBase
 {
@@ -286,9 +287,50 @@ public class DatabaseController(
             return BadRequest(new { message = "Config backup path is required." });
 
         logger.LogWarning("Config restore initiated from {Path}", request.BackupPath);
+
+        // Parse before copying so a file that is not a Cove config never replaces cove-config.json.
+        CoveConfigDto restored;
+        try
+        {
+            restored = await configService.ReadConfigFileAsync(request.BackupPath, ct);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { message = $"Config backup not found: {request.BackupPath}" });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        var previous = configService.GetConfig();
         await backupService.RestoreConfigBackupAsync(request.BackupPath, ct);
-        return Ok(new { message = "Config restored successfully. Restart Cove for changes to take effect.", backupPath = request.BackupPath });
+        // Apply to the running process the same way startup applies cove-config.json, so the restore
+        // takes effect now and later saves do not write the old in-memory config back over it.
+        var applied = await configService.ApplyWithoutSavingAsync(restored);
+
+        var restartRequiredSettings = GetRestartRequiredSettings(previous, applied);
+        var message = restartRequiredSettings.Count == 0
+            ? "Config restored and applied."
+            : $"Config restored and applied. Restart Cove for the changed {string.Join(" and ", restartRequiredSettings)} setting{(restartRequiredSettings.Count == 1 ? "" : "s")} to take effect.";
+        return Ok(new RestoreConfigResultDto(
+            message,
+            request.BackupPath,
+            restartRequiredSettings.Count > 0,
+            restartRequiredSettings));
     }
+
+    /// <summary>Settings the running process only reads at startup (the listener binding).</summary>
+    internal static IReadOnlyList<string> GetRestartRequiredSettings(CoveConfigDto previous, CoveConfigDto applied)
+    {
+        var settings = new List<string>();
+        if (!string.Equals(previous.Host, applied.Host, StringComparison.OrdinalIgnoreCase))
+            settings.Add("host");
+        if (previous.Port != applied.Port)
+            settings.Add("port");
+        return settings;
+    }
+
 
     [HttpGet("config/latest-backup")]
     [RequiresPermission(Permissions.SystemBackup)]
@@ -298,3 +340,9 @@ public class DatabaseController(
         return Ok(new { path });
     }
 }
+
+public sealed record RestoreConfigResultDto(
+    string Message,
+    string BackupPath,
+    bool RestartRequired,
+    IReadOnlyList<string> RestartRequiredSettings);
