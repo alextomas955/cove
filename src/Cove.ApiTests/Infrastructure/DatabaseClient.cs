@@ -542,6 +542,20 @@ public sealed class DatabaseClient
             .ExecuteUpdateAsync(update => update.SetProperty(video => video.PrimaryFileId, fileId), cancellationToken);
     }
 
+    /// <summary>
+    /// Moves an entity's Updated date into the past so a later write that bumps it is observable
+    /// without depending on clock resolution between two requests.
+    /// </summary>
+    public async Task BackdateUpdatedAtAsync<TEntity>(int id, DateTime updatedAt, CancellationToken cancellationToken = default)
+        where TEntity : BaseEntity
+    {
+        await using var db = CreateCoveContext();
+        await db.Set<TEntity>()
+            .IgnoreQueryFilters()
+            .Where(entity => entity.Id == id)
+            .ExecuteUpdateAsync(update => update.SetProperty(entity => entity.UpdatedAt, updatedAt), cancellationToken);
+    }
+
     public async Task<int> CountVideoShotSetsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = CreateCoveContext();
