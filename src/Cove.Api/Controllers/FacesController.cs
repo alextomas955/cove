@@ -1518,10 +1518,7 @@ public class FacesController(
             .ToArray();
         if (videoIds.Length > 0)
         {
-            videoTitles = await db.Videos
-                .AsNoTracking()
-                .Where(video => videoIds.Contains(video.Id))
-                .ToDictionaryAsync(video => video.Id, video => video.Title, cancellationToken);
+            videoTitles = await LoadVideoDisplayTitlesAsync(videoIds, cancellationToken);
         }
 
         Dictionary<int, string?> imageTitles = [];
@@ -1532,10 +1529,7 @@ public class FacesController(
             .ToArray();
         if (imageIds.Length > 0)
         {
-            imageTitles = await db.Images
-                .AsNoTracking()
-                .Where(image => imageIds.Contains(image.Id))
-                .ToDictionaryAsync(image => image.Id, image => image.Title, cancellationToken);
+            imageTitles = await LoadImageDisplayTitlesAsync(imageIds, cancellationToken);
         }
 
         return appearances
@@ -2449,10 +2443,7 @@ public class FacesController(
             .ToArray();
         if (videoIds.Length > 0)
         {
-            videoTitles = await db.Videos
-                .AsNoTracking()
-                .Where(video => videoIds.Contains(video.Id))
-                .ToDictionaryAsync(video => video.Id, video => video.Title, cancellationToken);
+            videoTitles = await LoadVideoDisplayTitlesAsync(videoIds, cancellationToken);
         }
 
         Dictionary<int, string?> imageTitles = [];
@@ -2462,10 +2453,7 @@ public class FacesController(
             .ToArray();
         if (imageIds.Length > 0)
         {
-            imageTitles = await db.Images
-                .AsNoTracking()
-                .Where(image => imageIds.Contains(image.Id))
-                .ToDictionaryAsync(image => image.Id, image => image.Title, cancellationToken);
+            imageTitles = await LoadImageDisplayTitlesAsync(imageIds, cancellationToken);
         }
 
         var items = groupedDetections
@@ -2510,6 +2498,36 @@ public class FacesController(
         var resolved = values.Where(static value => value.HasValue).Select(static value => value!.Value).ToArray();
         return resolved.Length == 0 ? null : resolved.Max();
     }
+
+    // Untitled media falls back to its file basename, as the media cards do; the caller's
+    // "Video {id}" / "Image {id}" fallback is left for hosts with no file at all.
+    private async Task<Dictionary<int, string?>> LoadVideoDisplayTitlesAsync(int[] videoIds, CancellationToken cancellationToken)
+        => (await db.Videos
+                .AsNoTracking()
+                .Where(video => videoIds.Contains(video.Id))
+                .Select(video => new
+                {
+                    video.Id,
+                    video.Title,
+                    Basename = video.PrimaryFile != null
+                        ? video.PrimaryFile.Basename
+                        : video.Files.OrderBy(file => file.Id).Select(file => file.Basename).FirstOrDefault(),
+                })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(video => video.Id, video => Clean(video.Title) ?? Clean(video.Basename));
+
+    private async Task<Dictionary<int, string?>> LoadImageDisplayTitlesAsync(int[] imageIds, CancellationToken cancellationToken)
+        => (await db.Images
+                .AsNoTracking()
+                .Where(image => imageIds.Contains(image.Id))
+                .Select(image => new
+                {
+                    image.Id,
+                    image.Title,
+                    Basename = image.Files.OrderBy(file => file.Id).Select(file => file.Basename).FirstOrDefault(),
+                })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(image => image.Id, image => Clean(image.Title) ?? Clean(image.Basename));
 
     private static string ResolveAppearanceTitle(
         FaceAppearance appearance,
