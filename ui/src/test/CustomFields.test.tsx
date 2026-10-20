@@ -266,6 +266,54 @@ describe("long text custom fields", () => {
   });
 });
 
+describe("text custom field display", () => {
+  const textDefinition: CustomFieldDefinition = {
+    ...jsonDefinition,
+    key: "summary",
+    label: "Summary",
+    type: "text",
+    filterable: true,
+    sortable: true,
+  };
+  const codeDefinition: CustomFieldDefinition = { ...textDefinition, key: "code", label: "Code", displayOrder: 1 };
+
+  function cellFor(label: string) {
+    const cell = screen.getByText(label).parentElement!;
+    const value = cell.querySelector(":scope > div")!;
+    return { cell, value };
+  }
+
+  it("lets long text values wrap across the full card width instead of clipping", () => {
+    const longValue = `${"Unbroken".repeat(20)} and then a sentence that keeps going`;
+    renderWithDefinition(
+      <CustomFieldsDisplay customFields={{ summary: longValue, code: "ABC-123" }} entityType="video" />,
+      [textDefinition, codeDefinition],
+    );
+
+    const summary = cellFor("Summary");
+    expect(summary.cell).toHaveClass("min-w-0", "col-span-2");
+    expect(summary.value).toHaveClass("min-w-0", "whitespace-pre-wrap", "[overflow-wrap:anywhere]");
+    expect(summary.value).toHaveTextContent(longValue);
+
+    const code = cellFor("Code");
+    expect(code.cell).toHaveClass("min-w-0");
+    expect(code.cell).not.toHaveClass("col-span-2");
+    expect(code.value).toHaveClass("[overflow-wrap:anywhere]");
+  });
+
+  it("keeps line breaks in text values and gives them the full width", () => {
+    const value = "Line one\nLine two";
+    renderWithDefinition(<CustomFieldsDisplay customFields={{ summary: value }} entityType="video" />, [
+      textDefinition,
+    ]);
+
+    const summary = cellFor("Summary");
+    expect(summary.cell).toHaveClass("col-span-2");
+    expect(summary.value).toHaveClass("whitespace-pre-wrap");
+    expect(summary.value.textContent).toBe(value);
+  });
+});
+
 describe("timestamp custom fields", () => {
   const timestampDefinition: CustomFieldDefinition = {
     ...jsonDefinition,

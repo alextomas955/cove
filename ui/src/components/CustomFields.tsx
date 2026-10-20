@@ -45,12 +45,10 @@ export function CustomFieldsDisplay({
         {entries.map(({ key, definition, value }) => {
           const label = definition?.label || key;
           const urlValue = definition?.type === "url" && typeof value === "string" ? value.trim() : "";
+          const plainText = isPlainTextDisplay(definition);
 
           return (
-            <div
-              key={key}
-              className={`flex flex-col ${definition?.type === "json" || definition?.type === "longText" ? "col-span-2" : ""}`}
-            >
+            <div key={key} className={`flex min-w-0 flex-col ${spansFullWidth(definition, value) ? "col-span-2" : ""}`}>
               <span className="text-muted text-xs">{label}</span>
               {urlValue ? (
                 <a href={urlValue} target="_blank" rel="noreferrer" className="text-accent hover:underline break-all">
@@ -58,7 +56,7 @@ export function CustomFieldsDisplay({
                 </a>
               ) : (
                 <div
-                  className={`text-foreground break-words ${definition?.type === "longText" ? "whitespace-pre-wrap" : ""}`}
+                  className={`min-w-0 text-foreground ${plainText ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "break-words"}`}
                 >
                   <CustomFieldDisplayValue definition={definition} value={value} />
                 </div>
@@ -955,6 +953,21 @@ function getDisplayEntries(customFields: Record<string, unknown> | undefined, de
         entry.value !== null &&
         !(typeof entry.value === "string" && entry.value.trim() === ""),
     );
+}
+
+// Text longer than this reads as prose rather than a short attribute, so it gets the full card width.
+const FULL_WIDTH_TEXT_LENGTH = 40;
+
+function isPlainTextDisplay(definition: CustomFieldDefinition | undefined) {
+  return definition?.type !== "json" && !(definition && isEntityReferenceType(definition.type));
+}
+
+function spansFullWidth(definition: CustomFieldDefinition | undefined, value: unknown) {
+  if (definition?.type === "json" || definition?.type === "longText") return true;
+  if (!isPlainTextDisplay(definition)) return false;
+
+  const text = formatCustomFieldValue(value, definition?.type);
+  return text.length > FULL_WIDTH_TEXT_LENGTH || text.includes("\n");
 }
 
 function CustomFieldDisplayValue({
