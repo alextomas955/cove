@@ -902,6 +902,45 @@ describe("VideoTaggerReview items the library does not have", () => {
     expect(screen.getByRole("button", { name: "Link" })).toBeEnabled();
   });
 
+  it("offers no performer link unless the source can link one", () => {
+    renderRow(leftOut(), "performers");
+    expect(screen.getByText("Newcomer")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Link Performers:/ })).not.toBeInTheDocument();
+  });
+
+  it("links a new performer to a library one by its choice key, with no alias to remember", async () => {
+    const onLinkPerformer = vi.fn();
+    renderRow(leftOut({ onLinkPerformer }), "performers");
+    await userEvent.click(screen.getByRole("button", { name: "Link Performers: Newcomer to a library performer" }));
+    expect(screen.getByText("Use a performer you already have for “Newcomer”")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/as an alias/)).not.toBeInTheDocument();
+    expect(screen.getByText(/the performer is linked to StashDB/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pick Edging" }));
+    await userEvent.click(screen.getByRole("button", { name: "Link" }));
+    expect(onLinkPerformer).toHaveBeenCalledWith("remote-performer:p-new", { id: 7, label: "Edging" });
+    expect(screen.queryByRole("button", { name: "Link" })).not.toBeInTheDocument();
+  });
+
+  it("shows a linked performer as the library performer it uses, with the scraped name on hover", () => {
+    const linkedCandidate = { ...result.performerCandidates[1], existsLocally: true, localId: 7, localName: "Edging" };
+    renderRow(
+      leftOut({
+        onLinkPerformer: vi.fn(),
+        linkedPerformerLabels: { "remote-performer:p-new": "Jane D. (from A)" },
+        performerChoices: [
+          { key: "remote-performer:p-known", label: "Known Performer", candidate: result.performerCandidates[0] },
+          { key: "remote-performer:p-new", label: "Newcomer", candidate: linkedCandidate },
+        ],
+        performerActions: { "remote-performer:p-known": "include", "remote-performer:p-new": "include" },
+      }),
+      "performers",
+    );
+    const chip = screen.getByText("Jane D. (from A)").closest("[data-state]")!;
+    expect(chip).toHaveAttribute("data-state", "added");
+    expect(chip.querySelector("[title]")?.getAttribute("title")).toContain("Newcomer");
+    expect(screen.queryByText("Not in your library")).not.toBeInTheDocument();
+  });
+
   it("closes the link panel on Escape and hands focus back to the link button", async () => {
     renderRow(leftOut());
     const linkButton = screen.getByRole("button", { name: "Link Tags: Brand new tag to a library tag" });

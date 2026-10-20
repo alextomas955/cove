@@ -341,6 +341,116 @@ public sealed class MetadataServerServiceTests
         Assert.Contains(video.VideoPerformers, link => link.Performer?.Name == "Jane Doe");
     }
 
+    // A performer imported from another server, spelled differently there, matches nothing on this one.
+    // Linking it in the review must use it rather than create a duplicate, and link it to this server
+    // so the next video from here finds it by remote id on its own.
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_UsesALinkedPerformerAndRecordsTheRemoteId()
+    {
+        await using var context = CreateContext();
+        var existing = new Performer { Name = "Jane D.", Disambiguation = "from server A" };
+        existing.RemoteIds.Add(new PerformerRemoteId { Endpoint = "https://server-a.example/graphql", RemoteId = "a-performer-1" });
+        var video = new Video { Title = "Original Video" };
+        var nextVideo = new Video { Title = "Another Video" };
+        context.AddRange(existing, video, nextVideo);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        var result = await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                SetStudio = false,
+                SetTags = false,
+                PerformerOverrides =
+                [
+                    new MetadataServerVideoEntityOverrideDto
+                    {
+                        RemoteId = "remote-performer-1",
+                        Name = "Jane Doe",
+                        Action = "existing",
+                        LocalId = existing.Id,
+                    },
+                ],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.Imported);
+        var linked = Assert.Single(video.VideoPerformers);
+        Assert.Equal(existing.Id, linked.PerformerId);
+        Assert.Equal(1, await context.Performers.CountAsync(TestContext.Current.CancellationToken));
+        var remoteIds = await context.Set<PerformerRemoteId>()
+            .Where(id => id.PerformerId == existing.Id)
+            .Select(id => new { id.Endpoint, id.RemoteId })
+            .ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Contains(new { Endpoint = "https://server-a.example/graphql", RemoteId = "a-performer-1" }, remoteIds);
+        Assert.Contains(new { Endpoint, RemoteId = "remote-performer-1" }, remoteIds);
+        // Linking is not editing: the performer keeps its own name and disambiguation.
+        Assert.Equal("Jane D.", existing.Name);
+        Assert.Equal("from server A", existing.Disambiguation);
+
+        // The next video from this server matches the performer without any override.
+        context.ChangeTracker.Clear();
+        service.ResetTrackedIdentityState();
+        var next = await context.Videos.Include(item => item.VideoPerformers).SingleAsync(item => item.Id == nextVideo.Id, TestContext.Current.CancellationToken);
+        var nextResult = await service.MergeVideoWithWarningsAsync(
+            next,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto { SetCoverImage = false, SetStudio = false, SetTags = false },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(nextResult.Imported);
+        Assert.Equal(existing.Id, Assert.Single(next.VideoPerformers).PerformerId);
+        Assert.Equal(1, await context.Performers.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    // A performer that already has a link for this server keeps it when linked to a different remote entry.
+    [Fact]
+    public async Task MergeVideoWithWarningsAsync_KeepsALinkedPerformersExistingRemoteIdForTheServer()
+    {
+        await using var context = CreateContext();
+        var existing = new Performer { Name = "Jane D." };
+        existing.RemoteIds.Add(new PerformerRemoteId { Endpoint = Endpoint, RemoteId = "another-remote-performer" });
+        var video = new Video { Title = "Original Video" };
+        context.AddRange(existing, video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var httpClient = new HttpClient(new FixtureMetadataServerHandler(_ => GraphQlData($$"""
+            "findVideo": {{RemoteVideoJson}}
+            """)));
+        var service = CreateService(context, httpClient);
+
+        await service.MergeVideoWithWarningsAsync(
+            video,
+            Endpoint,
+            "remote-video-1",
+            new MetadataServerVideoImportRequestDto
+            {
+                SetCoverImage = false,
+                SetStudio = false,
+                SetTags = false,
+                PerformerOverrides =
+                [
+                    new MetadataServerVideoEntityOverrideDto { RemoteId = "remote-performer-1", Name = "Jane Doe", Action = "existing", LocalId = existing.Id },
+                ],
+            },
+            CancellationToken.None);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(existing.Id, Assert.Single(video.VideoPerformers).PerformerId);
+        Assert.Equal("another-remote-performer", Assert.Single(existing.RemoteIds).RemoteId);
+    }
+
     [Fact]
     public async Task MergeVideoWithWarningsAsync_KeepsExistingPerformersWhenTheGenderFilterAdmitsNothing()
     {

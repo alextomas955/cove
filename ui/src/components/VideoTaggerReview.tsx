@@ -111,6 +111,14 @@ export interface TaggerReviewInput {
    */
   onLinkTag?: (scrapedName: string, tag: EntityReferenceOption) => Promise<void>;
   /**
+   * Uses a library performer for a scraped one the library lacks, by the choice's key, instead of creating
+   * it. The apply then links the performer to the source, so its later matches find it. Absent where the
+   * source has no remote ids to link (a scraper), and the review then offers no performer link.
+   */
+  onLinkPerformer?: (choiceKey: string, performer: EntityReferenceOption) => void;
+  /** The library performer each linked choice uses, as it reads, by choice key. */
+  linkedPerformerLabels?: Record<string, string>;
+  /**
    * Sets a collection's mode directly, for a preset that selects exactly what is already selected
    * (nothing incoming to add, say): the selection cannot say which of the equal presets was meant.
    */
@@ -368,7 +376,9 @@ function performerItems(input: TaggerReviewInput) {
       choice.candidate.existsLocally && !choice.candidate.disambiguation?.trim()
         ? choice.candidate.localName
         : undefined;
-    const label = onVideo ? performerIdentity(onVideo) : localName || choice.label;
+    const label = onVideo
+      ? performerIdentity(onVideo)
+      : input.linkedPerformerLabels?.[choice.key] || localName || choice.label;
     const scrapedAs = relationKey(label) !== relationKey(choice.label) ? [choice.label] : undefined;
     return {
       ...item(relationKey(choice.key), label, !choice.candidate.existsLocally, scrapedAs, localId),
@@ -458,8 +468,8 @@ export function selectorChange(items: ReviewItem[], selected: string[], ids: num
  * The relationship row as the video's edit form shows it: the app's selector with chips, x buttons
  * and search-to-add for the current items and anything added through search, and chip strips for
  * the scraped items: those the library has (green, struck through when left out), and apart from
- * them those it does not (amber when they will be created, plain with + and, for tags, a link action
- * when not). While the collection is switched off the scraped strips are hidden.
+ * them those it does not (amber when they will be created, plain with + when not, and a link action
+ * where the caller can link one). While the collection is switched off the scraped strips are hidden.
  */
 function RelationshipEditor({
   entityType,
@@ -472,6 +482,8 @@ function RelationshipEditor({
   incomingHidden,
   waiting = false,
   onLinkTag,
+  onLinkPerformer,
+  linkNote,
   tagOptions,
 }: {
   entityType: "tag" | "performer";
@@ -485,6 +497,10 @@ function RelationshipEditor({
   /** The library has not said yet which scraped items it has, so none is called new or matched. */
   waiting?: boolean;
   onLinkTag?: TaggerReviewInput["onLinkTag"];
+  /** Uses a library performer for a scraped item the library lacks, by the item's id. */
+  onLinkPerformer?: (itemId: string, performer: EntityReferenceOption) => void;
+  /** What a performer link does beyond this video, said in the link panel. */
+  linkNote?: string;
   /** The video's tags as options, so the current tag chips carry their colors. */
   tagOptions?: EntityReferenceOption[];
 }) {
@@ -526,6 +542,7 @@ function RelationshipEditor({
   // While the library has not said, the scraped items stand together, with nothing called new or matched.
   const matched = waiting ? scraped : scraped.filter((entry) => !entry.isNew);
   const unknown = waiting ? [] : scraped.filter((entry) => entry.isNew);
+  const canLink = Boolean(entityType === "tag" ? onLinkTag : onLinkPerformer);
   const [linking, setLinking] = useState<ReviewItem | null>(null);
   const linkIdPrefix = useId();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -569,14 +586,14 @@ function RelationshipEditor({
         >
           {included ? <X className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
         </button>
-        {isNew && onLinkTag ? (
+        {isNew && canLink ? (
           <button
             type="button"
             id={`${linkIdPrefix}-link-${entry.id}`}
             disabled={disabled}
             onClick={() => setLinking(entry)}
-            aria-label={`Link ${label}: ${entry.label} to a library tag`}
-            title={`Use a tag you already have for “${entry.label}”`}
+            aria-label={`Link ${label}: ${entry.label} to a library ${entityType}`}
+            title={`Use a ${entityType} you already have for “${entry.label}”`}
             className="inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
           >
             <Link2 className="h-2.5 w-2.5" />
@@ -630,6 +647,20 @@ function RelationshipEditor({
           <div className="flex flex-wrap gap-1.5">{unknown.map(chip)}</div>
         </div>
       ) : null}
+      {linking && onLinkPerformer && unknown.some((entry) => entry.id === linking.id) ? (
+        <ScrapedNameLinkPanel
+          entityType="performer"
+          scrapedName={linking.label}
+          disabled={disabled}
+          note={linkNote}
+          onCancel={() => closeLink(linking)}
+          onLink={async (performer) => {
+            // The scraped performer is the library one from now on, matched like any other, so it is not new.
+            onLinkPerformer(linking.id, performer);
+            closeLink(linking);
+          }}
+        />
+      ) : null}
       {linking && onLinkTag && unknown.some((entry) => entry.id === linking.id) ? (
         <ScrapedNameLinkPanel
           entityType="tag"
@@ -669,23 +700,28 @@ function RelationshipEditor({
 }
 
 /**
- * Links a scraped tag or studio that matched nothing to one the library already has. Remembering the
- * scraped name as an alias changes the library entity, not just this video, so it takes effect at once and
- * every later scrape matches it; without that, the library one is used for this video alone.
+ * Links a scraped tag, studio or performer that matched nothing to one the library already has. Remembering
+ * a tag's or studio's scraped name as an alias changes the library entity, not just this video, so it takes
+ * effect at once and every later scrape matches it; without that, the library one is used for this video
+ * alone. A performer is told apart by its remote id rather than its name, so it offers no alias, and `note`
+ * says what the link does instead.
  */
 export function ScrapedNameLinkPanel({
   entityType,
   scrapedName,
   disabled,
+  note,
   onLink,
   onCancel,
 }: {
-  entityType: "tag" | "studio";
+  entityType: "tag" | "studio" | "performer";
   scrapedName: string;
   disabled: boolean;
+  note?: string;
   onLink: (entity: EntityReferenceOption, rememberAlias: boolean) => Promise<void>;
   onCancel: () => void;
 }) {
+  const offersAlias = entityType !== "performer";
   const inputId = useId();
   const [entity, setEntity] = useState<EntityReferenceOption | null>(null);
   const [rememberAlias, setRememberAlias] = useState(true);
@@ -697,7 +733,7 @@ export function ScrapedNameLinkPanel({
     setBusy(true);
     setError(null);
     try {
-      await onLink(entity, rememberAlias);
+      await onLink(entity, offersAlias && rememberAlias);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Cove couldn’t save the alias. Please try again.");
       setBusy(false);
@@ -721,26 +757,30 @@ export function ScrapedNameLinkPanel({
         value={entity?.id}
         onChange={(_, option) => setEntity(option ?? null)}
         inputId={inputId}
-        placeholder={entityType === "tag" ? "Search tags..." : "Search studios..."}
+        placeholder={`Search ${entityType}s...`}
         allowCreate={false}
         creatable={false}
         disabled={disabled || busy}
       />
-      <label className="flex items-center gap-2 text-xs text-foreground">
-        <input
-          type="checkbox"
-          checked={rememberAlias}
-          onChange={(event) => setRememberAlias(event.target.checked)}
-          disabled={disabled || busy}
-          aria-describedby={rememberAlias ? `${inputId}-note` : undefined}
-          className="rounded border-border"
-        />
-        Remember “{scrapedName}” as an alias{entity ? ` of ${entity.label}` : ""}
-      </label>
-      {rememberAlias ? (
+      {offersAlias ? (
+        <label className="flex items-center gap-2 text-xs text-foreground">
+          <input
+            type="checkbox"
+            checked={rememberAlias}
+            onChange={(event) => setRememberAlias(event.target.checked)}
+            disabled={disabled || busy}
+            aria-describedby={rememberAlias ? `${inputId}-note` : undefined}
+            className="rounded border-border"
+          />
+          Remember “{scrapedName}” as an alias{entity ? ` of ${entity.label}` : ""}
+        </label>
+      ) : null}
+      {offersAlias && rememberAlias ? (
         <p id={`${inputId}-note`} className="text-[11px] text-muted">
           The alias is saved to the {entityType} right away, even if you don’t apply.
         </p>
+      ) : !offersAlias && note ? (
+        <p className="text-[11px] text-muted">{note}</p>
       ) : null}
       {error ? (
         <p role="alert" className="text-[11px] text-red-400">
@@ -904,6 +944,7 @@ export function buildTaggerReview(input: TaggerReviewInput) {
     incoming: ReviewItem[],
     included: string[],
     edits: TaggerRelationshipEdits | undefined,
+    choiceKeys?: Map<string, string>,
   ) => {
     const mode = input.collectionModes[key] ?? "merge";
     const field = listField(key, label, mode);
@@ -922,6 +963,19 @@ export function buildTaggerReview(input: TaggerReviewInput) {
         incomingHidden={mode === "skip"}
         waiting={Boolean(field.waiting)}
         onLinkTag={entityType === "tag" ? input.onLinkTag : undefined}
+        onLinkPerformer={
+          entityType === "performer" && input.onLinkPerformer
+            ? (itemId, performer) => {
+                const choiceKey = choiceKeys?.get(itemId);
+                if (choiceKey) input.onLinkPerformer?.(choiceKey, performer);
+              }
+            : undefined
+        }
+        linkNote={
+          entityType === "performer"
+            ? `When you apply, the performer is linked to ${input.sourceName}, so its later matches find it.`
+            : undefined
+        }
         tagOptions={entityType === "tag" ? input.video.tags.map(toTagOption) : undefined}
       />
     );
@@ -943,6 +997,7 @@ export function buildTaggerReview(input: TaggerReviewInput) {
       performers.incoming,
       performers.included,
       input.performerEdits,
+      performers.choiceKeys,
     );
   }
   if (input.showTags) {
