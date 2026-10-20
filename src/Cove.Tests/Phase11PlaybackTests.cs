@@ -60,7 +60,7 @@ public sealed class Phase11PlaybackTests
         await scope.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
         var groupId = await scope.Context.Groups.Select(group => group.Id).SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        scope.PrincipalAccessor.Set(CreatePrincipal(11));
+        scope.PrincipalAccessor.Set(CreatePrincipal(11, Permissions.GroupsRead));
         var controller = CreateController(scope.Context, scope.PrincipalAccessor);
         var sessionId = Guid.NewGuid();
 
@@ -99,6 +99,55 @@ public sealed class Phase11PlaybackTests
     }
 
     [Fact]
+    public async Task PlaybackController_RejectsNonPlayableHostTypesEvenWithTheirReadPermission()
+    {
+        await using var scope = await CreateContextAsync();
+        var performer = new Performer { Name = "Not playable" };
+        scope.Context.Performers.Add(performer);
+        await scope.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        scope.PrincipalAccessor.Set(CreatePrincipal(15, Permissions.PerformersRead));
+        var controller = CreateController(scope.Context, scope.PrincipalAccessor);
+
+        // Rejected before any lookup by id, so an existing and a missing id get the same answer.
+        foreach (var (hostType, hostId) in new[] { ("performer", performer.Id), ("performer", int.MaxValue), ("search", 0), ("collection", 0) })
+        {
+            Assert.IsType<BadRequestObjectResult>(await controller.RecordIntervals(new PlaybackIntervalsRequestDto(
+                hostType,
+                hostId,
+                Guid.NewGuid(),
+                60.0,
+                5.0,
+                "active",
+                [new PlaybackIntervalInputDto(0.0, 5.0)]), CancellationToken.None));
+        }
+
+        Assert.False(await scope.Context.PlaybackSessions.IgnoreQueryFilters().AnyAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task PlaybackController_RequiresGroupsReadForCompilationSessions()
+    {
+        await using var scope = await CreateContextAsync();
+        var group = new Group { Name = "Compilation without access" };
+        scope.Context.Groups.Add(group);
+        await scope.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        scope.PrincipalAccessor.Set(CreatePrincipal(16));
+        var controller = CreateController(scope.Context, scope.PrincipalAccessor);
+
+        Assert.IsType<ForbidResult>(await controller.RecordIntervals(new PlaybackIntervalsRequestDto(
+            "group",
+            group.Id,
+            Guid.NewGuid(),
+            60.0,
+            5.0,
+            "active",
+            [new PlaybackIntervalInputDto(0.0, 5.0)]), CancellationToken.None));
+        Assert.False(await scope.Context.PlaybackSessions.IgnoreQueryFilters().AnyAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task PlaybackController_PersistsPlaybackContextOnSessionAndIntervals()
     {
         await using var scope = await CreateContextAsync();
@@ -107,7 +156,7 @@ public sealed class Phase11PlaybackTests
         scope.Context.AddRange(video, group);
         await scope.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        scope.PrincipalAccessor.Set(CreatePrincipal(12));
+        scope.PrincipalAccessor.Set(CreatePrincipal(12, Permissions.GroupsRead));
         var controller = CreateController(scope.Context, scope.PrincipalAccessor);
         var sessionId = Guid.NewGuid();
         var context = JsonSerializer.SerializeToElement(new { itemIndex = 3, source = "test" });

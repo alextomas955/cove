@@ -17,28 +17,27 @@ public class PlaybackController(IUserEngagementService engagementService, ICurre
     {
         if (principalAccessor.Current?.UserId is null)
             return Forbid();
-        if (!InteractionValueMapper.TryParseHostType(dto.HostType, out var hostType))
+        if (!InteractionValueMapper.TryParseHostType(dto.HostType, out var hostType)
+            || GetPlaybackReadPermission(hostType) is not { } permission)
             return BadRequest("Unsupported host type.");
-        if (!HasInteractionPermission(hostType))
+        if (principalAccessor.Current?.Has(permission) != true)
             return Forbid();
 
         var recorded = await engagementService.RecordPlaybackIntervalsAsync(dto, ct);
         return recorded ? NoContent() : NotFound();
     }
 
-    private bool HasInteractionPermission(InteractionHostType hostType)
+    // Only hosts that can actually be played are accepted; anything else, including a host type added to the
+    // enum later without a mapping here, is rejected as unsupported before any lookup by id. Group is the
+    // compilation player's session host.
+    private static string? GetPlaybackReadPermission(InteractionHostType hostType) => hostType switch
     {
-        var permission = hostType switch
-        {
-            InteractionHostType.Video => Permissions.VideosRead,
-            InteractionHostType.Image => Permissions.ImagesRead,
-            InteractionHostType.Audio => Permissions.AudiosRead,
-            InteractionHostType.Text => Permissions.TextsRead,
-            InteractionHostType.Segment => Permissions.SegmentsRead,
-            _ => null,
-        };
-
-        return permission is null || principalAccessor.Current?.Has(permission) == true;
-    }
+        InteractionHostType.Video => Permissions.VideosRead,
+        InteractionHostType.Image => Permissions.ImagesRead,
+        InteractionHostType.Audio => Permissions.AudiosRead,
+        InteractionHostType.Text => Permissions.TextsRead,
+        InteractionHostType.Segment => Permissions.SegmentsRead,
+        InteractionHostType.Group => Permissions.GroupsRead,
+        _ => null,
+    };
 }
-

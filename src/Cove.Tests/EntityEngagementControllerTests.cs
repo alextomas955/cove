@@ -153,6 +153,44 @@ public class EntityEngagementControllerTests
         Assert.Contains(interactionRows, interaction => interaction.HostType == InteractionHostType.Image && interaction.Kind == InteractionKind.OpenDetail && interaction.HostId == imageId);
     }
 
+    [Fact]
+    public void InteractionPermission_FailsClosedForUnmappedHostTypes()
+    {
+        var everything = new CovePrincipal
+        {
+            UserId = 1,
+            Username = "admin",
+            Kind = PrincipalKind.User,
+            Roles = new HashSet<string>(),
+            Permissions = new HashSet<string> { "*" },
+        };
+        var performerReader = CreatePrincipal(2);
+        var nobody = new CovePrincipal
+        {
+            UserId = 3,
+            Username = "nobody",
+            Kind = PrincipalKind.User,
+            Roles = new HashSet<string>(),
+            Permissions = new HashSet<string>(),
+        };
+
+        // A host type with no mapping (e.g. one added to the enum later) is denied even to a wildcard principal.
+        Assert.False(EntityEngagementController.HasInteractionPermission((InteractionHostType)999, everything));
+
+        // Mapped types still follow their read permission.
+        Assert.True(EntityEngagementController.HasInteractionPermission(InteractionHostType.Performer, performerReader));
+        Assert.False(EntityEngagementController.HasInteractionPermission(InteractionHostType.Performer, nobody));
+        Assert.False(EntityEngagementController.HasInteractionPermission(InteractionHostType.Video, performerReader));
+
+        // Search and Collection are deliberately permission-free because they name no concrete entity.
+        Assert.True(EntityEngagementController.HasInteractionPermission(InteractionHostType.Search, nobody));
+        Assert.True(EntityEngagementController.HasInteractionPermission(InteractionHostType.Collection, nobody));
+
+        // Every current enum member is either explicitly mapped or explicitly permission-free.
+        Assert.All(Enum.GetValues<InteractionHostType>(), hostType =>
+            Assert.True(EntityEngagementController.HasInteractionPermission(hostType, everything), hostType.ToString()));
+    }
+
     private static CovePrincipal CreatePrincipal(int userId) => new()
     {
         UserId = userId,
