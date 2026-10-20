@@ -196,9 +196,10 @@ describe("IdentifyDialog", () => {
 
     renderWithClient(<IdentifyDialog open onClose={vi.fn()} videoIds={[1]} />);
 
+    // Sources are opt-in (#703), so a scraper the user has never chosen starts unchecked.
     const source = await screen.findByRole("checkbox", { name: /URL scraper/ });
-    expect(source).toBeChecked();
+    expect(source).not.toBeChecked();
     fireEvent.click(source);
-    expect(screen.getByRole("checkbox", { name: /URL scraper/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /URL scraper/ })).toBeChecked();
   });
 });
