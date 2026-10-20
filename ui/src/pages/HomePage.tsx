@@ -34,6 +34,7 @@ import type {
   DashboardWidget,
   DashboardWidgetPresentation,
   ExtensionDashboardWidgetContribution,
+  SegmentSpanSearchRequest,
   TextDocument,
 } from "../api/types";
 import { formatDuration, getResolutionLabel } from "../components/shared";
@@ -62,6 +63,7 @@ import {
 } from "lucide-react";
 import { createRouteLinkProps } from "../components/cardNavigation";
 import { useEntityEngagementBatch } from "../hooks/useEntityEngagementBatch";
+import { useVideoQueueNavigation } from "../hooks/useVideoQueueNavigation";
 import { readAuthenticatedUserHomePageContent } from "../utils/userUiPreferences";
 import { getGalleryDisplayTitle } from "../utils/galleryDisplay";
 import { withSeededRandomSort } from "../utils/seededRandomSort";
@@ -2077,6 +2079,15 @@ function CustomFilterRecommendationRow({
     engagementHostType ?? "video",
     engagementHostType ? items.map((item: any) => item.id) : [],
   );
+  const queryVideoPage = useCallback((page: FindFilter) => videos.find(page), []);
+  const { navigateFromList } = useVideoQueueNavigation({
+    items: filter.mode === "videos" ? items : [],
+    filter: findFilter,
+    totalCount: data?.totalCount,
+    infinitePageSize: false,
+    queryPage: queryVideoPage,
+    onNavigate,
+  });
   if (query.isError)
     return (
       <WidgetLoadError
@@ -2099,6 +2110,7 @@ function CustomFilterRecommendationRow({
       loading={isLoading}
       cardShape={cardShapeForMode(filter.mode)}
       count={items.length}
+      totalCount={data?.totalCount}
     >
       {items.map((item: any, index: number) => (
         <EntityCard
@@ -2106,7 +2118,7 @@ function CustomFilterRecommendationRow({
           item={item}
           engagement={engagementById.get(item.id)}
           mode={filter.mode}
-          onNavigate={onNavigate}
+          onNavigate={navigateFromList}
           imageLoading={cardImageLoading(imagePriority, index)}
         />
       ))}
@@ -2175,12 +2187,16 @@ function SavedFilterRecommendationRow({
     );
   }, [mode, parsedFilter]);
 
+  const queryVideoPage = useCallback(
+    (page: FindFilter) =>
+      hasObjectFilter ? videos.findFiltered({ findFilter: page, objectFilter: parsedObjectFilter }) : videos.find(page),
+    [hasObjectFilter, parsedObjectFilter],
+  );
+
   const fetchFn = useMemo((): (() => Promise<any>) => {
     if (!mode) return () => Promise.resolve({ items: [], totalCount: 0 });
     const fetchMap: Record<string, () => Promise<any>> = {
-      videos: hasObjectFilter
-        ? () => videos.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
-        : () => videos.find(findFilter),
+      videos: () => queryVideoPage(findFilter!),
       performers: hasObjectFilter
         ? () => performers.findFiltered({ findFilter, objectFilter: parsedObjectFilter })
         : () => performers.find(findFilter),
@@ -2218,26 +2234,27 @@ function SavedFilterRecommendationRow({
         );
         const appliedQuery = buildAppliedDerivedQuery(derivedFilter, new Map(performerFaceEntries));
         const derivedQueryDescriptor = buildDerivedQueryDescriptor(derivedFilter);
-        const response = await segmentSpans.search(
-          buildSpanSearchRequest({
-            activeProfileId: segmentProfileId,
-            pageNumber: 1,
-            perPage: 25,
-            q: findFilter?.q?.trim() ?? "",
-            videoTitle: criteria.videoTitle ?? "",
-            videoTagIds,
-            videoTagDepth,
-            sort: findFilter?.sort ?? DEFAULT_SORT_BY_MODE.segments,
-            direction: findFilter?.direction ?? "desc",
-            seed: findFilter?.seed,
-            includeVideoIds: criteria.videoIds,
-            excludeVideoIds: criteria.excludeVideoIds,
-            appliedQuery,
-            rawFilter: { ...createDefaultRawSegmentFilter(), ...criteria, tagDepth: rawTagDepth },
-          }),
-        );
+        const spanRequest = buildSpanSearchRequest({
+          activeProfileId: segmentProfileId,
+          pageNumber: 1,
+          perPage: 25,
+          q: findFilter?.q?.trim() ?? "",
+          videoTitle: criteria.videoTitle ?? "",
+          videoTagIds,
+          videoTagDepth,
+          sort: findFilter?.sort ?? DEFAULT_SORT_BY_MODE.segments,
+          direction: findFilter?.direction ?? "desc",
+          seed: findFilter?.seed,
+          includeVideoIds: criteria.videoIds,
+          excludeVideoIds: criteria.excludeVideoIds,
+          appliedQuery,
+          rawFilter: { ...createDefaultRawSegmentFilter(), ...criteria, tagDepth: rawTagDepth },
+        });
+        const response = await segmentSpans.search(spanRequest);
         return {
           ...response,
+          // A search that stopped early leaves the total to the separate, cached count below.
+          spanRequest: response.totalCount < 0 ? spanRequest : undefined,
           items: response.items.map<DerivedSpanItem>((item) => ({
             id: `${item.videoId}:${item.span.spanKey}`,
             key: `${item.videoId}:${item.span.spanKey}`,
@@ -2287,7 +2304,7 @@ function SavedFilterRecommendationRow({
       },
     };
     return fetchMap[mode] ?? (() => Promise.resolve({ items: [], totalCount: 0 }));
-  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId]);
+  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId, queryVideoPage]);
 
   const itemQuery = useQuery<any>({
     queryKey: ["front-page-saved", principalKey, savedFilterId, mode, findFilter, parsedObjectFilter, segmentProfileId],
@@ -2297,11 +2314,26 @@ function SavedFilterRecommendationRow({
 
   const { data, isLoading } = itemQuery;
   const items = (data as any)?.items ?? [];
+  const uncountedSpanRequest: SegmentSpanSearchRequest | undefined = data?.spanRequest;
+  const spanCountQuery = useQuery({
+    queryKey: ["front-page-saved-span-count", principalKey, uncountedSpanRequest],
+    queryFn: () => segmentSpans.count(uncountedSpanRequest!),
+    enabled: uncountedSpanRequest !== undefined,
+  });
+  const totalCount: number | undefined = uncountedSpanRequest ? spanCountQuery.data?.totalCount : data?.totalCount;
   const engagementHostType = getRecommendationEngagementHostType(mode ?? undefined);
   const { engagementById } = useEntityEngagementBatch(
     engagementHostType ?? "video",
     engagementHostType ? items.map((item: any) => item.id) : [],
   );
+  const { navigateFromList } = useVideoQueueNavigation({
+    items: mode === "videos" ? items : [],
+    filter: findFilter ?? {},
+    totalCount: data?.totalCount,
+    infinitePageSize: false,
+    queryPage: queryVideoPage,
+    onNavigate,
+  });
   if (isApiNotFoundError(filterQuery.error)) {
     return <MissingSourceWidget label={errorLabel} reason="The saved filter was deleted." onRemove={onRemove} />;
   }
@@ -2358,6 +2390,7 @@ function SavedFilterRecommendationRow({
       loading={isLoading}
       cardShape={cardShapeForMode(mode)}
       count={items.length}
+      totalCount={totalCount}
     >
       {items.map((item: any, index: number) => (
         <EntityCard
@@ -2365,7 +2398,7 @@ function SavedFilterRecommendationRow({
           item={item}
           engagement={engagementById.get(item.id)}
           mode={mode!}
-          onNavigate={onNavigate}
+          onNavigate={navigateFromList}
           imageLoading={cardImageLoading(imagePriority, index)}
         />
       ))}
@@ -2458,6 +2491,8 @@ function GroupRecommendationRow({
       loading={itemQuery.isLoading}
       cardShape={RECOMMENDATION_CARD_SHAPES.groupItem}
       count={items.length}
+      totalCount={itemQuery.data?.totalCount}
+      totalNoun={["item", "items"]}
     >
       {items.map((item, index) => (
         <GroupItemRecommendationCard
@@ -2487,6 +2522,8 @@ function RecommendationRowShell({
   loading,
   cardShape,
   count,
+  totalCount,
+  totalNoun = ["match", "matches"],
   children,
 }: {
   header: string;
@@ -2501,6 +2538,10 @@ function RecommendationRowShell({
   loading: boolean;
   cardShape: RecommendationCardShape;
   count: number;
+  /** Every match of the row's query, not just the cards it shows; a negative total means it went uncounted. */
+  totalCount?: number;
+  /** What the total counts, singular then plural. */
+  totalNoun?: readonly [string, string];
   children: React.ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -2541,6 +2582,13 @@ function RecommendationRowShell({
     }
   }, [updateScrollState, count]);
 
+  // The cards on screen are a lower bound, in case the total was counted before they were added.
+  const shownTotalCount = totalCount != null && totalCount >= 0 ? Math.max(totalCount, count) : undefined;
+  const totalLabel =
+    shownTotalCount != null
+      ? `${shownTotalCount.toLocaleString()} ${totalNoun[shownTotalCount === 1 ? 0 : 1]}`
+      : undefined;
+
   const scroll = (dir: "left" | "right") => {
     const el = scrollRef.current;
     if (!el) return;
@@ -2552,7 +2600,15 @@ function RecommendationRowShell({
     <div className="recommendation-row">
       {/* Header */}
       <div className="flex items-center justify-between mb-2 px-1">
-        <h2 className="text-base font-semibold text-foreground">{header}</h2>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="min-w-0 break-words text-base font-semibold text-foreground">{header}</h2>
+          {shownTotalCount != null && (
+            <span className="shrink-0 text-xs text-muted tabular-nums" title={totalLabel}>
+              {shownTotalCount.toLocaleString()}
+              <span className="sr-only"> {totalNoun[shownTotalCount === 1 ? 0 : 1]}</span>
+            </span>
+          )}
+        </div>
         <button
           onClick={() =>
             onNavigate({
@@ -2565,7 +2621,7 @@ function RecommendationRowShell({
               ...(viewAllSegmentsView ? { segmentsView: viewAllSegmentsView } : {}),
             })
           }
-          className="inline-flex min-h-9 items-center rounded-md px-2 text-sm text-muted hover:text-accent sm:min-h-0 sm:px-0 sm:text-xs"
+          className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-sm text-muted hover:text-accent sm:min-h-0 sm:px-0 sm:text-xs"
         >
           View All
         </button>
