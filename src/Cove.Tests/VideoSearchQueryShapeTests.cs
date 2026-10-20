@@ -144,7 +144,7 @@ public sealed class VideoSearchQueryShapeTests
 
         Assert.Contains("video_performers", sql, StringComparison.Ordinal);
         Assert.Contains("<>", sql, StringComparison.Ordinal);
-        Assert.Contains("Female", sql, StringComparison.Ordinal);
+        Assert.Contains("\"Gender\" = ANY (", sql, StringComparison.Ordinal);
     }
 
     // A NOT EXISTS over the union of manual and derived tags was planned as a rescan of every derived

@@ -36,6 +36,54 @@ public class PerformerRepository : IPerformerRepository
             tagSelectors: [p => p.PerformerTags.Where(pt => pt.Tag != null).Select(pt => pt.Tag!)]);
     }
 
+    private static readonly Regex SelectedValuesPattern = new(@"^\^\(\?:(?<values>[A-Za-z]+(?:\|[A-Za-z]+)*)\)\$\z");
+
+    // Matching Gender as text hides the enum column from the planner's statistics: PostgreSQL then
+    // estimates one matching performer, and a related performer filter planned on that estimate can
+    // re-scan its other conditions for every link. Whole-value selections, including the filter UI's
+    // `^(?:A|B)$` multi-select, compare the column directly; any other pattern still matches as text.
+    private static IQueryable<Performer> ApplyGenderCriterion(IQueryable<Performer> query, StringCriterion? criterion)
+    {
+        if (criterion == null)
+            return query;
+
+        var genders = SelectedGenders(criterion);
+        if (genders == null)
+            return FilterHelpers.ApplyString(query, criterion, p => p.Gender != null ? p.Gender.ToString() : null);
+
+        return criterion.Modifier is CriterionModifier.Equals or CriterionModifier.MatchesRegex
+            ? query.Where(p => p.Gender != null && genders.Contains(p.Gender.Value))
+            : query.Where(p => p.Gender == null || !genders.Contains(p.Gender.Value));
+    }
+
+    private static Cove.Core.Enums.GenderEnum[]? SelectedGenders(StringCriterion criterion)
+    {
+        string[] names;
+        StringComparison comparison;
+        switch (criterion.Modifier)
+        {
+            case CriterionModifier.Equals or CriterionModifier.NotEquals:
+                names = [criterion.Value];
+                comparison = StringComparison.Ordinal;
+                break;
+            case CriterionModifier.MatchesRegex or CriterionModifier.NotMatchesRegex:
+                var match = SelectedValuesPattern.Match(criterion.Value ?? "");
+                if (!match.Success)
+                    return null;
+                names = match.Groups["values"].Value.Split('|');
+                comparison = StringComparison.OrdinalIgnoreCase;
+                break;
+            default:
+                return null;
+        }
+
+        // No enum name matched: leave it to the text path, which also matches stored values outside the enum.
+        var genders = Enum.GetValues<Cove.Core.Enums.GenderEnum>()
+            .Where(gender => names.Any(name => string.Equals(name, gender.ToString(), comparison)))
+            .ToArray();
+        return genders.Length > 0 ? genders : null;
+    }
+
     private static IQueryable<Performer> ApplyCareerLengthCriterion(IQueryable<Performer> query, IntCriterion? criterion)
     {
         if (criterion == null)
@@ -482,7 +530,7 @@ public class PerformerRepository : IPerformerRepository
             }
 
             // String criteria
-            query = FilterHelpers.ApplyString(query, filter.GenderCriterion, p => p.Gender != null ? p.Gender.ToString() : null);
+            query = ApplyGenderCriterion(query, filter.GenderCriterion);
             query = FilterHelpers.ApplyString(query, filter.EthnicityCriterion, p => p.Ethnicity);
             StringCriterion? countryCriterion = filter.CountryCriterion;
             if (filter.CountryCriterion is { Values: not null } listCriterion
