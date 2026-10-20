@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace Cove.Api.Services;
@@ -17,7 +18,7 @@ namespace Cove.Api.Services;
 /// <c>-hwaccel_output_format cuda</c>) with a software <c>scale</c> filter or libx264 is the classic
 /// "Impossible to convert between the formats" failure.
 /// </summary>
-internal static class FfmpegHwAccel
+internal static partial class FfmpegHwAccel
 {
     /// <summary>The hardware accelerators Cove understands, paired with their H.264 encoder, in
     /// auto-detect preference order. This single list is the source of truth for: the values the
@@ -176,9 +177,10 @@ internal static class FfmpegHwAccel
 
                 if (!ProbeEncoder(ffmpegPath, pinned, out var pinnedError))
                 {
-                    logger.LogWarning(
-                        "Configured HW encoder {Encoder} is present but a test encode failed ({Error}); falling back to {Software}.",
-                        pinned, pinnedError, softwareEncoder);
+                    if (!LogDriverTooOld(logger, pinned, pinnedAccelerator, pinnedError))
+                        logger.LogWarning(
+                            "Configured HW encoder {Encoder} is present but a test encode failed ({Error}); falling back to {Software}.",
+                            pinned, pinnedError, softwareEncoder);
                     return softwareEncoder;
                 }
 
@@ -194,7 +196,8 @@ internal static class FfmpegHwAccel
                 if (!listed.Contains(enc, StringComparer.OrdinalIgnoreCase)) continue;
                 if (!ProbeEncoder(ffmpegPath, enc, out var probeError))
                 {
-                    logger.LogTrace("Skipping {Encoder} ({Accel}): probe failed ({Error})", enc, accel, probeError);
+                    if (!LogDriverTooOld(logger, enc, accel, probeError))
+                        logger.LogTrace("Skipping {Encoder} ({Accel}): probe failed ({Error})", enc, accel, probeError);
                     continue;
                 }
 
@@ -225,7 +228,7 @@ internal static class FfmpegHwAccel
                 if (!listed.Contains(encoder, StringComparer.OrdinalIgnoreCase)) continue;
                 if (ProbeEncoder(ffmpegPath, encoder, out var err))
                     available.Add(accel);
-                else
+                else if (!LogDriverTooOld(logger, encoder, accel, err))
                     logger.LogTrace("HW accelerator {Accel} ({Encoder}) present but test-encode failed: {Error}", accel, encoder, err);
             }
         }
@@ -509,7 +512,10 @@ internal static class FfmpegHwAccel
             }
             if (result.ExitCode == 0)
                 return true;
-            error = result.StandardError.Length > 200 ? result.StandardError[..200] : result.StandardError;
+            // The driver-version lines are what explain an NVENC failure, and the ones after them can push
+            // them past a plain prefix cut, so keep them whole when present.
+            error = DriverRequirementMessage(result.StandardError)
+                ?? (result.StandardError.Length > 200 ? result.StandardError[..200] : result.StandardError);
             return false;
         }
         catch (Exception ex)
@@ -517,5 +523,49 @@ internal static class FfmpegHwAccel
             error = ex.Message;
             return false;
         }
+    }
+
+    /// <summary>
+    /// The NVENC lines of a failed test encode that say the NVIDIA driver is too old for the NVENC API this
+    /// ffmpeg was built against, with ffmpeg's <c>[h264_nvenc @ 0x…]</c> prefixes removed, or null when the
+    /// failure is anything else. ffmpeg prints, for example:
+    /// <code>
+    /// Driver does not support the required nvenc API version. Required: 13.1 Found: 13.0
+    /// The minimum required Nvidia driver for nvenc is 610.00 or newer
+    /// </code>
+    /// </summary>
+    internal static string? DriverRequirementMessage(string stderr)
+    {
+        var lines = stderr
+            .Split('\n')
+            .Select(line => DriverLinePrefix().Replace(line.Trim(), string.Empty))
+            .Where(line =>
+                line.Contains("nvenc API version", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("minimum required Nvidia driver", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return lines.Count == 0 ? null : string.Join("; ", lines);
+    }
+
+    [GeneratedRegex(@"^\[[^\]]*\]\s*")]
+    private static partial Regex DriverLinePrefix();
+
+    /// <summary>
+    /// Logs a Warning when a failed test encode is the NVIDIA driver being older than this ffmpeg's NVENC
+    /// needs, and returns whether it did. Other probe failures are expected on most machines (every vendor's
+    /// encoder is built into the bundled ffmpeg whatever GPU is installed), so callers keep those quiet. This
+    /// one means a GPU and driver are present and NVENC would work after a driver update, so it should not
+    /// be left to the startup line's <c>encoders=[]</c>.
+    /// </summary>
+    private static bool LogDriverTooOld(ILogger logger, string encoder, string accelerator, string probeError)
+    {
+        var requirement = DriverRequirementMessage(probeError);
+        if (requirement == null)
+            return false;
+
+        logger.LogWarning(
+            "HW encoder {Encoder} ({Accel}) is built into ffmpeg but the NVIDIA driver is too old for it ({Requirement}). " +
+            "Update the driver to at least the version ffmpeg names to enable hardware encoding; until then Cove encodes in software.",
+            encoder, accelerator, requirement);
+        return true;
     }
 }
