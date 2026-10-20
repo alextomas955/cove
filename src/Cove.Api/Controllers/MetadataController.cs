@@ -802,11 +802,29 @@ public class MetadataController(
 
             var total = videoIds.Count;
             var identifiedCount = 0;
+            var failedCount = 0;
             var warningCount = 0;
+            // Distinct error messages per source, so a run whose queries failed does not read like one
+            // that simply found no matches.
+            var sourceErrors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var sourceNames = config.Scraping.MetadataServers
+                .GroupBy(server => server.Endpoint, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First().Name, StringComparer.OrdinalIgnoreCase);
+            progress.DeclareUnitCount(total);
             for (var i = 0; i < total; i++)
             {
                 ct.ThrowIfCancellationRequested();
                 progress.Report((double)(i + 1) / total, $"Identifying video {i + 1}/{total}");
+                using var unit = progress.StartUnit(videoIds[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
+                var videoFailures = new List<string>();
+                void RecordFailure(string source, string message)
+                {
+                    videoFailures.Add($"{source}: {message}");
+                    if (!sourceErrors.TryGetValue(source, out var messages))
+                        sourceErrors[source] = messages = [];
+                    if (!messages.Contains(message, StringComparer.Ordinal))
+                        messages.Add(message);
+                }
 
                 dbCtx.ChangeTracker.Clear();
                 metadataServerSvc?.ResetTrackedIdentityState();
@@ -820,6 +838,10 @@ public class MetadataController(
                     .SingleAsync(entity => entity.Id == videoIds[i], ct);
                 var fingerprints = video.Files.SelectMany(f => f.Fingerprints).ToList();
                 var identified = false;
+                // Set when a metadata server returned candidates but none was applied: the video is left
+                // alone rather than handed to the scrapers.
+                var candidatesDeclined = false;
+                string? mergeSource = null;
 
                 // Attempt MetadataServer identification (needs fingerprints to auto-match a candidate).
                 if (fingerprints.Count > 0 && metadataServerSvc != null && (sourceEndpoints == null || sourceEndpoints.Count > 0))
@@ -836,7 +858,16 @@ public class MetadataController(
                             var orderedMatches = new List<MetadataServerVideoMatchDto>();
                             foreach (var endpoint in sourceEndpoints)
                             {
-                                orderedMatches.AddRange(await metadataServerSvc.SearchVideosAsync(video, null, endpoint, null, ct));
+                                // One failing source must not keep the remaining ones from being tried.
+                                try
+                                {
+                                    orderedMatches.AddRange(await metadataServerSvc.SearchVideosAsync(video, null, endpoint, null, ct));
+                                }
+                                catch (Exception ex) when (!ct.IsCancellationRequested)
+                                {
+                                    logger.LogWarning(ex, "MetadataServer identify query to {Endpoint} failed for video {VideoId}", endpoint, video.Id);
+                                    RecordFailure(sourceNames.GetValueOrDefault(endpoint) ?? endpoint, ex.Message);
+                                }
                             }
                             matches = orderedMatches;
                         }
@@ -896,54 +927,57 @@ public class MetadataController(
                                 logger.LogTrace(
                                     "Identify video {VideoId}: {MatchCount} candidate(s) returned, 0 passed thresholds",
                                     video.Id, matches.Count);
-                                continue;
+                                candidatesDeclined = true;
                             }
-
                             // Skip a video with several passing candidates unless the caller opts out:
                             // applying the top-ranked one is a guess that can attach the wrong scene.
-                            if ((opts?.SkipMultipleMatches ?? true) && rankedMatches.Count > 1)
+                            else if ((opts?.SkipMultipleMatches ?? true) && rankedMatches.Count > 1)
                             {
                                 logger.LogTrace(
                                     "Identify video {VideoId}: skipping because {PassedCount} candidates passed thresholds and SkipMultipleMatches is enabled",
                                     video.Id, rankedMatches.Count);
-                                continue;
+                                candidatesDeclined = true;
                             }
-
-                            var bestCandidate = rankedMatches[0];
-                            var best = bestCandidate.Match;
-                            logger.LogTrace(
-                                "Identify video {VideoId}: selected candidate {CandidateId} '{CandidateTitle}' from {Endpoint} ({ServerName}) - matchCount={MatchCount}, durationDiff={DurationDiff}, phashDistance={PhashDistance} (best of {PassedCount} passing of {TotalCount} returned)",
-                                video.Id,
-                                best.Id,
-                                best.Title,
-                                best.Endpoint,
-                                best.MetadataServerName,
-                                best.MatchCount,
-                                bestCandidate.DurationDifferenceSeconds,
-                                bestCandidate.PhashDistance,
-                                rankedMatches.Count,
-                                matches.Count);
-
-                            var imported = await metadataServerSvc.MergeVideoWithWarningsAsync(video, best.Endpoint, best.Id, importConfig, ct);
-                            if (imported.Imported)
+                            else
                             {
-                                await dbCtx.SaveChangesAsync(ct);
-                                if (imported.Warnings.Count > 0)
+                                var bestCandidate = rankedMatches[0];
+                                var best = bestCandidate.Match;
+                                logger.LogTrace(
+                                    "Identify video {VideoId}: selected candidate {CandidateId} '{CandidateTitle}' from {Endpoint} ({ServerName}) - matchCount={MatchCount}, durationDiff={DurationDiff}, phashDistance={PhashDistance} (best of {PassedCount} passing of {TotalCount} returned)",
+                                    video.Id,
+                                    best.Id,
+                                    best.Title,
+                                    best.Endpoint,
+                                    best.MetadataServerName,
+                                    best.MatchCount,
+                                    bestCandidate.DurationDifferenceSeconds,
+                                    bestCandidate.PhashDistance,
+                                    rankedMatches.Count,
+                                    matches.Count);
+
+                                mergeSource = best.MetadataServerName;
+                                var imported = await metadataServerSvc.MergeVideoWithWarningsAsync(video, best.Endpoint, best.Id, importConfig, ct);
+                                if (imported.Imported)
                                 {
-                                    warningCount++;
-                                    logger.LogWarning(
-                                        "MetadataServer identify partially updated video {VideoId}: {Warnings}",
-                                        video.Id,
-                                        string.Join(" ", imported.Warnings));
+                                    await dbCtx.SaveChangesAsync(ct);
+                                    if (imported.Warnings.Count > 0)
+                                    {
+                                        warningCount++;
+                                        logger.LogWarning(
+                                            "MetadataServer identify partially updated video {VideoId}: {Warnings}",
+                                            video.Id,
+                                            string.Join(" ", imported.Warnings));
+                                    }
+                                    eventBus.Publish(new EntityEvent(EventType.VideoUpdated, "Video", video.Id));
+                                    identified = true;
                                 }
-                                eventBus.Publish(new EntityEvent(EventType.VideoUpdated, "Video", video.Id));
-                                identified = true;
                             }
                         }
                     }
                     catch (Exception ex)
                     {
                         logger.LogWarning(ex, "MetadataServer identify failed for video {VideoId}", video.Id);
+                        RecordFailure(mergeSource ?? "Metadata servers", ex.Message);
                         dbCtx.ChangeTracker.Clear();
                         metadataServerSvc.ResetTrackedIdentityState();
                         video = await dbCtx.Videos
@@ -960,7 +994,7 @@ public class MetadataController(
                 // Attempt scraper identification from the video's existing URL(s). The URL is the
                 // identity, so unlike metadata servers this needs no fingerprint match and also runs
                 // for fingerprint-less videos. Skipped if a metadata server already identified this one.
-                if (!identified && scraperSvc != null && scrapeAttemptSvc != null
+                if (!identified && !candidatesDeclined && scraperSvc != null && scrapeAttemptSvc != null
                     && (enabledScraperIds == null || enabledScraperIds.Count > 0))
                 {
                     try
@@ -977,6 +1011,7 @@ public class MetadataController(
                     catch (Exception ex)
                     {
                         logger.LogWarning(ex, "Scraper identify failed for video {VideoId}", video.Id);
+                        RecordFailure("Scrapers", ex.Message);
                         dbCtx.ChangeTracker.Clear();
                         metadataServerSvc?.ResetTrackedIdentityState();
                     }
@@ -986,20 +1021,83 @@ public class MetadataController(
                 {
                     await dbCtx.SaveChangesAsync(ct);
                     identifiedCount++;
+                    unit.Complete(JobUnitOutcome.Succeeded);
+                }
+                else if (videoFailures.Count > 0)
+                {
+                    // A video only counts as unmatched when every query it needed actually ran.
+                    failedCount++;
+                    unit.Complete(JobUnitOutcome.Failed, $"Video {video.Id}: {string.Join("; ", videoFailures)}");
+                }
+                else
+                {
+                    unit.Complete(JobUnitOutcome.Skipped);
                 }
             }
 
             await dbCtx.SaveChangesAsync(ct);
-            if (warningCount > 0)
-                progress.Report(1d, $"Identified {identifiedCount} videos; {warningCount} saved with skipped conflicting tag names or aliases. See server logs for details.");
-            logger.LogInformation(
-                "Identify completed: {Identified} identified, {Unmatched} unmatched of {Total} videos",
-                identifiedCount,
-                total - identifiedCount,
-                total);
+            var unmatchedCount = total - identifiedCount - failedCount;
+            progress.SetSummary(BuildIdentifySummary(identifiedCount, failedCount, unmatchedCount, total, warningCount, sourceErrors));
+            if (failedCount > 0 || sourceErrors.Count > 0)
+            {
+                logger.LogWarning(
+                    "Identify completed: {Identified} identified, {Failed} failed, {Unmatched} unmatched of {Total} videos; source errors: {SourceErrors}",
+                    identifiedCount,
+                    failedCount,
+                    unmatchedCount,
+                    total,
+                    string.Join("; ", sourceErrors.Select(pair => $"{pair.Key}: {string.Join(" | ", pair.Value)}")));
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Identify completed: {Identified} identified, {Unmatched} unmatched of {Total} videos",
+                    identifiedCount,
+                    unmatchedCount,
+                    total);
+            }
         }, exclusive: false);
 
         return Ok(new { jobId });
+    }
+
+    // The finished Identify job's summary. Failed videos are those a source error left unidentified;
+    // source errors are listed even when another source still identified the video.
+    internal static string BuildIdentifySummary(
+        int identified,
+        int failed,
+        int unmatched,
+        int total,
+        int warnings,
+        IReadOnlyDictionary<string, List<string>> sourceErrors)
+    {
+        const int maxMessagesPerSource = 3;
+        const int maxMessageLength = 300;
+
+        var summary = new StringBuilder($"Identified {identified} of {total} videos");
+        if (failed > 0)
+            summary.Append($", {failed} failed");
+        summary.Append($", {unmatched} unmatched");
+        if (warnings > 0)
+            summary.Append($"; {warnings} saved with skipped conflicting tag names or aliases");
+        summary.Append('.');
+        if (warnings > 0)
+            summary.Append(" See server logs for details.");
+
+        if (sourceErrors.Count > 0)
+        {
+            summary.Append(" Source errors: ");
+            summary.AppendJoin("; ", sourceErrors.Select(pair =>
+            {
+                var messages = pair.Value
+                    .Take(maxMessagesPerSource)
+                    .Select(message => message.Length > maxMessageLength ? message[..maxMessageLength] + "…" : message);
+                var more = pair.Value.Count > maxMessagesPerSource ? $" (+{pair.Value.Count - maxMessagesPerSource} more)" : string.Empty;
+                return $"{pair.Key}: {string.Join(" | ", messages)}{more}";
+            }));
+        }
+
+        return summary.ToString();
     }
 
     private static List<string>? ResolveIdentifyMetadataServerEndpoints(List<string>? sources, IReadOnlyList<MetadataServerInstance> metadataServers)
