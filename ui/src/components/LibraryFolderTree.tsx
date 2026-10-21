@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { metadata, type LibraryFolder } from "../api/client";
+import { isFolderAncestorOf } from "../utils/folderPaths";
 
 export function LibraryFolderTree({
   roots,
@@ -19,6 +20,15 @@ export function LibraryFolderTree({
   emptyHint: string;
 }) {
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  // Same policy and fallback as the in-browser path filter, so "beneath" means what the server means.
+  const { data: filesystemPolicy } = useQuery({
+    queryKey: ["filesystem-policy"],
+    queryFn: metadata.filesystemPolicy,
+    enabled: selected.length > 0,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const caseSensitive = filesystemPolicy?.caseSensitive ?? true;
   if (roots.length === 0) {
     return <p className="text-[11px] text-muted">{emptyHint}</p>;
   }
@@ -30,7 +40,9 @@ export function LibraryFolderTree({
           key={root.path}
           folder={root}
           depth={0}
+          selected={selected}
           selectedSet={selectedSet}
+          caseSensitive={caseSensitive}
           onToggle={onToggle}
           selectionMode={selectionMode}
           probeChildren={probeChildren}
@@ -43,19 +55,34 @@ export function LibraryFolderTree({
 function LibraryFolderNode({
   folder,
   depth,
+  selected,
   selectedSet,
+  caseSensitive,
   onToggle,
   selectionMode,
   probeChildren,
 }: {
   folder: LibraryFolder;
   depth: number;
+  selected: string[];
   selectedSet: Set<string>;
+  caseSensitive: boolean;
   onToggle: (path: string, checked: boolean) => void;
   selectionMode: "single" | "multiple";
   probeChildren: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Open the path down to a selected folder (#590). Re-applied only when this node newly becomes an
+  // ancestor of the selection, so a manual collapse sticks until the selection moves elsewhere.
+  const containsSelection = useMemo(
+    () => folder.hasChildren && selected.some((path) => isFolderAncestorOf(folder.path, path, caseSensitive)),
+    [folder.hasChildren, folder.path, selected, caseSensitive],
+  );
+  const [expanded, setExpanded] = useState(containsSelection);
+  const [lastContainsSelection, setLastContainsSelection] = useState(containsSelection);
+  if (containsSelection !== lastContainsSelection) {
+    setLastContainsSelection(containsSelection);
+    if (containsSelection) setExpanded(true);
+  }
   const {
     data: children,
     isLoading,
@@ -119,7 +146,9 @@ function LibraryFolderNode({
                 key={child.path}
                 folder={child}
                 depth={depth + 1}
+                selected={selected}
                 selectedSet={selectedSet}
+                caseSensitive={caseSensitive}
                 onToggle={onToggle}
                 selectionMode={selectionMode}
                 probeChildren={probeChildren}

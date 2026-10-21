@@ -116,6 +116,7 @@ import { sortSeededRandom } from "../utils/seededRandomSort";
 import { parseDateFilterValue } from "../utils/relativeDate";
 import { useDetailListUrlState } from "../hooks/useDetailListUrlState";
 import { compareNatural } from "../utils/naturalCompare";
+import { normalizeFolderPath } from "../utils/folderPaths";
 import { listKey, pageLabel, vrOnlyFilter } from "../vr/vrListRegistry";
 
 interface Props {
@@ -2107,14 +2108,6 @@ function matchesStringCriterion(value: string | undefined, criterion?: StringCri
     default:
       return normalized === expected;
   }
-}
-
-function normalizeFolderPath(value: string) {
-  let normalized = value.trim().replaceAll("\\", "/");
-  while (normalized.length > 1 && normalized.endsWith("/") && !(normalized.length === 3 && normalized[1] === ":")) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
 }
 
 function matchesStringCollectionCriterion(values: string[], criterion?: StringCriterion, pathCaseSensitive = true) {
