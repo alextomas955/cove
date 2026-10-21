@@ -86,9 +86,7 @@ public class BackupServiceIntegrationTests
 
             var ok = Assert.IsType<OkObjectResult>(action);
             var response = Assert.IsType<RestoreConfigResultDto>(ok.Value);
-            Assert.True(response.RestartRequired);
-            Assert.Equal(["port"], response.RestartRequiredSettings);
-            Assert.Equal("Config restored and applied. Restart Cove for the changed port setting to take effect.", response.Message);
+            Assert.Equal("Config restored and applied.", response.Message);
             Assert.Equal(["/media/restored"], live.CovePaths.Select(path => path.Path));
             Assert.Equal(7, live.MaxParallelTasks);
 

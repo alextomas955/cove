@@ -2243,14 +2243,11 @@ export const database = {
       timeoutMs: null,
     }),
   restoreConfig: (backupPath: string) =>
-    request<{ message: string; backupPath: string; restartRequired: boolean; restartRequiredSettings: string[] }>(
-      "/database/config/restore",
-      {
-        method: "POST",
-        body: JSON.stringify({ backupPath }),
-        timeoutMs: null,
-      },
-    ),
+    request<{ message: string; backupPath: string }>("/database/config/restore", {
+      method: "POST",
+      body: JSON.stringify({ backupPath }),
+      timeoutMs: null,
+    }),
   latestConfigBackup: async () => {
     const result = await requestOptional<{ path: string | null }>("/database/config/latest-backup");
     return result?.path ?? null;

@@ -71,7 +71,6 @@ interface BackupRestoreResultSummary {
   backupPath: string;
   preRestoreBackupPath: string | null;
   configBackupPath: string | null;
-  configRestartNotice: string | null;
 }
 
 function getThemePreviewColor(cssVariables: Record<string, string> | undefined, key: string, fallback: string) {
@@ -262,13 +261,14 @@ export function SetupWizardPage({ config, onComplete }: Props) {
       }
 
       const restoreResult = await database.restore(backupPath);
-      const configResult = configBackupPath ? await database.restoreConfig(configBackupPath) : null;
+      if (configBackupPath) {
+        await database.restoreConfig(configBackupPath);
+      }
 
       return {
         backupPath,
         preRestoreBackupPath: restoreResult.preRestoreBackupPath,
         configBackupPath: configBackupPath || null,
-        configRestartNotice: configResult?.restartRequired ? configResult.message : null,
       };
     },
     onSuccess: async (result) => {
@@ -1219,9 +1219,6 @@ export function SetupWizardPage({ config, onComplete }: Props) {
                       <div>
                         <span className="font-medium text-foreground">Config backup:</span>{" "}
                         {backupRestoreResult.configBackupPath}
-                        {backupRestoreResult.configRestartNotice ? (
-                          <div className="mt-1 text-amber-300">{backupRestoreResult.configRestartNotice}</div>
-                        ) : null}
                       </div>
                     ) : (
                       <div>Config restore was skipped.</div>

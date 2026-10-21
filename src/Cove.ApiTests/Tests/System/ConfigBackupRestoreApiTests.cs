@@ -55,8 +55,6 @@ public sealed class ConfigBackupRestoreApiTests(
             var restored = await AsUser().RestoreConfigAsync(backup.BackupPath, TestContext.Current.CancellationToken);
             restored.Message.Should().Be("Config restored and applied.");
             restored.BackupPath.Should().Be(backup.BackupPath);
-            restored.RestartRequired.Should().BeFalse();
-            restored.RestartRequiredSettings.Should().BeEmpty();
             (await File.ReadAllBytesAsync(configPath, TestContext.Current.CancellationToken)).Should().Equal(originalConfig);
             (await AsUser().GetSystemConfigAsync(TestContext.Current.CancellationToken)).MaxConcurrentDownloads
                 .Should().Be(live.MaxConcurrentDownloads + 1);

@@ -6289,10 +6289,9 @@ function DataManagementSection({ refetchJobs, mode }: { refetchJobs: () => void;
       if (!configRestoreConfirmed) throw new Error("Confirm that restoring will replace the current config first.");
       return database.restoreConfig(path);
     },
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries();
-      // The restored config is already live. Keep the restart notice on screen instead of reloading it away.
-      if (!result.restartRequired) window.location.reload();
+      window.location.reload();
     },
   });
 
@@ -6568,12 +6567,7 @@ function DataManagementSection({ refetchJobs, mode }: { refetchJobs: () => void;
               isPending={configRestoreMut.isPending}
               statusMessage={
                 configRestoreMut.isSuccess
-                  ? {
-                      type: "success" as const,
-                      text: configRestoreMut.data.restartRequired
-                        ? `${configRestoreMut.data.message} Restored from ${configRestorePath}.`
-                        : `Config restored from ${configRestorePath}. Reloading...`,
-                    }
+                  ? { type: "success" as const, text: `Config restored from ${configRestorePath}. Reloading...` }
                   : configRestoreMut.isError
                     ? {
                         type: "error" as const,

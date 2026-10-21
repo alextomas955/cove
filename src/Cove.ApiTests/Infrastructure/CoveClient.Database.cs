@@ -90,6 +90,4 @@ public sealed record LatestBackupResponse(string Path);
 
 public sealed record RestoreConfigResponse(
     string Message,
-    string BackupPath,
-    bool RestartRequired,
-    IReadOnlyList<string> RestartRequiredSettings);
+    string BackupPath);
