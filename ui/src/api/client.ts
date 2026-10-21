@@ -2181,7 +2181,10 @@ export const metadata = {
     if (path) params.set("path", path);
     if (!probeChildren) params.set("probeChildren", "false");
     const query = params.toString();
-    return request<LibraryFolder[]>(`/metadata/library-folders${query ? `?${query}` : ""}`);
+    // Enumerating a large or slow (e.g. network) folder can exceed the default deadline.
+    return request<LibraryFolder[]>(`/metadata/library-folders${query ? `?${query}` : ""}`, {
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
+    });
   },
   filesystemPolicy: () => request<{ caseSensitive: boolean }>("/metadata/filesystem-policy"),
   clean: (opts?: CleanOptions) =>
