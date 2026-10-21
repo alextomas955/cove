@@ -15,7 +15,7 @@ A scan can create records for newly recognized files, refresh technical metadata
 
 ### File identity and changed content
 
-Cove first matches a discovered file by its path. When that directory is inspected, a different size or meaningfully newer modified time causes Cove to update the existing file record and refresh its technical metadata and OShash instead of creating a new media record. A same-size replacement whose modified time is unchanged or older is indistinguishable from an unchanged file during an ordinary scan; use **Force rescan (ignore mtime)** after that kind of replacement.
+Cove first matches a discovered file by its path. When that directory is inspected, a different size or meaningfully newer modified time causes Cove to update the existing file record and refresh its technical metadata and OShash instead of creating a new media record. A same-size replacement whose modified time is unchanged or older is indistinguishable from an unchanged file, even during a forced rescan; see [In-place edits](#in-place-edits).
 
 When a file appears at a new path, Cove can use its OShash fingerprint to reconcile it with existing content. OShash combines the file size with samples from the beginning and end of the file, making it a fast identity heuristic rather than a full-file checksum:
 
@@ -58,7 +58,9 @@ When possible, copy to a temporary filename or unsupported extension and atomica
 
 ### In-place edits
 
-Editing the bytes of an existing file does not normally update its directory's modified time. This is outside the immutable-source contract used by the optimization. If your workflow rewrites or replaces files at the same path, run a selective scan with **Force rescan (ignore mtime)** for those folders. A forced scan keeps the existing file identity when the path is unchanged and refreshes its OShash and metadata from the new bytes.
+Editing the bytes of an existing file does not normally update its directory's modified time. This is outside the immutable-source contract used by the optimization. If your workflow rewrites or replaces files at the same path, run a selective scan with **Force rescan (ignore mtime)** for those folders. A forced scan enters every directory and keeps the existing file identity when the path is unchanged. Files whose size changed or whose modified time advanced are treated as changed content: Cove refreshes their metadata and fingerprints and regenerates requested assets.
+
+A forced scan also re-reads technical metadata for every other known file, but it does not read or compare file contents. Cove still decides whether bytes changed from the stored size and modified time, so a same-size replacement that keeps its original or an older modified time is treated as unchanged content: its fingerprints and generated assets stay associated with the previous bytes. After that kind of replacement, update the file's modified time (for example with `touch`) and scan its folder again.
 
 ## Access and effects
 

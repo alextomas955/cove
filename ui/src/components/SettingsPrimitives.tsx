@@ -26,7 +26,7 @@ const fieldDescriptionFallbacks: Record<string, string> = {
   "Overwrite existing generated files":
     "Regenerate and replace assets that already exist, instead of skipping files that are already done.",
   "Force rescan (ignore mtime)":
-    "Re-examine every file even if its modified time hasn't changed, instead of skipping files that look unchanged.",
+    "Re-read metadata for every file, even if its size and modified time look unchanged, and check folders a normal scan would skip. File contents are not compared, so a replacement with the same size and modified time is not treated as changed and its fingerprints and generated assets are not invalidated.",
   "Exclude videos": "Skip video files under this library path during scans.",
   "Exclude images": "Skip image files under this library path during scans.",
   "Exclude audio": "Skip audio files under this library path during scans.",
