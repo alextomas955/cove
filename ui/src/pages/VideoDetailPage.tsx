@@ -141,6 +141,7 @@ import { changedUpdateFields, hasUpdateChanges } from "../utils/changedUpdateFie
 import { saveButtonTone } from "../components/EditModal";
 import { applyFormFields, untouchedFieldUpdates, type FormFieldSetters } from "../utils/rebaseEditForm";
 import { LikeHistorySection } from "../components/LikeHistorySection";
+import { PlaybackSessionCard } from "../components/PlaybackSessionCard";
 import type { CutRange } from "../utils/videoCut";
 
 function directorVideosRoute(director: string) {
@@ -2383,35 +2384,7 @@ function HistoryTab({
           </div>
           <div className="space-y-3 border-t border-border pt-3">
             {recentSessions.map((session) => (
-              <div key={session.sessionId} className="rounded-lg border border-border/70 bg-surface/35 px-3 py-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium uppercase tracking-wide text-foreground">
-                      {session.isCompleted ? "Completed session" : "Playback session"}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-secondary">
-                      <span>Watched {formatDuration(session.totalWatchedSec)}</span>
-                      {session.lastPositionSec != null ? (
-                        <span>Last position {formatDuration(session.lastPositionSec)}</span>
-                      ) : null}
-                      <span>{session.intervals.length} intervals</span>
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-xs text-secondary">{formatDateTime(session.startedAt)}</div>
-                </div>
-                {session.intervals.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {session.intervals.map((range, index) => (
-                      <span
-                        key={`${session.sessionId}-${range.startSec}-${range.endSec}-${index}`}
-                        className="rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-secondary"
-                      >
-                        {formatDuration(range.startSec)}-{formatDuration(range.endSec)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              <PlaybackSessionCard key={session.sessionId} session={session} />
             ))}
           </div>
         </section>

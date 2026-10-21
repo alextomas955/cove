@@ -173,6 +173,47 @@ public class VideoEngagementControllerTests
     }
 
     [Fact]
+    public async Task History_HidesWatchedRunsShorterThanTwoSecondsButKeepsThemInTotals()
+    {
+        await using var scope = await CreateContextAsync();
+        var context = scope.Context;
+        var principalAccessor = scope.PrincipalAccessor;
+
+        context.Videos.Add(new Video { Title = "Seeked Video" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var videoId = await context.Videos.Select(video => video.Id).SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var videosController = CreateVideosController(context, principalAccessor);
+        var playbackController = CreatePlaybackController(context, principalAccessor);
+        principalAccessor.Set(CreatePrincipal(7));
+        var sessionId = Guid.NewGuid();
+
+        // Two touching keepalive chunks (one real watch whose tail chunk is short), then the sub-second runs
+        // that holding an arrow key leaves between seeks, then a run of exactly 2s.
+        Assert.IsType<NoContentResult>(await playbackController.RecordIntervals(new PlaybackIntervalsRequestDto(
+            "video", videoId, sessionId, 600.0, 202.0, "paused",
+            [
+                new PlaybackIntervalInputDto(10.0, 20.0),
+                new PlaybackIntervalInputDto(20.0, 21.5),
+                new PlaybackIntervalInputDto(100.0, 100.4),
+                new PlaybackIntervalInputDto(105.0, 105.3),
+                new PlaybackIntervalInputDto(110.0, 111.9),
+                new PlaybackIntervalInputDto(200.0, 202.0),
+            ]), CancellationToken.None));
+
+        var historyResult = await videosController.GetHistory(videoId, CancellationToken.None);
+        var history = Assert.IsType<VideoHistoryDto>(Assert.IsType<OkObjectResult>(historyResult.Result).Value);
+
+        Assert.Collection(history.AllTimeWatchedIntervals!,
+            run => { Assert.Equal(10.0, run.StartSec); Assert.Equal(21.5, run.EndSec); },
+            run => { Assert.Equal(200.0, run.StartSec); Assert.Equal(202.0, run.EndSec); });
+        var session = Assert.Single(history.Sessions!);
+        Assert.Equal(2, session.Intervals.Count);
+        // The hidden fragments are still watched time: 11.5 + 0.4 + 0.3 + 1.9 + 2.0.
+        Assert.Equal(16.1, history.TotalDistinctWatchedSec!.Value, precision: 5);
+    }
+
+    [Fact]
     public async Task VideoActivityAndRating_AreScopedToCurrentUser()
     {
         await using var scope = await CreateContextAsync();

@@ -1534,10 +1534,14 @@ public sealed partial class UserEngagementService(
     /// the playback history show one section per real watch run instead of 10s confetti (and drops the
     /// duplicate rows a keepalive+close double-flush can leave). Purely presentational — TotalWatchedSec and
     /// MaxDwellSec already merge on read. A small join tolerance absorbs rounding between adjacent chunks
-    /// without bridging a real seek gap.</summary>
+    /// without bridging a real seek gap. Merged runs shorter than <c>minDisplaySec</c> are left out: rapid
+    /// seeking (e.g. holding an arrow key) closes a sub-second run per seek, which only buries the real
+    /// watches (#317). The raw rows stay stored, so watch totals and recommendation attention still count
+    /// them, and skimming is read from the separate seek count.</summary>
     private static List<PlaybackIntervalDto> MergeIntervalsForDisplay(IEnumerable<PlaybackInterval> intervals)
     {
         const double joinGapSec = 0.5;
+        const double minDisplaySec = 2.0;
         var sorted = intervals.Where(iv => iv.EndSec > iv.StartSec)
             .OrderBy(iv => iv.StartSec).ThenBy(iv => iv.EndSec).ToList();
         var merged = new List<PlaybackIntervalDto>();
@@ -1556,7 +1560,7 @@ public sealed partial class UserEngagementService(
             }
         }
         if (open) merged.Add(new PlaybackIntervalDto(curStart, curEnd, curRecorded.ToString("o")));
-        return merged;
+        return merged.Where(run => run.EndSec - run.StartSec >= minDisplaySec).ToList();
     }
 
     private static JsonDocument? CloneJsonDocument(JsonElement? element)
