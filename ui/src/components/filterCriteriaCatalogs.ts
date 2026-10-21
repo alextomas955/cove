@@ -138,6 +138,13 @@ export const VIDEO_CRITERIA: CriteriaDefinitionList<VideoFilterCriteria> = [
     modifiers: NON_NULL_NUMBER_MODIFIERS,
   },
   {
+    id: "fileSize",
+    label: "File Size",
+    type: "number",
+    filterKey: "fileSizeCriterion",
+    modifiers: NON_NULL_NUMBER_MODIFIERS,
+  },
+  {
     id: "relatedPerformers",
     label: "Related Performers",
     type: "related",
@@ -697,6 +704,13 @@ export const IMAGE_CRITERIA: CriteriaDefinitionList<ImageFilterCriteria> = [
     label: "File Count",
     type: "number",
     filterKey: "fileCountCriterion",
+    modifiers: NON_NULL_NUMBER_MODIFIERS,
+  },
+  {
+    id: "fileSize",
+    label: "File Size",
+    type: "number",
+    filterKey: "fileSizeCriterion",
     modifiers: NON_NULL_NUMBER_MODIFIERS,
   },
   {

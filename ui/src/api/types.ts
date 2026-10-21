@@ -3099,6 +3099,7 @@ export interface VideoFilterCriteria {
   frameRateCriterion?: IntCriterion;
   bitrateInterval?: IntCriterion;
   fileCountCriterion?: IntCriterion;
+  fileSizeCriterion?: IntCriterion;
   remoteIdCriterion?: StringCriterion;
   remoteIdValueCriterion?: StringCriterion;
   remoteIdCountCriterion?: IntCriterion;
@@ -3332,6 +3333,7 @@ export interface ImageFilterCriteria {
   urlCriterion?: StringCriterion;
   dateCriterion?: DateCriterion;
   fileCountCriterion?: IntCriterion;
+  fileSizeCriterion?: IntCriterion;
   tagCountCriterion?: IntCriterion;
   performerCountCriterion?: IntCriterion;
   performerAgeCriterion?: IntCriterion;

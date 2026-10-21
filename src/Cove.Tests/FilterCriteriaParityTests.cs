@@ -58,6 +58,7 @@ public class FilterCriteriaParityTests
         Assert.Null(filter.PerformerAgeCriterion);
         Assert.Null(filter.PerformerFilterCriterion);
         Assert.Null(filter.CaptionsCriterion);
+        Assert.Null(filter.FileSizeCriterion);
     }
 
     [Fact]
@@ -123,6 +124,28 @@ public class FilterCriteriaParityTests
         var result = JsonSerializer.Deserialize<FilteredQueryRequest<VideoFilter>>(json, Options);
         Assert.NotNull(result?.ObjectFilter?.CaptionsCriterion);
         Assert.Equal("english", result.ObjectFilter.CaptionsCriterion.Value);
+    }
+
+    [Fact]
+    public void VideoAndImageFilters_FileSizeCriterion_Deserializes()
+    {
+        var json = """
+        {
+            "objectFilter": {
+                "fileSizeCriterion": { "value": 3221225472, "value2": 6442450944, "modifier": "between" }
+            }
+        }
+        """;
+        var video = JsonSerializer.Deserialize<FilteredQueryRequest<VideoFilter>>(json, Options)?.ObjectFilter?.FileSizeCriterion;
+        var image = JsonSerializer.Deserialize<FilteredQueryRequest<ImageFilter>>(json, Options)?.ObjectFilter?.FileSizeCriterion;
+
+        foreach (var criterion in new[] { video, image })
+        {
+            Assert.NotNull(criterion);
+            Assert.Equal(3_221_225_472, criterion.Value);
+            Assert.Equal(6_442_450_944, criterion.Value2);
+            Assert.Equal(CriterionModifier.Between, criterion.Modifier);
+        }
     }
 
     [Fact]
@@ -508,6 +531,7 @@ public class FilterCriteriaParityTests
         Assert.Null(filter.UrlCriterion);
         Assert.Null(filter.DateCriterion);
         Assert.Null(filter.FileCountCriterion);
+        Assert.Null(filter.FileSizeCriterion);
         Assert.Null(filter.TagCountCriterion);
         Assert.Null(filter.PerformerCountCriterion);
         Assert.Null(filter.PerformerTagsCriterion);
