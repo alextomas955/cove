@@ -86,7 +86,7 @@ Renames and moves must preserve the media identity and remove the stale path. Co
 
 Test both an in-place overwrite and an atomic replacement of a known path. Start a scan during the in-place write, then another after completion. The changing version must not be treated as a completed refresh. After completion, Cove must preserve the path's media identity while refreshing size, technical metadata, fingerprints, and requested generated assets.
 
-If the replacement has the same size and a restored or older modification time, use **Force rescan (ignore mtime)** and record that condition explicitly. An ordinary scan cannot reliably distinguish that replacement from unchanged immutable media.
+If the replacement has the same size and a restored or older modification time, record that condition explicitly. Neither an ordinary scan nor **Force rescan (ignore mtime)** distinguishes that replacement from unchanged immutable media: a forced scan re-reads technical metadata but keeps existing fingerprints and generated assets. Advance the file's modification time before expecting a changed-content refresh.
 
 ### Reach final convergence
 
