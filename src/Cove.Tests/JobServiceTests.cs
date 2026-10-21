@@ -1,3 +1,5 @@
+using System.Text;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -529,6 +531,120 @@ public class JobServiceTests
         {
             await service.StopAsync(CancellationToken.None);
         }
+    }
+
+    [Fact]
+    public async Task JobStartedByApiRequest_CanBeRetriedWithThatRequest_ButJobsItStartsCannot()
+    {
+        const string body = "{\"items\":[{\"url\":\"https://example.com/watch?v=1\",\"entity\":\"Video\"}]}";
+        var accessor = new HttpContextAccessor { HttpContext = await CaptureRequestAsync("POST", "/api/system/downloaders/download-batch", body) };
+        var service = new JobService(new EventBus(), new FakeHubContext(), NullLogger<JobService>.Instance, requestCapture: new JobRequestCapture(accessor));
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            string? followUpId = null;
+            var jobId = service.Enqueue(
+                "download-batch",
+                "Downloading 1 item",
+                (_, _) =>
+                {
+                    followUpId = service.Enqueue("scan", "Scanning library", static (_, _) => Task.CompletedTask);
+                    return Task.CompletedTask;
+                },
+                exclusive: false);
+
+            await WaitForTerminalStateAsync(service, jobId, TimeSpan.FromSeconds(5));
+            Assert.NotNull(followUpId);
+            await WaitForTerminalStateAsync(service, followUpId!, TimeSpan.FromSeconds(5));
+
+            Assert.Equal(
+                new JobReplayRequest("POST", "/api/system/downloaders/download-batch", body),
+                service.GetRetryRequestFor(null, jobId, includeAll: true));
+            Assert.Null(service.GetRetryRequestFor(null, followUpId!, includeAll: true));
+            Assert.Contains(service.GetStoredJobHistoryFor(null, includeAll: true), job => job.Info.Id == jobId && job.Request is not null);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Theory]
+    [InlineData("{\"site\":\"example.com\",\"password\":\"hunter2\"}")]
+    [InlineData("{\"servers\":[{\"apiKey\":\"abc\"}]}")]
+    [InlineData("not json")]
+    public async Task JobStartedByRequestCarryingASecret_CannotBeRetried(string body)
+    {
+        var accessor = new HttpContextAccessor { HttpContext = await CaptureRequestAsync("POST", "/api/jobs/scan", body) };
+        var service = new JobService(new EventBus(), new FakeHubContext(), NullLogger<JobService>.Instance, requestCapture: new JobRequestCapture(accessor));
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var jobId = service.Enqueue("scan", "Scanning library", static (_, _) => Task.CompletedTask);
+            await WaitForTerminalStateAsync(service, jobId, TimeSpan.FromSeconds(5));
+
+            Assert.Null(service.GetRetryRequestFor(null, jobId, includeAll: true));
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task JobHistory_IsRestoredFromTheStoreAndEveryFinishedJobIsSaved()
+    {
+        var saved = new StoredJob(
+            new JobOwner("user:1"),
+            new JobInfo("old-job", "scan", "Scanning library", JobStatus.Completed, 1, null, DateTime.UtcNow.AddHours(-1), DateTime.UtcNow.AddHours(-1), null),
+            new JobReplayRequest("POST", "/api/jobs/scan", null));
+        var store = new FakeJobHistoryStore([saved]);
+        var service = new JobService(new EventBus(), new FakeHubContext(), NullLogger<JobService>.Instance, historyStore: store);
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (service.GetJobHistory().Count == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(25, TestContext.Current.CancellationToken);
+
+            Assert.Equal(saved.Request, service.GetRetryRequestFor(new JobOwner("user:1"), "old-job", includeAll: false));
+            Assert.Null(service.GetRetryRequestFor(new JobOwner("user:2"), "old-job", includeAll: false));
+
+            var jobId = service.Enqueue("clean", "Cleaning library", static (_, _) => Task.CompletedTask);
+            await WaitForTerminalStateAsync(service, jobId, TimeSpan.FromSeconds(5));
+
+            Assert.Equal(["old-job", jobId], service.GetJobHistory().Select(job => job.Id).Reverse());
+            Assert.Contains(store.Saved, job => job.Info.Id == jobId && job.Info.Status == JobStatus.Completed);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task<HttpContext> CaptureRequestAsync(string method, string path, string body)
+    {
+        var bytes = Encoding.UTF8.GetBytes(body);
+        var context = new DefaultHttpContext();
+        context.Request.Method = method;
+        context.Request.Path = path;
+        context.Request.ContentType = "application/json";
+        context.Request.ContentLength = bytes.Length;
+        context.Request.Body = new MemoryStream(bytes);
+        await JobRequestCapture.CaptureAsync(context);
+        return context;
+    }
+
+    private sealed class FakeJobHistoryStore(IReadOnlyList<StoredJob> initial) : IJobHistoryStore
+    {
+        public ConcurrentQueue<StoredJob> Saved { get; } = new();
+
+        public Task<IReadOnlyList<StoredJob>> LoadRecentAsync(CancellationToken ct) => Task.FromResult(initial);
+
+        public void Save(StoredJob job) => Saved.Enqueue(job);
     }
 
     private static async Task<JobInfo?> WaitForTerminalStateAsync(IJobService service, string jobId, TimeSpan timeout)

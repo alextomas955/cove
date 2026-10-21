@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { JobCard } from "../components/JobCard";
 import type { JobInfo } from "../api/types";
 
@@ -46,5 +46,27 @@ describe("JobCard", () => {
     render(<JobCard job={finishedJob({ unitsSucceeded: 1, unitsFailed: 1 })} />);
 
     expect(screen.getByRole("img", { name: "Completed with failures" })).toBeInTheDocument();
+  });
+
+  it("offers Retry only for a finished job the server can retry", async () => {
+    const onRetry = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <JobCard variant="panel" job={finishedJob({ status: "failed", canRetry: true })} onRetry={onRetry} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(onRetry).toHaveBeenCalledWith("job-1"));
+
+    rerender(<JobCard variant="panel" job={finishedJob({ status: "failed", canRetry: false })} onRetry={onRetry} />);
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("shows why a retry could not start", async () => {
+    const onRetry = vi.fn().mockRejectedValue(new Error("API Error 409: already downloaded"));
+    render(<JobCard job={finishedJob({ canRetry: true })} onRetry={onRetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry job" }));
+
+    expect(await screen.findByText("Retry failed: API Error 409: already downloaded")).toBeInTheDocument();
   });
 });

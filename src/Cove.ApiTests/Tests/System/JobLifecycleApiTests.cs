@@ -66,6 +66,31 @@ public sealed class JobLifecycleApiTests(
         AssertHistory(await viewerSession.Client.GetJobHistoryAsync(TestContext.Current.CancellationToken), expectedHistory);
     }
 
+    [Fact]
+    [CoversEndpoint("GET", "/api/jobs/{jobId}/retry-request")]
+    public async Task GivenFinishedJob_WhenItsRetryRequestIsSentAgain_ThenTheJobRunsAgain()
+    {
+        var firstId = await AsUser().StartLibraryCleanJobAsync(dryRun: true, cancellationToken: TestContext.Current.CancellationToken);
+        await WaitForCompletedJobAsync(firstId, "clean", "Cleaning (dry run)");
+
+        var retryRequest = await AsUser().GetJobRetryRequestAsync(firstId, TestContext.Current.CancellationToken);
+        retryRequest.Method.Should().Be("POST");
+        retryRequest.Path.Should().Be("/api/jobs/clean?dryRun=true");
+        retryRequest.Body.Should().BeNull();
+
+        var history = await AsUser().GetJobHistoryJsonAsync(TestContext.Current.CancellationToken);
+        history.EnumerateArray()
+            .Single(job => job.GetProperty("id").GetString() == firstId)
+            .GetProperty("canRetry").GetBoolean().Should().BeTrue();
+
+        var secondId = await AsUser().SendJobRetryRequestAsync(retryRequest, TestContext.Current.CancellationToken);
+        secondId.Should().NotBe(firstId);
+        await WaitForCompletedJobAsync(secondId, "clean", "Cleaning (dry run)");
+
+        (await AsUser().GetJobRetryRequestStatusAsync("no-such-job", TestContext.Current.CancellationToken))
+            .Should().Be(HttpStatusCode.NotFound);
+    }
+
     private async Task<JobInfo> WaitForCompletedJobAsync(
         string jobId,
         string expectedType,

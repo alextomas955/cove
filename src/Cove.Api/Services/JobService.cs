@@ -19,27 +19,63 @@ public class JobService : IJobService, IHostedService
     private readonly IHubContext<JobHub> _hubContext;
     private readonly ILogger<JobService> _logger;
     private readonly ICurrentPrincipalAccessor? _principalAccessor;
+    private readonly JobRequestCapture? _requestCapture;
+    private readonly IJobHistoryStore? _historyStore;
     private Task? _processorTask;
     private CancellationTokenSource? _cts;
-    private const int MaxHistory = 50;
+    private const int MaxHistory = JobHistoryStore.Capacity;
 
     public JobService(
         IEventBus eventBus,
         IHubContext<JobHub> hubContext,
         ILogger<JobService> logger,
-        ICurrentPrincipalAccessor? principalAccessor = null)
+        ICurrentPrincipalAccessor? principalAccessor = null,
+        JobRequestCapture? requestCapture = null,
+        IJobHistoryStore? historyStore = null)
     {
         _eventBus = eventBus;
         _hubContext = hubContext;
         _logger = logger;
         _principalAccessor = principalAccessor;
+        _requestCapture = requestCapture;
+        _historyStore = historyStore;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _processorTask = Task.Run(() => ProcessQueueAsync(_cts.Token), _cts.Token);
+        if (_historyStore is not null)
+            _ = LoadHistoryAsync(_historyStore, _cts.Token);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Restores the job history saved before the last shutdown, behind any job that has already finished
+    /// since startup. Startup does not wait for it, so the database being unavailable cannot block it.
+    /// </summary>
+    private async Task LoadHistoryAsync(IJobHistoryStore store, CancellationToken ct)
+    {
+        try
+        {
+            var saved = await store.LoadRecentAsync(ct);
+            lock (_lock)
+            {
+                var finishedSinceStartup = _history.Select(job => job.Info.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                _history.AddRange(saved
+                    .Where(job => !finishedSinceStartup.Contains(job.Info.Id))
+                    .Select(job => new JobHistoryEntry(job.Owner, job.Info, job.Request)));
+                if (_history.Count > MaxHistory)
+                    _history.RemoveRange(MaxHistory, _history.Count - MaxHistory);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not load the saved job history");
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -93,6 +129,7 @@ public class JobService : IJobService, IHostedService
             Work = work,
             Owner = owner,
             ResultUrl = resultUrl,
+            Request = _requestCapture?.ForNewJob(),
         };
 
         lock (_lock)
@@ -241,6 +278,31 @@ public class JobService : IJobService, IHostedService
         }
     }
 
+    /// <summary>The finished jobs the caller may see, each with the request that started it, if known.</summary>
+    public IReadOnlyList<StoredJob> GetStoredJobHistoryFor(JobOwner? owner, bool includeAll)
+    {
+        lock (_lock)
+        {
+            return _history
+                .Where(job => CanAccess(job.Owner, owner, includeAll))
+                .Select(job => new StoredJob(job.Owner, job.Info, job.Request))
+                .ToList();
+        }
+    }
+
+    /// <summary>
+    /// The API request that started a finished job, which sending again retries the job. Null when the
+    /// caller may not see the job, it has not finished, or it cannot be retried.
+    /// </summary>
+    public JobReplayRequest? GetRetryRequestFor(JobOwner? owner, string jobId, bool includeAll)
+    {
+        lock (_lock)
+        {
+            var job = _history.FirstOrDefault(job => string.Equals(job.Info.Id, jobId, StringComparison.OrdinalIgnoreCase));
+            return job is not null && CanAccess(job.Owner, owner, includeAll) ? job.Request : null;
+        }
+    }
+
     private static bool CanAccess(JobOwner? jobOwner, JobOwner? requestingOwner, bool includeAll)
         => includeAll || (jobOwner is not null && jobOwner == requestingOwner);
 
@@ -269,6 +331,7 @@ public class JobService : IJobService, IHostedService
 
     private async Task ProcessQueueAsync(CancellationToken ct)
     {
+        JobRequestCapture.MarkJobWork();
         while (!ct.IsCancellationRequested)
         {
             await _queueSignal.WaitAsync(ct);
@@ -334,6 +397,8 @@ public class JobService : IJobService, IHostedService
 
     private async Task RunConcurrentJobAsync(JobEntry entry)
     {
+        // Runs on the request that started the job; nothing this job starts belongs to that request.
+        JobRequestCapture.MarkJobWork();
         entry.Cts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? CancellationToken.None);
         entry.Status = JobStatus.Running;
         entry.StartedAt = DateTime.UtcNow;
@@ -467,13 +532,15 @@ public class JobService : IJobService, IHostedService
 
     private void MoveToHistory(JobEntry entry)
     {
+        var finished = new JobHistoryEntry(entry.Owner, entry.ToInfo(), entry.Request);
         lock (_lock)
         {
             _jobs.Remove(entry.Id);
-            _history.Insert(0, new JobHistoryEntry(entry.Owner, entry.ToInfo()));
+            _history.Insert(0, finished);
             if (_history.Count > MaxHistory)
                 _history.RemoveRange(MaxHistory, _history.Count - MaxHistory);
         }
+        _historyStore?.Save(new StoredJob(finished.Owner, finished.Info, finished.Request));
         entry.Completion.TrySetResult();
     }
 
@@ -551,6 +618,7 @@ public class JobService : IJobService, IHostedService
         public string? Summary { get; set; }
         public JobOwner? Owner { get; set; }
         public string? ResultUrl { get; set; }
+        public JobReplayRequest? Request { get; set; }
         internal bool AggregateUnitMode { get; set; }
 
         public JobInfo ToInfo()
@@ -581,7 +649,7 @@ public class JobService : IJobService, IHostedService
         }
     }
 
-    private sealed record JobHistoryEntry(JobOwner? Owner, JobInfo Info);
+    private sealed record JobHistoryEntry(JobOwner? Owner, JobInfo Info, JobReplayRequest? Request);
 
     /// <summary>
     /// Estimates time-to-completion for a job.

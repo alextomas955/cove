@@ -20,6 +20,7 @@ public class JobsController(
     ICurrentPrincipalAccessor principalAccessor,
     CoveContext db,
     DuplicateResolutionService duplicateResolutionService,
+    JobService jobHistory,
     ILogger<JobsController>? logger = null) : ControllerBase
 {
     [HttpGet]
@@ -32,10 +33,25 @@ public class JobsController(
 
     [HttpGet("history")]
     [AllowWithoutPermission]
-    public async Task<ActionResult<IReadOnlyList<JobInfo>>> GetHistory(CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<JobHistoryInfo>>> GetHistory(CancellationToken ct)
     {
         var (owner, includeAll) = await GetVisibilityAsync(ct);
-        return Ok(jobService.GetJobHistoryFor(owner, includeAll));
+        return Ok(jobHistory.GetStoredJobHistoryFor(owner, includeAll)
+            .Select(job => new JobHistoryInfo(job.Info, job.Request is not null))
+            .ToList());
+    }
+
+    /// <summary>
+    /// The API request that started a finished job. Sending it again, as the person retrying, starts the
+    /// job again with the same inputs and the same permission checks as the first time.
+    /// </summary>
+    [HttpGet("{jobId}/retry-request")]
+    [AllowWithoutPermission]
+    public async Task<ActionResult<JobReplayRequest>> GetRetryRequest(string jobId, CancellationToken ct)
+    {
+        var (owner, includeAll) = await GetVisibilityAsync(ct);
+        var request = jobHistory.GetRetryRequestFor(owner, jobId, includeAll);
+        return request is not null ? Ok(request) : NotFound();
     }
 
     [HttpGet("{jobId}")]
@@ -163,6 +179,18 @@ public class JobsController(
         var includeAll = await JobHub.CanReadGlobalStreamAsync(principal, Permissions.JobsRead, db, ct);
         return (JobOwner.FromPrincipal(principal), includeAll);
     }
+}
+
+/// <summary>A finished job, and whether it can be retried.</summary>
+public sealed record JobHistoryInfo : Cove.Core.Interfaces.JobInfo
+{
+    public JobHistoryInfo(Cove.Core.Interfaces.JobInfo info, bool canRetry)
+        : base(info)
+    {
+        CanRetry = canRetry;
+    }
+
+    public bool CanRetry { get; init; }
 }
 
 public class ReorderJobRequest

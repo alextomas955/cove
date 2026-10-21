@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ExternalLink,
   TriangleAlert,
+  RotateCcw,
 } from "lucide-react";
 import type { JobInfo } from "../api/types";
 import { formatDateTime } from "../utils/dateFormat";
@@ -119,6 +120,8 @@ export interface JobCardProps {
   onCancel?: (id: string) => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  /** Starts a finished job again; offered only for jobs the server says can be retried. */
+  onRetry?: (id: string) => Promise<unknown>;
 }
 
 /**
@@ -126,12 +129,28 @@ export interface JobCardProps {
  * the Settings jobs panel. Finished jobs show their start time, total duration, finish time, a unit
  * summary, and any error.
  */
-export function JobCard({ job, variant = "drawer", onCancel, onMoveUp, onMoveDown }: JobCardProps) {
+export function JobCard({ job, variant = "drawer", onCancel, onMoveUp, onMoveDown, onRetry }: JobCardProps) {
   const { progressPct, elapsedMs, etaMs } = useJobTiming(job);
   const isPanel = variant === "panel";
   const isFinished = job.status !== "running" && job.status !== "pending";
   const counts = isFinished ? finishedCounts(job) : null;
   const hasFailedUnits = completedWithFailures(job);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const canRetry = isFinished && job.canRetry === true && onRetry !== undefined;
+
+  const handleRetry = async () => {
+    if (!onRetry) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      await onRetry(job.id);
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const containerClass = isPanel
     ? "flex items-start justify-between gap-2 rounded-xl border border-border bg-card p-3"
@@ -180,6 +199,7 @@ export function JobCard({ job, variant = "drawer", onCancel, onMoveUp, onMoveDow
           )}
 
           {job.error && <p className="text-xs text-red-400 mt-1 break-words">{job.error}</p>}
+          {retryError && <p className="text-xs text-red-400 mt-1 break-words">Retry failed: {retryError}</p>}
 
           {isFinished && job.completedAt && (
             <div className="mt-1 space-y-0.5">
@@ -239,6 +259,28 @@ export function JobCard({ job, variant = "drawer", onCancel, onMoveUp, onMoveDow
               className="text-muted hover:text-red-400 flex-shrink-0"
             >
               <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          ))}
+        {canRetry &&
+          (isPanel ? (
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={retrying}
+              className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+            >
+              {retrying ? "Retrying…" : "Retry"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={retrying}
+              title="Run this job again"
+              aria-label="Retry job"
+              className="text-muted hover:text-foreground flex-shrink-0 disabled:opacity-50"
+            >
+              {retrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
             </button>
           ))}
       </div>

@@ -286,6 +286,11 @@ try
     builder.Services.AddSingleton<IEventBus, EventBus>();
 
     // Job service (background task processing)
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddSingleton<JobRequestCapture>();
+    builder.Services.AddSingleton<JobHistoryStore>();
+    builder.Services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<JobHistoryStore>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<JobHistoryStore>());
     builder.Services.AddSingleton<JobService>();
     builder.Services.AddSingleton<IJobService>(sp => sp.GetRequiredService<JobService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<JobService>());
@@ -662,6 +667,13 @@ try
     // Always run our principal-resolver middleware so [RequiresPermission] can read it.
     // (When auth is disabled the filter short-circuits and treats requests as anonymous-allowed.)
     app.UseMiddleware<Cove.Api.Middleware.CurrentPrincipalMiddleware>();
+
+    // Keep the request that starts each job, so the job can be retried by sending it again.
+    app.Use(async (context, next) =>
+    {
+        await JobRequestCapture.CaptureAsync(context);
+        await next();
+    });
 
     // Authorize extension endpoints with the host request scope before exposing extension-owned
     // registrations to endpoint execution. This prevents an extension from replacing Cove's

@@ -1239,3 +1239,20 @@ public class ExtensionDataConfiguration : IEntityTypeConfiguration<ExtensionData
         builder.HasIndex(e => e.ExtensionId);
     }
 }
+
+public class JobHistoryRecordConfiguration : IEntityTypeConfiguration<JobHistoryRecord>
+{
+    public void Configure(EntityTypeBuilder<JobHistoryRecord> builder)
+    {
+        builder.ToTable("job_history");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedOnAdd();
+        builder.Property(e => e.JobId).IsRequired().HasMaxLength(64);
+        builder.Property(e => e.OwnerKey).HasMaxLength(128);
+        builder.Property(e => e.Info).IsRequired().HasColumnType("jsonb");
+        builder.Property(e => e.RequestMethod).HasMaxLength(16);
+        builder.Property(e => e.RequestPath).HasMaxLength(2048);
+
+        builder.HasIndex(e => e.JobId).IsUnique();
+    }
+}

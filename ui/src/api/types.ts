@@ -2486,6 +2486,15 @@ export interface JobInfo {
   updatedAt?: string | null;
   /** Internal application route for durable job output. */
   resultUrl?: string | null;
+  /** Finished jobs only: whether the job can be started again with the request that started it. */
+  canRetry?: boolean;
+}
+
+/** The API request that started a finished job. */
+export interface JobRetryRequest {
+  method: string;
+  path: string;
+  body?: string | null;
 }
 
 export interface SortClause {

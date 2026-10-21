@@ -5561,7 +5561,12 @@ function TasksPanel({ activeTab, midSlot }: { activeTab: SettingsTab; midSlot?: 
       >
         <div className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
           {recentJobs.map((job) => (
-            <JobCard key={job.id} job={job} variant="panel" />
+            <JobCard
+              key={job.id}
+              job={job}
+              variant="panel"
+              onRetry={(id) => jobs.retry(id).then(() => refetchJobs())}
+            />
           ))}
         </div>
       </SectionCard>

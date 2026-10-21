@@ -176,6 +176,14 @@ export function JobDrawer({ open, onClose }: Props) {
     [queryClient],
   );
 
+  const handleRetry = useCallback(
+    async (id: string) => {
+      await jobs.retry(id);
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    [queryClient],
+  );
+
   // Clean up stale entries from realtimeJobs when the API no longer returns them
   const [prevActiveJobs, setPrevActiveJobs] = useState(activeJobs);
   if (activeJobs !== prevActiveJobs) {
@@ -248,7 +256,7 @@ export function JobDrawer({ open, onClose }: Props) {
                   <h3 className="text-xs font-semibold text-muted uppercase mb-2">History</h3>
                   <div className="space-y-2">
                     {jobHistory.map((job) => (
-                      <JobCard key={job.id} job={job} />
+                      <JobCard key={job.id} job={job} onRetry={handleRetry} />
                     ))}
                   </div>
                 </div>

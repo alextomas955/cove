@@ -134,6 +134,7 @@ public partial class CoveContext : DbContext
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Dashboard> Dashboards => Set<Dashboard>();
+    public DbSet<JobHistoryRecord> JobHistory => Set<JobHistoryRecord>();
 
     // Extensions
     public DbSet<ExtensionData> ExtensionData => Set<ExtensionData>();

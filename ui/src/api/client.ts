@@ -127,6 +127,7 @@ import type {
   CoveConfig,
   FfmpegCapabilities,
   JobInfo,
+  JobRetryRequest,
   DatabaseMigrationResult,
   ScraperSummary,
   DownloaderDescriptor,
@@ -2011,6 +2012,17 @@ export const customFields = {
 export const jobs = {
   list: () => request<JobInfo[]>("/jobs"),
   history: () => request<JobInfo[]>("/jobs/history"),
+  /**
+   * Starts a finished job again by sending the API request that started it once more, as the current
+   * user, so it runs with the same inputs and the same permission checks.
+   */
+  retry: async (id: string) => {
+    const original = await request<JobRetryRequest>(`/jobs/${encodeURIComponent(id)}/retry-request`);
+    return request<unknown>(normalizeApiPath(original.path), {
+      method: original.method,
+      body: original.body ?? undefined,
+    });
+  },
   get: (id: string) => request<JobInfo>(`/jobs/${id}`),
   cancel: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
   reorder: (id: string, beforeJobId?: string | null) =>

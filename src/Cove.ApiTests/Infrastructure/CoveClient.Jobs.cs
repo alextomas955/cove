@@ -59,6 +59,50 @@ public sealed partial class CoveClient
             new { BeforeJobId = beforeJobId },
             cancellationToken);
 
+    public Task<JsonElement> GetJobHistoryJsonAsync(CancellationToken cancellationToken = default)
+        => SendAsync<JsonElement>(
+            HttpMethod.Get,
+            WithCacheNonce("/api/jobs/history"),
+            payload: null,
+            cancellationToken);
+
+    public Task<Cove.Api.Services.JobReplayRequest> GetJobRetryRequestAsync(
+        string jobId,
+        CancellationToken cancellationToken = default)
+        => SendAsync<Cove.Api.Services.JobReplayRequest>(
+            HttpMethod.Get,
+            WithCacheNonce($"/api/jobs/{Uri.EscapeDataString(jobId)}/retry-request"),
+            payload: null,
+            cancellationToken);
+
+    public async Task<HttpStatusCode> GetJobRetryRequestStatusAsync(
+        string jobId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _client.GetAsync(
+            WithCacheNonce($"/api/jobs/{Uri.EscapeDataString(jobId)}/retry-request"),
+            cancellationToken);
+        return response.StatusCode;
+    }
+
+    /// <summary>Sends a finished job's request again, as the UI's Retry does, and returns the new job id.</summary>
+    public async Task<string> SendJobRetryRequestAsync(
+        Cove.Api.Services.JobReplayRequest retryRequest,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(new HttpMethod(retryRequest.Method), retryRequest.Path);
+        if (retryRequest.Body is not null)
+            request.Content = new StringContent(retryRequest.Body, System.Text.Encoding.UTF8, "application/json");
+
+        using var response = await _client.SendAsync(request, cancellationToken);
+        var payload = await ApiResponse.ReadAsync<JsonElement>(
+            response,
+            $"{retryRequest.Method} {retryRequest.Path}",
+            cancellationToken);
+        return payload.GetProperty("jobId").GetString()
+            ?? throw new InvalidOperationException($"{retryRequest.Method} {retryRequest.Path} did not return a job id.");
+    }
+
     private async Task<string> StartJobAsync(
         string requestUri,
         CancellationToken cancellationToken)
