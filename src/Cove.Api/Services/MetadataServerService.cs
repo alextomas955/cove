@@ -3168,7 +3168,8 @@ query Me {
         var payload = await response.Content.ReadAsStringAsync(ct);
 
         if (payload.Contains("<!doctype", StringComparison.OrdinalIgnoreCase) || payload.Contains("<html", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Invalid endpoint");
+            throw new InvalidOperationException(
+                $"Invalid endpoint: {box.Endpoint} returned an HTML page (HTTP {(int)response.StatusCode} {response.ReasonPhrase}) instead of a GraphQL response");
 
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(payload) ? response.ReasonPhrase ?? "Request failed" : payload);
@@ -3703,6 +3704,7 @@ query Me {
         var message = ex.Message.ToLowerInvariant();
         return message switch
         {
+            _ when message.StartsWith("invalid endpoint", StringComparison.Ordinal) => ex.Message,
             _ when message.Contains("doctype") || message.Contains("<html") => "Invalid endpoint",
             _ when message.Contains("connection refused") || message.Contains("no such host") || message.Contains("name or service not known") => "No response from server",
             _ when message.Contains("signature is invalid") || message.Contains("unauthorized") || message.Contains("forbidden") => "Invalid or expired API key.",
