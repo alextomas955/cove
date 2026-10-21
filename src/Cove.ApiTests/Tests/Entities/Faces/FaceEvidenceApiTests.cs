@@ -80,6 +80,36 @@ public sealed class FaceEvidenceApiTests(
     }
 
     [Fact]
+    public async Task GivenUntitledHosts_WhenFaceAppearancesAreRead_ThenTitlesFallBackToFileBasename()
+    {
+        // Arrange
+        var video = await AsUser().CreateVideoAsync(string.Empty, TestContext.Current.CancellationToken);
+        var image = await AsUser().CreateImageAsync(string.Empty, TestContext.Current.CancellationToken);
+        var filelessVideo = await AsUser().CreateVideoAsync(string.Empty, TestContext.Current.CancellationToken);
+        await AsDbUser().AttachVideoFileAsync(video.Id, duration: 10, size: 1_000, cancellationToken: TestContext.Current.CancellationToken);
+        await AsDbUser().AttachImageFileAsync(image.Id, size: 1_000, cancellationToken: TestContext.Current.CancellationToken);
+        var detectedFace = await AsUser().CreateFaceAsync(new FaceCreateDto("Untitled detections", null, false, null), TestContext.Current.CancellationToken);
+        var projectedFace = await AsUser().CreateFaceAsync(new FaceCreateDto("Untitled appearances", null, false, null), TestContext.Current.CancellationToken);
+        await AsUser().CreateVideoFaceDetectionAsync(video, detectedFace, TestContext.Current.CancellationToken);
+        await AsUser().CreateImageFaceDetectionAsync(image, detectedFace, TestContext.Current.CancellationToken);
+        await AsDbUser().CreateFaceAppearanceAsync(projectedFace.Id, FaceAppearanceHostType.Video, video.Id, sampleCount: 1, retainedSpatialSampleCount: 1, segmentCount: 1, firstSeenAtSec: 1, lastSeenAtSec: 2, topConfidence: 0.9f, cancellationToken: TestContext.Current.CancellationToken);
+        await AsDbUser().CreateFaceAppearanceAsync(projectedFace.Id, FaceAppearanceHostType.Video, filelessVideo.Id, sampleCount: 1, retainedSpatialSampleCount: 1, segmentCount: 1, firstSeenAtSec: 1, lastSeenAtSec: 2, topConfidence: 0.9f, cancellationToken: TestContext.Current.CancellationToken);
+        await AsDbUser().CreateFaceAppearanceAsync(projectedFace.Id, FaceAppearanceHostType.Image, image.Id, sampleCount: 1, retainedSpatialSampleCount: 1, segmentCount: 1, firstSeenAtSec: null, lastSeenAtSec: null, topConfidence: 0.9f, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Act
+        var fromDetections = await AsUser().GetFaceAppearancesAsync(detectedFace.Id, TestContext.Current.CancellationToken);
+        var fromAppearances = await AsUser().GetFaceAppearancesAsync(projectedFace.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        foreach (var appearances in new[] { fromDetections, fromAppearances })
+        {
+            appearances.Items.Single(item => item.HostType == "video" && item.HostId == video.Id).Title.Should().Be("aggregate-source.mp4");
+            appearances.Items.Single(item => item.HostType == "image").Title.Should().Be("aggregate-source.png");
+        }
+        fromAppearances.Items.Single(item => item.HostId == filelessVideo.Id).Title.Should().Be($"Video {filelessVideo.Id}");
+    }
+
+    [Fact]
     public async Task GivenMissingFace_WhenEvidenceIsRead_ThenNotFoundIsReturned()
     {
         // Arrange
