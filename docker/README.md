@@ -64,6 +64,8 @@ deploy:
 
 3. Set transcoding to NVENC in Cove's Settings → Transcoding
 
+**NVIDIA driver version:** the bundled FFmpeg (BtbN's `master-latest` build, which Cove also downloads for native Windows and Linux installs) is currently built against NVIDIA Video Codec SDK 13.1, so NVENC encoding needs **host driver 610 or newer**. On older drivers, such as the 580 series many distributions package, NVENC cannot open an encode session. Cove then encodes in software and logs a warning at startup that quotes FFmpeg's required driver version. NVDEC/CUDA decoding still works on those drivers. BtbN raises the SDK version over time, so the version in that warning takes precedence over the one given here.
+
 ### Intel / AMD (VAAPI)
 
 1. Uncomment the `devices` section in your compose file:
