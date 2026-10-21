@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { segmentDisplayProfiles } from "../api/client";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
 
 const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, coverDialogMock, appConfigMock } =
@@ -26,6 +27,12 @@ const { mockVideos, videoPlayerMock, videoQueueMock, visualAvailabilityMock, cov
     visualAvailabilityMock: { available: false, loading: false },
     coverDialogMock: vi.fn(),
   }));
+
+const { authMock, segmentsPanelMock, layoutShortcutsMock } = vi.hoisted(() => ({
+  authMock: { extraPermissions: new Set<string>() },
+  segmentsPanelMock: vi.fn(),
+  layoutShortcutsMock: vi.fn((_shortcuts: { id?: string; handler: () => void }[]) => undefined),
+}));
 
 const { videoSpritesMock, layoutMock } = vi.hoisted(() => ({
   videoSpritesMock: vi.fn((_videoId: number | null) => null as unknown),
@@ -72,6 +79,7 @@ vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
     tabs,
     activeTab,
     onTabChange,
+    keyboardShortcuts,
     children,
   }: {
     media: ReactElement<{ children?: ReactNode }>;
@@ -80,8 +88,10 @@ vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
     tabs: { key: string; label: string }[];
     activeTab: string;
     onTabChange: (key: string) => void;
+    keyboardShortcuts?: { id?: string; handler: () => void }[];
     children?: ReactNode;
   }) => {
+    layoutShortcutsMock(keyboardShortcuts ?? []);
     const mediaChildren = Array.isArray(media.props.children) ? media.props.children : [media.props.children];
     return (
       <>
@@ -104,13 +114,21 @@ vi.mock("../components/MediaDetailLayout/MediaDetailLayout", () => {
   return { MediaDetailLayout: MockMediaDetailLayout };
 });
 
+vi.mock("../components/VideoSegmentsPanel", () => ({
+  VideoSegmentsPanel: (props: Record<string, unknown>) => {
+    segmentsPanelMock(props);
+    return <div data-testid="video-segments-panel" />;
+  },
+}));
+
 vi.mock("../router/RouteRegistry", () => ({
   ExtensionSlot: () => null,
 }));
 
 vi.mock("../auth/AuthContext", () => ({
   useAuth: () => ({
-    hasPermission: (permission: string) => permission === "videos.write" || permission === "files.read",
+    hasPermission: (permission: string) =>
+      permission === "videos.write" || permission === "files.read" || authMock.extraPermissions.has(permission),
     user: { kind: "user", uiPreferences: { tracking: { enabled: false } } },
   }),
 }));
@@ -238,6 +256,7 @@ describe("VideoDetailPage media-player extension surface", () => {
     videoSpritesMock.mockReset();
     layoutMock.renderWholeMediaColumn = false;
     layoutMock.renderDetailsTab = false;
+    authMock.extraPermissions.clear();
     videoSpritesMock.mockReturnValue(null);
     appConfigMock.config = { ui: {} };
   });
@@ -911,5 +930,52 @@ describe("VideoDetailPage media-player extension surface", () => {
 
     expect(screen.getByRole("button", { name: /Merge/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Submit Draft…" })).not.toBeInTheDocument();
+  });
+
+  it("opens the segments tab with the add form at the current time from the add-segment shortcut", async () => {
+    authMock.extraPermissions = new Set(["segments.read", "segments.write"]);
+    layoutMock.renderDetailsTab = true;
+    Object.assign(mockVideos, {
+      segments: { list: vi.fn().mockResolvedValue([]), spans: vi.fn().mockResolvedValue({ spans: [] }) },
+      detections: { list: vi.fn().mockResolvedValue([]) },
+    });
+    Object.assign(segmentDisplayProfiles, { list: vi.fn().mockResolvedValue([]) });
+    mockVideos.get.mockResolvedValue({
+      id: 14,
+      title: "Segmented video",
+      organized: false,
+      updatedAt: "2026-07-11T00:00:00Z",
+      files: [{ format: "mp4", duration: 120, width: 1920, height: 1080, frameRate: 30, captions: [] }],
+      performers: [],
+      tags: [],
+      galleries: [],
+      groups: [],
+      urls: [],
+      remoteIds: [],
+      contextTagApplications: [],
+    });
+
+    renderVideoDetail();
+    await waitFor(() => expect(videoPlayerMock).toHaveBeenCalled());
+    const onTimeUpdate = videoPlayerMock.mock.calls.at(-1)?.[0].onTimeUpdate as (time: number) => void;
+    act(() => onTimeUpdate(83.4));
+
+    const shortcut = layoutShortcutsMock.mock.calls
+      .at(-1)?.[0]
+      .find((candidate) => candidate.id === "detail.video.addSegment");
+    expect(shortcut).toBeDefined();
+    act(() => shortcut!.handler());
+
+    expect(await screen.findByRole("tab", { name: /^Segments/, selected: true })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(segmentsPanelMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ addRequested: true, currentTime: 83.4, canEdit: true }),
+      ),
+    );
+
+    // The panel clears the request once it has opened the form, so revisiting the tab does not reopen it.
+    const { onAddRequestHandled } = segmentsPanelMock.mock.calls.at(-1)![0] as { onAddRequestHandled: () => void };
+    act(() => onAddRequestHandled());
+    expect(segmentsPanelMock).toHaveBeenLastCalledWith(expect.objectContaining({ addRequested: false }));
   });
 });

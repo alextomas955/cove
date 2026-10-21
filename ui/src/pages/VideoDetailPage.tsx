@@ -449,6 +449,9 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, initialCut, onN
   const trackedPageVisitVideoIdRef = useRef<number | null>(null);
   const opsMenuRef = useRef<HTMLDivElement>(null);
   const [videoTime, setVideoTime] = useState(0);
+  // Set by the "add segment at current time" shortcut; the segments panel clears it once handled.
+  const [segmentAddRequested, setSegmentAddRequested] = useState(false);
+  const clearSegmentAddRequest = useCallback(() => setSegmentAddRequested(false), []);
   const [coverOpen, setCoverOpen] = useState(false);
   const [videoFilters, setVideoFilters] = useState({
     brightness: 100,
@@ -837,6 +840,16 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, initialCut, onN
         handler: () => canReadSegments && setActiveTab("segments"),
       },
       {
+        id: "detail.video.addSegment",
+        key: "n",
+        description: "Add segment at current time",
+        handler: () => {
+          if (!canReadSegments || !canWriteSegments) return;
+          setActiveTab("segments");
+          setSegmentAddRequested(true);
+        },
+      },
+      {
         id: "detail.fileInfo",
         key: "i",
         description: "Open file info tab",
@@ -870,6 +883,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, initialCut, onN
       canEngageVideo,
       canReadFiles,
       canReadSegments,
+      canWriteSegments,
       canWriteVideo,
       hasNext,
       hasPrev,
@@ -1231,6 +1245,8 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, initialCut, onN
         canEdit={canWriteSegments}
         onSeek={(time) => seekRef.current?.(time)}
         currentTime={videoTime}
+        addRequested={segmentAddRequested}
+        onAddRequestHandled={clearSegmentAddRequest}
         onNavigate={onNavigate}
       />
     ) : activeTab === "similar" ? (
