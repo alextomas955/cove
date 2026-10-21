@@ -110,6 +110,35 @@ public sealed class TagApplicationHostUpdatedAtApiTests(
             await AssertVideoUpdatedAtAdvancedAsync(video.Id, ct);
     }
 
+    [Fact]
+    public async Task GivenVideos_WhenAnExtensionWritesTagApplicationsThroughTheRepository_ThenEveryAffectedVideoUpdatedAtAdvances()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var owner = AsUser();
+        var suffix = Guid.NewGuid().ToString("N");
+        var tag = await owner.CreateTagAsync($"Extension application tag {suffix}", ct);
+        var videos = new[]
+        {
+            await owner.CreateVideoAsync($"Extension application host A {suffix}", ct),
+            await owner.CreateVideoAsync($"Extension application host B {suffix}", ct),
+        };
+        var control = await owner.CreateVideoAsync($"Extension application control {suffix}", ct);
+        var hostIds = videos.Select(video => video.Id).ToArray();
+        foreach (var id in hostIds.Append(control.Id))
+            await BackdateAsync<Video>(id, ct);
+
+        // An extension's background job (AI tagging) writes through the repository with no signed-in user.
+        await AsDbUser().AddTagApplicationsThroughRepositoryAsync(AffinityHostType.Video, hostIds, tag.Id, "ai:tagging", ct);
+        foreach (var id in hostIds)
+            await AssertVideoUpdatedAtAdvancedAsync(id, ct);
+
+        await AsDbUser().RemoveTagApplicationsThroughRepositoryAsync(AffinityHostType.Video, hostIds, tag.Id, "ai:tagging", ct);
+        foreach (var id in hostIds)
+            await AssertVideoUpdatedAtAdvancedAsync(id, ct);
+
+        Timestamp((await owner.GetVideoByIdAsync(control.Id, ct)).UpdatedAt).Should().Be(Backdated);
+    }
+
     private Task BackdateAsync<TEntity>(int id, CancellationToken ct) where TEntity : BaseEntity
         => AsDbUser().BackdateUpdatedAtAsync<TEntity>(id, Backdated, ct);
 

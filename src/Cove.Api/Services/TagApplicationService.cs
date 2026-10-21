@@ -50,7 +50,6 @@ public sealed class TagApplicationService(CoveContext db)
             && candidate.ModelKey == modelKey,
             ct);
 
-        var created = application == null;
         if (application == null)
         {
             application = new TagApplication
@@ -72,9 +71,6 @@ public sealed class TagApplicationService(CoveContext db)
         if (dto.HostDurationSec.HasValue) application.HostDurationSec = dto.HostDurationSec.Value;
 
         await db.SaveChangesAsync(ct);
-        // Re-sending an application the host already has changes nothing about the host.
-        if (created)
-            await HostUpdatedAtStamp.TouchAsync(db, hostType, dto.HostId, ct);
 
         return await db.TagApplications
             .Include(item => item.Tag).ThenInclude(tag => tag!.Aliases)
@@ -91,7 +87,6 @@ public sealed class TagApplicationService(CoveContext db)
 
         db.TagApplications.Remove(application);
         await db.SaveChangesAsync(ct);
-        await HostUpdatedAtStamp.TouchAsync(db, application.HostType, application.HostId, ct);
         return application;
     }
 
@@ -124,7 +119,6 @@ public sealed class TagApplicationService(CoveContext db)
 
         db.TagApplications.RemoveRange(applications);
         await db.SaveChangesAsync(ct);
-        await HostUpdatedAtStamp.TouchAsync(db, parsedHostType, hostId, ct);
         return applications.Count;
     }
 

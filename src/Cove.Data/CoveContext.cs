@@ -629,6 +629,7 @@ public partial class CoveContext : DbContext
                     newVideosWithoutPrimary.AddRange(Videos.IgnoreQueryFilters().Where(video => firstAttachments.Contains(video.Id)
                         && video.PrimaryFileId == null && !VideoFiles.Any(file => file.VideoId == video.Id) && !existingIds.Contains(video.Id)).ToList());
                 }
+                var tagApplicationHosts = CollectTagApplicationHosts();
                 var result = SaveChangesWithNameConstraintTranslation();
                 AddPostSaveDerivedCountTargets(derivedCountTargets, postSaveDerivedCountTargets);
                 MaintainPostSaveDenormalizedIdArrays(derivedCountTargets, postSaveDerivedCountTargets);
@@ -636,6 +637,7 @@ public partial class CoveContext : DbContext
                 PersistDerivedCounts(derivedCountTargets);
                 if (ChangeTracker.HasChanges())
                     base.SaveChanges();
+                StampTagApplicationHosts(tagApplicationHosts);
                 return result;
             }
             finally
@@ -693,7 +695,10 @@ public partial class CoveContext : DbContext
                     newVideosWithoutPrimary.AddRange(await Videos.IgnoreQueryFilters().Where(video => firstAttachments.Contains(video.Id)
                         && video.PrimaryFileId == null && !VideoFiles.Any(file => file.VideoId == video.Id) && !existingIds.Contains(video.Id)).ToListAsync(cancellationToken));
                 }
-                return await SaveChangesWithDerivedCountsAsync(derivedCountTargets, postSaveDerivedCountTargets, newVideosWithoutPrimary, cancellationToken);
+                var tagApplicationHosts = CollectTagApplicationHosts();
+                var result = await SaveChangesWithDerivedCountsAsync(derivedCountTargets, postSaveDerivedCountTargets, newVideosWithoutPrimary, cancellationToken);
+                await StampTagApplicationHostsAsync(tagApplicationHosts, cancellationToken);
+                return result;
             }
             finally
             {

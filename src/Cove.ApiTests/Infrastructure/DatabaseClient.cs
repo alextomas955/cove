@@ -556,6 +556,30 @@ public sealed class DatabaseClient
             .ExecuteUpdateAsync(update => update.SetProperty(entity => entity.UpdatedAt, updatedAt), cancellationToken);
     }
 
+    /// <summary>
+    /// Writes host-level tag applications through the extension-facing repository, the way an extension's
+    /// background job (e.g. AI tagging) does: no signed-in principal, one save for every host.
+    /// </summary>
+    public async Task AddTagApplicationsThroughRepositoryAsync(
+        AffinityHostType hostType, IReadOnlyCollection<int> hostIds, int tagId, string sourceKey, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateCoveContext();
+        var repository = new Cove.Data.Repositories.TagApplicationRepository(db);
+        foreach (var hostId in hostIds)
+            repository.Add(new TagApplication { HostType = hostType, HostId = hostId, TagId = tagId, SourceKey = sourceKey });
+        await repository.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveTagApplicationsThroughRepositoryAsync(
+        AffinityHostType hostType, IReadOnlyCollection<int> hostIds, int tagId, string sourceKey, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateCoveContext();
+        var repository = new Cove.Data.Repositories.TagApplicationRepository(db);
+        var applications = await repository.FindAsync(new Cove.Core.Interfaces.TagApplicationFilter { HostType = hostType, SourceKey = sourceKey }, cancellationToken);
+        repository.RemoveRange(applications.Where(application => application.TagId == tagId && hostIds.Contains(application.HostId)));
+        await repository.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<int> CountVideoShotSetsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = CreateCoveContext();
