@@ -75,11 +75,11 @@ public class EntityListSortBehaviorHarnessTests
             _ => [402, 403])];
         yield return [new FilterProbe(
             "filter:videos:FileSizeCriterion/greater_than",
-            fixture => QueryFilteredIdsAsync(fixture.Context, "videos", new VideoFilter { FileSizeCriterion = new IntCriterion { Modifier = CriterionModifier.GreaterThan, Value = 2_000 } }),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "videos", new VideoFilter { FileSizeCriterion = new LongCriterion { Modifier = CriterionModifier.GreaterThan, Value = 2_000 } }),
             _ => [402, 403])];
         yield return [new FilterProbe(
             "filter:videos:FileSizeCriterion/between",
-            fixture => QueryFilteredIdsAsync(fixture.Context, "videos", new VideoFilter { FileSizeCriterion = new IntCriterion { Modifier = CriterionModifier.Between, Value = 1_100, Value2 = 2_200 } }),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "videos", new VideoFilter { FileSizeCriterion = new LongCriterion { Modifier = CriterionModifier.Between, Value = 1_100, Value2 = 2_200 } }),
             _ => [401, 402])];
         yield return [new FilterProbe(
             "filter:videos:OrganizedCriterion/true",
@@ -108,11 +108,11 @@ public class EntityListSortBehaviorHarnessTests
             _ => [502, 503])];
         yield return [new FilterProbe(
             "filter:images:FileSizeCriterion/less_than",
-            fixture => QueryFilteredIdsAsync(fixture.Context, "images", new ImageFilter { FileSizeCriterion = new IntCriterion { Modifier = CriterionModifier.LessThan, Value = 1_900 } }),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "images", new ImageFilter { FileSizeCriterion = new LongCriterion { Modifier = CriterionModifier.LessThan, Value = 1_900 } }),
             _ => [501])];
         yield return [new FilterProbe(
             "filter:images:FileSizeCriterion/between",
-            fixture => QueryFilteredIdsAsync(fixture.Context, "images", new ImageFilter { FileSizeCriterion = new IntCriterion { Modifier = CriterionModifier.Between, Value = 1_000, Value2 = 2_900 } }),
+            fixture => QueryFilteredIdsAsync(fixture.Context, "images", new ImageFilter { FileSizeCriterion = new LongCriterion { Modifier = CriterionModifier.Between, Value = 1_000, Value2 = 2_900 } }),
             _ => [502, 503])];
         yield return [new FilterProbe(
             "filter:images:FavoriteCriterion/true",

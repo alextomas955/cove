@@ -132,7 +132,7 @@ public class FilterCriteriaParityTests
         var json = """
         {
             "objectFilter": {
-                "fileSizeCriterion": { "value": 1048576, "value2": 2097152, "modifier": "between" }
+                "fileSizeCriterion": { "value": 3221225472, "value2": 6442450944, "modifier": "between" }
             }
         }
         """;
@@ -142,8 +142,8 @@ public class FilterCriteriaParityTests
         foreach (var criterion in new[] { video, image })
         {
             Assert.NotNull(criterion);
-            Assert.Equal(1_048_576, criterion.Value);
-            Assert.Equal(2_097_152, criterion.Value2);
+            Assert.Equal(3_221_225_472, criterion.Value);
+            Assert.Equal(6_442_450_944, criterion.Value2);
             Assert.Equal(CriterionModifier.Between, criterion.Modifier);
         }
     }
