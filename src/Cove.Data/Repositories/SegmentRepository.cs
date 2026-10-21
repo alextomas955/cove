@@ -34,7 +34,7 @@ public class SegmentRepository : ISegmentRepository
         findFilter ??= new FindFilter();
         var page = Math.Max(findFilter.Page, 1);
         // PerPage of 0 or less means count only, as the video repository treats it.
-        var perPage = Math.Clamp(findFilter.PerPage, 0, 250);
+        var perPage = Math.Clamp(findFilter.PerPage, 0, ListPaging.MaxPerPage);
 
         var library = await BuildLibraryQueryAsync(filter, findFilter.Q, ct);
         var totalCount = await library.CountAsync(ct);

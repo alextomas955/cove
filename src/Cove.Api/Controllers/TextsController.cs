@@ -95,7 +95,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         CancellationToken ct = default)
     {
         page = Math.Max(1, page);
-        perPage = Math.Clamp(perPage, 1, 250);
+        perPage = Math.Clamp(perPage, 1, ListPaging.MaxPerPage);
         var findFilter = new FindFilter
         {
             Q = q,
@@ -121,7 +121,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
             return BadRequest(new { message = expressionError });
         var findFilter = req.FindFilter ?? new FindFilter();
         findFilter.Page = Math.Max(1, findFilter.Page);
-        findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, 250);
+        findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, ListPaging.MaxPerPage);
         var (items, totalCount) = await Texts.FindAsync(req.ObjectFilter, findFilter, ct, req.FilterExpression);
 
         var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);

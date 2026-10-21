@@ -216,7 +216,7 @@ public class FacesController(
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(page, 1);
-        perPage = Math.Clamp(perPage, 1, 250);
+        perPage = Math.Clamp(perPage, 1, ListPaging.MaxPerPage);
         var pathCriterion = BuildPathCriterion(path, pathModifier);
         if (pathCriterion is not null && !CanReadFiles)
             return Forbid();
@@ -267,7 +267,7 @@ public class FacesController(
         findFilter.Page = Math.Max(findFilter.Page, 1);
         // PerPage <= 0 is a count-only request; otherwise the page is capped like the GET list.
         if (findFilter.PerPage > 0)
-            findFilter.PerPage = Math.Min(findFilter.PerPage, 250);
+            findFilter.PerPage = Math.Min(findFilter.PerPage, ListPaging.MaxPerPage);
 
         return Ok(await FindFacePageAsync(filter, findFilter, cancellationToken));
     }
@@ -476,7 +476,7 @@ public class FacesController(
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(page, 1);
-        perPage = Math.Clamp(perPage, 1, 250);
+        perPage = Math.Clamp(perPage, 1, ListPaging.MaxPerPage);
 
         var faceExists = await db.Faces.AsNoTracking().AnyAsync(face => face.Id == id, cancellationToken);
         if (!faceExists)
@@ -1327,7 +1327,7 @@ public class FacesController(
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(page, 1);
-        perPage = Math.Clamp(perPage, 1, 250);
+        perPage = Math.Clamp(perPage, 1, ListPaging.MaxPerPage);
         var candidateCount = Math.Clamp(k, 1, 250);
         var pathCriterion = BuildPathCriterion(path, pathModifier);
         if (pathCriterion is not null && !CanReadFiles)

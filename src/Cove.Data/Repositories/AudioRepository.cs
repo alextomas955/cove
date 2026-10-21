@@ -8,7 +8,7 @@ public class AudioRepository : IAudioRepository
 {
     // The list endpoints never hand out more than this many rows per page, so the repository caps the
     // same way and an extension cannot ask for the whole library as one page.
-    public const int MaxPerPage = 250;
+    public const int MaxPerPage = ListPaging.MaxPerPage;
 
     private static readonly HashSet<string> AffinityMultiSortKeys = new(StringComparer.OrdinalIgnoreCase)
     {
