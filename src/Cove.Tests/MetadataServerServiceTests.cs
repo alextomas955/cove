@@ -11,6 +11,10 @@ using Cove.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace Cove.Tests;
 
@@ -2399,6 +2403,76 @@ public sealed class MetadataServerServiceTests
         var input = variables.RootElement.GetProperty("input");
         Assert.Equal("Covered Video", input.GetProperty("title").GetString());
         Assert.False(input.TryGetProperty("image", out _));
+    }
+
+    [Theory]
+    [InlineData("gif")]
+    [InlineData("webp")]
+    public async Task SubmitVideoDraftAsync_ConvertsACoverTheMetadataServerCannotReadToAPngOfItsFirstFrame(string format)
+    {
+        // stash-box rejects the whole draft over an image that is not JPEG, PNG or a still WebP.
+        using var animation = new Image<Rgba32>(3, 2, new Rgba32(255, 0, 0));
+        using var secondFrame = new Image<Rgba32>(3, 2, new Rgba32(0, 0, 255));
+        animation.Frames.AddFrame(secondFrame.Frames.RootFrame);
+        var cover = await EncodeAsync(animation, format);
+
+        var upload = await SubmitVideoDraftWithCoverAsync(cover, $"image/{format}");
+
+        Assert.Equal("image/png", upload.ContentType);
+        Assert.Equal(PngFormat.Instance, SixLabors.ImageSharp.Image.DetectFormat(upload.Data));
+        using var converted = SixLabors.ImageSharp.Image.Load<Rgba32>(upload.Data);
+        Assert.Equal((3, 2), (converted.Width, converted.Height));
+        Assert.Equal(new Rgba32(255, 0, 0), converted[0, 0]);
+    }
+
+    [Theory]
+    [InlineData("jpeg")]
+    [InlineData("png")]
+    [InlineData("webp")]
+    public async Task SubmitVideoDraftAsync_UploadsACoverTheMetadataServerAcceptsUnchanged(string format)
+    {
+        using var still = new Image<Rgba32>(3, 2, new Rgba32(255, 0, 0));
+        var cover = await EncodeAsync(still, format);
+
+        var upload = await SubmitVideoDraftWithCoverAsync(cover, $"image/{format}");
+
+        Assert.Equal($"image/{format}", upload.ContentType);
+        Assert.Equal(cover, upload.Data);
+    }
+
+    private static async Task<byte[]> EncodeAsync(SixLabors.ImageSharp.Image image, string format)
+    {
+        using var stream = new MemoryStream();
+        var ct = TestContext.Current.CancellationToken;
+        switch (format)
+        {
+            case "gif": await image.SaveAsGifAsync(stream, ct); break;
+            case "jpeg": await image.SaveAsJpegAsync(stream, ct); break;
+            case "png": await image.SaveAsPngAsync(stream, ct); break;
+            case "webp": await image.SaveAsWebpAsync(stream, new WebpEncoder { FileFormat = WebpFileFormatType.Lossless }, ct); break;
+            default: throw new ArgumentOutOfRangeException(nameof(format), format, null);
+        }
+        return stream.ToArray();
+    }
+
+    private async Task<GraphQlUploadSnapshot> SubmitVideoDraftWithCoverAsync(byte[] cover, string contentType)
+    {
+        await using var context = CreateContext();
+        var video = new Video { Title = "Covered Video", ImageBlobId = "cover-blob" };
+        context.Videos.Add(video);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var handler = new FixtureMetadataServerHandler(_ => GraphQlData("""
+            "submitSceneDraft": { "id": "draft-video-1" }
+            """));
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(
+            context,
+            httpClient,
+            blobService: new CoverBlobService("cover-blob", cover, contentType));
+
+        await service.SubmitVideoDraftAsync(video, Endpoint, CancellationToken.None);
+
+        return Assert.IsType<GraphQlUploadSnapshot>(Assert.Single(handler.Requests).Upload);
     }
 
     [Fact]
