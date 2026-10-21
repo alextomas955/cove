@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -348,6 +349,16 @@ export function ConfiguredFieldInput({
     percent: "number",
   };
 
+  if (definition.type === "text") {
+    return (
+      <WrappingTextInput
+        ariaLabel={controlLabel}
+        value={serializeScalarValue(value, definition.type)}
+        onChange={onChange}
+      />
+    );
+  }
+
   const Input = definition.type === "date" || definition.type === "timestamp" ? IsoDateInput : "input";
   return (
     <Input
@@ -357,6 +368,43 @@ export function ConfiguredFieldInput({
       value={serializeScalarValue(value, definition.type)}
       onChange={(event) => onChange(event.target.value)}
       className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+    />
+  );
+}
+
+/**
+ * A single-line text value that wraps instead of scrolling sideways out of view (#810): a one-row textarea
+ * that grows with its content. Enter still adds no line break, as in the input it replaces; multi-line
+ * text is what the Long text type is for.
+ */
+function WrappingTextInput({
+  ariaLabel,
+  value,
+  onChange,
+}: {
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const textarea = ref.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      aria-label={ariaLabel}
+      rows={1}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) event.preventDefault();
+      }}
+      className="block w-full resize-none overflow-hidden rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
     />
   );
 }

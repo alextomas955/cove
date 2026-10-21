@@ -266,6 +266,36 @@ describe("long text custom fields", () => {
   });
 });
 
+describe("text custom field editor", () => {
+  const textDefinition: CustomFieldDefinition = { ...jsonDefinition, key: "summary", label: "Summary", type: "text" };
+
+  it("wraps a long value in a one-row editor instead of scrolling it out of view", () => {
+    const onChange = vi.fn();
+    const longValue = "A text value much longer than the edit form is wide. ".repeat(4).trim();
+    renderWithDefinition(<CustomFieldsEditor value={{ summary: longValue }} onChange={onChange} entityType="video" />, [
+      textDefinition,
+    ]);
+
+    const editor = screen.getByRole("textbox", { name: "Summary" });
+    expect(editor.tagName).toBe("TEXTAREA");
+    expect(editor).toHaveAttribute("rows", "1");
+    expect(editor).toHaveValue(longValue);
+
+    fireEvent.change(editor, { target: { value: "Edited" } });
+    expect(onChange).toHaveBeenLastCalledWith({ summary: "Edited" });
+  });
+
+  it("does not add a line break on Enter", () => {
+    renderWithDefinition(<CustomFieldsEditor value={{ summary: "One line" }} onChange={vi.fn()} entityType="video" />, [
+      textDefinition,
+    ]);
+
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    screen.getByRole("textbox", { name: "Summary" }).dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+  });
+});
+
 describe("text custom field display", () => {
   const textDefinition: CustomFieldDefinition = {
     ...jsonDefinition,
