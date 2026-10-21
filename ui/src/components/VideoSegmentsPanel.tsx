@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Layers,
@@ -44,6 +44,9 @@ interface Props {
   canEdit: boolean;
   onSeek?: (time: number) => void;
   currentTime?: number;
+  /** Set by the parent (e.g. a keyboard shortcut) to open the add form; cleared via onAddRequestHandled. */
+  addRequested?: boolean;
+  onAddRequestHandled?: () => void;
   onNavigate: (r: any) => void;
 }
 
@@ -67,6 +70,8 @@ export function VideoSegmentsPanel({
   canEdit,
   onSeek,
   currentTime = 0,
+  addRequested = false,
+  onAddRequestHandled,
   onNavigate,
 }: Props) {
   const queryClient = useQueryClient();
@@ -241,6 +246,13 @@ export function VideoSegmentsPanel({
     setSelectedTagId(null);
     setSelectedPerformerId(null);
   }
+  // A new segment starts at the current playback position, so the user can keep watching and only
+  // fill in the rest (#602).
+  function startAdding() {
+    resetForm();
+    setAdding(true);
+    setStartTimeFromSeconds(currentTime);
+  }
   function setStartTimeFromSeconds(seconds: number) {
     const normalized = Math.max(0, seconds);
     setStartSec(normalized);
@@ -318,6 +330,17 @@ export function VideoSegmentsPanel({
     });
   };
 
+  // The "add segment at current time" shortcut asks the panel to open the add form, possibly
+  // mounting it in the same render. A form that is already open (including an edit) is left alone.
+  const [prevAddRequested, setPrevAddRequested] = useState(false);
+  if (addRequested !== prevAddRequested) {
+    setPrevAddRequested(addRequested);
+    if (addRequested && canEdit && !adding) startAdding();
+  }
+  useEffect(() => {
+    if (addRequested) onAddRequestHandled?.();
+  }, [addRequested, onAddRequestHandled]);
+
   const activeFilterCount = countActiveFilters(filter);
   const filterActive = isSegmentFilterActive(filter);
 
@@ -386,7 +409,7 @@ export function VideoSegmentsPanel({
           {canEdit ? (
             <button
               type="button"
-              onClick={() => (adding ? resetForm() : setAdding(true))}
+              onClick={() => (adding ? resetForm() : startAdding())}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm text-foreground transition-colors hover:border-accent"
             >
               <Plus className="h-4 w-4" /> {adding ? "Cancel" : "Add"}

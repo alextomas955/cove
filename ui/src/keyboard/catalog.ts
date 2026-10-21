@@ -69,6 +69,12 @@ export const COVE_KEYBOARD_ACTIONS: KeyboardActionDefinition[] = [
   { id: "detail.fileInfo", group: "Detail Pages", label: "Open file information", defaultBindings: ["i"] },
   { id: "detail.video.details", group: "Video Detail", label: "Open details", defaultBindings: ["a"] },
   { id: "detail.video.segments", group: "Video Detail", label: "Open segments", defaultBindings: ["s"] },
+  {
+    id: "detail.video.addSegment",
+    group: "Video Detail",
+    label: "Add segment at current time",
+    defaultBindings: ["n"],
+  },
   { id: "detail.video.history", group: "Video Detail", label: "Open history", defaultBindings: ["h"] },
   { id: "detail.previous", group: "Detail Pages", label: "Open previous item", defaultBindings: ["["] },
   { id: "detail.next", group: "Detail Pages", label: "Open next item", defaultBindings: ["]"] },

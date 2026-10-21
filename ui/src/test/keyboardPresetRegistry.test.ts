@@ -9,6 +9,7 @@ import {
   type KeyboardShortcutPreset,
 } from "../keyboard/registry";
 import { keepResolvableKeyboardPresets } from "../keyboard/KeyboardShortcutProvider";
+import { BUILTIN_KEYBOARD_PRESETS, COVE_KEYBOARD_ACTIONS, STASH_KEYBOARD_PRESET_ID } from "../keyboard/catalog";
 
 const actions: KeyboardActionDefinition[] = [
   { id: "global.help", group: "Global", label: "Help", defaultBindings: ["?"] },
@@ -151,5 +152,55 @@ describe("keyboard preset registry", () => {
     };
 
     expect(keepResolvableKeyboardPresets([cove, broken], actions).map((preset) => preset.id)).toEqual([cove.id]);
+  });
+});
+
+describe("add segment at current time shortcut", () => {
+  const action = COVE_KEYBOARD_ACTIONS.find((candidate) => candidate.id === "detail.video.addSegment");
+
+  it("is a Video Detail action bound to n by default", () => {
+    expect(action).toMatchObject({
+      group: "Video Detail",
+      label: "Add segment at current time",
+      defaultBindings: ["n"],
+    });
+  });
+
+  it("does not collide with, or share a prefix with, any other default binding", () => {
+    const collisions = COVE_KEYBOARD_ACTIONS.filter((candidate) => candidate.id !== action?.id).flatMap((candidate) =>
+      candidate.defaultBindings
+        .filter((binding) => binding === "n" || binding.startsWith("n ") || "n".startsWith(`${binding} `))
+        .map((binding) => `${candidate.id}: ${binding}`),
+    );
+    expect(collisions).toEqual([]);
+  });
+
+  it("resolves on the video detail page alongside the player and global shortcuts", () => {
+    // Video detail registers detail-surface actions; the player and app shell add player and global ones.
+    const priority = (id: string) => (id.startsWith("player.") ? 30 : id.startsWith("global.") ? 0 : 20);
+    const candidates = COVE_KEYBOARD_ACTIONS.filter(
+      (candidate) =>
+        candidate.group === "Video Detail" ||
+        candidate.group === "Detail Pages" ||
+        candidate.group === "Video Player" ||
+        candidate.group.startsWith("Global"),
+    ).flatMap((candidate) =>
+      candidate.defaultBindings.map((sequence) => ({
+        actionId: candidate.id,
+        sequence,
+        priority: priority(candidate.id),
+        value: candidate.id,
+      })),
+    );
+
+    expect(resolveKeyboardDispatch(candidates, "n")).toMatchObject({
+      kind: "action",
+      candidate: { actionId: "detail.video.addSegment" },
+    });
+  });
+
+  it("is left unbound in the Stash preset, which has no equivalent action", () => {
+    const stash = BUILTIN_KEYBOARD_PRESETS.find((preset) => preset.id === STASH_KEYBOARD_PRESET_ID);
+    expect(stash?.bindings["detail.video.addSegment"]).toEqual([]);
   });
 });
