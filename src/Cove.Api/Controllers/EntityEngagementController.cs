@@ -14,7 +14,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
     [HttpGet("{hostType}/{hostId:int}")]
     public async Task<ActionResult<EntityEngagementDto>> Get(AffinityHostType hostType, int hostId, CancellationToken cancellationToken)
     {
-        if (!HasPermission(hostType, write: false))
+        if (!HasPermission(hostType))
             return Forbid();
 
         var snapshot = await engagementService.GetSnapshotAsync(hostType, hostId, cancellationToken);
@@ -24,7 +24,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
     [HttpGet("{hostType}/{hostId:int}/ratings")]
     public async Task<ActionResult<EntityRatingsDto>> GetRatings(AffinityHostType hostType, int hostId, CancellationToken cancellationToken)
     {
-        if (!HasPermission(hostType, write: false))
+        if (!HasPermission(hostType))
             return Forbid();
 
         var ratings = await engagementService.GetRatingsByAspectAsync(hostType, hostId, cancellationToken);
@@ -34,7 +34,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
     [HttpPost("batch")]
     public async Task<ActionResult<IReadOnlyList<EntityEngagementDto>>> Batch([FromBody] EntityEngagementBatchRequestDto dto, CancellationToken cancellationToken)
     {
-        if (!HasPermission(dto.HostType, write: false))
+        if (!HasPermission(dto.HostType))
             return Forbid();
 
         var snapshots = await engagementService.GetSnapshotsAsync(dto.HostType, dto.HostIds, cancellationToken);
@@ -55,7 +55,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
             return BadRequest("Like count interactions must use a dedicated media like endpoint.");
         if (InteractionValueMapper.RequiresConcreteHost(hostType) && (!dto.HostId.HasValue || dto.HostId.Value <= 0))
             return BadRequest("This interaction host type requires a host id.");
-        if (!HasInteractionPermission(hostType))
+        if (!HasInteractionPermission(hostType, principalAccessor.Current))
             return Forbid();
 
         var recorded = await engagementService.RecordInteractionAsync(
@@ -81,7 +81,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
                 return BadRequest("Unsupported interaction host type.");
             if (InteractionValueMapper.RequiresConcreteHost(concreteHostType) && hostId.GetValueOrDefault() <= 0)
                 return BadRequest("This interaction host type requires a host id.");
-            if (!HasInteractionPermission(concreteHostType))
+            if (!HasInteractionPermission(concreteHostType, principalAccessor.Current))
                 return Forbid();
             parsedHostType = concreteHostType;
         }
@@ -94,7 +94,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
     {
         if (principalAccessor.Current?.UserId is null)
             return Forbid();
-        if (!HasPermission(hostType, write: false))
+        if (!HasPermission(hostType))
             return Forbid();
 
         var snapshot = await engagementService.SetFavoriteAsync(hostType, hostId, dto.IsFavorite, cancellationToken);
@@ -106,7 +106,7 @@ public class EntityEngagementController(IUserEngagementService engagementService
     {
         if (principalAccessor.Current?.UserId is null)
             return Forbid();
-        if (!HasPermission(hostType, write: false))
+        if (!HasPermission(hostType))
             return Forbid();
 
         var snapshot = await engagementService.SetRatingAsync(hostType, hostId, dto.Value, dto.Aspect, cancellationToken);
@@ -133,40 +133,36 @@ public class EntityEngagementController(IUserEngagementService engagementService
         return Ok(new { wiped = count });
     }
 
-    private bool HasPermission(AffinityHostType hostType, bool write)
+    // Engagement writes (favorite, rating) are authorized by the entity kind's read permission, not its write
+    // permission: they change only the caller's own personal state, never the library record.
+    private bool HasPermission(AffinityHostType hostType)
     {
-        var permission = (hostType, write) switch
+        var permission = hostType switch
         {
-            (AffinityHostType.Video, false) => Permissions.VideosRead,
-            (AffinityHostType.Video, true) => Permissions.VideosWrite,
-            (AffinityHostType.Audio, false) => Permissions.AudiosRead,
-            (AffinityHostType.Audio, true) => Permissions.AudiosWrite,
-            (AffinityHostType.Text, false) => Permissions.TextsRead,
-            (AffinityHostType.Text, true) => Permissions.TextsWrite,
-            (AffinityHostType.Image, false) => Permissions.ImagesRead,
-            (AffinityHostType.Image, true) => Permissions.ImagesWrite,
-            (AffinityHostType.Performer, false) => Permissions.PerformersRead,
-            (AffinityHostType.Performer, true) => Permissions.PerformersWrite,
-            (AffinityHostType.Face, false) => Permissions.FacesRead,
-            (AffinityHostType.Face, true) => Permissions.FacesWrite,
-            (AffinityHostType.Tag, false) => Permissions.TagsRead,
-            (AffinityHostType.Tag, true) => Permissions.TagsWrite,
-            (AffinityHostType.Studio, false) => Permissions.StudiosRead,
-            (AffinityHostType.Studio, true) => Permissions.StudiosWrite,
-            (AffinityHostType.Gallery, false) => Permissions.GalleriesRead,
-            (AffinityHostType.Gallery, true) => Permissions.GalleriesWrite,
-            (AffinityHostType.Group, false) => Permissions.GroupsRead,
-            (AffinityHostType.Group, true) => Permissions.GroupsWrite,
-            (AffinityHostType.Segment, false) => Permissions.SegmentsRead,
-            (AffinityHostType.Segment, true) => Permissions.SegmentsWrite,
+            AffinityHostType.Video => Permissions.VideosRead,
+            AffinityHostType.Audio => Permissions.AudiosRead,
+            AffinityHostType.Text => Permissions.TextsRead,
+            AffinityHostType.Image => Permissions.ImagesRead,
+            AffinityHostType.Performer => Permissions.PerformersRead,
+            AffinityHostType.Face => Permissions.FacesRead,
+            AffinityHostType.Tag => Permissions.TagsRead,
+            AffinityHostType.Studio => Permissions.StudiosRead,
+            AffinityHostType.Gallery => Permissions.GalleriesRead,
+            AffinityHostType.Group => Permissions.GroupsRead,
+            AffinityHostType.Segment => Permissions.SegmentsRead,
             _ => null,
         };
 
-        return permission != null && principalAccessor.Current?.Has(permission) == true;
+        return permission is not null && principalAccessor.Current?.Has(permission) == true;
     }
 
-    private bool HasInteractionPermission(InteractionHostType hostType)
+    internal static bool HasInteractionPermission(InteractionHostType hostType, CovePrincipal? principal)
     {
+        // Search and Collection name no concrete entity, so there is no entity permission to check. Every other
+        // host type must map to one below; an unmapped type is denied, so a new enum member fails closed.
+        if (hostType is InteractionHostType.Search or InteractionHostType.Collection)
+            return true;
+
         var permission = hostType switch
         {
             InteractionHostType.Video => Permissions.VideosRead,
@@ -180,12 +176,10 @@ public class EntityEngagementController(IUserEngagementService engagementService
             InteractionHostType.Studio => Permissions.StudiosRead,
             InteractionHostType.Gallery => Permissions.GalleriesRead,
             InteractionHostType.Group => Permissions.GroupsRead,
-            InteractionHostType.Search => null,
-            InteractionHostType.Collection => null,
             _ => null,
         };
 
-        return permission == null || principalAccessor.Current?.Has(permission) == true;
+        return permission is not null && principal?.Has(permission) == true;
     }
 
     private static EntityEngagementDto ToDto(int hostId, UserEngagementSnapshot? snapshot)
