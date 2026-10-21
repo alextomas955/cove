@@ -10,6 +10,7 @@ import {
   TAG_CRITERIA,
   TEXT_CRITERIA,
 } from "../components/filterCriteriaCatalogs";
+import { filterToExpression, sanitizeFilterCriteria } from "../components/filterCriterionState";
 import type { CriterionDefinition } from "../components/filterCriteriaTypes";
 
 const criteriaSets = [
@@ -120,6 +121,27 @@ describe("filter criteria definitions", () => {
     ]);
     expect(videoCriteriaById.get("orientation")?.modifiers).toEqual(["EQUALS", "NOT_EQUALS"]);
     expect(videoCriteriaById.get("studios")?.hierarchyToggleLabel).toBe("Include sub-studios");
+  });
+
+  it.each([
+    ["video", VIDEO_CRITERIA],
+    ["image", IMAGE_CRITERIA],
+  ] as const)("%s reuses the audio/text file size criterion and keeps it when serialized", (_entityName, criteria) => {
+    const audioFileSize = AUDIO_CRITERIA.find((criterion) => criterion.id === "fileSize");
+    const fileSize = criteria.find((criterion) => criterion.id === "fileSize");
+
+    expect(fileSize).toEqual(audioFileSize);
+    expect(fileSize).toEqual(
+      expect.objectContaining({ label: "File Size", type: "number", filterKey: "fileSizeCriterion" }),
+    );
+
+    const value = { modifier: "BETWEEN", value: 1_048_576, value2: 2_097_152 };
+    const sanitized = sanitizeFilterCriteria({ fileSizeCriterion: value }, criteria);
+    expect(JSON.parse(JSON.stringify(sanitized))).toEqual({ fileSizeCriterion: value });
+    expect(filterToExpression({ fileSizeCriterion: value }, criteria)).toEqual({
+      operator: "AND",
+      children: [{ filter: { fileSizeCriterion: value } }],
+    });
   });
 
   it("offers related-entity filters instead of specialized performer-favorite filters", () => {

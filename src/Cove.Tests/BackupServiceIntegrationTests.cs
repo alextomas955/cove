@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using DatabaseController = Cove.Api.Controllers.DatabaseController;
+using RestoreConfigResultDto = Cove.Api.Controllers.RestoreConfigResultDto;
 
 namespace Cove.Tests;
 
@@ -57,10 +58,103 @@ public class BackupServiceIntegrationTests
     }
 
     [Fact]
+    public async Task RestoreConfig_AppliesRestoredConfigToLiveConfigAndLaterSavesKeepIt()
+    {
+        var dataRoot = Path.Combine(Path.GetTempPath(), $"cove_config_restore_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dataRoot);
+
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            var live = new CoveConfiguration();
+            var configService = new ConfigService(live, NullLogger<ConfigService>.Instance, Path.Combine(dataRoot, "cove-config.json"));
+            var backupService = new BackupService(new NullJobService(), live, NullLogger<BackupService>.Instance, dataRoot);
+            var controller = new DatabaseController(null!, backupService, live, NullLogger<DatabaseController>.Instance, configService);
+            await configService.SaveCurrentConfigAsync();
+
+            // A backup written by another instance: a library path and settings the fresh install lacks.
+            var backupPath = Path.Combine(dataRoot, "restore-source.json");
+            var otherInstance = new ConfigService(new CoveConfiguration(), NullLogger<ConfigService>.Instance, backupPath);
+            await otherInstance.UpdateConfigAsync(cfg => cfg with
+            {
+                CovePaths = [new CovePathDto { Path = "/media/restored" }],
+                MaxParallelTasks = 7,
+                Port = cfg.Port + 1,
+            });
+
+            var action = await controller.RestoreConfig(new RestoreBackupRequestDto(backupPath), ct);
+
+            var ok = Assert.IsType<OkObjectResult>(action);
+            var response = Assert.IsType<RestoreConfigResultDto>(ok.Value);
+            Assert.Equal("Config restored and applied.", response.Message);
+            Assert.Equal(["/media/restored"], live.CovePaths.Select(path => path.Path));
+            Assert.Equal(7, live.MaxParallelTasks);
+
+            // Any later save persists the live config; it must not put the pre-restore config back.
+            await configService.UpdateUiConfigAsync(ui => ui);
+            var saved = await configService.LoadSavedConfigAsync();
+            Assert.NotNull(saved);
+            Assert.Equal(["/media/restored"], saved.CovePaths.Select(path => path.Path));
+            Assert.Equal(7, saved.MaxParallelTasks);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(dataRoot, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RestoreConfig_RejectsInvalidBackupWithoutReplacingConfig()
+    {
+        var dataRoot = Path.Combine(Path.GetTempPath(), $"cove_config_restore_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dataRoot);
+
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            var live = new CoveConfiguration();
+            var configPath = Path.Combine(dataRoot, "cove-config.json");
+            var configService = new ConfigService(live, NullLogger<ConfigService>.Instance, configPath);
+            var backupService = new BackupService(new NullJobService(), live, NullLogger<BackupService>.Instance, dataRoot);
+            var controller = new DatabaseController(null!, backupService, live, NullLogger<DatabaseController>.Instance, configService);
+            await configService.SaveCurrentConfigAsync();
+            var before = await File.ReadAllTextAsync(configPath, ct);
+            var backupPath = Path.Combine(dataRoot, "not-a-config.json");
+            await File.WriteAllTextAsync(backupPath, "not json", ct);
+
+            var action = await controller.RestoreConfig(new RestoreBackupRequestDto(backupPath), ct);
+
+            Assert.IsType<BadRequestObjectResult>(action);
+            Assert.Equal(before, await File.ReadAllTextAsync(configPath, ct));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(dataRoot, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [Fact]
     public async Task RestoreDatabase_CreatesPreRestoreBackupBeforeRestore()
     {
         var backupService = new RecordingBackupService();
-        var controller = new DatabaseController(null!, backupService, new CoveConfiguration(), NullLogger<DatabaseController>.Instance);
+        var config = new CoveConfiguration();
+        var configService = new ConfigService(
+            config,
+            NullLogger<ConfigService>.Instance,
+            Path.Combine(Path.GetTempPath(), $"cove_config_unused_{Guid.NewGuid():N}", "cove-config.json"));
+        var controller = new DatabaseController(null!, backupService, config, NullLogger<DatabaseController>.Instance, configService);
 
         var action = await controller.RestoreDatabase(new RestoreBackupRequestDto("restore.sql"), CancellationToken.None);
 

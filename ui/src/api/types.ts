@@ -3108,6 +3108,7 @@ export interface VideoFilterCriteria {
   frameRateCriterion?: IntCriterion;
   bitrateInterval?: IntCriterion;
   fileCountCriterion?: IntCriterion;
+  fileSizeCriterion?: IntCriterion;
   remoteIdCriterion?: StringCriterion;
   remoteIdValueCriterion?: StringCriterion;
   remoteIdCountCriterion?: IntCriterion;
@@ -3341,6 +3342,7 @@ export interface ImageFilterCriteria {
   urlCriterion?: StringCriterion;
   dateCriterion?: DateCriterion;
   fileCountCriterion?: IntCriterion;
+  fileSizeCriterion?: IntCriterion;
   tagCountCriterion?: IntCriterion;
   performerCountCriterion?: IntCriterion;
   performerAgeCriterion?: IntCriterion;
@@ -3708,6 +3710,7 @@ export interface BulkGroupUpdate {
   description?: string;
   tagIds?: number[];
   tagMode?: BulkUpdateMode;
+  showInVideoLists?: boolean;
 }
 
 // ===== Plugin Types =====

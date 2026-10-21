@@ -120,7 +120,7 @@
             "No items appear: recheck the configured container path, Docker volume mount, per-path media exclusions, and configured file extensions.",
             "Only some files appear: inspect the scan job error and logs for unreadable paths, unsupported files, or exclude-pattern matches.",
             "Generated assets fail: verify the generated path is writable and review FFmpeg messages in Settings → System Info → Logs.",
-            "A moved, replaced, or unchanged file was skipped: select only its folder and retry with Force rescan (ignore mtime). Do not force-rescan the whole library unless necessary.",
+            "A moved, replaced, or unchanged file was skipped: select only its folder and retry with Force rescan (ignore mtime). Do not force-rescan the whole library unless necessary. A forced rescan re-reads metadata but does not compare file contents, so if a replacement kept the original size and modified time, update its modified time first.",
             "The job is still running: do not queue repeated full scans. Monitor or cancel the existing job under Settings → Operations → Jobs first."
           ]
         },

@@ -772,10 +772,13 @@ public static class FilterHelpers
     }
 
     public static IQueryable<T> ApplyLong<T>(IQueryable<T> query, IntCriterion? criterion, Expression<Func<T, long>> selector)
+        => ApplyLong(query, criterion == null ? null : new LongCriterion { Value = criterion.Value, Value2 = criterion.Value2, Modifier = criterion.Modifier }, selector);
+
+    public static IQueryable<T> ApplyLong<T>(IQueryable<T> query, LongCriterion? criterion, Expression<Func<T, long>> selector)
     {
         if (criterion == null) return query;
-        var val = (long)criterion.Value;
-        var val2 = (long)(criterion.Value2 ?? criterion.Value);
+        var val = criterion.Value;
+        var val2 = criterion.Value2 ?? criterion.Value;
         var param = selector.Parameters[0];
         var body = selector.Body;
 

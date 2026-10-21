@@ -6567,7 +6567,7 @@ function DataManagementSection({ refetchJobs, mode }: { refetchJobs: () => void;
             />
             <TaskCard
               label="Restore Config"
-              description="Replace the current cove-config.json with a previously saved snapshot. Reloads Cove on success."
+              description="Replace the current cove-config.json with a previously saved snapshot and apply it. Reloads Cove on success."
               onRun={() => configRestoreMut.mutate()}
               isPending={configRestoreMut.isPending}
               statusMessage={
@@ -8659,6 +8659,8 @@ export function FindAndInstallExtensions() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState<string>("");
   const [registryType, setRegistryType] = useState<string>("");
+  // "" keeps the registry's own ordering (the server's default); other values are sent as `sort`.
+  const [registrySort, setRegistrySort] = useState<string>("");
   const [page, setPage] = useState(1);
   const [selectedExtension, setSelectedExtension] = useState<import("../api/types").RegistryExtensionDetail | null>(
     null,
@@ -8696,25 +8698,27 @@ export function FindAndInstallExtensions() {
     }
   };
 
-  // Reset to the first page whenever the search/filters change.
-  const [prevRegistryFilters, setPrevRegistryFilters] = useState({ searchQuery, category, registryType });
+  // Reset to the first page whenever the search/filters/sort change.
+  const [prevRegistryFilters, setPrevRegistryFilters] = useState({ searchQuery, category, registryType, registrySort });
   if (
     prevRegistryFilters.searchQuery !== searchQuery ||
     prevRegistryFilters.category !== category ||
-    prevRegistryFilters.registryType !== registryType
+    prevRegistryFilters.registryType !== registryType ||
+    prevRegistryFilters.registrySort !== registrySort
   ) {
-    setPrevRegistryFilters({ searchQuery, category, registryType });
+    setPrevRegistryFilters({ searchQuery, category, registryType, registrySort });
     setPage(1);
   }
 
   const { data: searchResults, isLoading: searching } = useQuery({
-    queryKey: ["registry-search", searchQuery, category, registryType, page],
+    queryKey: ["registry-search", searchQuery, category, registryType, registrySort, page],
     queryFn: () =>
       import("../api/client").then((m) =>
         m.extensions.registrySearch({
           q: searchQuery || undefined,
           category: category || undefined,
           type: registryType || undefined,
+          sort: registrySort || undefined,
           page,
           pageSize: REGISTRY_PAGE_SIZE,
         }),
@@ -9076,6 +9080,17 @@ export function FindAndInstallExtensions() {
             ))}
           </select>
         )}
+        <select
+          value={registrySort}
+          onChange={(e) => setRegistrySort(e.target.value)}
+          className="min-h-10 rounded border border-border bg-card px-3 py-2 text-sm focus:border-accent focus:outline-none sm:min-h-0 sm:w-auto sm:py-1.5"
+          title="Sort extensions"
+          aria-label="Sort extensions"
+        >
+          <option value="">Default order</option>
+          <option value="updated">Recently updated</option>
+          <option value="name">Name (A–Z)</option>
+        </select>
         <div className="relative">
           <button
             type="button"

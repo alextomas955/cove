@@ -228,6 +228,8 @@ public enum CriterionModifier
 }
 
 public class IntCriterion { public int Value { get; set; } public int? Value2 { get; set; } public CriterionModifier Modifier { get; set; } = CriterionModifier.Equals; }
+/// <summary>An <see cref="IntCriterion"/> for values that can exceed 32 bits, such as file sizes in bytes.</summary>
+public class LongCriterion { public long Value { get; set; } public long? Value2 { get; set; } public CriterionModifier Modifier { get; set; } = CriterionModifier.Equals; }
 public class CountryCriterion : StringCriterion { public List<string>? Values { get; set; } }
 public class StringCriterion { public string Value { get; set; } = ""; public CriterionModifier Modifier { get; set; } = CriterionModifier.Equals; }
 public class CustomFieldCriterion : StringCriterion { public string Key { get; set; } = ""; public string Type { get; set; } = "text"; public string? JsonPath { get; set; } public string? Value2 { get; set; } }
@@ -370,6 +372,8 @@ public class VideoFilter
     public IntCriterion? FrameRateCriterion { get; set; }
     public IntCriterion? BitrateInterval { get; set; }
     public IntCriterion? FileCountCriterion { get; set; }
+    /// <summary>Size in bytes of the video's largest file (<c>Video.MaxFileSize</c>), matching the file-size sort.</summary>
+    public LongCriterion? FileSizeCriterion { get; set; }
     public StringCriterion? RemoteIdCriterion { get; set; }
     public StringCriterion? RemoteIdValueCriterion { get; set; }
     public IntCriterion? RemoteIdCountCriterion { get; set; }
@@ -615,6 +619,8 @@ public class ImageFilter
     public StringCriterion? UrlCriterion { get; set; }
     public DateCriterion? DateCriterion { get; set; }
     public IntCriterion? FileCountCriterion { get; set; }
+    /// <summary>Size in bytes of the image's largest file (<c>Image.MaxFileSize</c>), matching the file-size sort.</summary>
+    public LongCriterion? FileSizeCriterion { get; set; }
     public IntCriterion? TagCountCriterion { get; set; }
     public IntCriterion? PerformerCountCriterion { get; set; }
     public IntCriterion? PerformerAgeCriterion { get; set; }

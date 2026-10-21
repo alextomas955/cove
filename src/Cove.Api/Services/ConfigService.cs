@@ -332,6 +332,45 @@ public class ConfigService
         }
     }
 
+    /// <summary>
+    /// Read and parse a config file (such as a config backup) without applying it.
+    /// Throws <see cref="InvalidDataException"/> when the file is not a Cove config.
+    /// </summary>
+    public async Task<CoveConfigDto> ReadConfigFileAsync(string path, CancellationToken ct = default)
+    {
+        var json = await File.ReadAllTextAsync(path, ct);
+        try
+        {
+            return JsonSerializer.Deserialize<CoveConfigDto>(json, _jsonOpts)
+                ?? throw new InvalidDataException($"Config file is empty: {path}");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Config file is not valid Cove config JSON: {path}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Apply a config to the live CoveConfiguration without writing cove-config.json, for when the
+    /// file on disk already holds it (a restored backup). Without this the running process keeps
+    /// serving the old config, and the next save writes it back over the restored file.
+    /// </summary>
+    public async Task<CoveConfigDto> ApplyWithoutSavingAsync(CoveConfigDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        await _lock.WaitAsync();
+        try
+        {
+            ApplyToLive(dto);
+            return GetConfig();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     /// <summary>Apply DTO values to the live CoveConfiguration singleton. Internal for testing the
     /// legacy-config migration without touching disk.</summary>
     internal void ApplyToLive(CoveConfigDto dto)

@@ -2771,6 +2771,7 @@ public class ImageRepository : IImageRepository
 
         // Count criteria
         query = FilterHelpers.ApplyInt(query, filter.FileCountCriterion, i => i.FileCount);
+        query = FilterHelpers.ApplyLong(query, filter.FileSizeCriterion, i => i.MaxFileSize);
         query = FilterHelpers.ApplyInt(query, filter.TagCountCriterion, i => i.TagCount);
         query = FilterHelpers.ApplyInt(query, filter.PerformerCountCriterion, i => i.ImagePerformers.Count);
 

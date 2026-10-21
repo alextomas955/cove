@@ -170,6 +170,31 @@ describe("BulkEditDialog", () => {
     expect(onApply).toHaveBeenCalledWith({ studioId: 11 });
   });
 
+  it.each([
+    ["Show in video browsing", true],
+    ["Hide from video browsing", false],
+  ])("sends showInVideoLists for selected groups via %s", async (choice, expected) => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+
+    renderDialog(
+      <BulkEditDialog
+        open
+        onClose={vi.fn()}
+        title="Edit Groups"
+        selectedCount={2}
+        fields={GROUP_BULK_FIELDS}
+        onApply={onApply}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Video Browsing" }));
+    await user.click(screen.getByRole("button", { name: choice }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onApply).toHaveBeenCalledWith({ showInVideoLists: expected });
+  });
+
   it("keeps Apply disabled while a ticked rating has no value, but not for a nullable field", async () => {
     const user = userEvent.setup();
 

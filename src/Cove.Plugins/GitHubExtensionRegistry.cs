@@ -233,10 +233,11 @@ public class GitHubExtensionRegistry : IExtensionRegistry
         var list = items.ToList();
         var totalCount = list.Count;
 
-        // Sort
-        list = request.SortBy?.ToLower() switch
+        // Sort. OrderBy is stable, so ties keep the registry's own order. Name sorting is case-insensitive
+        // and culture-invariant so "alpha" and "Beta" interleave the same way on every server locale.
+        list = request.SortBy?.ToLowerInvariant() switch
         {
-            "name" => list.OrderBy(e => e.Name).ToList(),
+            "name" => list.OrderBy(e => e.Name, StringComparer.InvariantCultureIgnoreCase).ToList(),
             "updated" => list.OrderByDescending(e => e.UpdatedAt ?? DateTime.MinValue).ToList(),
             _ => list, // relevance = default order
         };
