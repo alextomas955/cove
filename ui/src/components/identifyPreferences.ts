@@ -130,3 +130,18 @@ export function applySavedSources(
   for (const source of byId.values()) ordered.push({ ...source, enabled: false });
   return ordered;
 }
+
+/**
+ * The sources to remember: the shown ones in their current order and state, then any saved ones not shown
+ * right now (a scraper that failed to load), which keep their state for next time.
+ */
+export function rememberedSources(
+  shown: IdentifySource[],
+  saved: IdentifyPreferences["sources"],
+): IdentifyPreferences["sources"] {
+  const shownIds = new Set(shown.map((source) => source.id));
+  return [
+    ...shown.map((source) => ({ id: source.id, enabled: source.enabled })),
+    ...saved.filter((source) => !shownIds.has(source.id)),
+  ];
+}

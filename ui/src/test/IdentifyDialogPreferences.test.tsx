@@ -146,4 +146,15 @@ describe("IdentifyDialog remembered choices", () => {
     expect(screen.getByRole("checkbox", { name: "Skip videos with multiple matches" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Mark identified videos as organized" })).toBeChecked();
   });
+
+  it("remembers the source selection without a run", async () => {
+    const first = renderDialog();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Box/ }));
+    first.unmount();
+
+    renderDialog();
+    expect(await screen.findByRole("checkbox", { name: /Site A/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Box/ })).toBeChecked();
+    expect(api.identify).not.toHaveBeenCalled();
+  });
 });

@@ -13,6 +13,7 @@ import {
 import {
   applySavedSources,
   loadIdentifyPreferences,
+  rememberedSources,
   saveIdentifyPreferences,
   type FieldStrategy,
   type IdentifyPreferences,
@@ -158,13 +159,8 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
 
   const identifyMut = useMutation({
     mutationFn: () => {
-      const shownIds = new Set(sources.map((s) => s.id));
       saveIdentifyPreferences({
-        // Saved sources not listed right now (a scraper that failed to load) keep their state for next time.
-        sources: [
-          ...sources.map((s) => ({ id: s.id, enabled: s.enabled })),
-          ...saved.sources.filter((s) => !shownIds.has(s.id)),
-        ],
+        sources: rememberedSources(sources, saved.sources),
         setCoverImage,
         markOrganized: setOrganized,
         skipMultipleMatches,
@@ -198,8 +194,17 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
     },
   });
 
+  // The source selection is remembered as soon as it changes, not only when a run starts, so closing the
+  // dialog without running keeps it too.
+  const updateSources = (next: IdentifySource[]) => {
+    setSources(next);
+    const remembered = { ...saved, sources: rememberedSources(next, saved.sources) };
+    setSaved(remembered);
+    saveIdentifyPreferences(remembered);
+  };
+
   const toggleSource = (id: string) => {
-    setSources(sources.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
+    updateSources(sources.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
   };
 
   const moveSource = (index: number, direction: "up" | "down") => {
@@ -207,7 +212,7 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
     const target = direction === "up" ? index - 1 : index + 1;
     if (target < 0 || target >= newSources.length) return;
     [newSources[index], newSources[target]] = [newSources[target], newSources[index]];
-    setSources(newSources);
+    updateSources(newSources);
   };
 
   const setFieldStrategy = (key: string, strategy: FieldStrategy) => {
