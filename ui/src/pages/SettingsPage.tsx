@@ -6562,7 +6562,7 @@ function DataManagementSection({ refetchJobs, mode }: { refetchJobs: () => void;
             />
             <TaskCard
               label="Restore Config"
-              description="Replace the current cove-config.json with a previously saved snapshot. Reloads Cove on success."
+              description="Replace the current cove-config.json with a previously saved snapshot and apply it. Reloads Cove on success."
               onRun={() => configRestoreMut.mutate()}
               isPending={configRestoreMut.isPending}
               statusMessage={

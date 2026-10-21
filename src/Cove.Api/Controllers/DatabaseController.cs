@@ -18,6 +18,7 @@ public class DatabaseController(
     IBackupService backupService,
     CoveConfiguration config,
     ILogger<DatabaseController> logger,
+    ConfigService configService,
     NameRuleEnforcementService? nameRuleEnforcement = null,
     CustomFieldJsonIndexJobService? jsonIndexJobs = null) : ControllerBase
 {
@@ -286,8 +287,27 @@ public class DatabaseController(
             return BadRequest(new { message = "Config backup path is required." });
 
         logger.LogWarning("Config restore initiated from {Path}", request.BackupPath);
+
+        // Parse before copying so a file that is not a Cove config never replaces cove-config.json.
+        CoveConfigDto restored;
+        try
+        {
+            restored = await configService.ReadConfigFileAsync(request.BackupPath, ct);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { message = $"Config backup not found: {request.BackupPath}" });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         await backupService.RestoreConfigBackupAsync(request.BackupPath, ct);
-        return Ok(new { message = "Config restored successfully. Restart Cove for changes to take effect.", backupPath = request.BackupPath });
+        // Apply to the running process the same way startup applies cove-config.json, so the restore
+        // takes effect now and later saves do not write the old in-memory config back over it.
+        await configService.ApplyWithoutSavingAsync(restored);
+        return Ok(new RestoreConfigResultDto("Config restored and applied.", request.BackupPath));
     }
 
     [HttpGet("config/latest-backup")]
@@ -298,3 +318,5 @@ public class DatabaseController(
         return Ok(new { path });
     }
 }
+
+public sealed record RestoreConfigResultDto(string Message, string BackupPath);

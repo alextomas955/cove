@@ -88,4 +88,6 @@ public sealed record DatabaseOperationMessage(string Message);
 
 public sealed record LatestBackupResponse(string Path);
 
-public sealed record RestoreConfigResponse(string Message, string BackupPath);
+public sealed record RestoreConfigResponse(
+    string Message,
+    string BackupPath);
