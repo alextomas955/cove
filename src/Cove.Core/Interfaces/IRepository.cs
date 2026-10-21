@@ -370,6 +370,8 @@ public class VideoFilter
     public IntCriterion? FrameRateCriterion { get; set; }
     public IntCriterion? BitrateInterval { get; set; }
     public IntCriterion? FileCountCriterion { get; set; }
+    /// <summary>Size in bytes of the video's largest file (<c>Video.MaxFileSize</c>), matching the file-size sort.</summary>
+    public IntCriterion? FileSizeCriterion { get; set; }
     public StringCriterion? RemoteIdCriterion { get; set; }
     public StringCriterion? RemoteIdValueCriterion { get; set; }
     public IntCriterion? RemoteIdCountCriterion { get; set; }
@@ -615,6 +617,8 @@ public class ImageFilter
     public StringCriterion? UrlCriterion { get; set; }
     public DateCriterion? DateCriterion { get; set; }
     public IntCriterion? FileCountCriterion { get; set; }
+    /// <summary>Size in bytes of the image's largest file (<c>Image.MaxFileSize</c>), matching the file-size sort.</summary>
+    public IntCriterion? FileSizeCriterion { get; set; }
     public IntCriterion? TagCountCriterion { get; set; }
     public IntCriterion? PerformerCountCriterion { get; set; }
     public IntCriterion? PerformerAgeCriterion { get; set; }

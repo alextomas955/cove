@@ -365,6 +365,8 @@ public class VideoRepository : IVideoRepository
             if (filter.FileCountCriterion != null)
                 query = ApplyIntCriterion(query, filter.FileCountCriterion, s => s.FileCount);
 
+            query = FilterHelpers.ApplyLong(query, filter.FileSizeCriterion, s => s.MaxFileSize);
+
             query = ApplyVideoTagCriterion(query, filter.TagsCriterion, hierarchicalTagGroups, requiredTagGroups);
             query = ApplyTagDurationCriterion(query, filter.TagDurationCriterion);
             query = ApplyMultiIdCriterion(query, filter.PerformersCriterion, s => s.PerformerIds);
