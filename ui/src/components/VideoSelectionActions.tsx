@@ -1,7 +1,7 @@
 import { VideoMergeEditor } from "./VideoMergeEditor";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, Edit, FileVideoCamera, Loader2, Merge, Play, Search, Trash2 } from "lucide-react";
+import { Clapperboard, Download, Edit, FileVideoCamera, Loader2, Merge, Play, Search, Trash2 } from "lucide-react";
 import type { BulkDeletionJobStart, BulkVideoUpdate, Video } from "../api/types";
 import { videos } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -33,6 +33,7 @@ const IdentifyDialog = lazy(() => import("./IdentifyDialog").then((module) => ({
 const ConvertVideosDialog = lazy(() =>
   import("./ConvertVideosDialog").then((module) => ({ default: module.ConvertVideosDialog })),
 );
+const GenerateDialog = lazy(() => import("./GenerateDialog").then((module) => ({ default: module.GenerateDialog })));
 
 const actionClass = "flex items-center gap-1 px-2 py-0.5 rounded text-xs";
 
@@ -53,7 +54,7 @@ export interface VideoSelectionActionsProps {
 }
 
 /**
- * The bulk actions offered for a multi-selection of videos: download, edit, identify, merge, play, whatever
+ * The bulk actions offered for a multi-selection of videos: download, edit, identify, merge, convert, generate, play, whatever
  * extensions contribute, and delete — plus every dialog they open and the permission checks that gate them.
  *
  * This is the single definition of "what you can do with selected videos", so the native videos page and any
@@ -79,6 +80,7 @@ export function VideoSelectionActions({
   const canIdentify = hasPermission("library.identify") && canWrite;
   const canDownload = hasPermission("jobs.run") && canWrite;
   const canConvert = hasPermission("jobs.run") && canWrite;
+  const canGenerate = hasPermission("jobs.run") && canWrite;
   const continuePlaylistDefault = config?.ui.continuePlaylistDefault ?? false;
 
   const [showBulkEdit, setShowBulkEdit] = useState(false);
@@ -86,6 +88,7 @@ export function VideoSelectionActions({
   const [showIdentify, setShowIdentify] = useState(false);
   // The ids are captured when the dialog opens, because starting the job clears the selection.
   const [convertIds, setConvertIds] = useState<number[] | null>(null);
+  const [generateIds, setGenerateIds] = useState<number[] | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBatchDownloadOptions, setShowBatchDownloadOptions] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState<Video | null>(null);
@@ -220,6 +223,15 @@ export function VideoSelectionActions({
           Convert
         </button>
       )}
+      {canGenerate && (
+        <button
+          onClick={() => setGenerateIds([...selectedIds])}
+          className={`${actionClass} text-accent hover:text-accent-hover hover:bg-accent/10`}
+        >
+          <Clapperboard className="w-3 h-3" />
+          Generate
+        </button>
+      )}
       <button
         onClick={handlePlaySelected}
         className={`${actionClass} text-green-400 hover:text-green-300 hover:bg-green-900/20`}
@@ -335,6 +347,9 @@ export function VideoSelectionActions({
             onStarted={onSelectNone}
             onClose={() => setConvertIds(null)}
           />
+        ) : null}
+        {generateIds !== null ? (
+          <GenerateDialog open videoIds={generateIds} onClose={() => setGenerateIds(null)} />
         ) : null}
       </Suspense>
     </>

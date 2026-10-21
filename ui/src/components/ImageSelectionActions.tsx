@@ -1,12 +1,13 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Edit, Loader2, Play, Trash2 } from "lucide-react";
+import { Clapperboard, Edit, Loader2, Play, Trash2 } from "lucide-react";
 import type { BulkDeletionJobStart, DeleteEntityOptions } from "../api/types";
 import { images } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { canDeleteEntity, canWriteEntity } from "../auth/visibility";
 import { BulkEditDialog, IMAGE_BULK_FIELDS } from "./BulkEditDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { GenerateDialog } from "./GenerateDialog";
 import { ExtensionSelectionActions } from "./ExtensionSelectionActions";
 
 const actionClass = "flex items-center gap-1 px-2 py-0.5 rounded text-xs";
@@ -25,7 +26,7 @@ export interface ImageSelectionActionsProps {
 }
 
 /**
- * The bulk actions offered for a multi-selection of images: play, edit, whatever extensions contribute, and
+ * The bulk actions offered for a multi-selection of images: play, edit, generate, whatever extensions contribute, and
  * delete — dialogs included. Shared so the native images page and any extension list (the recommendations feed)
  * offer the same actions and keep doing so as actions are added.
  */
@@ -40,9 +41,12 @@ export function ImageSelectionActions({
   const canWrite = canWriteEntity("image", hasPermission);
   const canDelete = canDeleteEntity("image", hasPermission);
   const canDeleteFiles = hasPermission("images.delete.file");
+  const canGenerate = hasPermission("jobs.run") && canWrite;
 
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // The ids are captured when the dialog opens, so the job targets what was selected at that moment.
+  const [generateIds, setGenerateIds] = useState<number[] | null>(null);
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [queryKey] });
@@ -87,6 +91,15 @@ export function ImageSelectionActions({
           Edit
         </button>
       )}
+      {canGenerate && (
+        <button
+          onClick={() => setGenerateIds([...selectedIds])}
+          className={`${actionClass} text-accent hover:text-accent-hover hover:bg-accent/10`}
+        >
+          <Clapperboard className="w-3 h-3" />
+          Generate
+        </button>
+      )}
       <ExtensionSelectionActions entityType="image" selectedIds={selectedIds} />
       {canDelete && (
         <button
@@ -123,6 +136,9 @@ export function ImageSelectionActions({
         onApply={(values) => bulkEditMut.mutate(values)}
         isPending={bulkEditMut.isPending}
       />
+      {generateIds !== null ? (
+        <GenerateDialog open imageIds={generateIds} onClose={() => setGenerateIds(null)} />
+      ) : null}
     </>
   );
 }
