@@ -342,6 +342,54 @@ describe("VideoTagger", () => {
     });
   });
 
+  it("imports a provider performer linked to a library one as that performer instead of creating it", async () => {
+    // Imported from another server, the performer matched nothing on this one (another disambiguation, say).
+    mocks.findMetadataServerByIds.mockResolvedValue([
+      {
+        ...matchFor(123),
+        id: "first-video-id",
+        performerNames: ["Jane Doe"],
+        performerCandidates: [{ remoteId: "remote-jane", name: "Jane Doe", disambiguation: "B", existsLocally: false }],
+      },
+    ]);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const video = {
+      id: 123,
+      title: "Local video",
+      files: [{ duration: 60, basename: "video.mp4", path: "/library/video.mp4" }],
+      performers: [],
+      tags: [],
+      urls: [],
+      remoteIds: [{ endpoint: "https://first.example/graphql", remoteId: "first-video-id" }],
+    } as any;
+    render(
+      <QueryClientProvider client={queryClient}>
+        <VideoTagger videos={[video]} mode="detail" />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Refresh from First provider" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Adjust…" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Link Performers: Jane Doe (B) to a library performer" }),
+    );
+    // A performer is linked by its remote id, not remembered by name, so there is no alias to offer.
+    expect(screen.queryByLabelText(/as an alias/)).not.toBeInTheDocument();
+    expect(screen.getByText(/When you apply, the performer is linked to/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pick Library Studio" }));
+    await userEvent.click(screen.getByRole("button", { name: "Link" }));
+    // The chip now reads as the library performer, matched rather than new.
+    expect(await screen.findByText("Library Studio")).toBeInTheDocument();
+    expect(screen.queryByText("Not in your library")).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
+
+    await waitFor(() => expect(mocks.importFromMetadataServer).toHaveBeenCalledOnce());
+    const request = mocks.importFromMetadataServer.mock.calls[0][1];
+    expect(request.setPerformers).toBe(true);
+    expect(request.performerOverrides).toEqual([
+      { remoteId: "remote-jane", name: "Jane Doe", action: "existing", localId: 77 },
+    ]);
+  });
+
   it("shows a metadata-server match under the library name it lands on and folds it into the tag the video has", async () => {
     // The search matched "Big Tits" to the library tag "Big Breasts" (by alias or remote id), and the
     // studio to one linked under another name.

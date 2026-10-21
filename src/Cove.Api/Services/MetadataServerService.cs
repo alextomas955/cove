@@ -1794,10 +1794,31 @@ query Me {
         return GetVideoEntityOverrideAction(entityOverride) switch
         {
             VideoEntityOverrideAction.Skip => null,
-            VideoEntityOverrideAction.Existing when entityOverride?.LocalId is int localId => await _db.Performers.FirstOrDefaultAsync(performer => performer.Id == localId, ct),
+            VideoEntityOverrideAction.Existing when entityOverride?.LocalId is int localId => await LinkExistingPerformerAsync(localId, remote, endpoint, ct),
             VideoEntityOverrideAction.Create => await FindOrCreatePerformerAsync(remote, endpoint, ct, allowCreate: true),
             _ => await FindOrCreatePerformerAsync(remote, endpoint, ct, allowCreate: allowCreate),
         };
+    }
+
+    // The library performer the review chose for a remote one, whether the search matched it or the
+    // person linked it by hand. It gains this endpoint's link the way a performer FindOrCreatePerformerAsync
+    // matches does, so the next video from this server finds it by remote id instead of creating a
+    // duplicate; a link it already has for the endpoint is kept, and nothing else about it changes.
+    private async Task<Performer?> LinkExistingPerformerAsync(int localId, MetadataServerRemotePerformer remote, string endpoint, CancellationToken ct)
+    {
+        var performer = await _db.Performers
+            .Include(entity => entity.RemoteIds)
+            .FirstOrDefaultAsync(entity => entity.Id == localId, ct);
+        if (performer != null && !string.IsNullOrWhiteSpace(remote.Id))
+        {
+            AddRemoteIdIfMissing(
+                performer.RemoteIds,
+                endpoint,
+                remote.Id,
+                id => id.Endpoint,
+                value => new PerformerRemoteId { Endpoint = endpoint, RemoteId = value });
+        }
+        return performer;
     }
 
     private async Task<Studio?> ResolveVideoStudioAsync(

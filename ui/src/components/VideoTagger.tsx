@@ -211,6 +211,9 @@ interface VideoSearchState {
   createdStudio?: string;
   // A library studio the person linked the scraped one to for this video alone, by the scraped name's key.
   linkedStudio?: LinkedStudio;
+  // Library performers the person linked scraped ones to, by performer choice key. The apply uses each and
+  // links it to the server, so the server's later matches find it.
+  linkedPerformers?: Record<string, LinkedPerformer>;
   fieldStrategies?: Record<string, VideoFieldStrategy>;
   collectionModes?: Record<string, CollectionMode>;
   // Hand edits made in the review beside the scrape, as the edit form would make them.
@@ -735,6 +738,32 @@ function withLinkedStudio(
   return candidate && studio
     ? { ...candidate, existsLocally: true, localId: studio.id, localName: studio.name }
     : candidate;
+}
+
+interface LinkedPerformer {
+  id: number;
+  /** The library performer as it reads, disambiguation included. */
+  label: string;
+}
+
+/**
+ * A metadata server's performers the person linked to library ones are the library's, as if the search had
+ * matched them, so the apply sends each as an existing performer, which it uses instead of creating one.
+ */
+function withLinkedPerformers<T extends MetadataServerVideoMatch>(
+  match: T,
+  linked: Record<string, LinkedPerformer> | undefined,
+): T {
+  if (!linked) return match;
+  return {
+    ...match,
+    performerCandidates: match.performerCandidates.map((candidate) => {
+      const performer = candidate.existsLocally ? undefined : linked[performerChoiceKey(candidate)];
+      return performer
+        ? { ...candidate, existsLocally: true, localId: performer.id, localName: performer.label }
+        : candidate;
+    }),
+  };
 }
 
 /** The person chose "+ Create" for this result's studio; a later search naming another studio has not. */
@@ -2073,8 +2102,9 @@ function TaggerVideoRow({
         ? // Only a metadata server states a performer's gender, so only its matches can be filtered by
           // one. Dropping the excluded performers here keeps the preview, its counts and the apply
           // request agreed on one list, and re-runs when the setting changes without a new search.
+          // Only its performers carry remote ids, so only they can be linked to library ones.
           {
-            ...filterMatchPerformersByGender(r, allowedGenderKeys),
+            ...withLinkedPerformers(filterMatchPerformersByGender(r, allowedGenderKeys), state?.linkedPerformers),
             tagCandidates: r.tagCandidates.map((c) =>
               c.existsLocally || !existingTagKeys.has(relationKey(c.name)) ? c : { ...c, existsLocally: true },
             ),
@@ -2107,7 +2137,15 @@ function TaggerVideoRow({
             ),
           },
     );
-  }, [state?.results, existingTagKeys, existingPerformerKeys, studioMatchInfo, allowedGenderKeys, state?.linkedStudio]);
+  }, [
+    state?.results,
+    existingTagKeys,
+    existingPerformerKeys,
+    studioMatchInfo,
+    allowedGenderKeys,
+    state?.linkedStudio,
+    state?.linkedPerformers,
+  ]);
   const selectedResult = enrichedResults?.[state?.selectedIndex ?? 0];
   const coverComparison = useCoverComparison(video, selectedResult?.imageUrl);
   const videoLinkProps = createNestedRouteLinkProps<HTMLAnchorElement>({ page: "video", id: video.id }, () =>
@@ -2623,6 +2661,7 @@ function TaggerVideoRow({
                         forceIncludedTags: undefined,
                         createdStudio: undefined,
                         linkedStudio: undefined,
+                        linkedPerformers: undefined,
                         tagEdits: undefined,
                         performerEdits: undefined,
                       },
@@ -2637,6 +2676,7 @@ function TaggerVideoRow({
               forceIncludedPerformers={state.forceIncludedPerformers ?? new Set()}
               forceIncludedTags={state.forceIncludedTags ?? new Set()}
               createdStudio={state.createdStudio}
+              linkedPerformers={state.linkedPerformers}
               fieldStrategies={selectedResult ? getVideoFieldStrategies(video, selectedResult, state) : {}}
               collectionModes={selectedResult ? getVideoCollectionModes(selectedResult, state, taggerConfig) : {}}
               onFieldStrategyChange={(field, strategy) => {
@@ -2696,6 +2736,23 @@ function TaggerVideoRow({
                 void queryClient.invalidateQueries({ queryKey: ["tag", tag.id] });
                 // Every row asks again, so the same name scraped for another video matches too.
                 await queryClient.invalidateQueries({ queryKey: ["tagger-resolve-relations"] });
+              }}
+              onLinkPerformer={(choiceKey, performer) => {
+                // Linking is a choice to use the performer, whatever was decided about the scraped one as new.
+                const forget = (keys?: Set<string>) => new Set([...(keys ?? [])].filter((key) => key !== choiceKey));
+                onUpdateState((latest) => ({
+                  linkedPerformers: {
+                    ...latest?.linkedPerformers,
+                    [choiceKey]: {
+                      id: performer.id,
+                      label: performer.secondaryLabel
+                        ? `${performer.label} ${performer.secondaryLabel}`
+                        : performer.label,
+                    },
+                  },
+                  excludedPerformers: forget(latest?.excludedPerformers),
+                  forceIncludedPerformers: forget(latest?.forceIncludedPerformers),
+                }));
               }}
               onCreateStudio={() => {
                 if (!selectedResult) return;
@@ -2783,6 +2840,7 @@ interface TaggerResultsProps {
   forceIncludedPerformers: Set<string>;
   forceIncludedTags: Set<string>;
   createdStudio?: string;
+  linkedPerformers?: Record<string, LinkedPerformer>;
   fieldStrategies: Record<string, VideoFieldStrategy>;
   collectionModes: Record<string, CollectionMode>;
   onFieldStrategyChange: (field: string, strategy: VideoFieldStrategy) => void;
@@ -2790,6 +2848,7 @@ interface TaggerResultsProps {
   onTogglePerformer: (names: string | string[]) => void;
   onToggleTag: (names: string | string[]) => void;
   onLinkTag?: TaggerReviewInput["onLinkTag"];
+  onLinkPerformer?: TaggerReviewInput["onLinkPerformer"];
   onCreateStudio: () => void;
   onLinkStudio: NonNullable<TaggerReviewInput["onLinkStudio"]>;
   tagEdits?: TaggerRelationshipEdits;
@@ -2820,6 +2879,7 @@ function TaggerResults({
   forceIncludedPerformers,
   forceIncludedTags,
   createdStudio,
+  linkedPerformers,
   fieldStrategies,
   collectionModes,
   onFieldStrategyChange,
@@ -2827,6 +2887,7 @@ function TaggerResults({
   onTogglePerformer,
   onToggleTag,
   onLinkTag,
+  onLinkPerformer,
   onCreateStudio,
   onLinkStudio,
   tagEdits,
@@ -2862,6 +2923,7 @@ function TaggerResults({
       forceIncludedPerformers={forceIncludedPerformers}
       forceIncludedTags={forceIncludedTags}
       createdStudio={createdStudio}
+      linkedPerformers={linkedPerformers}
       fieldStrategies={fieldStrategies}
       collectionModes={collectionModes}
       onFieldStrategyChange={i === current ? onFieldStrategyChange : undefined}
@@ -2869,6 +2931,7 @@ function TaggerResults({
       onTogglePerformer={i === current ? onTogglePerformer : undefined}
       onToggleTag={i === current ? onToggleTag : undefined}
       onLinkTag={i === current ? onLinkTag : undefined}
+      onLinkPerformer={i === current ? onLinkPerformer : undefined}
       onCreateStudio={i === current ? onCreateStudio : undefined}
       onLinkStudio={i === current ? onLinkStudio : undefined}
       tagEdits={tagEdits}
@@ -2917,6 +2980,7 @@ function TaggerResultRow({
   forceIncludedPerformers,
   forceIncludedTags,
   createdStudio,
+  linkedPerformers,
   fieldStrategies,
   collectionModes,
   onFieldStrategyChange,
@@ -2924,6 +2988,7 @@ function TaggerResultRow({
   onTogglePerformer,
   onToggleTag,
   onLinkTag,
+  onLinkPerformer,
   onCreateStudio,
   onLinkStudio,
   tagEdits,
@@ -2952,6 +3017,7 @@ function TaggerResultRow({
   forceIncludedPerformers: Set<string>;
   forceIncludedTags: Set<string>;
   createdStudio?: string;
+  linkedPerformers?: Record<string, LinkedPerformer>;
   fieldStrategies: Record<string, VideoFieldStrategy>;
   collectionModes: Record<string, CollectionMode>;
   onFieldStrategyChange?: (field: string, strategy: VideoFieldStrategy) => void;
@@ -2959,6 +3025,7 @@ function TaggerResultRow({
   onTogglePerformer?: (names: string | string[]) => void;
   onToggleTag?: (names: string | string[]) => void;
   onLinkTag?: TaggerReviewInput["onLinkTag"];
+  onLinkPerformer?: TaggerReviewInput["onLinkPerformer"];
   onCreateStudio?: () => void;
   onLinkStudio?: TaggerReviewInput["onLinkStudio"];
   tagEdits?: TaggerRelationshipEdits;
@@ -3055,6 +3122,12 @@ function TaggerResultRow({
     performerChoices,
     currentPerformerChoiceKeys,
     performerActions,
+    // A scraper's performers have no remote ids to link a library performer to.
+    onLinkPerformer: result.sourceKind === "scraper" ? undefined : onLinkPerformer,
+    linkedPerformerLabels:
+      result.sourceKind === "scraper" || !linkedPerformers
+        ? undefined
+        : Object.fromEntries(Object.entries(linkedPerformers).map(([key, performer]) => [key, performer.label])),
     tagEdits,
     performerEdits,
   };
