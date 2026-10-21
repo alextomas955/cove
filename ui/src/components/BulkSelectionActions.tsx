@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, Edit, Image as ImageIcon, Loader2, Trash2, Search, Play, Unlink, Merge } from "lucide-react";
+import {
+  Clapperboard,
+  Download,
+  Edit,
+  Image as ImageIcon,
+  Loader2,
+  Trash2,
+  Search,
+  Play,
+  Unlink,
+  Merge,
+} from "lucide-react";
 import {
   videos as videosApi,
   images,
@@ -48,6 +59,7 @@ import {
 } from "./BulkEditDialog";
 import { BatchDownloadOptionsDialog } from "./BatchDownloadOptionsDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { GenerateDialog } from "./GenerateDialog";
 import { IdentifyDialog } from "./IdentifyDialog";
 import { VideoQueue } from "./VideoQueue";
 import { ExtensionSelectionActions } from "./ExtensionSelectionActions";
@@ -362,6 +374,8 @@ export function BulkSelectionActions({
   const [showBatchDownloadOptions, setShowBatchDownloadOptions] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveFromParentConfirm, setShowRemoveFromParentConfirm] = useState(false);
+  // The ids are captured when the dialog opens, so the job targets what was selected at that moment.
+  const [generateIds, setGenerateIds] = useState<number[] | null>(null);
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const api = API_MAP[entityType];
@@ -506,6 +520,17 @@ export function BulkSelectionActions({
   }, [audioItems, isAudios, isTexts, selectedIds, textItems]);
   const mediaScrapeType = isAudios ? "audio" : isTexts ? "text" : null;
   const canScrapeMedia = canWrite && !!mediaScrapeType && !!selectedMediaItem;
+  const generateScope: "videoIds" | "imageIds" | "audioIds" | "textIds" | null =
+    entityType === "videos"
+      ? "videoIds"
+      : entityType === "images"
+        ? "imageIds"
+        : isAudios
+          ? "audioIds"
+          : isTexts
+            ? "textIds"
+            : null;
+  const canGenerate = !!generateScope && hasPermission("jobs.run") && canWrite;
 
   useEffect(() => {
     if (batchDownloadStorageKey) {
@@ -581,6 +606,15 @@ export function BulkSelectionActions({
         >
           <Search className="w-3 h-3" />
           Scrape
+        </button>
+      )}
+      {canGenerate && (
+        <button
+          onClick={() => setGenerateIds([...selectedIds])}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-xs text-accent hover:text-accent-hover hover:bg-accent/10"
+        >
+          <Clapperboard className="w-3 h-3" />
+          Generate
         </button>
       )}
       {isVideos && videoItems && onNavigate && (
@@ -721,6 +755,9 @@ export function BulkSelectionActions({
           entity={selectedMediaItem}
           onClose={() => setShowScrape(false)}
         />
+      ) : null}
+      {generateIds !== null && generateScope ? (
+        <GenerateDialog open {...{ [generateScope]: generateIds }} onClose={() => setGenerateIds(null)} />
       ) : null}
       {canDownload && downloadEntity && (
         <BatchDownloadOptionsDialog
