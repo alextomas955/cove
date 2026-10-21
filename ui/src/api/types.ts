@@ -3699,6 +3699,7 @@ export interface BulkGroupUpdate {
   description?: string;
   tagIds?: number[];
   tagMode?: BulkUpdateMode;
+  showInVideoLists?: boolean;
 }
 
 // ===== Plugin Types =====

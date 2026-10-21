@@ -2416,6 +2416,7 @@ public record BulkGroupUpdateDto
     public string? Description { get; init; }
     public List<int>? TagIds { get; init; }
     public BulkUpdateMode TagMode { get; init; } = BulkUpdateMode.Add;
+    public bool? ShowInVideoLists { get; init; }
 }
 
 // ===== MERGE DTOs =====

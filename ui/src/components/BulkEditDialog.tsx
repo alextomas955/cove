@@ -922,5 +922,12 @@ export const GROUP_BULK_FIELDS: BulkEditField[] = [
   { key: "date", label: "Date", type: "date" },
   { key: "director", label: "Director", type: "string" },
   { key: "description", label: "Description", type: "string" },
+  {
+    key: "showInVideoLists",
+    label: "Video Browsing",
+    type: "bool",
+    trueLabel: "Show in video browsing",
+    falseLabel: "Hide from video browsing",
+  },
   { key: "tagIds", label: "Tags", type: "multiId", entityType: "tags", modeKey: "tagMode" },
 ];

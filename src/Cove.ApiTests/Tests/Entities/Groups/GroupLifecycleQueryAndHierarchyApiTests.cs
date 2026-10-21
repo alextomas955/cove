@@ -197,6 +197,32 @@ public sealed class GroupLifecycleQueryAndHierarchyApiTests(
     }
 
     [Fact]
+    [CoversEndpoint("POST", "/api/groups/bulk")]
+    public async Task GivenGroups_WhenMemberBulkTogglesShowInVideoLists_ThenOnlySelectionChangesAndOmittingLeavesIt()
+    {
+        var owner = AsUser();
+        var member = AsUser(ApiTestUsers.Eva);
+        var selected = await Task.WhenAll(Enumerable.Range(1, 2).Select(index =>
+            owner.CreateGroupAsync($"Video browsing bulk group {index} {Guid.NewGuid():N}")));
+        var control = await owner.CreateCompilationAsync($"Video browsing control group {Guid.NewGuid():N}", TestContext.Current.CancellationToken);
+        var ids = selected.Select(group => group.Id).ToList();
+        selected.Should().AllSatisfy(group => group.ShowInVideoLists.Should().BeFalse());
+
+        async Task<bool[]> ReadSelectedAsync() =>
+            (await Task.WhenAll(ids.Select(id => owner.GetGroupByIdAsync(id)))).Select(group => group.ShowInVideoLists).ToArray();
+
+        (await member.BulkUpdateGroupsAsync(new BulkGroupUpdateDto { Ids = ids, ShowInVideoLists = true }, TestContext.Current.CancellationToken)).Should().Be(2);
+        (await ReadSelectedAsync()).Should().Equal(true, true);
+
+        await member.BulkUpdateGroupsAsync(new BulkGroupUpdateDto { Ids = ids, Director = "Bulk director" }, TestContext.Current.CancellationToken);
+        (await ReadSelectedAsync()).Should().Equal(true, true);
+
+        await member.BulkUpdateGroupsAsync(new BulkGroupUpdateDto { Ids = ids, ShowInVideoLists = false }, TestContext.Current.CancellationToken);
+        (await ReadSelectedAsync()).Should().Equal(false, false);
+        (await owner.GetGroupByIdAsync(control.Id, TestContext.Current.CancellationToken)).ShowInVideoLists.Should().BeTrue();
+    }
+
+    [Fact]
     [CoversEndpoint("POST", "/api/groups/{id:int}/subgroups")]
     [CoversEndpoint("GET", "/api/groups/{id:int}/subgroups")]
     [CoversEndpoint("GET", "/api/groups/{id:int}/containinggroups")]

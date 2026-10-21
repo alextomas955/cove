@@ -227,6 +227,7 @@ public class GroupsController(IGroupRepository groupRepo, Data.CoveContext db, I
             if (dto.Date != null) { var date = PartialDate.Parse(dto.Date); g.Date = date.Value; g.DatePrecision = date.Precision; }
             if (dto.Director != null) g.Director = dto.Director;
             if (dto.Description != null) g.Synopsis = dto.Description;
+            if (dto.ShowInVideoLists.HasValue) g.ShowInVideoLists = dto.ShowInVideoLists.Value;
 
             if (dto.TagIds != null && MetadataCollectionUpdater.ApplyBulkUpdate(g.GroupTags, dto.TagIds, dto.TagMode, item => item.TagId, tagId => new GroupTag { TagId = tagId, GroupId = g.Id }))
                 MetadataCollectionUpdater.Touch(g);
