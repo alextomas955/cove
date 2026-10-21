@@ -2657,7 +2657,8 @@ public record IdentifyOptionsDto
     public bool? CreatePerformers { get; init; }
     public bool? CreateStudios { get; init; }
     public bool MarkOrganized { get; init; }
-    public bool SkipMultipleMatches { get; init; }
+    // On unless turned off: applying the top-ranked of several passing candidates is a guess.
+    public bool SkipMultipleMatches { get; init; } = true;
     public bool SkipSingleNamePerformers { get; init; } = true;
     public Dictionary<string, string>? FieldStrategies { get; init; }
     // The performer genders to keep, as the metadata server spells them (matched after stripping

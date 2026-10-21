@@ -10,21 +10,21 @@ import {
   isGenderOptionChecked,
   toggleGenderOption,
 } from "../utils/performerGenders";
+import {
+  applySavedSources,
+  loadIdentifyPreferences,
+  rememberedSources,
+  saveIdentifyPreferences,
+  type FieldStrategy,
+  type IdentifyPreferences,
+  type IdentifySource,
+} from "./identifyPreferences";
 
 interface Props {
   open: boolean;
   onClose: () => void;
   videoIds?: number[];
 }
-
-interface IdentifySource {
-  id: string;
-  name: string;
-  type: "metadata-server" | "scraper";
-  enabled: boolean;
-}
-
-type FieldStrategy = "ignore" | "merge" | "overwrite";
 
 const METADATA_FIELD_OPTIONS: { key: string; label: string }[] = [
   { key: "title", label: "Title" },
@@ -39,8 +39,8 @@ const METADATA_FIELD_OPTIONS: { key: string; label: string }[] = [
   { key: "tags", label: "Tags" },
 ];
 
-function buildDefaultFieldStrategies(): Record<string, FieldStrategy> {
-  return Object.fromEntries(METADATA_FIELD_OPTIONS.map((field) => [field.key, "merge"])) as Record<
+function buildFieldStrategies(saved: Record<string, FieldStrategy>): Record<string, FieldStrategy> {
+  return Object.fromEntries(METADATA_FIELD_OPTIONS.map((field) => [field.key, saved[field.key] ?? "merge"])) as Record<
     string,
     FieldStrategy
   >;
@@ -54,9 +54,9 @@ const DEFAULT_IDENTIFY_DEFAULTS = {
 
 function buildIdentifySources(metadataServers: MetadataServer[], scrapers: ScraperSummary[]): IdentifySource[] {
   const sources: IdentifySource[] = [];
-  metadataServers.forEach((box, i) => {
+  metadataServers.forEach((box) => {
     sources.push({
-      id: `metadata-server-${i}`,
+      id: `metadata-server:${box.endpoint}`,
       name: box.name || box.endpoint,
       type: "metadata-server",
       enabled: true,
@@ -73,7 +73,7 @@ function buildIdentifySources(metadataServers: MetadataServer[], scrapers: Scrap
     )
     .forEach((scraper) => {
       sources.push({
-        id: `scraper-${scraper.id}`,
+        id: `scraper:${scraper.id}`,
         name: scraper.name,
         type: "scraper",
         enabled: true,
@@ -98,22 +98,27 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
     enabled: open,
   });
 
-  const [sources, setSources] = useState<IdentifySource[]>(() => buildIdentifySources(metadataServers, []));
+  // The last run's choices; re-read on every open so a run from another dialog instance is picked up.
+  const [saved, setSaved] = useState<IdentifyPreferences>(loadIdentifyPreferences);
+  const [sources, setSources] = useState<IdentifySource[]>(() =>
+    applySavedSources(buildIdentifySources(metadataServers, []), saved.sources),
+  );
 
   const [showOptions, setShowOptions] = useState(false);
-  const [setCoverImage, setSetCoverImage] = useState(true);
-  const [setOrganized, setSetOrganized] = useState(false);
-  const [skipMultipleMatches, setSkipMultipleMatches] = useState(false);
-  const [skipSingleNamePerformers, setSkipSingleNamePerformers] = useState(true);
-  const [createTags, setCreateTags] = useState(identifyDefaults.createTags);
-  const [createPerformers, setCreatePerformers] = useState(identifyDefaults.createPerformers);
-  const [createStudios, setCreateStudios] = useState(identifyDefaults.createStudios);
+  const [setCoverImage, setSetCoverImage] = useState(saved.setCoverImage);
+  const [setOrganized, setSetOrganized] = useState(saved.markOrganized);
+  const [skipMultipleMatches, setSkipMultipleMatches] = useState(saved.skipMultipleMatches);
+  const [skipSingleNamePerformers, setSkipSingleNamePerformers] = useState(saved.skipSingleNamePerformers);
+  const [createTags, setCreateTags] = useState(saved.createTags ?? identifyDefaults.createTags);
+  const [createPerformers, setCreatePerformers] = useState(saved.createPerformers ?? identifyDefaults.createPerformers);
+  const [createStudios, setCreateStudios] = useState(saved.createStudios ?? identifyDefaults.createStudios);
   const [fieldStrategies, setFieldStrategies] = useState<Record<string, FieldStrategy>>(() =>
-    buildDefaultFieldStrategies(),
+    buildFieldStrategies(saved.fieldStrategies),
   );
-  const [performerGenders, setPerformerGenders] = useState<string[]>(() => [...PERFORMER_GENDER_OPTIONS]);
+  const [performerGenders, setPerformerGenders] = useState<string[]>(() => [...saved.performerGenders]);
 
-  // Reset the sources and defaults whenever the dialog opens or its inputs change while open.
+  // Reset the sources and options to the last-used ones whenever the dialog opens or its inputs change
+  // while open.
   const {
     createTags: defaultCreateTags,
     createPerformers: defaultCreatePerformers,
@@ -137,17 +142,35 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
   ) {
     setResetKey({ open, metadataServers, scrapers, defaultCreateTags, defaultCreatePerformers, defaultCreateStudios });
     if (open) {
-      setSources(buildIdentifySources(metadataServers, scrapers));
-      setCreateTags(defaultCreateTags);
-      setCreatePerformers(defaultCreatePerformers);
-      setCreateStudios(defaultCreateStudios);
-      setFieldStrategies(buildDefaultFieldStrategies());
-      setPerformerGenders([...PERFORMER_GENDER_OPTIONS]);
+      const last = resetKey.open ? saved : loadIdentifyPreferences();
+      setSaved(last);
+      setSources(applySavedSources(buildIdentifySources(metadataServers, scrapers), last.sources));
+      setSetCoverImage(last.setCoverImage);
+      setSetOrganized(last.markOrganized);
+      setSkipMultipleMatches(last.skipMultipleMatches);
+      setSkipSingleNamePerformers(last.skipSingleNamePerformers);
+      setCreateTags(last.createTags ?? defaultCreateTags);
+      setCreatePerformers(last.createPerformers ?? defaultCreatePerformers);
+      setCreateStudios(last.createStudios ?? defaultCreateStudios);
+      setFieldStrategies(buildFieldStrategies(last.fieldStrategies));
+      setPerformerGenders([...last.performerGenders]);
     }
   }
 
   const identifyMut = useMutation({
     mutationFn: () => {
+      saveIdentifyPreferences({
+        sources: rememberedSources(sources, saved.sources),
+        setCoverImage,
+        markOrganized: setOrganized,
+        skipMultipleMatches,
+        skipSingleNamePerformers,
+        createTags,
+        createPerformers,
+        createStudios,
+        fieldStrategies,
+        performerGenders,
+      });
       const enabledSources = sources.filter((s) => s.enabled).map((s) => s.name);
       return metadata.identify({
         sources: enabledSources.length > 0 ? enabledSources : undefined,
@@ -171,8 +194,17 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
     },
   });
 
+  // The source selection is remembered as soon as it changes, not only when a run starts, so closing the
+  // dialog without running keeps it too.
+  const updateSources = (next: IdentifySource[]) => {
+    setSources(next);
+    const remembered = { ...saved, sources: rememberedSources(next, saved.sources) };
+    setSaved(remembered);
+    saveIdentifyPreferences(remembered);
+  };
+
   const toggleSource = (id: string) => {
-    setSources(sources.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
+    updateSources(sources.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
   };
 
   const moveSource = (index: number, direction: "up" | "down") => {
@@ -180,7 +212,7 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
     const target = direction === "up" ? index - 1 : index + 1;
     if (target < 0 || target >= newSources.length) return;
     [newSources[index], newSources[target]] = [newSources[target], newSources[index]];
-    setSources(newSources);
+    updateSources(newSources);
   };
 
   const setFieldStrategy = (key: string, strategy: FieldStrategy) => {
@@ -258,6 +290,9 @@ export function IdentifyDialog({ open, onClose, videoIds }: Props) {
                 </div>
               ))}
             </div>
+            {sources.length > 0 && !sources.some((s) => s.enabled) && (
+              <p className="mt-2 text-xs text-muted">Select the sources to identify from.</p>
+            )}
             {sources.length === 0 && (
               <div className="text-sm text-muted text-center py-4">
                 No sources available. Configure MetadataServer endpoints in Settings &gt; Metadata Providers.

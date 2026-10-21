@@ -899,9 +899,9 @@ public class MetadataController(
                                 continue;
                             }
 
-                            // Skip multiple matches only when explicitly requested. By default we
-                            // apply the top-ranked candidate rather than skipping the whole video.
-                            if ((opts?.SkipMultipleMatches ?? false) && rankedMatches.Count > 1)
+                            // Skip a video with several passing candidates unless the caller opts out:
+                            // applying the top-ranked one is a guess that can attach the wrong scene.
+                            if ((opts?.SkipMultipleMatches ?? true) && rankedMatches.Count > 1)
                             {
                                 logger.LogTrace(
                                     "Identify video {VideoId}: skipping because {PassedCount} candidates passed thresholds and SkipMultipleMatches is enabled",
