@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -45,12 +46,10 @@ export function CustomFieldsDisplay({
         {entries.map(({ key, definition, value }) => {
           const label = definition?.label || key;
           const urlValue = definition?.type === "url" && typeof value === "string" ? value.trim() : "";
+          const plainText = isPlainTextDisplay(definition);
 
           return (
-            <div
-              key={key}
-              className={`flex flex-col ${definition?.type === "json" || definition?.type === "longText" ? "col-span-2" : ""}`}
-            >
+            <div key={key} className={`flex min-w-0 flex-col ${spansFullWidth(definition, value) ? "col-span-2" : ""}`}>
               <span className="text-muted text-xs">{label}</span>
               {urlValue ? (
                 <a href={urlValue} target="_blank" rel="noreferrer" className="text-accent hover:underline break-all">
@@ -58,7 +57,7 @@ export function CustomFieldsDisplay({
                 </a>
               ) : (
                 <div
-                  className={`text-foreground break-words ${definition?.type === "longText" ? "whitespace-pre-wrap" : ""}`}
+                  className={`min-w-0 text-foreground ${plainText ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "break-words"}`}
                 >
                   <CustomFieldDisplayValue definition={definition} value={value} />
                 </div>
@@ -350,6 +349,16 @@ export function ConfiguredFieldInput({
     percent: "number",
   };
 
+  if (definition.type === "text") {
+    return (
+      <WrappingTextInput
+        ariaLabel={controlLabel}
+        value={serializeScalarValue(value, definition.type)}
+        onChange={onChange}
+      />
+    );
+  }
+
   const Input = definition.type === "date" || definition.type === "timestamp" ? IsoDateInput : "input";
   return (
     <Input
@@ -359,6 +368,43 @@ export function ConfiguredFieldInput({
       value={serializeScalarValue(value, definition.type)}
       onChange={(event) => onChange(event.target.value)}
       className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+    />
+  );
+}
+
+/**
+ * A single-line text value that wraps instead of scrolling sideways out of view (#810): a one-row textarea
+ * that grows with its content. Enter still adds no line break, as in the input it replaces; multi-line
+ * text is what the Long text type is for.
+ */
+function WrappingTextInput({
+  ariaLabel,
+  value,
+  onChange,
+}: {
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const textarea = ref.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      aria-label={ariaLabel}
+      rows={1}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) event.preventDefault();
+      }}
+      className="block w-full resize-none overflow-hidden rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
     />
   );
 }
@@ -955,6 +1001,21 @@ function getDisplayEntries(customFields: Record<string, unknown> | undefined, de
         entry.value !== null &&
         !(typeof entry.value === "string" && entry.value.trim() === ""),
     );
+}
+
+// Text longer than this reads as prose rather than a short attribute, so it gets the full card width.
+const FULL_WIDTH_TEXT_LENGTH = 40;
+
+function isPlainTextDisplay(definition: CustomFieldDefinition | undefined) {
+  return definition?.type !== "json" && !(definition && isEntityReferenceType(definition.type));
+}
+
+function spansFullWidth(definition: CustomFieldDefinition | undefined, value: unknown) {
+  if (definition?.type === "json" || definition?.type === "longText") return true;
+  if (!isPlainTextDisplay(definition)) return false;
+
+  const text = formatCustomFieldValue(value, definition?.type);
+  return text.length > FULL_WIDTH_TEXT_LENGTH || text.includes("\n");
 }
 
 function CustomFieldDisplayValue({

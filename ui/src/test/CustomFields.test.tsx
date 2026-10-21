@@ -266,6 +266,84 @@ describe("long text custom fields", () => {
   });
 });
 
+describe("text custom field editor", () => {
+  const textDefinition: CustomFieldDefinition = { ...jsonDefinition, key: "summary", label: "Summary", type: "text" };
+
+  it("wraps a long value in a one-row editor instead of scrolling it out of view", () => {
+    const onChange = vi.fn();
+    const longValue = "A text value much longer than the edit form is wide. ".repeat(4).trim();
+    renderWithDefinition(<CustomFieldsEditor value={{ summary: longValue }} onChange={onChange} entityType="video" />, [
+      textDefinition,
+    ]);
+
+    const editor = screen.getByRole("textbox", { name: "Summary" });
+    expect(editor.tagName).toBe("TEXTAREA");
+    expect(editor).toHaveAttribute("rows", "1");
+    expect(editor).toHaveValue(longValue);
+
+    fireEvent.change(editor, { target: { value: "Edited" } });
+    expect(onChange).toHaveBeenLastCalledWith({ summary: "Edited" });
+  });
+
+  it("does not add a line break on Enter", () => {
+    renderWithDefinition(<CustomFieldsEditor value={{ summary: "One line" }} onChange={vi.fn()} entityType="video" />, [
+      textDefinition,
+    ]);
+
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    screen.getByRole("textbox", { name: "Summary" }).dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+  });
+});
+
+describe("text custom field display", () => {
+  const textDefinition: CustomFieldDefinition = {
+    ...jsonDefinition,
+    key: "summary",
+    label: "Summary",
+    type: "text",
+    filterable: true,
+    sortable: true,
+  };
+  const codeDefinition: CustomFieldDefinition = { ...textDefinition, key: "code", label: "Code", displayOrder: 1 };
+
+  function cellFor(label: string) {
+    const cell = screen.getByText(label).parentElement!;
+    const value = cell.querySelector(":scope > div")!;
+    return { cell, value };
+  }
+
+  it("lets long text values wrap across the full card width instead of clipping", () => {
+    const longValue = `${"Unbroken".repeat(20)} and then a sentence that keeps going`;
+    renderWithDefinition(
+      <CustomFieldsDisplay customFields={{ summary: longValue, code: "ABC-123" }} entityType="video" />,
+      [textDefinition, codeDefinition],
+    );
+
+    const summary = cellFor("Summary");
+    expect(summary.cell).toHaveClass("min-w-0", "col-span-2");
+    expect(summary.value).toHaveClass("min-w-0", "whitespace-pre-wrap", "[overflow-wrap:anywhere]");
+    expect(summary.value).toHaveTextContent(longValue);
+
+    const code = cellFor("Code");
+    expect(code.cell).toHaveClass("min-w-0");
+    expect(code.cell).not.toHaveClass("col-span-2");
+    expect(code.value).toHaveClass("[overflow-wrap:anywhere]");
+  });
+
+  it("keeps line breaks in text values and gives them the full width", () => {
+    const value = "Line one\nLine two";
+    renderWithDefinition(<CustomFieldsDisplay customFields={{ summary: value }} entityType="video" />, [
+      textDefinition,
+    ]);
+
+    const summary = cellFor("Summary");
+    expect(summary.cell).toHaveClass("col-span-2");
+    expect(summary.value).toHaveClass("whitespace-pre-wrap");
+    expect(summary.value.textContent).toBe(value);
+  });
+});
+
 describe("timestamp custom fields", () => {
   const timestampDefinition: CustomFieldDefinition = {
     ...jsonDefinition,
