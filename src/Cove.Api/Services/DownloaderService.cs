@@ -377,9 +377,11 @@ public partial class DownloaderService(
             async (batchItem, token) =>
             {
                 var label = BuildBatchItemLabel(batchItem.Item, batchItem.Index);
+                ResolvedBatchItem? resolvedItem = null;
+                var downloaded = false;
                 try
                 {
-                    var resolvedItem = await ResolveBatchItemAsync(batchItem.Item, batchItem.Index, followUp, reservedDownloads, token);
+                    resolvedItem = await ResolveBatchItemAsync(batchItem.Item, batchItem.Index, followUp, reservedDownloads, token);
                     label = resolvedItem.Label;
 
                     var (result, importedEntityId) = await DownloadAndIngestAsync(
@@ -393,6 +395,7 @@ public partial class DownloaderService(
 
                     if (result != null)
                     {
+                        downloaded = true;
                         importedPaths.Add(result.LocalPath);
                         if (importedEntityId.HasValue)
                             await AttachBatchRelationshipsAsync(resolvedItem.Request.Entity, importedEntityId.Value, batchItem.Item, token);
@@ -427,6 +430,9 @@ public partial class DownloaderService(
                 }
                 finally
                 {
+                    if (!downloaded && resolvedItem is { CreatedPlaceholder: true, EntityId: int placeholderId })
+                        await RemoveEmptyPlaceholderAsync(resolvedItem.Request.Entity, placeholderId, label);
+
                     var completed = Interlocked.Increment(ref processed);
                     var percent = batchItems.Count == 0 ? 0.95d : (completed / (double)batchItems.Count) * 0.95d;
                     progress?.Report(percent, BuildBatchProgressMessage(completed, batchItems.Count, label));
@@ -2517,8 +2523,12 @@ public partial class DownloaderService(
 
         var entityId = item.EntityId;
         var resolvedLabel = string.IsNullOrWhiteSpace(matched.Label) ? label : matched.Label.Trim();
+        var createdPlaceholder = false;
         if (!entityId.HasValue && item.CreateEntityIfMissing)
+        {
             entityId = await CreatePlaceholderEntityAsync(entity, effectiveUrl, ResolvePlaceholderTitle(item, effectiveUrl, resolvedLabel), ct);
+            createdPlaceholder = true;
+        }
 
         if (!entityId.HasValue && entity is DownloaderEntity.Video or DownloaderEntity.Image or DownloaderEntity.Gallery)
             throw new InvalidOperationException($"Batch download item {index + 1} is missing an entity id.");
@@ -2528,7 +2538,42 @@ public partial class DownloaderService(
             entityId,
             resolvedLabel,
             item.AutoApplyMetadata || followUp.AutoApplyMetadata,
-            BuildMetadataApplyOptions(item, followUp));
+            BuildMetadataApplyOptions(item, followUp),
+            createdPlaceholder);
+    }
+
+    /// <summary>
+    /// Removes the entity a batch item created to download into when its download did not succeed. Left
+    /// behind, the empty entity keeps the URL, so every later attempt to download it is refused as a
+    /// duplicate. An entity that has a file by now is kept, since the download got that far.
+    /// </summary>
+    private async Task RemoveEmptyPlaceholderAsync(DownloaderEntity entity, int entityId, string label)
+    {
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CoveContext>();
+            var removed = entity switch
+            {
+                DownloaderEntity.Video when !await db.VideoFiles.AnyAsync(file => file.VideoId == entityId)
+                    => await db.Videos.Where(video => video.Id == entityId).ExecuteDeleteAsync(),
+                DownloaderEntity.Image when !await db.ImageFiles.AnyAsync(file => file.ImageId == entityId)
+                    => await db.Images.Where(image => image.Id == entityId).ExecuteDeleteAsync(),
+                DownloaderEntity.Gallery when !await db.GalleryFiles.AnyAsync(file => file.GalleryId == entityId)
+                    => await db.Galleries.Where(gallery => gallery.Id == entityId).ExecuteDeleteAsync(),
+                DownloaderEntity.Audio when !await db.AudioFiles.AnyAsync(file => file.AudioId == entityId)
+                    => await db.Audios.Where(audio => audio.Id == entityId).ExecuteDeleteAsync(),
+                DownloaderEntity.Text when !await db.TextFiles.AnyAsync(file => file.TextDocumentId == entityId)
+                    => await db.TextDocuments.Where(text => text.Id == entityId).ExecuteDeleteAsync(),
+                _ => 0,
+            };
+            if (removed > 0)
+                logger.LogInformation("Removed empty {Entity} {EntityId} created for failed download {Label}", entity, entityId, label);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not remove empty {Entity} {EntityId} created for failed download {Label}", entity, entityId, label);
+        }
     }
 
     private DownloaderMetadataApplyOptions BuildMetadataApplyOptions(DownloaderBatchItemDto item, DownloaderBatchFollowUpDto followUp)
@@ -2907,7 +2952,7 @@ public partial class DownloaderService(
         public List<string> TagNames { get; init; } = [];
     }
 
-    private sealed record ResolvedBatchItem(DownloaderRequest Request, int? EntityId, string Label, bool AutoApplyMetadata, DownloaderMetadataApplyOptions MetadataApplyOptions);
+    private sealed record ResolvedBatchItem(DownloaderRequest Request, int? EntityId, string Label, bool AutoApplyMetadata, DownloaderMetadataApplyOptions MetadataApplyOptions, bool CreatedPlaceholder);
 
     private sealed record ResolvedBatchMatch(string DownloaderId, string NormalizedUrl, string? QualityId, string? Label = null, string? SourceUrl = null);
 

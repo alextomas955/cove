@@ -120,6 +120,26 @@ public sealed class DownloaderApiTests(
     }
 
     [Fact]
+    public async Task GivenBatchItemWhoseDownloadFails_WhenBatchCompletes_ThenItsUrlCanBeDownloadedAgain()
+    {
+        // Arrange
+        var source = AsDownloadSource().CreateFailure("batch-forbidden.txt", HttpStatusCode.Forbidden);
+
+        // Act
+        var batch = await AsUser().StartDownloaderBatchAsync(new DownloaderBatchStartRequestDto
+        {
+            Items = [CreateTextBatchItem(source) with { CreateEntityIfMissing = true }],
+        }, TestContext.Current.CancellationToken);
+        var job = await AsUser().WaitForTerminalJobAsync(batch.JobId!, TestContext.Current.CancellationToken);
+
+        // Assert
+        job.SubTask.Should().Contain("Failed 1");
+        (await AsUser().GetTextsAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
+        var preflight = await AsUser().PreflightDownloadAsync(source.Uri, "Text", cancellationToken: TestContext.Current.CancellationToken);
+        preflight.IsDuplicate.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task GivenRepeatedRemoteTextUrl_WhenBatchIsPreflighted_ThenOnlyOneItemIsQueued()
     {
         // Arrange
