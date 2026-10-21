@@ -29,7 +29,8 @@ public class FfmpegProcessRunnerTests
                 timeout: TimeSpan.FromMinutes(1),
                 cancellation.Token);
 
-            await WaitUntilAsync(() => File.Exists(markerPath), TimeSpan.FromSeconds(5));
+            // The shell's redirect creates the file before printf writes to it, so wait for content too.
+            await WaitUntilAsync(() => File.Exists(markerPath) && new FileInfo(markerPath).Length > 0, TimeSpan.FromSeconds(5));
             processIds = (await File.ReadAllTextAsync(markerPath, TestContext.Current.CancellationToken))
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Select(int.Parse)
