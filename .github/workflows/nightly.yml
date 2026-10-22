@@ -158,6 +158,8 @@ jobs:
           -p:DebugSymbols=false
           -p:Version=${{ needs.prepare.outputs.version }}
           -p:CoveCiVersion=true
+          -p:CoveDistribution=native-${{ matrix.rid }}
+          -p:CoveReleaseChannel=nightly
           -o publish/
 
       - name: Publish native instance manager
@@ -349,6 +351,16 @@ jobs:
             printf '%s\n' '```'
             printf '\nImmutable tags for this build: `%s` and `sha-%s`.\n' "$VERSION" "$SHORT_SHA"
           } > nightly-body.md
+
+          # The manifest Cove's built-in updater reads (releases/download/nightly/cove-release.json).
+          node scripts/generate-release-manifest.mjs \
+            --version "$VERSION" \
+            --channel nightly \
+            --assets-dir release-files \
+            --migrations-dir src/Cove.Data/Migrations \
+            --notes-file nightly-body.md \
+            --notes-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/nightly" \
+            --output release-files/cove-release.json
 
       - name: Update rolling nightly release assets
         uses: softprops/action-gh-release@v3
