@@ -31,6 +31,10 @@ if (Cove.Api.Updates.UpdateCommandLine.Run(args) is int earlyExitCode)
     return;
 }
 
+// A Cove started by the update relauncher on Windows copies its start-up output to the file the
+// relauncher shows if this start fails.
+Cove.Api.Updates.UpdateConsoleCapture.StartFromEnvironment();
+
 // Ensure enough threads for async I/O under concurrent load
 ThreadPool.SetMinThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 4);
 
@@ -1067,8 +1071,21 @@ try
         coveCfgInstance.Postgres.Managed,
         coveCfgInstance.Auth.Enabled,
         runtimeLogLevelManager.LevelSwitch.MinimumLevel);
+    // ApplicationStopping callbacks run before any hosted service is stopped but inside the host's
+    // shutdown timeout, so an extension that hangs here would leave the services (managed PostgreSQL
+    // among them) an already-cancelled token. Bound it.
     app.Lifetime.ApplicationStopping.Register(() =>
-        extensionManager.ShutdownAllAsync().GetAwaiter().GetResult());
+    {
+        using var extensionShutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            extensionManager.ShutdownAllAsync(extensionShutdown.Token).WaitAsync(extensionShutdown.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (extensionShutdown.IsCancellationRequested)
+        {
+            Log.Warning("Extensions did not shut down within 10 seconds; continuing the shutdown");
+        }
+    });
     try
     {
         await app.Services.GetRequiredService<Cove.Api.Updates.UpdateService>().OnStartupCompletedAsync(CancellationToken.None);
@@ -1077,6 +1094,7 @@ try
     {
         Log.Warning(ex, "Update bookkeeping after startup failed");
     }
+    Cove.Api.Updates.UpdateConsoleCapture.Stop();
     integrationStartupReady.TrySetResult();
     await app.WaitForShutdownAsync();
     // An update under systemd exits with a dedicated code so Restart=on-failure starts the new binary.

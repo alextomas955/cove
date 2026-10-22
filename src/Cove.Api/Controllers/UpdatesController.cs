@@ -47,11 +47,14 @@ public class UpdatesController : ControllerBase
         return Ok(await _updates.GetStatusAsync(ct));
     }
 
-    /// <summary>Downloads, verifies, backs up, installs, and restarts into the available update (native installs only).</summary>
+    /// <summary>
+    /// Fetches the offered release again, then downloads, verifies, backs up, installs, and restarts into
+    /// it (native installs only).
+    /// </summary>
     [HttpPost("apply")]
     [RequiresPermission(Permissions.SystemUpdate)]
-    public ActionResult<UpdateActionResultDto> Apply([FromBody] UpdateApplyRequest? request)
-        => ToResult(_updates.StartApply(_principal.Current, request?.Force == true, automatic: false));
+    public async Task<ActionResult<UpdateActionResultDto>> Apply([FromBody] UpdateApplyRequest? request, CancellationToken ct)
+        => ToResult(await _updates.StartApplyAsync(_principal.Current, request?.Force == true, automatic: false, request?.Version, ct));
 
     /// <summary>Restores the version that the last update replaced, while no migration has run since.</summary>
     [HttpPost("revert")]

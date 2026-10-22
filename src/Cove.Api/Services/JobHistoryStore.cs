@@ -15,7 +15,10 @@ public interface IJobHistoryStore
 {
     Task<IReadOnlyList<StoredJob>> LoadRecentAsync(CancellationToken ct);
 
-    /// <summary>Queues a finished job to be written; the oldest jobs beyond the limit are removed.</summary>
+    /// <summary>
+    /// Queues a finished job to be written, replacing the saved copy of the same job if there is one; the
+    /// oldest jobs beyond the limit are removed.
+    /// </summary>
     void Save(StoredJob job);
 }
 
@@ -84,6 +87,20 @@ public sealed class JobHistoryStore(IServiceScopeFactory scopeFactory, ILogger<J
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CoveContext>();
+        var existing = await db.JobHistory.FirstOrDefaultAsync(record => record.JobId == job.Info.Id, ct);
+        if (existing is not null)
+        {
+            // A correction to a job saved earlier (see JobService.RecordLateFailure).
+            existing.OwnerKey = job.Owner?.Key;
+            existing.CompletedAt = job.Info.CompletedAt ?? existing.CompletedAt;
+            existing.Info = JsonSerializer.Serialize(job.Info, JsonOptions);
+            existing.RequestMethod = job.Request?.Method;
+            existing.RequestPath = job.Request?.Path;
+            existing.RequestBody = job.Request?.Body;
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
         db.JobHistory.Add(new JobHistoryRecord
         {
             JobId = job.Info.Id,

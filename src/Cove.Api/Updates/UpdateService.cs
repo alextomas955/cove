@@ -25,7 +25,7 @@ public sealed class UpdateService
 
     private readonly CoveConfiguration _config;
     private readonly ConfigService _configService;
-    private readonly IJobService _jobs;
+    private readonly JobService _jobs;
     private readonly IAuditService _audit;
     private readonly IServiceScopeFactory _scopes;
     private readonly IHostApplicationLifetime _lifetime;
@@ -47,7 +47,7 @@ public sealed class UpdateService
     public UpdateService(
         CoveConfiguration config,
         ConfigService configService,
-        IJobService jobs,
+        JobService jobs,
         IAuditService audit,
         IServiceScopeFactory scopes,
         IHostApplicationLifetime lifetime,
@@ -56,6 +56,26 @@ public sealed class UpdateService
         IServer server,
         ILogger<UpdateService> logger,
         TimeProvider time)
+        : this(config, configService, jobs, audit, scopes, lifetime, httpFactory, configuration, server, logger, time,
+            InstallEnvironment.DetectCurrent, CoveDefaultPaths.GetDataRoot())
+    {
+    }
+
+    /// <summary>For tests: a fixed install environment and data root.</summary>
+    internal UpdateService(
+        CoveConfiguration config,
+        ConfigService configService,
+        JobService jobs,
+        IAuditService audit,
+        IServiceScopeFactory scopes,
+        IHostApplicationLifetime lifetime,
+        IHttpClientFactory httpFactory,
+        IConfiguration configuration,
+        IServer? server,
+        ILogger<UpdateService> logger,
+        TimeProvider time,
+        Func<InstallEnvironment> detectEnvironment,
+        string dataRoot)
     {
         _config = config;
         _configService = configService;
@@ -68,8 +88,8 @@ public sealed class UpdateService
         _server = server;
         _logger = logger;
         _time = time;
-        _detectEnvironment = InstallEnvironment.DetectCurrent;
-        Paths = new UpdatePaths(CoveDefaultPaths.GetDataRoot());
+        _detectEnvironment = detectEnvironment;
+        Paths = new UpdatePaths(dataRoot);
     }
 
     internal UpdatePaths Paths { get; }
@@ -115,6 +135,7 @@ public sealed class UpdateService
                 AssetName = asset?.Name,
                 AssetSize = asset?.Size,
                 RequiresMigration = UpdatePolicy.RequiresMigration(offer, known),
+                PreviousOutcome = UpdateFailureMemory.Find(state, offer.Version)?.Outcome,
             },
             LastCheckedAt = state?.LastCheckedAt,
             LastError = state?.LastError,
@@ -127,6 +148,7 @@ public sealed class UpdateService
             PreviousVersion = revert.PreviousVersion,
             RevertUnavailableReason = revert.Reason,
             OtherInstancesSharingBinary = GetOtherInstances(environment),
+            ManualRestart = environment.Kind == InstallKinds.Native && DecideRestart(environment) == RestartPlan.Manual,
             ShowBanner = settings.ShowBanner,
             ReleasesUrl = ReleasesPageUrl(),
             Settings = settings,
@@ -151,7 +173,13 @@ public sealed class UpdateService
     }
 
     /// <summary>Fetches the feed for the configured channel and persists the result.</summary>
-    public async Task CheckAsync(CancellationToken ct)
+    public Task CheckAsync(CancellationToken ct) => RefreshAsync(ct);
+
+    /// <summary>
+    /// Fetches the feed and persists the result. Returns the current offer and, when the feed could not
+    /// be read, the error (the offer is then the previous check's).
+    /// </summary>
+    private async Task<(UpdateRelease? Offer, string? Error)> RefreshAsync(CancellationToken ct)
     {
         await _checkGate.WaitAsync(ct);
         try
@@ -188,7 +216,9 @@ public sealed class UpdateService
                 CheckedChannel = channel,
                 Latest = offer,
                 LastError = error,
+                FailedVersions = previous?.FailedVersions ?? [],
             });
+            return (offer, error);
         }
         finally
         {
@@ -211,7 +241,17 @@ public sealed class UpdateService
         return _time.GetUtcNow() - lastChecked >= TimeSpan.FromHours(hours * jitter);
     }
 
-    internal UpdateActionOutcome StartApply(CovePrincipal? actor, bool force, bool automatic)
+    /// <summary>
+    /// Starts installing the offered update. The release is fetched again first, so a re-published
+    /// release or changed checksums are used rather than the last check's copy.
+    /// </summary>
+    /// <param name="expectedVersion">The version the person confirmed; defaults to the last check's offer.</param>
+    internal async Task<UpdateActionOutcome> StartApplyAsync(
+        CovePrincipal? actor,
+        bool force,
+        bool automatic,
+        string? expectedVersion,
+        CancellationToken ct)
     {
         var environment = DetectEnvironment();
         if (environment.CannotApplyReason is { } reason)
@@ -219,41 +259,77 @@ public sealed class UpdateService
 
         var current = CurrentVersion;
         var channel = UpdatePolicy.ResolveChannel(_config.Updates.Channel, current);
-        var offer = GetValidOffer(UpdateJson.Read<UpdateCheckState>(Paths.StatePath), channel, current);
-        if (offer is null)
+        var cached = GetValidOffer(UpdateJson.Read<UpdateCheckState>(Paths.StatePath), channel, current);
+        if (cached is null)
             return new(StatusCodes.Status409Conflict, "No update is available. Check for updates first.");
-        var asset = offer.FindAsset(environment.Rid);
-        if (asset is null)
-            return new(StatusCodes.Status400BadRequest, $"Cove {offer.Version} has no download for {environment.Rid}.");
+        var version = string.IsNullOrWhiteSpace(expectedVersion) ? cached.Version : expectedVersion.Trim();
 
         if (!force && HasActiveJobs())
             return new(StatusCodes.Status409Conflict, "Jobs are running. Wait for them to finish, or confirm that the restart may interrupt them.");
-
-        try
-        {
-            var free = new DriveInfo(environment.AppDirectory).AvailableFreeSpace;
-            var needed = Math.Max(asset.Size, 1) * 4 + 64L * 1024 * 1024;
-            if (free < needed)
-                return new(StatusCodes.Status400BadRequest, $"Not enough free disk space in {environment.AppDirectory}: {needed / (1024 * 1024)} MB needed.");
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
-        {
-            _logger.LogDebug(ex, "Could not determine free disk space for {Directory}", environment.AppDirectory);
-        }
 
         lock (_applyLock)
         {
             if (_applyState is UpdateApplyStates.Downloading or UpdateApplyStates.Applying)
                 return new(StatusCodes.Status409Conflict, "An update is already in progress.");
             _applyState = UpdateApplyStates.Downloading;
-            _applyMessage = $"Downloading Cove {offer.Version}";
+            _applyMessage = $"Checking the release of Cove {version}";
             _failedVersion = null;
         }
 
-        var jobId = _jobs.Enqueue(
+        var (offer, refreshError) = await RefreshAsync(ct);
+        string? refused = null;
+        int refusedStatus = StatusCodes.Status409Conflict;
+        if (refreshError is not null)
+        {
+            refused = $"Could not confirm Cove {version} with the release feed: {refreshError}";
+            refusedStatus = StatusCodes.Status502BadGateway;
+        }
+        else if (offer is null)
+            refused = $"Cove {version} is no longer offered. The update status has been refreshed.";
+        else if (!string.Equals(offer.Version, version, StringComparison.Ordinal))
+            refused = $"The release feed now offers Cove {offer.Version} instead of {version}. Review it and install again.";
+
+        var asset = offer?.FindAsset(environment.Rid);
+        if (refused is null && asset is null)
+        {
+            refused = $"Cove {version} has no download for {environment.Rid}.";
+            refusedStatus = StatusCodes.Status400BadRequest;
+        }
+
+        if (refused is null)
+        {
+            try
+            {
+                var free = new DriveInfo(environment.AppDirectory).AvailableFreeSpace;
+                var needed = Math.Max(asset!.Size, 1) * 4 + 64L * 1024 * 1024;
+                if (free < needed)
+                {
+                    refused = $"Not enough free disk space in {environment.AppDirectory}: {needed / (1024 * 1024)} MB needed.";
+                    refusedStatus = StatusCodes.Status400BadRequest;
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                _logger.LogDebug(ex, "Could not determine free disk space for {Directory}", environment.AppDirectory);
+            }
+        }
+
+        if (refused is not null)
+        {
+            lock (_applyLock)
+            {
+                _applyState = UpdateApplyStates.Idle;
+                _applyMessage = null;
+            }
+            _logger.LogWarning("Not installing Cove {Version}: {Reason}", version, refused);
+            return new(refusedStatus, refused);
+        }
+
+        string? jobId = null;
+        jobId = _jobs.EnqueueWithoutRetry(
             JobType,
-            $"Update Cove to {offer.Version}",
-            (progress, ct) => ApplyAsync(environment, offer, asset, actor, automatic, progress, ct),
+            $"Update Cove to {offer!.Version}",
+            (progress, jobCt) => ApplyAsync(environment, offer, asset!, actor, automatic, () => jobId, progress, jobCt),
             exclusive: false);
         lock (_applyLock)
             _applyJobId = jobId;
@@ -294,6 +370,8 @@ public sealed class UpdateService
                 UpdatedAt = DateTimeOffset.UtcNow,
             });
 
+            // Someone went back from this version on purpose: automatic updates must not reinstall it.
+            RememberFailure(current, UpdateFailureOutcomes.Reverted, $"Reverted to Cove {journal.FromVersion}.");
             await _audit.LogAsync(AuditActions.SystemUpdateRevert, AuditOutcomes.Success, actor, "system", "cove",
                 new { from = current, to = journal.FromVersion }, ct);
             lock (_applyLock)
@@ -346,21 +424,72 @@ public sealed class UpdateService
                 _logger.LogInformation("Cove {Version} started; the {Kind} from {From} is complete", current, journal.Kind, journal.FromVersion);
             }
 
-            if (journal.State == UpdateJournalStates.RolledBack && journal.FromVersion == current && !journal.RollbackAudited)
+            if (journal.State is UpdateJournalStates.RolledBack or UpdateJournalStates.Failed
+                && journal.FromVersion == current
+                && !journal.RollbackAudited)
             {
-                await _audit.LogAsync(AuditActions.SystemUpdateRollback, AuditOutcomes.Fail, null, "system", "cove",
-                    new { from = journal.FromVersion, to = journal.ToVersion, reason = journal.Error }, ct);
+                var rolledBack = journal.State == UpdateJournalStates.RolledBack;
+                if (journal.Kind == UpdateJournalKinds.Update)
+                {
+                    // The relauncher records this too; a rollback after repeated unsupervised boots does not.
+                    RememberFailure(journal.ToVersion, rolledBack ? UpdateFailureOutcomes.RolledBack : UpdateFailureOutcomes.Failed, journal.Error);
+                }
+                // The job finished before the restart and reported success; correct it now.
+                if (journal.JobId is { } jobId)
+                    _jobs.RecordLateFailure(jobId, journal.Error ?? $"Cove {journal.ToVersion} did not start and Cove {journal.FromVersion} was restored.");
+                if (rolledBack)
+                {
+                    await _audit.LogAsync(AuditActions.SystemUpdateRollback, AuditOutcomes.Fail, null, "system", "cove",
+                        new { from = journal.FromVersion, to = journal.ToVersion, reason = journal.Error }, ct);
+                    _logger.LogWarning("The update to Cove {Version} was rolled back: {Reason}", journal.ToVersion, journal.Error);
+                }
                 journal = journal with { RollbackAudited = true };
                 UpdateJson.Write(Paths.JournalPath, journal);
-                _logger.LogWarning("The update to Cove {Version} was rolled back: {Reason}", journal.ToVersion, journal.Error);
             }
         }
 
         var environment = DetectEnvironment();
-        if (environment.Kind == InstallKinds.Native && environment.AppDirectoryWritable && journal?.State != UpdateJournalStates.Restarting)
+        if (environment.Kind != InstallKinds.Native || !environment.AppDirectoryWritable)
+            return;
+        if (journal?.State != UpdateJournalStates.Restarting)
         {
             var keepPrevious = journal is { Kind: UpdateJournalKinds.Update, State: UpdateJournalStates.Succeeded } && journal.ToVersion == current;
             await Task.Run(() => CreateSwapper(environment).CleanUp(keepPrevious), ct);
+        }
+        else if (journal is { Supervised: true, Kind: UpdateJournalKinds.Revert } && journal.ToVersion == current)
+        {
+            // The relauncher of a revert runs from Cove.reverted, so it cannot delete that file itself.
+            // Once it has marked the revert done and exited, remove it rather than wait for the next start.
+            _ = Task.Run(() => CleanUpAfterRelauncherAsync(environment, journal.Id));
+        }
+    }
+
+    private async Task CleanUpAfterRelauncherAsync(InstallEnvironment environment, string journalId)
+    {
+        try
+        {
+            var deadline = _time.GetUtcNow() + TimeSpan.FromMinutes(10);
+            while (_time.GetUtcNow() < deadline && !_lifetime.ApplicationStopping.IsCancellationRequested)
+            {
+                var journal = UpdateJson.Read<UpdateJournal>(Paths.JournalPath);
+                if (journal?.Id != journalId || journal.State is not (UpdateJournalStates.Restarting or UpdateJournalStates.Succeeded))
+                    return;
+                if (journal.State == UpdateJournalStates.Succeeded)
+                {
+                    // Give the relauncher a moment to exit; the deletes retry while the file is still locked.
+                    await Task.Delay(TimeSpan.FromSeconds(3), _lifetime.ApplicationStopping);
+                    CreateSwapper(environment).CleanUp(keepPrevious: false);
+                    return;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(2), _lifetime.ApplicationStopping);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Removing the reverted binary failed; it is removed on the next start");
         }
     }
 
@@ -381,6 +510,11 @@ public sealed class UpdateService
             return false;
 
         var journal = UpdateJson.Read<UpdateJournal>(Paths.JournalPath);
+        if (UpdateFailureMemory.Find(UpdateJson.Read<UpdateCheckState>(Paths.StatePath), offer.Version) is { } failed)
+        {
+            _logger.LogDebug("Not installing Cove {Version} automatically: it {Outcome} before", offer.Version, failed.Outcome);
+            return false;
+        }
         if ((journal?.ToVersion == offer.Version && journal.State is UpdateJournalStates.RolledBack or UpdateJournalStates.Failed)
             || _failedVersion == offer.Version)
         {
@@ -395,7 +529,7 @@ public sealed class UpdateService
         }
 
         _logger.LogInformation("Installing Cove {Version} automatically ({Reason})", offer.Version, reason);
-        return StartApply(null, force: false, automatic: true).StatusCode == StatusCodes.Status202Accepted;
+        return (await StartApplyAsync(null, force: false, automatic: true, offer.Version, ct)).StatusCode == StatusCodes.Status202Accepted;
     }
 
     internal void ResetForTests()
@@ -421,12 +555,16 @@ public sealed class UpdateService
         UpdateReleaseAsset asset,
         CovePrincipal? actor,
         bool automatic,
+        Func<string?> jobId,
         IJobProgress progress,
         CancellationToken ct)
     {
         var current = CurrentVersion;
         var swapper = CreateSwapper(environment);
         var swapped = false;
+        // Failures from here on are about the release itself (it would not start, or would not install),
+        // not the network, so automatic updates stop trying it.
+        var releaseTried = false;
         UpdateJournal? journal = null;
         try
         {
@@ -453,6 +591,7 @@ public sealed class UpdateService
             File.Delete(archive);
 
             progress.Report(0.6, "Checking the new version starts");
+            releaseTried = true;
             await SmokeTestAsync(extracted.CovePath, offer.Version, ct);
 
             lock (_applyLock)
@@ -478,6 +617,7 @@ public sealed class UpdateService
             {
                 Supervised = plan == RestartPlan.Relauncher,
                 BackupPath = backupPath,
+                JobId = jobId(),
             };
             UpdateJson.Write(Paths.JournalPath, journal);
             swapper.PrepareForInstall();
@@ -530,6 +670,8 @@ public sealed class UpdateService
                 _applyMessage = cancelled ? "The update was cancelled." : $"The update to {offer.Version} failed: {ex.Message}";
                 _failedVersion = offer.Version;
             }
+            if (releaseTried && !cancelled)
+                RememberFailure(offer.Version, UpdateFailureOutcomes.Failed, ex.Message);
             await _audit.LogAsync(AuditActions.SystemUpdateApply, cancelled ? AuditOutcomes.Fail : AuditOutcomes.Error, actor, "system", "cove",
                 new { from = current, to = offer.Version, automatic, error = ex.Message }, CancellationToken.None);
             throw;
@@ -593,17 +735,24 @@ public sealed class UpdateService
                         State = UpdateJournalStates.Failed,
                         Error = $"Cove could not restart itself: {ex.Message}",
                         UpdatedAt = DateTimeOffset.UtcNow,
+                        RollbackAudited = true,
                     });
                 }
                 catch (Exception rollbackError)
                 {
                     _logger.LogError(rollbackError, "Restoring Cove {Version} failed", journal.FromVersion);
                 }
+                var message = $"Cove could not restart itself: {ex.Message}";
                 lock (_applyLock)
                 {
                     _applyState = UpdateApplyStates.Failed;
-                    _applyMessage = $"Cove could not restart itself: {ex.Message}";
+                    _applyMessage = message;
+                    _failedVersion = journal.ToVersion;
                 }
+                if (journal.Kind == UpdateJournalKinds.Update)
+                    RememberFailure(journal.ToVersion, UpdateFailureOutcomes.Failed, message);
+                if (journal.JobId is { } jobId)
+                    _jobs.RecordLateFailure(jobId, message);
             }
         });
     }
@@ -758,28 +907,35 @@ public sealed class UpdateService
 
     private IReadOnlyList<string> GetOtherInstances(InstallEnvironment environment)
     {
-        if (environment.Kind != InstallKinds.Native || (!environment.InstanceManagerPresent && environment.LaunchMode != LaunchModes.InstanceManager))
+        if (environment.Kind != InstallKinds.Native
+            || environment.ExecutablePath is null
+            || (!environment.InstanceManagerPresent && environment.LaunchMode != LaunchModes.InstanceManager))
+        {
             return [];
+        }
 
         var registry = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "cove", "cove-instances.json");
         try
         {
-            if (!File.Exists(registry))
-                return [];
-            using var document = JsonDocument.Parse(File.ReadAllText(registry));
-            if (!document.RootElement.TryGetProperty("instances", out var instances) || instances.ValueKind != JsonValueKind.Array)
-                return [];
-            var dataRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Paths.DataRoot));
-            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            return instances.EnumerateArray()
-                .Where(instance => instance.TryGetProperty("homePath", out var home) && home.GetString() is { } path
-                    && !string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)), dataRoot, comparison))
-                .Select(instance => instance.TryGetProperty("name", out var name) ? name.GetString() ?? "(unnamed)" : "(unnamed)")
-                .ToList();
+            return File.Exists(registry)
+                ? InstanceRegistry.FindInstancesLaunching(File.ReadAllText(registry), Paths.DataRoot, environment.ExecutablePath, environment.IsWindows)
+                : [];
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return [];
+        }
+    }
+
+    private void RememberFailure(string version, string outcome, string? reason)
+    {
+        try
+        {
+            UpdateFailureMemory.Remember(Paths.StatePath, version, outcome, reason);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning("Could not record that Cove {Version} {Outcome}: {Error}", version, outcome, ex.Message);
         }
     }
 

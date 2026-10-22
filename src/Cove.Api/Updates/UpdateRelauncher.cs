@@ -16,6 +16,8 @@ internal sealed record UpdateRelaunchHost
     public required Action<int> Stop { get; init; }
     public required Func<UpdateJournal, CancellationToken, Task> WaitForPortFree { get; init; }
     public required Func<UpdateJournal, string?> ReadLogTail { get; init; }
+    /// <summary>Called right before the new version starts, so <see cref="ReadLogTail"/> returns only its output.</summary>
+    public Action<UpdateJournal> MarkLogStart { get; init; } = _ => { };
     public required Action<string> Log { get; init; }
     public TimeSpan ExitWaitTimeout { get; init; } = TimeSpan.FromMinutes(2);
     public TimeSpan HealthTimeout { get; init; } = TimeSpan.FromMinutes(5);
@@ -33,6 +35,7 @@ internal sealed record UpdateRelaunchHost
                 ? TimeSpan.FromSeconds(seconds)
                 : TimeSpan.FromMinutes(5);
 
+        var logTail = new UpdateLogTail();
         return new UpdateRelaunchHost
         {
             IsAlive = UpdateProcessLauncher.IsAlive,
@@ -40,7 +43,8 @@ internal sealed record UpdateRelaunchHost
             Start = journal => StartCove(journal),
             GetRunningVersion = (journal, ct) => GetVersionAsync(http, journal, ct),
             WaitForPortFree = WaitForPortFreeAsync,
-            ReadLogTail = ReadLogTailDefault,
+            MarkLogStart = journal => logTail.Mark(Path.GetDirectoryName(OutputLogPath(journal))!, OutputLogPath(journal)),
+            ReadLogTail = journal => logTail.Read(OutputLogPath(journal)),
             Log = message => File.AppendAllText(logPath, $"[{DateTimeOffset.Now:u}] {message}{Environment.NewLine}"),
             HealthTimeout = healthTimeout,
         };
@@ -52,12 +56,25 @@ internal sealed record UpdateRelaunchHost
         if (journal.LaunchMode == LaunchModes.InstanceManager && journal.StartScript is { } script && File.Exists(script))
             return UpdateProcessLauncher.RunStartScript(script);
 
-        return UpdateProcessLauncher.StartDetached(
-            Path.Combine(journal.AppDirectory, journal.CoveFileName),
-            journal.Launch.Arguments,
-            journal.Launch.WorkingDirectory is { } cwd && Directory.Exists(cwd) ? cwd : journal.AppDirectory,
-            OutputLogPath(journal),
-            visibleWindow: true);
+        // On Windows Cove gets its own visible console, so its output cannot be redirected; it copies
+        // the output to this file itself (UpdateConsoleCapture). Unix redirects it in StartDetached.
+        var outputLog = OutputLogPath(journal);
+        if (OperatingSystem.IsWindows())
+            Environment.SetEnvironmentVariable(UpdateConsoleCapture.Variable, outputLog);
+        try
+        {
+            return UpdateProcessLauncher.StartDetached(
+                Path.Combine(journal.AppDirectory, journal.CoveFileName),
+                journal.Launch.Arguments,
+                journal.Launch.WorkingDirectory is { } cwd && Directory.Exists(cwd) ? cwd : journal.AppDirectory,
+                outputLog,
+                visibleWindow: true);
+        }
+        finally
+        {
+            if (OperatingSystem.IsWindows())
+                Environment.SetEnvironmentVariable(UpdateConsoleCapture.Variable, null);
+        }
     }
 
     /// <summary>
@@ -109,34 +126,6 @@ internal sealed record UpdateRelaunchHost
             }
         }
     }
-
-    private static string? ReadLogTailDefault(UpdateJournal journal)
-    {
-        var candidates = new List<string> { OutputLogPath(journal) };
-        var logDirectory = Path.GetDirectoryName(OutputLogPath(journal))!;
-        if (Directory.Exists(logDirectory))
-        {
-            candidates.AddRange(new DirectoryInfo(logDirectory).GetFiles("cove-*.log")
-                .OrderByDescending(file => file.LastWriteTimeUtc)
-                .Take(1)
-                .Select(file => file.FullName));
-        }
-
-        foreach (var path in candidates.Where(File.Exists))
-        {
-            try
-            {
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var reader = new StreamReader(stream);
-                var lines = reader.ReadToEnd().Split('\n');
-                return string.Join('\n', lines.TakeLast(40)).Trim();
-            }
-            catch (IOException)
-            {
-            }
-        }
-        return null;
-    }
 }
 
 /// <summary>
@@ -165,6 +154,7 @@ internal sealed class UpdateRelauncher(UpdateRelaunchHost host)
         int pid;
         try
         {
+            host.MarkLogStart(journal);
             pid = host.Start(journal);
             host.Log($"Started Cove {journal.ToVersion} as process {pid}");
         }
@@ -223,6 +213,8 @@ internal sealed class UpdateRelauncher(UpdateRelaunchHost host)
             host.Stop(pid);
 
         var logTail = host.ReadLogTail(journal);
+        if (journal.Kind == UpdateJournalKinds.Update)
+            RememberFailure(journalPath, journal, reason);
         var swapper = new UpdateFileSwapper(journal.AppDirectory, journal.CoveFileName, journal.ManagerFileName, host.Log);
         try
         {
@@ -275,5 +267,22 @@ internal sealed class UpdateRelauncher(UpdateRelaunchHost host)
         }
 
         return 1;
+    }
+
+    /// <summary>Records the version in <c>state.json</c> (next to the journal) so automatic updates skip it.</summary>
+    private void RememberFailure(string journalPath, UpdateJournal journal, string reason)
+    {
+        try
+        {
+            UpdateFailureMemory.Remember(
+                Path.Combine(Path.GetDirectoryName(Path.GetFullPath(journalPath))!, "state.json"),
+                journal.ToVersion,
+                UpdateFailureOutcomes.RolledBack,
+                reason);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            host.Log($"Could not record the failed version: {ex.Message}");
+        }
     }
 }

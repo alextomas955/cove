@@ -21,6 +21,7 @@ public class JobService : IJobService, IHostedService
     private readonly ICurrentPrincipalAccessor? _principalAccessor;
     private readonly JobRequestCapture? _requestCapture;
     private readonly IJobHistoryStore? _historyStore;
+    private readonly Dictionary<string, string> _lateFailures = new(StringComparer.OrdinalIgnoreCase);
     private Task? _processorTask;
     private CancellationTokenSource? _cts;
     private const int MaxHistory = JobHistoryStore.Capacity;
@@ -59,15 +60,25 @@ public class JobService : IJobService, IHostedService
         try
         {
             var saved = await store.LoadRecentAsync(ct);
+            var corrected = new List<StoredJob>();
             lock (_lock)
             {
                 var finishedSinceStartup = _history.Select(job => job.Info.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                _history.AddRange(saved
-                    .Where(job => !finishedSinceStartup.Contains(job.Info.Id))
-                    .Select(job => new JobHistoryEntry(job.Owner, job.Info, job.Request)));
+                foreach (var job in saved.Where(job => !finishedSinceStartup.Contains(job.Info.Id)))
+                {
+                    var entry = new JobHistoryEntry(job.Owner, job.Info, job.Request);
+                    if (_lateFailures.TryGetValue(job.Info.Id, out var error) && job.Info.Status != JobStatus.Failed)
+                    {
+                        entry = entry with { Info = AsFailed(job.Info, error) };
+                        corrected.Add(new StoredJob(entry.Owner, entry.Info, entry.Request));
+                    }
+                    _history.Add(entry);
+                }
                 if (_history.Count > MaxHistory)
                     _history.RemoveRange(MaxHistory, _history.Count - MaxHistory);
             }
+            foreach (var job in corrected)
+                store.Save(job);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -89,6 +100,39 @@ public class JobService : IJobService, IHostedService
 
     public string Enqueue(string type, string description, Func<IJobProgress, CancellationToken, Task> work, bool exclusive = true)
         => EnqueueCore(JobOwner.FromPrincipal(_principalAccessor?.Current), type, description, work, null, exclusive);
+
+    /// <summary>
+    /// Like <see cref="Enqueue"/>, but the job is never offered for retry: sending its request again
+    /// would not repeat it safely (an update to a version that may no longer be offered, say).
+    /// </summary>
+    public string EnqueueWithoutRetry(string type, string description, Func<IJobProgress, CancellationToken, Task> work, bool exclusive = true)
+        => EnqueueCore(JobOwner.FromPrincipal(_principalAccessor?.Current), type, description, work, null, exclusive, retryable: false);
+
+    /// <summary>
+    /// Marks a finished job as failed after the fact, for work whose real outcome is only known later
+    /// (an update that is rolled back after the restart that followed its job). Applies to the saved
+    /// history too, also when it has not been loaded yet.
+    /// </summary>
+    public void RecordLateFailure(string jobId, string error)
+    {
+        StoredJob? corrected = null;
+        lock (_lock)
+        {
+            _lateFailures[jobId] = error;
+            var index = _history.FindIndex(job => string.Equals(job.Info.Id, jobId, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0 && _history[index].Info.Status != JobStatus.Failed)
+            {
+                var entry = _history[index] with { Info = AsFailed(_history[index].Info, error) };
+                _history[index] = entry;
+                corrected = new StoredJob(entry.Owner, entry.Info, entry.Request);
+            }
+        }
+        if (corrected is not null)
+            _historyStore?.Save(corrected);
+    }
+
+    private static JobInfo AsFailed(JobInfo info, string error)
+        => info with { Status = JobStatus.Failed, Error = error, SubTask = error, Summary = null };
 
     public string EnqueueWithResult(
         string type,
@@ -116,7 +160,8 @@ public class JobService : IJobService, IHostedService
         string description,
         Func<IJobProgress, CancellationToken, Task> work,
         string? resultUrl,
-        bool exclusive)
+        bool exclusive,
+        bool retryable = true)
     {
         var entry = new JobEntry
         {
@@ -129,7 +174,7 @@ public class JobService : IJobService, IHostedService
             Work = work,
             Owner = owner,
             ResultUrl = resultUrl,
-            Request = _requestCapture?.ForNewJob(),
+            Request = retryable ? _requestCapture?.ForNewJob() : null,
         };
 
         lock (_lock)

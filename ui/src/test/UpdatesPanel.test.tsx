@@ -68,13 +68,45 @@ describe("UpdatesPanel", () => {
     renderPanel(updateStatus({ launchMode: "systemd" }));
 
     expect(await screen.findByRole("heading", { name: "[1.5.0]" })).toBeInTheDocument();
+    expect(screen.getByText(/Restart=on-failure/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Download & install/ }));
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("back up the database and configuration");
-    expect(dialog).toHaveTextContent("Restart=on-failure");
+    expect(dialog).toHaveTextContent(
+      "Cove will back up your database, install 1.5.0 and restart. This usually takes under a minute. If 1.5.0 doesn't start, Cove goes back to 1.4.1 automatically.",
+    );
+    expect(dialog).not.toHaveTextContent("Restart=on-failure");
+    expect(dialog).not.toHaveTextContent("restart Cove yourself");
+    expect(dialog).not.toHaveTextContent(/pre_update|executable/);
     fireEvent.click(within(dialog).getByRole("button", { name: "Download & install" }));
 
-    await waitFor(() => expect(mockUpdates.apply).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(mockUpdates.apply).toHaveBeenCalledWith(false, "1.5.0"));
+  });
+
+  it("names the instances sharing this program and asks for a manual restart only when needed", async () => {
+    renderPanel(updateStatus({ otherInstancesSharingBinary: ["Movies", "Archive"], manualRestart: true }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Download & install/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Movies and Archive use the same Cove program and will switch to 1.5.0 the next time they restart. Back them up first.",
+    );
+    expect(dialog).toHaveTextContent("You'll need to restart Cove yourself to finish.");
+  });
+
+  it("hides the install button while Cove is restarting into the new version", async () => {
+    renderPanel(updateStatus({ applyState: "applying", applyMessage: "Restarting into Cove 1.5.0" }));
+
+    expect(await screen.findByText("Restarting into Cove 1.5.0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Download & install/ })).not.toBeInTheDocument();
+  });
+
+  it("warns that a version which failed before is skipped by automatic updates", async () => {
+    renderPanel(updateStatus({ latest: { version: "1.5.0", previousOutcome: "rolledBack" } }));
+
+    expect(await screen.findByText(/automatic updates skip it/)).toHaveTextContent(
+      "This version didn't start before and Cove went back, so automatic updates skip it. You can still install it yourself.",
+    );
+    expect(screen.getByRole("button", { name: /Download & install/ })).toBeEnabled();
   });
 
   it("asks again before interrupting running jobs", async () => {
@@ -85,9 +117,15 @@ describe("UpdatesPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Download & install/ }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Download & install" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Install anyway" }));
+    const install = await screen.findByRole("button", { name: "Install anyway" });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Installing restarts Cove, which interrupts the jobs that are running. Wait for them to finish, or install anyway.",
+    );
+    expect(dialog).not.toHaveTextContent("Jobs are running. Wait");
+    fireEvent.click(install);
 
-    await waitFor(() => expect(mockUpdates.apply).toHaveBeenLastCalledWith(true));
+    await waitFor(() => expect(mockUpdates.apply).toHaveBeenLastCalledWith(true, "1.5.0"));
   });
 
   it("shows a rolled-back update with the log from the failed start", async () => {
@@ -105,6 +143,22 @@ describe("UpdatesPanel", () => {
     expect(await screen.findByText("Update to 1.5.0 failed and was rolled back")).toBeInTheDocument();
     expect(screen.getByText("Cove 1.5.0 exited during startup.")).toBeInTheDocument();
     expect(screen.getByText("database exploded")).toBeInTheDocument();
+  });
+
+  it("says when no log was captured from a failed start", async () => {
+    renderPanel(
+      updateStatus({
+        updateAvailable: false,
+        latest: null,
+        applyState: "rolledBack",
+        failedVersion: "1.5.0",
+        applyMessage: "Cove 1.5.0 exited during startup.",
+        logTail: null,
+      }),
+    );
+
+    expect(await screen.findByText("No log was captured from the failed start.")).toBeInTheDocument();
+    expect(screen.queryByText("Log from the failed start")).not.toBeInTheDocument();
   });
 
   it("offers revert while the previous version can still use the database", async () => {

@@ -1958,8 +1958,8 @@ export const system = {
 export const updates = {
   status: () => request<UpdateStatus>("/updates/status"),
   check: () => request<UpdateStatus>("/updates/check", { method: "POST" }),
-  apply: (force = false) =>
-    request<UpdateActionResult>("/updates/apply", { method: "POST", body: JSON.stringify({ force }) }),
+  apply: (force = false, version?: string) =>
+    request<UpdateActionResult>("/updates/apply", { method: "POST", body: JSON.stringify({ force, version }) }),
   revert: () => request<UpdateActionResult>("/updates/revert", { method: "POST" }),
   saveSettings: (settings: UpdatesConfig) =>
     request<UpdateStatus>("/updates/settings", { method: "PUT", body: JSON.stringify(settings) }),

@@ -72,6 +72,59 @@ public sealed class UpdateSwapRelaunchTests : IDisposable
         Assert.Contains("2.0.0", File.ReadAllText(CovePath + ".failed"));
         Assert.Contains("manager 1.0.0", File.ReadAllText(ManagerPath));
         Assert.Equal("1.0.0", File.ReadAllText(VersionFile).Trim());
+        var failed = Assert.Single(UpdateJson.Read<UpdateCheckState>(new UpdatePaths(_root).StatePath)!.FailedVersions);
+        Assert.Equal(("2.0.0", UpdateFailureOutcomes.RolledBack), (failed.Version, failed.Outcome));
+    }
+
+    [Fact]
+    public void Failed_versions_are_remembered_alongside_the_last_check()
+    {
+        var paths = new UpdatePaths(_root);
+        UpdateJson.Write(paths.StatePath, new UpdateCheckState { CheckedVersion = "1.0.0", LastError = "offline" });
+
+        UpdateFailureMemory.Remember(paths.StatePath, "2.0.0", UpdateFailureOutcomes.RolledBack, "exited during startup");
+        UpdateFailureMemory.Remember(paths.StatePath, "2.1.0", UpdateFailureOutcomes.Reverted, null);
+        UpdateFailureMemory.Remember(paths.StatePath, "2.0.0", UpdateFailureOutcomes.Failed, "again");
+
+        var state = UpdateJson.Read<UpdateCheckState>(paths.StatePath)!;
+        Assert.Equal("offline", state.LastError);
+        Assert.Equal(["2.1.0", "2.0.0"], state.FailedVersions.Select(entry => entry.Version));
+        Assert.Equal(UpdateFailureOutcomes.Failed, UpdateFailureMemory.Find(state, "2.0.0")!.Outcome);
+        Assert.Null(UpdateFailureMemory.Find(state, "3.0.0"));
+    }
+
+    [Fact]
+    public void Log_tail_ignores_what_the_previous_version_wrote_before_the_restart()
+    {
+        var logs = Path.Combine(_root, "logs");
+        Directory.CreateDirectory(logs);
+        var daily = Path.Combine(logs, "cove-20261022.log");
+        File.WriteAllText(daily, "1.0.0 shutting down\nChecksum mismatch from an earlier attempt\n");
+        var console = Path.Combine(logs, "update-console-2.0.0-abcdef12.log");
+        var tail = new UpdateLogTail();
+
+        tail.Mark(logs, console);
+        Assert.Null(tail.Read(console));
+
+        File.AppendAllText(daily, "\u001b[31mFATAL\u001b[0m simulated crash\n");
+        var read = tail.Read(console);
+        Assert.Equal("FATAL simulated crash", read);
+    }
+
+    [Fact]
+    public void Log_tail_prefers_the_console_output_of_the_attempt()
+    {
+        var logs = Path.Combine(_root, "logs");
+        Directory.CreateDirectory(logs);
+        var console = Path.Combine(logs, "update-console-2.0.0-abcdef12.log");
+        File.WriteAllText(console, "left over from an earlier attempt");
+        var tail = new UpdateLogTail();
+
+        tail.Mark(logs, console);
+        File.WriteAllText(Path.Combine(logs, "cove-20261022-101500.log"), "Instance Manager start log");
+        File.WriteAllText(console, "Unhandled exception: simulated crash");
+
+        Assert.Equal("Unhandled exception: simulated crash", tail.Read(console));
     }
 
     [Fact]

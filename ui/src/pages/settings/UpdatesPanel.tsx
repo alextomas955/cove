@@ -71,16 +71,29 @@ function formatSize(bytes?: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function restartDescription(status: UpdateStatus) {
-  switch (status.launchMode) {
-    case "systemd":
-      return "Cove then exits with code 75 so systemd starts the new version. This needs Restart=on-failure (or RestartForceExitStatus=75) in the service unit.";
-    case "instance-manager":
-      return "Cove then restarts this instance through its Instance Manager start script.";
-    default:
-      return "Cove then stops and starts the new version with the same settings; this page reconnects when it is back.";
-  }
+/** "A", "A and B", "A, B and C". */
+function joinNames(names: string[]) {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
+
+export function installConfirmationMessage(status: UpdateStatus, version: string) {
+  const others = status.otherInstancesSharingBinary;
+  return [
+    `Cove will back up your database, install ${version} and restart. This usually takes under a minute. If ${version} doesn't start, Cove goes back to ${status.currentVersion} automatically.`,
+    others.length > 0
+      ? `${joinNames(others)} ${others.length === 1 ? "uses" : "use"} the same Cove program and will switch to ${version} the next time ${others.length === 1 ? "it restarts" : "they restart"}. Back ${others.length === 1 ? "it" : "them"} up first.`
+      : null,
+    status.manualRestart ? "You'll need to restart Cove yourself to finish." : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+const previousOutcomeNotes: Record<NonNullable<NonNullable<UpdateStatus["latest"]>["previousOutcome"]>, string> = {
+  failed: "Installing this version failed before",
+  rolledBack: "This version didn't start before and Cove went back",
+  reverted: "You went back from this version before",
+};
 
 export function UpdatesPanel() {
   const queryClient = useQueryClient();
@@ -118,7 +131,7 @@ export function UpdatesPanel() {
 
   const applyMutation = useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: (force: boolean) => updates.apply(force),
+    mutationFn: (force: boolean) => updates.apply(force, statusQuery.data?.latest?.version),
     onSuccess: () => {
       setConfirmApply(false);
       setConfirmJobs(null);
@@ -134,6 +147,8 @@ export function UpdatesPanel() {
       }
       setConfirmJobs(null);
       setNotice({ type: "error", text: message });
+      // The release may have changed or gone away; show what the feed offers now.
+      void queryClient.invalidateQueries({ queryKey: updateStatusQueryKey });
     },
   });
 
@@ -249,6 +264,8 @@ export function UpdatesPanel() {
                 {status.logTail}
               </pre>
             </details>
+          ) : status.applyState === "rolledBack" ? (
+            <p className="mt-3 text-sm text-secondary">No log was captured from the failed start.</p>
           ) : null}
         </SectionCard>
       ) : null}
@@ -280,6 +297,12 @@ export function UpdatesPanel() {
             .filter(Boolean)
             .join(" · ")}
         >
+          {latest.previousOutcome ? (
+            <p className="mb-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 px-3 py-2 text-sm text-secondary">
+              {previousOutcomeNotes[latest.previousOutcome]}, so automatic updates skip it. You can still install it
+              yourself.
+            </p>
+          ) : null}
           {latest.requiresMigration ? (
             <p className="mb-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 px-3 py-2 text-sm text-secondary">
               This release includes database migrations. After updating, run them from the migration prompt; until then
@@ -301,13 +324,11 @@ export function UpdatesPanel() {
               Full release notes
             </a>
           ) : null}
-          <div className="mt-4">
-            <UpdateActions
-              status={status}
-              busy={busy || applyMutation.isPending}
-              onInstall={() => setConfirmApply(true)}
-            />
-          </div>
+          {busy || status.applyState === "staged" ? null : (
+            <div className="mt-4">
+              <UpdateActions status={status} busy={applyMutation.isPending} onInstall={() => setConfirmApply(true)} />
+            </div>
+          )}
         </SectionCard>
       ) : null}
 
@@ -390,16 +411,7 @@ export function UpdatesPanel() {
       <ConfirmDialog
         open={confirmApply}
         title={`Install Cove ${latest?.version ?? ""}?`}
-        message={[
-          "Cove will download and verify the update, back up the database and configuration (pre_update), and replace the Cove and Instance Manager executables.",
-          restartDescription(status),
-          "If the new version does not start, the previous version is restored automatically.",
-          status.otherInstancesSharingBinary.length > 0
-            ? `Other instances use the same executable (${status.otherInstancesSharingBinary.join(", ")}). They keep running the old version until restarted and are not backed up by this update; back them up first.`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        message={installConfirmationMessage(status, latest?.version ?? "the update")}
         confirmLabel="Download & install"
         destructive={false}
         isPending={applyMutation.isPending}
@@ -409,7 +421,7 @@ export function UpdatesPanel() {
       <ConfirmDialog
         open={confirmJobs !== null}
         title="Jobs are running"
-        message={`${confirmJobs ?? ""} Installing restarts Cove, which interrupts them.`}
+        message="Installing restarts Cove, which interrupts the jobs that are running. Wait for them to finish, or install anyway."
         confirmLabel="Install anyway"
         isPending={applyMutation.isPending}
         onConfirm={() => applyMutation.mutate(true)}
@@ -418,7 +430,12 @@ export function UpdatesPanel() {
       <ConfirmDialog
         open={confirmRevert}
         title={`Revert to Cove ${status.previousVersion ?? ""}?`}
-        message={`Cove will restore the previous executables and restart. ${restartDescription(status)}`}
+        message={[
+          `Cove will go back to ${status.previousVersion ?? "the previous version"} and restart.`,
+          status.manualRestart ? "You'll need to restart Cove yourself to finish." : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
         confirmLabel="Revert"
         isPending={revertMutation.isPending}
         onConfirm={() => revertMutation.mutate()}
@@ -469,9 +486,16 @@ function UpdateActions({ status, busy, onInstall }: { status: UpdateStatus; busy
   }
 
   return (
-    <SettingsButton variant="primary" onClick={onInstall} disabled={busy}>
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-      Download &amp; install
-    </SettingsButton>
+    <div className="space-y-2">
+      <SettingsButton variant="primary" onClick={onInstall} disabled={busy}>
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        Download &amp; install
+      </SettingsButton>
+      {status.launchMode === "systemd" ? (
+        <p className="text-xs text-secondary">
+          Cove restarts through systemd, so its service needs <code>Restart=on-failure</code>.
+        </p>
+      ) : null}
+    </div>
   );
 }

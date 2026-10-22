@@ -63,6 +63,49 @@ internal sealed record UpdateCheckState
     public string? CheckedChannel { get; init; }
     public UpdateRelease? Latest { get; init; }
     public string? LastError { get; init; }
+    /// <summary>
+    /// Versions that failed to install, were rolled back, or were reverted. Automatic updates never
+    /// install them again; a person still can. Kept across checks.
+    /// </summary>
+    public List<UpdateFailedVersion> FailedVersions { get; init; } = [];
+}
+
+internal static class UpdateFailureOutcomes
+{
+    public const string Failed = "failed";
+    public const string RolledBack = "rolledBack";
+    public const string Reverted = "reverted";
+}
+
+internal sealed record UpdateFailedVersion
+{
+    public required string Version { get; init; }
+    /// <summary>One of <see cref="UpdateFailureOutcomes"/>.</summary>
+    public required string Outcome { get; init; }
+    public string? Reason { get; init; }
+    public DateTimeOffset At { get; init; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>Reads and records <see cref="UpdateCheckState.FailedVersions"/>.</summary>
+internal static class UpdateFailureMemory
+{
+    /// <summary>The most versions remembered; the oldest entries are dropped first.</summary>
+    internal const int Capacity = 50;
+
+    public static UpdateFailedVersion? Find(UpdateCheckState? state, string version)
+        => state?.FailedVersions.LastOrDefault(entry => string.Equals(entry.Version, version, StringComparison.Ordinal));
+
+    /// <summary>Adds or refreshes <paramref name="version"/> in <c>state.json</c>, keeping everything else.</summary>
+    public static void Remember(string statePath, string version, string outcome, string? reason)
+    {
+        var state = UpdateJson.Read<UpdateCheckState>(statePath) ?? new UpdateCheckState();
+        var failed = state.FailedVersions
+            .Where(entry => !string.Equals(entry.Version, version, StringComparison.Ordinal))
+            .Append(new UpdateFailedVersion { Version = version, Outcome = outcome, Reason = reason })
+            .TakeLast(Capacity)
+            .ToList();
+        UpdateJson.Write(statePath, state with { FailedVersions = failed });
+    }
 }
 
 internal static class UpdateJournalStates
@@ -112,6 +155,8 @@ internal sealed record UpdateJournal
     public int BootAttempts { get; init; }
     public string? Error { get; init; }
     public string? LogTail { get; init; }
+    /// <summary>The <c>system-update</c> job that installed this update, so its outcome can be corrected after a rollback.</summary>
+    public string? JobId { get; init; }
     public bool RollbackAudited { get; init; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;

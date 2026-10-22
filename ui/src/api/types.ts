@@ -2116,6 +2116,8 @@ export interface UpdateLatest {
   assetSize?: number | null;
   /** null when the release does not list its migrations. */
   requiresMigration?: boolean | null;
+  /** Set when this version was tried before; automatic updates skip it, a manual install is still allowed. */
+  previousOutcome?: "failed" | "rolledBack" | "reverted" | null;
 }
 
 export type UpdateApplyState = "idle" | "downloading" | "staged" | "applying" | "failed" | "rolledBack";
@@ -2142,6 +2144,8 @@ export interface UpdateStatus {
   previousVersion?: string | null;
   revertUnavailableReason?: string | null;
   otherInstancesSharingBinary: string[];
+  /** True when Cove cannot restart itself after installing. */
+  manualRestart?: boolean;
   showBanner: boolean;
   releasesUrl?: string | null;
   settings: UpdatesConfig;

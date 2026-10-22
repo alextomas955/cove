@@ -36,7 +36,7 @@ Cove checks for new releases in the background and shows a notice to the owner. 
 - If Cove runs as a **systemd** service, it exits with code 75 to restart into the new version, so the unit needs `Restart=on-failure` (or `RestartForceExitStatus=75`).
 - If Cove cannot write to its program folder, the page lists the manual steps instead.
 
-Automatic installs are off by default. When enabled on the same page, they run only inside a time window you choose (03:00–05:00 by default) and only while no jobs are running.
+Automatic installs are off by default. When enabled on the same page, they run only inside a time window you choose (03:00–05:00 by default) and only while no jobs are running. A version that failed to install, did not start, or that you reverted is never installed automatically again; you can still install it yourself from the page.
 
 ## What happens next
 
