@@ -94,3 +94,14 @@ export function NarrativeText({ children, className = "" }: NarrativeTextProps) 
     </div>
   );
 }
+
+/** Always renders Markdown (no raw HTML), for text Cove itself supplies such as release notes. */
+export function MarkdownText({ children, className = "" }: NarrativeTextProps) {
+  return (
+    <div className={["break-words", className].filter(Boolean).join(" ")}>
+      <ReactMarkdown components={COMPONENTS} skipHtml>
+        {children}
+      </ReactMarkdown>
+    </div>
+  );
+}

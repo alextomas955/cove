@@ -8,6 +8,9 @@ import type {
   AlignmentAnchor,
 } from "./alignmentTypes";
 import type {
+  UpdateActionResult,
+  UpdateStatus,
+  UpdatesConfig,
   MeResponse,
   GlobalSearchResponse,
   Video,
@@ -1950,6 +1953,16 @@ export const system = {
       method: "PUT",
       body: JSON.stringify(value),
     }),
+};
+
+export const updates = {
+  status: () => request<UpdateStatus>("/updates/status"),
+  check: () => request<UpdateStatus>("/updates/check", { method: "POST" }),
+  apply: (force = false) =>
+    request<UpdateActionResult>("/updates/apply", { method: "POST", body: JSON.stringify({ force }) }),
+  revert: () => request<UpdateActionResult>("/updates/revert", { method: "POST" }),
+  saveSettings: (settings: UpdatesConfig) =>
+    request<UpdateStatus>("/updates/settings", { method: "PUT", body: JSON.stringify(settings) }),
 };
 
 export const scrapeAttempts = {
