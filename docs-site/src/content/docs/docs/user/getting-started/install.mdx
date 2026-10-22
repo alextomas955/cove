@@ -27,6 +27,17 @@ If native Linux cannot use Cove's managed PostgreSQL path, the [Linux installati
 
 For Docker, decide which host directories will hold persistent Cove data and media before starting the deployment. Container paths, not host paths, are entered in Cove's setup wizard.
 
+## Keeping Cove up to date
+
+Cove checks for new releases in the background and shows a notice to the owner. **Settings → System Info → Updates** shows the release notes and how to update:
+
+- **Native installs** can install the update from that page. Cove downloads and verifies it, backs up the database and configuration, replaces the `Cove` and `Cove.InstanceManager` executables, and restarts. If the new version does not start, Cove restores the previous one. Until a database migration has been run, **Revert** returns to the previous version. Your data folder is never touched by an update.
+- **Docker** shows the notice only. Update by pulling the new image: `docker compose pull && docker compose up -d`.
+- If Cove runs as a **systemd** service, it exits with code 75 to restart into the new version, so the unit needs `Restart=on-failure` (or `RestartForceExitStatus=75`).
+- If Cove cannot write to its program folder, the page lists the manual steps instead.
+
+Automatic installs are off by default. When enabled on the same page, they run only inside a time window you choose (03:00–05:00 by default) and only while no jobs are running.
+
 ## What happens next
 
 Every supported installation path ends with Cove running and the setup wizard open in a browser. From there you choose one of three shared setup routes:
