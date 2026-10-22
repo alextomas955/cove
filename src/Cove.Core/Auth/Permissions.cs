@@ -121,6 +121,7 @@ public static class Permissions
     public const string SystemRestore = "system.restore";
     public const string SystemWipe = "system.wipe";
     public const string SystemShutdown = "system.shutdown";
+    public const string SystemUpdate = "system.update";
 
     // Audit
     public const string AuditRead = "audit.read";
@@ -229,6 +230,7 @@ public static class Permissions
         new(SystemRestore, "System", "Restore from a backup.", Dangerous: true, Implies: [SystemRead]),
         new(SystemWipe, "System", "Wipe the entire library. Cannot be undone.", Dangerous: true),
         new(SystemShutdown, "System", "Shut down the Cove server process.", Dangerous: true, Implies: [SystemRead]),
+        new(SystemUpdate, "System", "Check for, install, and revert Cove updates. Installing restarts the server.", Dangerous: true, Implies: [SystemRead]),
 
         new(AuditRead, "Audit", "View the security audit log."),
 
@@ -284,6 +286,7 @@ public static class Permissions
             if (p.Key == All) continue;
             if (p.Key == SystemWipe) continue;
             if (p.Key == SystemShutdown) continue;
+            if (p.Key == SystemUpdate) continue;
             yield return p.Key;
         }
     }

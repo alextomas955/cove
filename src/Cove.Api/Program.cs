@@ -23,6 +23,14 @@ using Cove.Data;
 using Cove.Data.Services;
 using Cove.Plugins;
 
+// `--version` (the update smoke test) and `--cove-relaunch` (the update restarter) exit here, before
+// any host, logging, or data-root setup.
+if (Cove.Api.Updates.UpdateCommandLine.Run(args) is int earlyExitCode)
+{
+    Environment.ExitCode = earlyExitCode;
+    return;
+}
+
 // Ensure enough threads for async I/O under concurrent load
 ThreadPool.SetMinThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 4);
 
@@ -435,6 +443,12 @@ try
             registryBaseUrl: coveConfig.GetValue<string>("ExtensionRegistryBaseUrl"));
     });
     builder.Services.AddHttpClient("ExtensionRegistry");
+
+    // Cove's own updates: checks for every install kind, in-place install for native builds.
+    builder.Services.AddHttpClient("CoveUpdates");
+    builder.Services.AddSingleton<Cove.Api.Updates.UpdateService>();
+    if (!isTestHarness)
+        builder.Services.AddHostedService<Cove.Api.Updates.UpdateBackgroundService>();
     builder.Services.AddHostedService<ExtensionEventBridge>();
     extensionManager.ConfigureServices(builder.Services);
 
@@ -712,6 +726,7 @@ try
             Microsoft.Extensions.Caching.Memory.IMemoryCache memoryCache,
             Microsoft.AspNetCore.OutputCaching.IOutputCacheStore outputCache,
             Cove.Data.Auth.BootstrapAuthService auth,
+            Cove.Api.Updates.UpdateService updates,
             IServiceScopeFactory scopeFactory,
             CancellationToken cancellationToken) =>
         {
@@ -732,6 +747,7 @@ try
 
             await jobs.CancelAllAndWaitAsync(cancellationToken);
             await audit.FlushAsync(cancellationToken);
+            updates.ResetForTests();
 
             await using (var scope = scopeFactory.CreateAsyncScope())
             {
@@ -1053,8 +1069,19 @@ try
         runtimeLogLevelManager.LevelSwitch.MinimumLevel);
     app.Lifetime.ApplicationStopping.Register(() =>
         extensionManager.ShutdownAllAsync().GetAwaiter().GetResult());
+    try
+    {
+        await app.Services.GetRequiredService<Cove.Api.Updates.UpdateService>().OnStartupCompletedAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Update bookkeeping after startup failed");
+    }
     integrationStartupReady.TrySetResult();
     await app.WaitForShutdownAsync();
+    // An update under systemd exits with a dedicated code so Restart=on-failure starts the new binary.
+    if (Cove.Api.Updates.UpdateRestart.RequestedExitCode is int updateExitCode)
+        Environment.ExitCode = updateExitCode;
 }
 catch (Exception ex)
 {

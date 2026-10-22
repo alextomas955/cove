@@ -1469,6 +1469,8 @@ public record CoveConfigDto
     public UiConfigDto Ui { get; init; } = new();
     public SecurityConfigDto Security { get; init; } = new();
     public ScrapingConfigDto Scraping { get; init; } = new();
+    /// <summary>Null when a client omits the section; the stored update settings are then kept.</summary>
+    public UpdatesConfigDto? Updates { get; init; }
     public List<CustomFieldDefinitionDto> CustomFieldDefinitions { get; init; } = [];
     public Dictionary<string, Dictionary<string, object?>> PluginConfigurations { get; init; } = [];
     public List<string> DisabledPlugins { get; init; } = [];
@@ -1653,6 +1655,16 @@ public record SecurityConfigDto
     public List<string>? KnownProxies { get; init; } = [];
     public List<string>? TrustedHosts { get; init; } = [];
     public string? NewPassword { get; init; }
+}
+
+public record UpdatesConfigDto
+{
+    public bool CheckEnabled { get; init; } = true;
+    public string Channel { get; init; } = "auto";
+    public int CheckIntervalHours { get; init; } = 12;
+    public bool ShowBanner { get; init; } = true;
+    public string AutoUpdate { get; init; } = "off";
+    public string AutoUpdateWindow { get; init; } = "03:00-05:00";
 }
 
 public record ScrapingConfigDto

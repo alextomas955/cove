@@ -61,6 +61,9 @@ public static class AuditActions
     public const string AuthFailsafeEnabled = "auth.failsafe-enabled";
     public const string AuthSetupTokenCreate = "auth.setup-token.create";
     public const string SystemShutdown = "system.shutdown";
+    public const string SystemUpdateApply = "system.update.apply";
+    public const string SystemUpdateRevert = "system.update.revert";
+    public const string SystemUpdateRollback = "system.update.rollback";
     public const string AuthSetupTokenRedeem = "auth.setup-token.redeem";
     public const string AiDataPurge = "ai_data.purge";
 }

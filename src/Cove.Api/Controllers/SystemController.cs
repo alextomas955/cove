@@ -323,7 +323,9 @@ public class SystemController(
     [RequiresPermission(Permissions.SystemSettingsWrite)]
     public async Task<ActionResult<CoveConfigDto>> SaveConfig([FromBody] CoveConfigDto config)
     {
-        await configService.SaveConfigAsync(config);
+        // Update settings (including automatic updates) belong to system.update and are saved through
+        // PUT /api/updates/settings. Ignoring them here also stops a stale settings page from reverting them.
+        await configService.SaveConfigAsync(config with { Updates = null });
         return Ok(WithoutStoredPasswords(configService.GetConfig()));
     }
 

@@ -232,8 +232,65 @@ public class ConfigService
                     ExcludeFields = [.. cfg.Scraping.MetadataBatchDefaults.ExcludeFields],
                 },
             },
+            Updates = GetUpdatesConfig(),
             PluginConfigurations = cfg.PluginConfigurations,
             DisabledPlugins = [.. cfg.DisabledPlugins],
+        };
+    }
+
+    public UpdatesConfigDto GetUpdatesConfig()
+    {
+        var updates = _config.Updates;
+        return new UpdatesConfigDto
+        {
+            CheckEnabled = updates.CheckEnabled,
+            Channel = updates.Channel,
+            CheckIntervalHours = updates.CheckIntervalHours,
+            ShowBanner = updates.ShowBanner,
+            AutoUpdate = updates.AutoUpdate,
+            AutoUpdateWindow = updates.AutoUpdateWindow,
+        };
+    }
+
+    /// <summary>
+    /// Atomically update only the update settings. The general config save ignores this section, so it
+    /// is changed only by callers that hold the update permission.
+    /// </summary>
+    public async Task<UpdatesConfigDto> UpdateUpdatesConfigAsync(Func<UpdatesConfigDto, UpdatesConfigDto> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        await _lock.WaitAsync();
+        try
+        {
+            var updated = update(GetUpdatesConfig())
+                ?? throw new InvalidOperationException("The update configuration update returned null.");
+            _config.Updates = NormalizeUpdatesConfig(updated);
+
+            await PersistCurrentConfigAsync();
+            return GetUpdatesConfig();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    internal static UpdatesConfig NormalizeUpdatesConfig(UpdatesConfigDto dto)
+    {
+        var defaults = new UpdatesConfig();
+        var channel = dto.Channel?.Trim().ToLowerInvariant();
+        var autoUpdate = dto.AutoUpdate?.Trim().ToLowerInvariant();
+        return new UpdatesConfig
+        {
+            CheckEnabled = dto.CheckEnabled,
+            Channel = channel is "auto" or "stable" or "prerelease" or "nightly" ? channel : defaults.Channel,
+            CheckIntervalHours = dto.CheckIntervalHours is >= 1 and <= 168 ? dto.CheckIntervalHours : defaults.CheckIntervalHours,
+            ShowBanner = dto.ShowBanner,
+            AutoUpdate = autoUpdate is "off" or "safe" or "all" ? autoUpdate : defaults.AutoUpdate,
+            AutoUpdateWindow = Cove.Api.Updates.UpdatePolicy.TryParseWindow(dto.AutoUpdateWindow, out _, out _)
+                ? dto.AutoUpdateWindow!.Trim()
+                : defaults.AutoUpdateWindow,
         };
     }
 
@@ -525,6 +582,9 @@ public class ConfigService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
         };
+
+        if (dto.Updates is { } updates)
+            cfg.Updates = NormalizeUpdatesConfig(updates);
 
         cfg.PluginConfigurations = dto.PluginConfigurations ?? [];
         cfg.DisabledPlugins = dto.DisabledPlugins
