@@ -79,7 +79,6 @@ internal sealed record InstallEnvironment
 
     public static InstallEnvironment Detect(InstallProbe probe)
     {
-        var appDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(probe.AppDirectory));
         var processPath = probe.ProcessPath;
         var isDotnetHost = processPath is not null
             && string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet", StringComparison.OrdinalIgnoreCase);
@@ -107,13 +106,12 @@ internal sealed record InstallEnvironment
                 ? LaunchModes.Systemd
                 : LaunchModes.Direct;
 
-        var executablePath = kind == InstallKinds.Native && processPath is not null
-            && string.Equals(
-                Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(Path.GetFullPath(processPath)) ?? string.Empty),
-                appDirectory,
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-            ? Path.GetFullPath(processPath)
-            : null;
+        // A single-file release extracts its bundled content, so AppContext.BaseDirectory is the
+        // extraction folder; the folder to update is the one holding the running executable.
+        var executablePath = kind == InstallKinds.Native && processPath is not null ? Path.GetFullPath(processPath) : null;
+        var appDirectory = Path.TrimEndingDirectorySeparator(executablePath is not null
+            ? Path.GetDirectoryName(executablePath)!
+            : Path.GetFullPath(probe.AppDirectory));
         var managerName = probe.IsWindows ? "Cove.InstanceManager.exe" : "Cove.InstanceManager";
 
         return new InstallEnvironment

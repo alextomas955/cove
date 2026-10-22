@@ -60,10 +60,15 @@ internal sealed record UpdateRelaunchHost
             visibleWindow: true);
     }
 
+    /// <summary>
+    /// Console output of the Cove the relauncher starts, one file per attempt so a rollback's log tail
+    /// shows only the failed version's output (Cove's own log files are in the same folder).
+    /// </summary>
     internal static string OutputLogPath(UpdateJournal journal)
     {
         var dataRoot = Cove.Core.Interfaces.CoveDefaultPaths.GetDataRoot();
-        return Path.Combine(new UpdatePaths(dataRoot).LogDirectory, "cove-update-output.log");
+        var version = journal.State == UpdateJournalStates.RolledBack ? journal.FromVersion : journal.ToVersion;
+        return Path.Combine(new UpdatePaths(dataRoot).LogDirectory, $"update-console-{version}-{journal.Id[..Math.Min(8, journal.Id.Length)]}.log");
     }
 
     private static async Task<string?> GetVersionAsync(HttpClient http, UpdateJournal journal, CancellationToken ct)

@@ -98,6 +98,13 @@ public class InstallEnvironmentTests
     }
 
     [Fact]
-    public void Executable_outside_the_app_folder_cannot_apply()
-        => Assert.NotNull(Detect(processPath: "/usr/local/bin/Cove").CannotApplyReason);
+    public void Program_folder_is_where_the_executable_is_not_the_bundle_extraction_folder()
+    {
+        // AppContext.BaseDirectory of a single-file build with extracted content points elsewhere.
+        var environment = Detect(processPath: "/srv/apps/cove/Cove");
+
+        Assert.Equal("/srv/apps/cove", environment.AppDirectory);
+        Assert.Equal("/srv/apps/cove/Cove", environment.ExecutablePath);
+        Assert.Null(environment.CannotApplyReason);
+    }
 }
