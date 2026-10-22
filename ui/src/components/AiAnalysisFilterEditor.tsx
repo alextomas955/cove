@@ -118,7 +118,7 @@ export function AiAnalysisEditor({
             </select>
             {!value?.sourceKey && (
               <p className="text-xs text-muted">
-                With any source, the latest run across all sources decides the state.
+                With any source, the most recent run across all sources decides the status.
               </p>
             )}
           </>
@@ -138,14 +138,14 @@ export function AiAnalysisEditor({
         )}
       </div>
 
-      <div className="space-y-2" role="group" aria-label="Latest run state">
+      <div className="space-y-2" role="group" aria-label="Analysis status">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-sm font-medium text-secondary">Latest run</div>
+          <div className="text-sm font-medium text-secondary">Status</div>
           <button
             type="button"
             aria-pressed={needsAnalysis}
             onClick={() => setStates(needsAnalysis ? [] : [...NEEDS_ANALYSIS_STATES])}
-            title="Never run or latest cancelled. Failed runs are a separate choice."
+            title="Never run or cancelled. Failed runs are a separate choice."
             className={`rounded-lg border px-2.5 py-1 text-xs ${needsAnalysis ? PILL_ON : PILL_OFF}`}
           >
             Needs analysis
@@ -168,8 +168,8 @@ export function AiAnalysisEditor({
           })}
         </div>
         <p className="text-xs text-muted">
-          Matches items whose latest run is in any selected state. Needs analysis selects never run and latest
-          cancelled; failed runs stay a separate choice.
+          Based on each item&apos;s most recent run. Needs analysis selects never run and cancelled; failed runs stay a
+          separate choice.
         </p>
       </div>
 

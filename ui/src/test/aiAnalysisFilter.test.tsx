@@ -74,7 +74,7 @@ describe("AI analysis criterion editor", () => {
 
     expect(await screen.findByText("AI Core")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Latest failed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Failed" }));
 
     expect(onChange).toHaveBeenCalledWith({ sourceKey: "ext:ai.core", _singleSource: true, states: ["failed"] });
     expect(facets).toHaveBeenCalledWith("video");
@@ -106,10 +106,10 @@ describe("AI analysis criterion editor", () => {
 
     expect(screen.getByRole("button", { name: "Needs analysis" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Never run" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Latest cancelled" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Latest failed" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Cancelled" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Failed" })).toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.click(screen.getByRole("button", { name: "Latest failed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Failed" }));
     expect(onChange.mock.lastCall?.[0].states).toEqual(["neverRun", "failed", "cancelled"]);
   });
 
@@ -204,11 +204,11 @@ describe("AI analysis criterion state", () => {
 describe("AI analysis summaries", () => {
   it("words chips plainly and leaves out a single source", () => {
     const chip = (value: unknown) => formatFilterChipValue(videoCriterion, value);
-    expect(chip({ sourceKey: "ext:ai.core", _singleSource: true, states: ["failed"] })).toBe("latest failed");
-    expect(chip({ states: ["failed", "neverRun"] })).toBe("never run or latest failed");
+    expect(chip({ sourceKey: "ext:ai.core", _singleSource: true, states: ["failed"] })).toBe("failed");
+    expect(chip({ states: ["failed", "neverRun"] })).toBe("never run or failed");
     expect(chip({ states: ["neverRun", "cancelled"] })).toBe("needs analysis");
-    expect(chip({ states: ["neverRun", "cancelled", "failed"] })).toBe("never run, latest failed or latest cancelled");
-    expect(chip({ sourceKey: "ext:ai.core", states: ["completed"] })).toBe("AI Core · latest completed");
+    expect(chip({ states: ["neverRun", "cancelled", "failed"] })).toBe("never run, failed or cancelled");
+    expect(chip({ sourceKey: "ext:ai.core", states: ["completed"] })).toBe("AI Core · completed");
     expect(
       chip({
         states: ["completed"],
@@ -216,7 +216,7 @@ describe("AI analysis summaries", () => {
         modelModifier: "EXCLUDES",
         analysedAtCriterion: { value: "-30d", modifier: "LESS_THAN" },
       }),
-    ).toBe("latest completed · without model clip_v1 · last analysed before 30 days ago");
+    ).toBe("completed · without model clip_v1 · last analysed before 30 days ago");
     expect(chip({ modelKeys: ["a", "b"] })).toBe("with models a or b");
     expect(chip({ analysedAtCriterion: { value: "", modifier: "IS_NULL" } })).toBe("never completed");
     expect(
@@ -232,7 +232,7 @@ describe("AI analysis summaries", () => {
         { type: "stars", starPrecision: "full" } as never,
         [],
       ),
-    ).toBe("AI Analysis: never run or latest failed");
+    ).toBe("AI Analysis: never run or failed");
     expect(formatAiAnalysisSummary(undefined)).toBe("not set");
   });
 

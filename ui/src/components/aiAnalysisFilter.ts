@@ -5,10 +5,10 @@ import { formatSourceKeyLabel } from "../utils/sourceKeyLabel";
 /** State pills in display order, with the wording used by the editor and in summaries. */
 export const AI_ANALYSIS_STATE_OPTIONS: ReadonlyArray<{ value: AiAnalysisState; label: string; summary: string }> = [
   { value: "neverRun", label: "Never run", summary: "never run" },
-  { value: "failed", label: "Latest failed", summary: "latest failed" },
+  { value: "failed", label: "Failed", summary: "failed" },
   { value: "inProgress", label: "In progress", summary: "in progress" },
-  { value: "completed", label: "Latest completed", summary: "latest completed" },
-  { value: "cancelled", label: "Latest cancelled", summary: "latest cancelled" },
+  { value: "completed", label: "Completed", summary: "completed" },
+  { value: "cancelled", label: "Cancelled", summary: "cancelled" },
 ];
 
 /**
@@ -111,7 +111,7 @@ function joinOr(values: string[]) {
 }
 
 /**
- * Plain-language summary for chips and explanations, such as "never run or latest failed" or
+ * Plain-language summary for chips and explanations, such as "never run or failed" or
  * "AI Core · needs analysis · without model clip_v1". The source is left out when it was the only one.
  */
 export function formatAiAnalysisSummary(value: unknown, modelLabels?: ReadonlyMap<string, string>): string {
