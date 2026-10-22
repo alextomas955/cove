@@ -28,6 +28,8 @@ const NON_NULL_TIMESTAMP_MODIFIERS: CriterionModifier[] = [
   "BETWEEN",
   "NOT_BETWEEN",
 ];
+// The AI analysis filter is searched by what people look for ("failed", "never analysed"), not only by its label.
+const AI_ANALYSIS_SEARCH_TERMS = ["ai", "analysis", "analysed", "analyzed", "failed", "never", "model", "run"];
 const VALUE_ONLY_ENUM_MODIFIERS: CriterionModifier[] = ["EQUALS", "NOT_EQUALS"];
 const VIDEO_HASH_OPTIONS = [
   { value: "oshash", label: "OSHash" },
@@ -62,6 +64,15 @@ export const VIDEO_CRITERIA: CriteriaDefinitionList<VideoFilterCriteria> = [
     type: "tagDuration",
     entityType: "tags",
     filterKey: "tagDurationCriterion",
+  },
+  {
+    id: "aiAnalysis",
+    label: "AI Analysis",
+    type: "aiAnalysis",
+    filterKey: "aiAnalysisCriterion",
+    aiTargetType: "video",
+    searchTerms: AI_ANALYSIS_SEARCH_TERMS,
+    requiredPermission: "airuns.read",
   },
   { id: "resolution", label: "Resolution", type: "resolution", filterKey: "resolutionCriterion" },
   {
@@ -712,6 +723,15 @@ export const IMAGE_CRITERIA: CriteriaDefinitionList<ImageFilterCriteria> = [
     type: "number",
     filterKey: "fileSizeCriterion",
     modifiers: NON_NULL_NUMBER_MODIFIERS,
+  },
+  {
+    id: "aiAnalysis",
+    label: "AI Analysis",
+    type: "aiAnalysis",
+    filterKey: "aiAnalysisCriterion",
+    aiTargetType: "image",
+    searchTerms: AI_ANALYSIS_SEARCH_TERMS,
+    requiredPermission: "airuns.read",
   },
   {
     id: "tagCount",

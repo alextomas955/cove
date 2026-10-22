@@ -12,6 +12,7 @@ export type CriterionType =
   | "timestamp"
   | "duration"
   | "tagDuration"
+  | "aiAnalysis"
   | "careerLength"
   | "rating"
   | "resolution"
@@ -65,6 +66,12 @@ export interface CriterionDefinition<TFilterKey extends string = string> {
   secondaryFilterKey?: TFilterKey;
   supported?: boolean;
   unsupportedReason?: string;
+  /** Extra words the filter search matches besides the label, such as "failed" for AI analysis. */
+  searchTerms?: string[];
+  /** Which items an "aiAnalysis" criterion filters, selecting the AI run target type. */
+  aiTargetType?: "video" | "image";
+  /** Permission needed to add this criterion; without it the criterion is hidden unless already active. */
+  requiredPermission?: string;
 }
 
 export type CriteriaDefinitionList<TFilterCriteria> = CriterionDefinition<Extract<keyof TFilterCriteria, string>>[];

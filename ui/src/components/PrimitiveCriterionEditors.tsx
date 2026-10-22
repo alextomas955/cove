@@ -863,11 +863,13 @@ export function TimestampEditor({
   onChange,
   modifiers,
   allowRelative = true,
+  modifierLabels,
 }: {
   value?: TimestampCriterion;
   onChange: (v: unknown) => void;
   modifiers: CriterionModifier[];
   allowRelative?: boolean;
+  modifierLabels?: Partial<Record<CriterionModifier, string>>;
 }) {
   const modifier = value?.modifier ?? "EQUALS";
   const isBetween = modifier === "BETWEEN" || modifier === "NOT_BETWEEN";
@@ -880,6 +882,7 @@ export function TimestampEditor({
       <ModifierSelector
         modifiers={modifiers}
         selected={modifier}
+        labels={modifierLabels}
         onSelect={(m) => {
           const nextIsNull = m === "IS_NULL" || m === "NOT_NULL";
           const nextIsBetween = m === "BETWEEN" || m === "NOT_BETWEEN";

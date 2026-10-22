@@ -977,6 +977,11 @@ public class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
 
         builder.HasIndex(run => run.RunKey).IsUnique();
         builder.HasIndex(run => new { run.TargetType, run.TargetId, run.CreatedAt });
+        // The AI analysis filter's latest-run lookups: each item's runs of one source, newest first, with the
+        // status and completion time in the index so the EXISTS / NOT EXISTS probes never read the table.
+        builder.HasIndex(run => new { run.TargetType, run.SourceKey, run.TargetId, run.StartedAt, run.Id })
+            .IsDescending(false, false, false, true, true)
+            .IncludeProperties(run => new { run.Status, run.CompletedAt });
         builder.HasIndex(run => run.Status);
         builder.HasIndex(run => run.SourceKey);
         builder.HasIndex(run => run.JobId);

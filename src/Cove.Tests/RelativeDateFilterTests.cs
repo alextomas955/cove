@@ -209,7 +209,12 @@ public class RelativeDateExpressionTests
     [InlineData("{\"dateCriterion\":{\"modifier\":\"EQUALS\",\"value\":\"1y+3m\"}}")]
     [InlineData("{\"dateCriterion\":{\"modifier\":\"EQUALS\",\"value\":\"-6h\"}}")]
     [InlineData("{\"objectFilter\":{\"productionDateCriterion\":{\"modifier\":\"EQUALS\",\"value\":\"-6h\"}}}")]
+    [InlineData("{\"objectFilter\":{\"aiAnalysisCriterion\":{\"analysedAtCriterion\":{\"modifier\":\"LESS_THAN\",\"value\":\"1y+3m\"}}}}")]
     public void InvalidSavedRulesAreRejected(string json) => Assert.Throws<RelativeDateFilterException>(() => RelativeDateFilterJson.Validate(json));
+
+    [Fact]
+    public void SavedAiAnalysisDatesAcceptRelativeTimestamps()
+        => RelativeDateFilterJson.Validate("""{"objectFilter":{"aiAnalysisCriterion":{"states":["completed"],"analysedAtCriterion":{"modifier":"LESS_THAN","value":"-6h"}}}}""");
 
     [Fact]
     public void SavedTimestampRulesAcceptHours()

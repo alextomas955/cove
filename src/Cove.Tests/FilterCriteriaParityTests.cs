@@ -149,6 +149,39 @@ public class FilterCriteriaParityTests
     }
 
     [Fact]
+    public void VideoAndImageFilters_AiAnalysisCriterion_Deserializes()
+    {
+        var json = """
+        {
+            "objectFilter": {
+                "aiAnalysisCriterion": {
+                    "sourceKey": "ext:ai.core",
+                    "states": ["neverRun", "failed", "inProgress"],
+                    "modelKeys": ["clip_v2"],
+                    "modelModifier": "EXCLUDES",
+                    "analysedAtCriterion": { "value": "-30d", "modifier": "lessThan" },
+                    "_singleSource": true
+                }
+            }
+        }
+        """;
+        var video = JsonSerializer.Deserialize<FilteredQueryRequest<VideoFilter>>(json, Options)?.ObjectFilter?.AiAnalysisCriterion;
+        var image = JsonSerializer.Deserialize<FilteredQueryRequest<ImageFilter>>(json, Options)?.ObjectFilter?.AiAnalysisCriterion;
+
+        foreach (var criterion in new[] { video, image })
+        {
+            Assert.NotNull(criterion);
+            Assert.Equal("ext:ai.core", criterion.SourceKey);
+            Assert.Equal([AiAnalysisState.NeverRun, AiAnalysisState.Failed, AiAnalysisState.InProgress], criterion.States);
+            Assert.Equal(["clip_v2"], criterion.ModelKeys!);
+            Assert.Equal(CriterionModifier.Excludes, criterion.ModelModifier);
+            Assert.Equal("-30d", criterion.AnalysedAtCriterion!.Value);
+            Assert.Equal(CriterionModifier.LessThan, criterion.AnalysedAtCriterion.Modifier);
+            Assert.Null(criterion.Analysis);
+        }
+    }
+
+    [Fact]
     public void VideoFilter_TagDurationCriterion_DeserializesClauses()
     {
         var json = """

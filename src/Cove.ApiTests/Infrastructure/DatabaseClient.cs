@@ -1122,6 +1122,36 @@ public sealed class DatabaseClient
         return run.Id;
     }
 
+    /// <summary>Records an AI run as a worker would. AI runs have no public write endpoint.</summary>
+    public async Task<int> CreateAiRunAsync(
+        AiRunTargetType targetType,
+        int targetId,
+        string sourceKey,
+        AiRunStatus status,
+        DateTime startedAt,
+        DateTime? completedAt = null,
+        string? modelsJson = null,
+        CancellationToken cancellationToken = default)
+    {
+        var options = new DbContextOptionsBuilder<CoveContext>()
+            .UseNpgsql(_connectionString, npgsql => npgsql.UseVector())
+            .Options;
+        await using var db = new CoveContext(options);
+        var run = new AiRun
+        {
+            SourceKey = sourceKey,
+            TargetType = targetType,
+            TargetId = targetId,
+            Status = status,
+            StartedAt = startedAt.ToUniversalTime(),
+            CompletedAt = completedAt?.ToUniversalTime(),
+            Models = modelsJson is null ? null : JsonDocument.Parse(modelsJson),
+        };
+        db.AiRuns.Add(run);
+        await db.SaveChangesAsync(cancellationToken);
+        return run.Id;
+    }
+
     public async Task<int> CreateFaceEmbeddingAsync(
         int faceId,
         IReadOnlyCollection<float> values,

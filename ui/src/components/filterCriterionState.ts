@@ -14,6 +14,7 @@ import { FILTER_EXPRESSION_STATE_KEY, type EditableFilterExpression } from "../u
 import { getRelatedCriteria } from "./filterCriteriaCatalogs";
 import { MAX_DISTINCT_RELATED_CONDITIONS, type CriterionDefinition } from "./filterCriteriaTypes";
 import { isValidRelativeDate, looksLikeRelativeDate } from "../utils/relativeDate";
+import { isAiAnalysisCriterionValid, sanitizeAiAnalysisCriterion } from "./aiAnalysisFilter";
 
 export const NULL_VALUE_MODIFIERS = new Set<CriterionModifier>(["IS_NULL", "NOT_NULL"]);
 const RANGE_VALUE_MODIFIERS = new Set<CriterionModifier>(["BETWEEN", "NOT_BETWEEN"]);
@@ -122,6 +123,8 @@ export function isCriterionValueValid(value: unknown, criterion: CriterionDefini
       const criterionValue = value as TagDurationCriterion;
       return getTagDurationClauses(criterionValue).some((clause) => isTagDurationClauseValid(clause));
     }
+    case "aiAnalysis":
+      return isAiAnalysisCriterionValid(value);
     case "related":
       return sanitizeRelatedFilterCriterion(value, criterion) !== undefined;
     case "country": {
@@ -311,6 +314,8 @@ export function sanitizeFilterCriteria(
     } else if (criterion.type === "related") {
       const related = sanitizeRelatedFilterCriterion(value, criterion);
       if (related) sanitized[criterion.filterKey] = related;
+    } else if (criterion.type === "aiAnalysis") {
+      sanitized[criterion.filterKey] = sanitizeAiAnalysisCriterion(value);
     } else {
       sanitized[criterion.filterKey] = value;
     }

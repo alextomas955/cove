@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { authStore, hasPermission as hasPermImpl } from "./authStore";
 import type { AuthUser } from "./authStore";
 import { auth, nextAccessTokenRefreshAt, refreshAccessTokenIfDue } from "../api/client";
 import type { MeResponse } from "../api/types";
 import { serverAwareFetch } from "../state/serverAvailability";
+import { AuthContext } from "./optionalAuth";
 
 interface AuthState {
   user: AuthUser | null;
@@ -15,15 +16,13 @@ interface AuthState {
   ready: boolean;
 }
 
-interface AuthContextValue extends AuthState {
+export interface AuthContextValue extends AuthState {
   login(username: string, password: string): Promise<{ ok: boolean; error?: string }>;
   externalLoginRedeem(code: string): Promise<{ ok: boolean; error?: string }>;
   logout(): Promise<void>;
   hasPermission(key: string): boolean;
   refreshMe(): Promise<void>;
 }
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 // After a proactive refresh that did not rotate the token (offline, rate limited, server error),
 // try again after this delay instead of spinning; a 401 still refreshes reactively meanwhile.

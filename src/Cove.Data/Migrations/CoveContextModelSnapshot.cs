@@ -111,6 +111,11 @@ namespace Cove.Data.Migrations
 
                     b.HasIndex("TargetType", "TargetId", "CreatedAt");
 
+                    b.HasIndex("TargetType", "SourceKey", "TargetId", "StartedAt", "Id")
+                        .IsDescending(false, false, false, true, true);
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("TargetType", "SourceKey", "TargetId", "StartedAt", "Id"), new[] { "Status", "CompletedAt" });
+
                     b.ToTable("ai_runs", (string)null);
                 });
 

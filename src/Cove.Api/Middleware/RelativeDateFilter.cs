@@ -10,9 +10,10 @@ public sealed class RelativeDateFilter(TimeProvider clock) : IAsyncActionFilter
     {
         using var evaluation = RelativeDateEvaluation.Begin(clock);
         var result = await next();
-        if (result.Exception is RelativeDateFilterException error)
+        // Both are ArgumentExceptions describing a filter the caller sent, so they are the caller's error.
+        if (result.Exception is RelativeDateFilterException or FilterCriterionException)
         {
-            result.Result = new BadRequestObjectResult(new { message = error.Message });
+            result.Result = new BadRequestObjectResult(new { message = result.Exception.Message });
             result.ExceptionHandled = true;
         }
     }

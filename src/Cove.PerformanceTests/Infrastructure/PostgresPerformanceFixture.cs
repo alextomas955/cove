@@ -404,6 +404,28 @@ public sealed class PostgresPerformanceFixture : IAsyncLifetime
                     SourceKey = "performance",
                 });
             }
+
+            // AI runs: every fifth video was never analysed; the others have one to three runs, the earlier ones
+            // completed and the latest cycling through running, completed, failed and cancelled.
+            if (videoOrdinal % 5 != 0)
+            {
+                var runCount = 1 + (videoOrdinal % 3);
+                for (var runIndex = 0; runIndex < runCount; runIndex++)
+                {
+                    var status = runIndex == runCount - 1 ? (AiRunStatus)(2 + (videoOrdinal % 4)) : AiRunStatus.Completed;
+                    var startedAt = baseDate.AddDays(runIndex - runCount).AddMinutes(videoOrdinal);
+                    db.AiRuns.Add(new AiRun
+                    {
+                        SourceKey = "ext:ai.core",
+                        TargetType = AiRunTargetType.Video,
+                        TargetId = video.Id,
+                        Status = status,
+                        StartedAt = startedAt,
+                        CompletedAt = status == AiRunStatus.Running ? null : startedAt.AddMinutes(3),
+                        Models = System.Text.Json.JsonDocument.Parse(runIndex == 0 ? """[{"config_name":"clip_v1"}]""" : """[{"config_name":"clip_v2"}]"""),
+                    });
+                }
+            }
         }
 
         var images = new List<Image>();

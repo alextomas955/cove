@@ -35,10 +35,13 @@ export function ModifierSelector({
   modifiers,
   selected,
   onSelect,
+  labels,
 }: {
   modifiers: CriterionModifier[];
   selected: CriterionModifier;
   onSelect: (m: CriterionModifier) => void;
+  /** Wording that replaces the generic modifier symbols where the criterion has a clearer one. */
+  labels?: Partial<Record<CriterionModifier, string>>;
 }) {
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -75,7 +78,7 @@ export function ModifierSelector({
                 : "border-border text-secondary hover:text-foreground hover:border-accent/50"
             }`}
           >
-            {MODIFIER_LABELS[m]}
+            {labels?.[m] ?? MODIFIER_LABELS[m]}
           </button>
         ))}
       </div>

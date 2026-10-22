@@ -254,6 +254,36 @@ public class TagDurationCriterion : TagDurationClause
     public List<TagDurationClause> Clauses { get; set; } = [];
 }
 
+/// <summary>
+/// The state of an item's latest AI run for a source. <see cref="InProgress"/> covers pending and running runs,
+/// including a run whose worker stopped without recording an outcome.
+/// </summary>
+public enum AiAnalysisState
+{
+    NeverRun,
+    Completed,
+    Failed,
+    Cancelled,
+    InProgress,
+}
+
+/// <summary>Filters videos or images by the AI runs recorded for them.</summary>
+public class AiAnalysisCriterion
+{
+    /// <summary>The AI run source, such as <c>ext:ai.core</c>. Null or empty considers every source together.</summary>
+    public string? SourceKey { get; set; }
+    /// <summary>Reserved for filtering by analysis kind. Not supported yet; a request that sets it is rejected.</summary>
+    public string? Analysis { get; set; }
+    /// <summary>States of the latest run, OR-ed. Empty applies no state condition.</summary>
+    public List<AiAnalysisState> States { get; set; } = [];
+    /// <summary>Model keys (a run model's <c>config_name</c> or <c>name</c>) matched against every completed run of the source.</summary>
+    public List<string>? ModelKeys { get; set; }
+    /// <summary><see cref="CriterionModifier.Includes"/>: some completed run used one of <see cref="ModelKeys"/>. <see cref="CriterionModifier.Excludes"/>: none did.</summary>
+    public CriterionModifier ModelModifier { get; set; } = CriterionModifier.Includes;
+    /// <summary>When the item was last analysed: the latest completion time of a completed run. Is-null matches items never analysed to completion.</summary>
+    public TimestampCriterion? AnalysedAtCriterion { get; set; }
+}
+
 /// <summary>Filters an entity by whether it has a related entity matching another list filter.</summary>
 public enum RelatedFilterMode
 {
@@ -348,6 +378,7 @@ public class VideoFilter
     public IntCriterion? PerformerCountCriterion { get; set; }
     public MultiIdCriterion? TagsCriterion { get; set; }
     public TagDurationCriterion? TagDurationCriterion { get; set; }
+    public AiAnalysisCriterion? AiAnalysisCriterion { get; set; }
     public MultiIdCriterion? PerformersCriterion { get; set; }
     public MultiIdCriterion? StudiosCriterion { get; set; }
     public MultiIdCriterion? GroupsCriterion { get; set; }
@@ -625,6 +656,7 @@ public class ImageFilter
     public IntCriterion? PerformerCountCriterion { get; set; }
     public IntCriterion? PerformerAgeCriterion { get; set; }
     public StringCriterion? OrientationCriterion { get; set; }
+    public AiAnalysisCriterion? AiAnalysisCriterion { get; set; }
     public MultiIdCriterion? PerformerTagsCriterion { get; set; }
     public RelatedFilterCriterion<PerformerFilter>? PerformerFilterCriterion { get; set; }
     public CustomFieldCriterion? CustomFieldCriterion { get; set; }

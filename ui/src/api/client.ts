@@ -73,6 +73,7 @@ import type {
   AiDataPurgeResult,
   AiDataSelector,
   AiDataSummary,
+  AiRunFacets,
   AudioSimilarVideo,
   VisualSimilarImage,
   VisualSimilarVideo,
@@ -1344,6 +1345,18 @@ export const tagApplications = {
   // wrongly-derived tag falls off this host. Does not touch the tag's global threshold or segments.
   reportIncorrect: (hostType: string, hostId: number, tagId: number) =>
     request<void>(`/tagapplications/host/${hostType}/${hostId}/tag/${tagId}`, { method: "DELETE" }),
+};
+
+export const aiRuns = {
+  /** Sources with run counts for one target type; models of completed runs only when requested. */
+  facets: (targetType: "video" | "image", opts?: { sourceKey?: string; includeModels?: boolean }) =>
+    request<AiRunFacets>(
+      `/ai-runs/facets${buildQuery(undefined, {
+        targetType,
+        sourceKey: opts?.sourceKey || undefined,
+        include: opts?.includeModels ? "models" : undefined,
+      })}`,
+    ),
 };
 
 export const aiData = {
