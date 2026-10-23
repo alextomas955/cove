@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ListPage } from "../components/ListPage";
 import { formatFilterChipValue, formatRemoteIdFilterChipValue } from "../components/ActiveObjectFilterChips";
 import { PERFORMER_CRITERIA, TAG_CRITERIA, VIDEO_CRITERIA } from "../components/filterCriteriaCatalogs";
@@ -3034,5 +3034,187 @@ describe("ListPage active filter chips", () => {
         ],
       }),
     );
+  });
+});
+
+describe("ListPage sticky toolbar", () => {
+  const expandedToolbarHeight = 144;
+  let nav: HTMLElement;
+  let restoreLayout: () => void;
+
+  beforeEach(() => {
+    nav = document.createElement("nav");
+    nav.className = "cove-navbar";
+    nav.getBoundingClientRect = () => ({ height: 48 }) as DOMRect;
+    document.body.appendChild(nav);
+    // jsdom lays nothing out: place every element (the sentinel included) below the navbar until a test scrolls, and
+    // give the toolbar wrapper an expanded height to hold while condensed.
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue({ top: 60, height: 0 } as DOMRect);
+    const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight")!;
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("list-page-sticky") ? expandedToolbarHeight : 0;
+      },
+    });
+    restoreLayout = () => {
+      rectSpy.mockRestore();
+      Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeight);
+      document.documentElement.style.scrollPaddingTop = "";
+      nav.remove();
+    };
+  });
+
+  afterEach(() => restoreLayout());
+
+  const renderListPage = (onFilterChange = vi.fn()) => {
+    const queryClient = new QueryClient();
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={onFilterChange}
+            totalCount={120}
+            loadState={{ status: "success", data: {} }}
+            onNew={vi.fn()}
+            selectedIds={new Set([1, 2])}
+            onSelectNone={vi.fn()}
+            selectionActions={<button type="button">Bulk edit</button>}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>,
+    );
+    const sticky = container.querySelector<HTMLElement>(".list-page-sticky")!;
+    return { sticky, sentinel: sticky.previousElementSibling as HTMLElement };
+  };
+
+  // Scroll handling is throttled to animation frames; flush one so the assertion sees its result.
+  const scrollTo = async (sentinel: HTMLElement, top: number) => {
+    sentinel.getBoundingClientRect = () => ({ top }) as DOMRect;
+    await act(async () => {
+      fireEvent.scroll(window);
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    });
+  };
+
+  it("keeps the toolbar and selection bar pinned under the navbar and condenses them once scrolled past", async () => {
+    const onFilterChange = vi.fn();
+    const { sticky, sentinel } = renderListPage(onFilterChange);
+
+    expect(sticky).toHaveStyle({ top: "48px" });
+    expect(sticky).toContainElement(screen.getByText("2 selected"));
+    expect(sticky).toContainElement(screen.getByRole("button", { name: "Bulk edit" }));
+    expect(sticky).not.toHaveClass("list-page-sticky-condensed");
+    expect(within(sticky).queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+
+    // jsdom has no stylesheet; stand in for the lg:sticky layout.
+    sticky.style.position = "sticky";
+    await scrollTo(sentinel, -600);
+
+    expect(sticky).toHaveClass("list-page-sticky-condensed");
+    expect(within(sticky).getByRole("button", { name: "Back to top" })).toBeInTheDocument();
+    // The wrapper keeps reserving the expanded height so the content below does not move.
+    expect(sticky.style.height).toBe(`${expandedToolbarHeight}px`);
+    expect(screen.queryByRole("button", { name: "+ New" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ New", hidden: true }).closest(".list-page-operations"),
+    ).toHaveAttribute("hidden");
+    expect(sticky).toContainElement(screen.getByText("2 selected"));
+    expect(within(sticky).getByText(/Page/)).toHaveTextContent("Page 1 / 3");
+
+    fireEvent.click(within(sticky).getByRole("button", { name: "Next page" }));
+    expect(onFilterChange).toHaveBeenLastCalledWith({ page: 2, perPage: 40 });
+
+    await scrollTo(sentinel, 60);
+
+    expect(sticky).not.toHaveClass("list-page-sticky-condensed");
+    expect(sticky.style.height).toBe("");
+    expect(screen.getByRole("button", { name: "+ New" }).closest(".list-page-operations")).not.toHaveAttribute(
+      "hidden",
+    );
+  });
+
+  it("does not condense a toolbar that is not sticky", async () => {
+    const { sticky, sentinel } = renderListPage();
+    await scrollTo(sentinel, -600);
+
+    expect(sticky).not.toHaveClass("list-page-sticky-condensed");
+    expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+  });
+
+  it("waits for keyboard focus to leave a control that condensing hides", async () => {
+    const { sticky, sentinel } = renderListPage();
+    sticky.style.position = "sticky";
+    const newButton = screen.getByRole("button", { name: "+ New" });
+    // jsdom does not track keyboard modality; report the focus as keyboard focus.
+    const matches = newButton.matches.bind(newButton);
+    Object.defineProperty(newButton, "matches", {
+      value: (selector: string) => selector === ":focus-visible" || matches(selector),
+    });
+    newButton.focus();
+
+    await scrollTo(sentinel, -600);
+    expect(sticky).not.toHaveClass("list-page-sticky-condensed");
+    expect(newButton).toHaveFocus();
+
+    await act(async () => {
+      newButton.blur();
+      fireEvent.focusOut(newButton);
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    });
+    expect(sticky).toHaveClass("list-page-sticky-condensed");
+  });
+
+  it("condenses while focus is on a control that stays visible", async () => {
+    const { sticky, sentinel } = renderListPage();
+    sticky.style.position = "sticky";
+    const search = screen.getByRole("textbox", { name: "Search list" });
+    search.focus();
+
+    await scrollTo(sentinel, -600);
+    expect(sticky).toHaveClass("list-page-sticky-condensed");
+    expect(search).toHaveFocus();
+  });
+
+  it("moves focus from the condensed pager to the search before expanding, and reserves scroll padding while pinned", async () => {
+    const { sticky, sentinel } = renderListPage();
+    sticky.style.position = "sticky";
+
+    await scrollTo(sentinel, -600);
+    expect(document.documentElement.style.scrollPaddingTop).toBe("48px");
+    within(sticky).getByRole("button", { name: "Back to top" }).focus();
+
+    await scrollTo(sentinel, 60);
+    expect(sticky).not.toHaveClass("list-page-sticky-condensed");
+    expect(screen.getByRole("textbox", { name: "Search list" })).toHaveFocus();
+    expect(document.documentElement.style.scrollPaddingTop).toBe("");
+  });
+
+  it("stays in normal flow inside its own scroll container", async () => {
+    const queryClient = new QueryClient();
+    const { container } = render(
+      <div style={{ overflowY: "auto" }}>
+        <QueryClientProvider client={queryClient}>
+          <RouteRegistryProvider>
+            <ListPage title="Videos" filter={{ page: 1, perPage: 40 }} onFilterChange={vi.fn()} totalCount={120}>
+              <div>collection content</div>
+            </ListPage>
+          </RouteRegistryProvider>
+        </QueryClientProvider>
+      </div>,
+    );
+    const sticky = container.querySelector<HTMLElement>(".list-page-sticky")!;
+    expect(sticky).not.toHaveClass("lg:sticky");
+    expect(sticky.style.top).toBe("");
+
+    sticky.style.position = "sticky";
+    await scrollTo(sticky.previousElementSibling as HTMLElement, -600);
+    expect(sticky).not.toHaveClass("list-page-sticky-condensed");
   });
 });
