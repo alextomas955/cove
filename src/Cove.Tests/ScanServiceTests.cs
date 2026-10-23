@@ -2620,6 +2620,85 @@ public class ScanServiceTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task StartScan_RecognizesFilesInFolderStoredUnderDifferentlyNormalizedPath()
+    {
+        // Stash-migrated folders can be stored under a spelling that only canonicalizes to the real
+        // directory (seen in the field: `r:( . )( . )/Anal` for `R:\( . )( . )\Anal`). The scan reuses such
+        // a folder, so it must also recognize the files already in it instead of inserting duplicates
+        // that hit the unique (ParentFolderId, Basename) index on every scan.
+        var ct = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"scan-noncanonical-{Guid.NewGuid():N}");
+        var library = Path.Combine(root, "library");
+        Directory.CreateDirectory(library);
+        try
+        {
+            var existingPath = Path.Combine(library, "existing.mp4");
+            await WriteValidVideoAsync(existingPath);
+            await WriteValidVideoAsync(Path.Combine(library, "new.mp4"));
+            var canonicalFolderPath = ScanPath.NormalizeStoredFolderPath(library);
+            var storedFolderPath = canonicalFolderPath + "/.";
+            if (OperatingSystem.IsWindows())
+                storedFolderPath = char.ToLowerInvariant(storedFolderPath[0]) + storedFolderPath[1..];
+
+            await using var environment = await CreateBareEnvironmentAsync(root, relational: true);
+            environment.Config.EnableMoveDetection = false;
+            int folderId, existingFileId, existingVideoId;
+            await using (var setupScope = environment.Services.CreateAsyncScope())
+            {
+                var setupDb = setupScope.ServiceProvider.GetRequiredService<CoveContext>();
+                var folder = new Folder { Path = storedFolderPath };
+                setupDb.Folders.Add(folder);
+                await setupDb.SaveChangesAsync(ct);
+                var existingInfo = new FileInfo(existingPath);
+                var existingFile = new VideoFile
+                {
+                    Basename = "existing.mp4",
+                    ParentFolderId = folder.Id,
+                    Size = existingInfo.Length,
+                    ModTime = existingInfo.LastWriteTimeUtc,
+                    Format = "mp4",
+                    Width = 1920,
+                    Height = 1080,
+                    Duration = 42,
+                };
+                var existingVideo = new Video { Title = "Migrated video", Files = [existingFile] };
+                setupDb.Videos.Add(existingVideo);
+                await setupDb.SaveChangesAsync(ct);
+                Assert.Equal(storedFolderPath + "/existing.mp4", existingFile.Path);
+                folderId = folder.Id;
+                existingFileId = existingFile.Id;
+                existingVideoId = existingVideo.Id;
+            }
+
+            environment.Service.StartScan();
+            Assert.Contains("1 imported", environment.JobService.LatestSubTask);
+            Assert.Contains("0 file failures", environment.JobService.LatestSubTask);
+            environment.Service.StartScan(new ScanOperationOptions { Rescan = true });
+            Assert.Contains("0 imported", environment.JobService.LatestSubTask);
+            Assert.Contains("0 file failures", environment.JobService.LatestSubTask);
+
+            await using var scope = environment.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<CoveContext>();
+            var storedFolder = await db.Folders.SingleAsync(ct);
+            Assert.Equal(folderId, storedFolder.Id);
+            Assert.Equal(canonicalFolderPath, storedFolder.Path);
+
+            var files = await db.VideoFiles.OrderBy(file => file.Basename).ToListAsync(ct);
+            Assert.Equal(["existing.mp4", "new.mp4"], files.Select(file => file.Basename));
+            Assert.All(files, file => Assert.Equal(folderId, file.ParentFolderId));
+            Assert.Equal(existingFileId, files[0].Id);
+            Assert.Equal(existingVideoId, files[0].VideoId);
+            Assert.Equal(canonicalFolderPath + "/existing.mp4", files[0].Path);
+            Assert.Equal(canonicalFolderPath + "/new.mp4", files[1].Path);
+
+            var existingVideoRow = await db.Videos.SingleAsync(video => video.Id == existingVideoId, ct);
+            Assert.Equal(canonicalFolderPath + "/existing.mp4", existingVideoRow.MinPath);
+            Assert.Equal(2, await db.Videos.CountAsync(ct));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private sealed class RecordingProgress : Cove.Core.Interfaces.IJobProgress
     {
         public void Report(double progress, string? subTask = null) { }
