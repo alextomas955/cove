@@ -88,5 +88,6 @@ public class EntityListSortFilterCatalogTests
            || type == typeof(DateCriterion)
            || type == typeof(TimestampCriterion)
            || type == typeof(FingerprintCriterion)
-           || type == typeof(TagDurationCriterion);
+           || type == typeof(TagDurationCriterion)
+           || type == typeof(AiAnalysisCriterion);
 }

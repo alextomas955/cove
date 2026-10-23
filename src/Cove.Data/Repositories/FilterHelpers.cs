@@ -1459,7 +1459,7 @@ public static class FilterHelpers
         return query.Where(Expression.Lambda<Func<T, bool>>(pred, param));
     }
 
-    private static bool TryParseTimestamp(string? value, out DateTime timestamp)
+    internal static bool TryParseTimestamp(string? value, out DateTime timestamp)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

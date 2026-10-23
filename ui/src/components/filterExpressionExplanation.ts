@@ -31,9 +31,17 @@ function explainCriterionValue(
     return `${criterion.label}: ${formatRemoteIdFilterChipValue(remote, { value: remote.endpoint, modifier: remote.modifier }, metadataServers)}`;
   }
   if (
-    ["multiId", "rating", "duration", "careerLength", "resolution", "enum", "hash", "tagDuration"].includes(
-      criterion.type,
-    )
+    [
+      "multiId",
+      "rating",
+      "duration",
+      "careerLength",
+      "resolution",
+      "enum",
+      "hash",
+      "tagDuration",
+      "aiAnalysis",
+    ].includes(criterion.type)
   ) {
     return `${criterion.label}: ${formatFilterChipValue(criterion, value, undefined, ratingOptions)}`;
   }

@@ -24,6 +24,9 @@ public partial class CoveContext
         _embeddingReadAuthorizationFilterSuppressionDepth > 0;
 
     internal bool AuthorizationBypassedForReadOptimization => AuthorizationFiltersBypassed;
+
+    /// <summary>Whether list filters may test AI runs: without <c>airuns.read</c> the AiRun query filter hides every run.</summary>
+    internal bool CanFilterByAiRuns => AuthorizationFiltersBypassed || CanReadAiRuns;
     internal bool CanReadVideoTagTreeWithoutAuthorizationFilters
     {
         get

@@ -15,6 +15,19 @@ public sealed partial class CoveClient
             payload: null,
             cancellationToken);
 
+    public Task<Cove.Api.Controllers.AiRunFacetsDto> GetAiRunFacetsAsync(
+        AiRunTargetType targetType,
+        string? sourceKey = null,
+        bool includeModels = false,
+        CancellationToken cancellationToken = default)
+        => SendAsync<Cove.Api.Controllers.AiRunFacetsDto>(
+            HttpMethod.Get,
+            WithCacheNonce($"/api/ai-runs/facets?targetType={targetType}"
+                + (sourceKey is null ? "" : $"&sourceKey={Uri.EscapeDataString(sourceKey)}")
+                + (includeModels ? "&include=models" : "")),
+            payload: null,
+            cancellationToken);
+
     public Task<PaginatedResponse<EmbeddingDto>> GetEmbeddingsAsync(
         EmbeddingHostType? hostType = null,
         CancellationToken cancellationToken = default)

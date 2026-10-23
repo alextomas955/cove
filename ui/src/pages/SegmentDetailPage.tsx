@@ -37,6 +37,7 @@ import { useAppConfig } from "../state/AppConfigContext";
 import { SegmentVisualSimilarityPanel, useSegmentVisualSimilarityAvailable } from "../components/VisualSimilarityPanel";
 import { buildSubVideoCreate } from "../utils/subVideoCreation";
 import { getLoadError, isApiNotFoundError } from "../utils/queryLoadState";
+import { formatSourceKeyLabel } from "../utils/sourceKeyLabel";
 
 interface Props {
   id: number;
@@ -1465,7 +1466,7 @@ function SegmentSourceSummary({
       ) : referenceLabel ? (
         <ProvenanceBadge name={referenceLabel} sourceLabel="Reference" provenance={provenance} />
       ) : (
-        <StatusPill label={segment.kind || formatSegmentSourceLabel(segment.sourceKey)} tone="muted" />
+        <StatusPill label={segment.kind || formatSourceKeyLabel(segment.sourceKey)} tone="muted" />
       )}
     </div>
   );
@@ -1621,25 +1622,6 @@ function formatSegmentTime(value: number) {
 
 function formatConfidence(confidence?: number) {
   return confidence == null ? "Not set" : `${(confidence * 100).toFixed(0)}%`;
-}
-
-function formatSegmentSourceLabel(sourceKey?: string) {
-  if (!sourceKey) {
-    return "Unknown source";
-  }
-
-  if (sourceKey === "user") {
-    return "User";
-  }
-
-  return sourceKey.startsWith("ext:")
-    ? sourceKey
-        .slice(4)
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ")
-    : sourceKey;
 }
 
 function buildSegmentTagProvenance(segment: SegmentRecord): TagProvenance[] {

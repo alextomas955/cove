@@ -22,6 +22,7 @@ import {
   type RelatedFilterChipFacet,
 } from "./ActiveObjectFilterChips";
 import { pushOverlay } from "../utils/overlayState";
+import { useOptionalAuth } from "../auth/optionalAuth";
 import {
   FILTER_EXPRESSION_STATE_KEY,
   countFilterExpressionConditions,
@@ -149,6 +150,7 @@ export function FilterDialog({
   const [inlineStackReturnsToExpression, setInlineStackReturnsToExpression] = useState(false);
   const backdropPointerDownRef = useRef(false);
   const [search, setSearch] = useState("");
+  const auth = useOptionalAuth();
   const [expandedCriterion, setExpandedCriterion] = useState<string | null>(null);
   const [relatedWorkspaceSelection, setRelatedWorkspaceSelection] = useState<{
     facet: RelatedFilterChipFacet;
@@ -214,18 +216,35 @@ export function FilterDialog({
 
   const filteredCriteria = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (q ? criteria.filter((c) => c.label.toLowerCase().includes(q)) : criteria)
-      .filter(
-        (criterion) => !conditionDraft || (criterion.supported !== false && criterion.expressionSupported !== false),
-      )
-      .slice()
-      .sort((a, b) => {
-        const aExact = Boolean(q) && a.label.toLowerCase() === q;
-        const bExact = Boolean(q) && b.label.toLowerCase() === q;
-        if (aExact !== bExact) return aExact ? -1 : 1;
-        return a.label.localeCompare(b.label);
-      });
-  }, [conditionDraft, criteria, search]);
+    const matchesSearch = (criterion: CriterionDefinition) =>
+      criterion.label.toLowerCase().includes(q) ||
+      (criterion.searchTerms?.some((term) => term.toLowerCase().startsWith(q)) ?? false);
+    return (
+      (q ? criteria.filter(matchesSearch) : criteria)
+        .filter(
+          (criterion) => !conditionDraft || (criterion.supported !== false && criterion.expressionSupported !== false),
+        )
+        // A criterion the user may not use stays listed only while active, so a loaded filter can still be removed.
+        .filter(
+          (criterion) =>
+            !criterion.requiredPermission ||
+            !auth ||
+            auth.hasPermission(criterion.requiredPermission) ||
+            isCriterionValueValid(getCriterionFilterValue(editFilter, criterion), criterion) ||
+            expressionHasActiveCriterion(
+              editFilter[FILTER_EXPRESSION_STATE_KEY] as FilterExpression<Record<string, unknown>> | undefined,
+              criterion,
+            ),
+        )
+        .slice()
+        .sort((a, b) => {
+          const aExact = Boolean(q) && a.label.toLowerCase() === q;
+          const bExact = Boolean(q) && b.label.toLowerCase() === q;
+          if (aExact !== bExact) return aExact ? -1 : 1;
+          return a.label.localeCompare(b.label);
+        })
+    );
+  }, [auth, conditionDraft, criteria, editFilter, search]);
 
   const activeCriterionCount = useMemo(() => {
     const criteriaCount = criteria.filter((criterion) =>

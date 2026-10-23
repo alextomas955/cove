@@ -1,4 +1,5 @@
 import type {
+  AiAnalysisCriterion,
   BoolCriterion,
   CriterionModifier,
   DateCriterion,
@@ -25,6 +26,7 @@ import {
   TimestampEditor,
 } from "./PrimitiveCriterionEditors";
 import { TagDurationEditor } from "./TagDurationFilterEditor";
+import { AiAnalysisEditor } from "./AiAnalysisFilterEditor";
 import type { CriterionDefinition, CriterionType } from "./filterCriteriaTypes";
 import { supportsRelativeDateInput } from "./filterCriterionState";
 
@@ -69,6 +71,7 @@ const TYPE_MODIFIERS: Record<CriterionType, CriterionModifier[]> = {
   timestamp: ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN", "BETWEEN", "NOT_BETWEEN", "IS_NULL", "NOT_NULL"],
   duration: ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN", "BETWEEN", "NOT_BETWEEN"],
   tagDuration: ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN", "BETWEEN", "NOT_BETWEEN"],
+  aiAnalysis: [],
   careerLength: ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN", "BETWEEN", "NOT_BETWEEN"],
   rating: ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN", "BETWEEN", "NOT_BETWEEN", "IS_NULL", "NOT_NULL"],
   resolution: ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN"],
@@ -126,6 +129,14 @@ export function CriterionEditor({
           value={value as TagDurationCriterion | undefined}
           onChange={onChange}
           modifiers={modifiers}
+        />
+      );
+    case "aiAnalysis":
+      return (
+        <AiAnalysisEditor
+          value={value as AiAnalysisCriterion | undefined}
+          onChange={onChange}
+          targetType={criterion.aiTargetType ?? "video"}
         />
       );
     case "hash":

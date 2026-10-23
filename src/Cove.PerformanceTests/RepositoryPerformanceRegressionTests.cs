@@ -100,6 +100,51 @@ public sealed class RepositoryPerformanceRegressionTests(PostgresPerformanceFixt
             })];
 
         yield return [new RepositoryPerformanceBudget(
+            Name: "video_find_ai_needs_analysis",
+            MaxMeanMs: 140,
+            MaxP95Ms: 220,
+            Operation: static async (performanceFixture, ct) =>
+            {
+                await using var context = performanceFixture.CreateContext();
+                var repository = new VideoRepository(context);
+                _ = await repository.FindAsync(
+                    new VideoFilter
+                    {
+                        AiAnalysisCriterion = new AiAnalysisCriterion
+                        {
+                            SourceKey = "ext:ai.core",
+                            States = [AiAnalysisState.NeverRun, AiAnalysisState.Cancelled],
+                        },
+                    },
+                    Desc("date"),
+                    ct);
+            })];
+
+        yield return [new RepositoryPerformanceBudget(
+            Name: "video_find_ai_latest_failed_without_model",
+            MaxMeanMs: 140,
+            MaxP95Ms: 220,
+            Operation: static async (performanceFixture, ct) =>
+            {
+                await using var context = performanceFixture.CreateContext();
+                var repository = new VideoRepository(context);
+                _ = await repository.FindAsync(
+                    new VideoFilter
+                    {
+                        AiAnalysisCriterion = new AiAnalysisCriterion
+                        {
+                            SourceKey = "ext:ai.core",
+                            States = [AiAnalysisState.Failed],
+                            ModelKeys = ["clip_v1"],
+                            ModelModifier = CriterionModifier.Excludes,
+                            AnalysedAtCriterion = new TimestampCriterion { Value = "-30d", Modifier = CriterionModifier.GreaterThan },
+                        },
+                    },
+                    Desc("date"),
+                    ct);
+            })];
+
+        yield return [new RepositoryPerformanceBudget(
             Name: "video_sort_path",
             MaxMeanMs: 130,
             MaxP95Ms: 210,

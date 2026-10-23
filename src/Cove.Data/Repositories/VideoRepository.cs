@@ -369,6 +369,7 @@ public class VideoRepository : IVideoRepository
 
             query = ApplyVideoTagCriterion(query, filter.TagsCriterion, hierarchicalTagGroups, requiredTagGroups);
             query = ApplyTagDurationCriterion(query, filter.TagDurationCriterion);
+            query = AiAnalysisQuery.Apply(_db, query, AiRunTargetType.Video, filter.AiAnalysisCriterion);
             query = ApplyMultiIdCriterion(query, filter.PerformersCriterion, s => s.PerformerIds);
 
             query = FilterHelpers.ApplyStudioCriterion(query, filter.StudiosCriterion, s => s.StudioId, hierarchicalStudioGroups, requiredStudioGroups);

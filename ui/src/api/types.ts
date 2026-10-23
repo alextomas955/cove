@@ -3116,6 +3116,38 @@ export interface TagDurationCriterion extends TagDurationClause {
   _names?: Record<string, string>;
 }
 
+/** State of an item's latest AI run for a source. "inProgress" covers pending and running runs. */
+export type AiAnalysisState = "neverRun" | "completed" | "failed" | "cancelled" | "inProgress";
+
+export interface AiAnalysisCriterion {
+  /** AI run source such as "ext:ai.core"; omitted means every source together. */
+  sourceKey?: string;
+  /** States of the latest run, OR-ed. */
+  states?: AiAnalysisState[];
+  /** Models matched against every completed run of the source. */
+  modelKeys?: string[];
+  modelModifier?: "INCLUDES" | "EXCLUDES";
+  /** When the item was last analysed to completion; IS_NULL matches items never analysed to completion. */
+  analysedAtCriterion?: TimestampCriterion;
+  /** Client-only: the source was preselected because it was the only one, so summaries leave it out. */
+  _singleSource?: boolean;
+}
+
+export interface AiRunSourceFacet {
+  sourceKey: string;
+  runCount: number;
+}
+
+export interface AiRunModelFacet {
+  key: string;
+  name?: string | null;
+}
+
+export interface AiRunFacets {
+  sources: AiRunSourceFacet[];
+  models?: AiRunModelFacet[] | null;
+}
+
 export type FingerprintAlgorithm = "md5" | "oshash" | "phash";
 
 export interface FingerprintCriterion {
@@ -3145,6 +3177,7 @@ export interface VideoFilterCriteria {
   performerCountCriterion?: IntCriterion;
   tagsCriterion?: MultiIdCriterion;
   tagDurationCriterion?: TagDurationCriterion;
+  aiAnalysisCriterion?: AiAnalysisCriterion;
   performersCriterion?: MultiIdCriterion;
   studiosCriterion?: MultiIdCriterion;
   groupsCriterion?: MultiIdCriterion;
@@ -3404,6 +3437,7 @@ export interface ImageFilterCriteria {
   dateCriterion?: DateCriterion;
   fileCountCriterion?: IntCriterion;
   fileSizeCriterion?: IntCriterion;
+  aiAnalysisCriterion?: AiAnalysisCriterion;
   tagCountCriterion?: IntCriterion;
   performerCountCriterion?: IntCriterion;
   performerAgeCriterion?: IntCriterion;

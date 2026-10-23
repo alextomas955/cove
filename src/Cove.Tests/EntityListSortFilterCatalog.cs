@@ -396,6 +396,13 @@ public static class EntityListSortFilterCatalog
             return true;
         }
 
+        if (type == typeof(AiAnalysisCriterion))
+        {
+            criterionType = nameof(AiAnalysisCriterion);
+            operators = ["never_run", "completed", "failed", "cancelled", "in_progress"];
+            return true;
+        }
+
         criterionType = string.Empty;
         operators = [];
         return false;

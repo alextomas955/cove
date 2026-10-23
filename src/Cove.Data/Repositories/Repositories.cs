@@ -2777,6 +2777,8 @@ public class ImageRepository : IImageRepository
 
         query = PerformerOccurrenceTagQuery.Apply(_db, query, AffinityHostType.Image, filter.PerformerTagsCriterion, GetIncludedPerformerIds(filter), performerTagGroups);
 
+        query = AiAnalysisQuery.Apply(_db, query, AiRunTargetType.Image, filter.AiAnalysisCriterion);
+
         query = ApplyPerformerAgeCriterion(query, filter.PerformerAgeCriterion);
 
         if (filter.OrientationCriterion != null)

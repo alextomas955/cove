@@ -259,6 +259,13 @@ function transformCriterion(walk: Walk, value: unknown, definition: CriterionDef
   if (definition.type === "multiId" && definition.entityType)
     return transformMultiId(walk, value, definition.entityType);
   if (definition.type === "tagDuration") return transformTagDuration(walk, value);
+  // Source and model keys are the same on every server; only the client-only hints stay behind.
+  if (definition.type === "aiAnalysis")
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !key.startsWith("_"))
+        .map(([key, child]) => [key, structuredClone(child)]),
+    );
   if (definition.type === "related") return transformRelated(walk, value, definition);
   return structuredClone(value);
 }

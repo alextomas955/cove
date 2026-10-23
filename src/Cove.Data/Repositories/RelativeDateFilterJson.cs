@@ -40,6 +40,7 @@ public static class RelativeDateFilterJson
     {
         "addedAtCriterion", "createdAtCriterion", "updatedAtCriterion", "lastPlayedAtCriterion", "lastLikedAtCriterion",
         "lastReadAtCriterion", "lastResolvedAtCriterion", "fileModTimeCriterion", "rawCreatedAtCriterion", "rawUpdatedAtCriterion",
+        "analysedAtCriterion",
     };
     private static readonly HashSet<string> CustomFieldKeys = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -49,6 +50,7 @@ public static class RelativeDateFilterJson
     {
         "objectFilter", "filterExpression", "_filterExpression", "children", "filter", "group",
         "performerFilterCriterion", "videoFilterCriterion", "audioFilterCriterion", "rawSegmentFilters",
+        "aiAnalysisCriterion",
     };
 
     private static void ValidateElement(JsonElement element)

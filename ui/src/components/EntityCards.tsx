@@ -90,6 +90,7 @@ import { VideoPreviewThumbnail } from "./VideoPreviewThumbnail";
 import { GalleryScrubThumbnail, type GalleryScrubThumbnailHandle } from "./GalleryScrubThumbnail";
 import { getAgeAtDate, getPerformerAge, hasDeathOccurred } from "../utils/performerAge";
 import { CountryFlag } from "./Country";
+import { formatSourceKeyLabel } from "../utils/sourceKeyLabel";
 
 /** An image that follows the viewer's "cover" or "contain" image-fit setting. */
 export function CoverImage({ className = "", ...props }: ImgHTMLAttributes<HTMLImageElement>) {
@@ -3549,7 +3550,7 @@ export function SegmentTile({
   onSelect?: (options?: MultiSelectToggleOptions) => void;
   selecting?: boolean;
 }) {
-  const sourceLabel = formatSegmentSourceLabel(segment.sourceKey);
+  const sourceLabel = formatSourceKeyLabel(segment.sourceKey);
   const refLabel = segment.performerName || segment.refLabel;
   const title = segment.title || segment.tagName || refLabel || segment.kind || sourceLabel;
   const cardRoute = route ?? { page: "segment", id: segment.id };
@@ -3628,25 +3629,6 @@ function SegmentInfoChip({ label, value }: { label: string; value: string }) {
 function formatSegmentRangeLabel(startSec: number, endSec?: number) {
   const start = formatDuration(startSec);
   return endSec == null ? start : `${start} - ${formatDuration(endSec)}`;
-}
-
-function formatSegmentSourceLabel(sourceKey?: string) {
-  if (!sourceKey) {
-    return "Unknown source";
-  }
-
-  if (sourceKey === "user") {
-    return "User";
-  }
-
-  return sourceKey.startsWith("ext:")
-    ? sourceKey
-        .slice(4)
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ")
-    : sourceKey;
 }
 
 function SegmentHoverPreview({

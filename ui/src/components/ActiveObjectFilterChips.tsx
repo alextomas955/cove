@@ -6,6 +6,7 @@ import { formatHumanDuration } from "../utils/durationFormat";
 import type { CriterionDefinition, EntityType, FilterDialogCustomSection } from "./filterCriteriaTypes";
 import { multiIdEntityLabelQuery } from "./MultiIdFilterEditor";
 import { supportsRelativeDateInput } from "./filterCriterionState";
+import { formatAiAnalysisSummary } from "./aiAnalysisFilter";
 import { getMultiIdModifierLabel } from "../utils/filterModifierLabels";
 import type { MetadataServer, RatingSystemOptions } from "../api/types";
 import {
@@ -313,6 +314,8 @@ export function formatFilterChipValue(
     if (mode === "none") return `No ${singular} matches · ${details}`;
     return details;
   }
+
+  if (def?.type === "aiAnalysis") return formatAiAnalysisSummary(value);
 
   if (def?.type === "tagDuration") {
     const clauses = Array.isArray(criterion.clauses) && criterion.clauses.length > 0 ? criterion.clauses : [criterion];
