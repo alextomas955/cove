@@ -26,6 +26,7 @@ import {
   ArrowUp,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 import type { ExtensionListSortContribution, FindFilter } from "../api/types";
 import { ExtensionSlot } from "../router/RouteRegistry";
@@ -42,6 +43,7 @@ import {
   CONDENSE_ONLY_ATTRIBUTE,
   useCondensingStickyToolbar,
 } from "../hooks/useCondensingStickyToolbar";
+import { useDockingSelectionBar } from "../hooks/useDockingSelectionBar";
 
 const condenseHiddenProps = { [CONDENSE_HIDDEN_ATTRIBUTE]: "" };
 const condenseOnlyProps = { [CONDENSE_ONLY_ATTRIBUTE]: "" };
@@ -469,6 +471,17 @@ export function ListPage({
     condensed: toolbarCondensed,
     expandedHeight: expandedToolbarHeight,
   } = useCondensingStickyToolbar();
+  const {
+    anchorRef: selectionBarAnchorRef,
+    barRef: selectionBarRef,
+    docked: selectionBarDocked,
+    anchorHeight: selectionBarAnchorHeight,
+    dockHeight: selectionBarDockHeight,
+  } = useDockingSelectionBar({
+    active: showSelectionBar && toolbarPinnable,
+    navHeight,
+    toolbarRef: stickyToolbarRef,
+  });
   const cardSizeContextValue = useMemo(() => ({ cardMinWidthPx, zoomLevel }), [cardMinWidthPx, zoomLevel]);
   const scrollToTop = useCallback(() => {
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -1209,45 +1222,87 @@ export function ListPage({
             {pageKey && <ExtensionSlot slot={`${pageKey}-list-row`} context={slotContext} />}
           </div>
 
-          {/* Selection bar */}
+          {/* Selection bar. Below lg, once it scrolls up under the navbar it docks at the bottom of the screen: the same
+              element moves (so the actions and their dialogs keep their state) while the anchor holds its place. The
+              dock sits below the navbar, but is lifted above every overlay while one of its dialogs is open. */}
           {showSelectionBar && (
-            <div className="grid grid-cols-1 items-center gap-2 bg-card/80 border border-border rounded-lg px-3 py-1.5 mx-1 mt-1 sm:grid-cols-[1fr_auto_1fr]">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-secondary">
-                <span>{selectedIds!.size} selected</span>
-                {selectionMetadata}
+            <div
+              ref={selectionBarAnchorRef}
+              // flow-root keeps the bar's top margin inside the anchor, so the held height includes it.
+              className="list-page-selection-anchor flow-root"
+              style={selectionBarDocked ? { height: selectionBarAnchorHeight } : undefined}
+            >
+              <div
+                ref={selectionBarRef}
+                role="group"
+                aria-label="Selection actions"
+                className={
+                  selectionBarDocked
+                    ? "list-page-selection-dock fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[45] flex flex-col gap-1.5 rounded-2xl border border-border bg-background px-3 py-2 shadow-2xl shadow-black/60 has-[:is(.fixed.inset-0,[role=dialog])]:z-[150]"
+                    : "grid grid-cols-1 items-center gap-2 bg-card/80 border border-border rounded-lg px-3 py-1.5 mx-1 mt-1 sm:grid-cols-[1fr_auto_1fr]"
+                }
+              >
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-secondary">
+                  {onSelectNone && (
+                    <button
+                      type="button"
+                      onClick={onSelectNone}
+                      hidden={!selectionBarDocked}
+                      className={`${toolbarIconButtonClass} -ml-1.5`}
+                      aria-label="Clear selection"
+                      title="Clear selection"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  <span className={selectionBarDocked ? "text-sm font-semibold text-foreground" : undefined}>
+                    {selectedIds!.size} selected
+                  </span>
+                  {selectionMetadata}
+                </div>
+                <div
+                  className={
+                    selectionBarDocked
+                      ? "-mx-1 flex flex-nowrap items-center gap-3 overflow-x-auto px-1 py-1 [&>*]:shrink-0 [&>button]:min-h-10"
+                      : "flex flex-wrap items-center justify-center gap-3"
+                  }
+                >
+                  {onSelectAll && (
+                    <button
+                      onClick={onSelectAll}
+                      disabled={selectAllPending}
+                      className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {selectAllPending ? "Selecting..." : selectAllLabel}
+                    </button>
+                  )}
+                  {onSelectAllMatching && (
+                    <button
+                      onClick={onSelectAllMatching}
+                      disabled={selectAllMatchingPending}
+                      className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {selectAllMatchingPending ? "Selecting..." : selectAllMatchingLabel}
+                    </button>
+                  )}
+                  {onInvertSelection && (
+                    <button onClick={onInvertSelection} className="text-xs text-secondary hover:text-foreground">
+                      Invert
+                    </button>
+                  )}
+                  {onSelectNone && (
+                    <button
+                      onClick={onSelectNone}
+                      hidden={selectionBarDocked}
+                      className="text-xs text-secondary hover:text-foreground"
+                    >
+                      Deselect all
+                    </button>
+                  )}
+                  {selectionActions}
+                </div>
+                {!selectionBarDocked && <div className="hidden sm:block" aria-hidden="true" />}
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {onSelectAll && (
-                  <button
-                    onClick={onSelectAll}
-                    disabled={selectAllPending}
-                    className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {selectAllPending ? "Selecting..." : selectAllLabel}
-                  </button>
-                )}
-                {onSelectAllMatching && (
-                  <button
-                    onClick={onSelectAllMatching}
-                    disabled={selectAllMatchingPending}
-                    className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {selectAllMatchingPending ? "Selecting..." : selectAllMatchingLabel}
-                  </button>
-                )}
-                {onInvertSelection && (
-                  <button onClick={onInvertSelection} className="text-xs text-secondary hover:text-foreground">
-                    Invert
-                  </button>
-                )}
-                {onSelectNone && (
-                  <button onClick={onSelectNone} className="text-xs text-secondary hover:text-foreground">
-                    Deselect all
-                  </button>
-                )}
-                {selectionActions}
-              </div>
-              <div className="hidden sm:block" aria-hidden="true" />
             </div>
           )}
         </div>
@@ -1384,6 +1439,10 @@ export function ListPage({
           openAtRoot={filterDialogOpenAtRoot}
         />
       )}
+
+      {/* Keeps the last rows and the bottom pager clear of the docked selection bar. A trailing spacer rather than
+          padding on the list, which would stop scroll anchoring from correcting the jump when the selection clears. */}
+      {selectionBarDocked && <div aria-hidden="true" style={{ height: selectionBarDockHeight + 24 }} />}
     </div>
   );
 }

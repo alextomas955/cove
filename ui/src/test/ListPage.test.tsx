@@ -3039,6 +3039,10 @@ describe("ListPage active filter chips", () => {
 
 describe("ListPage sticky toolbar", () => {
   const expandedToolbarHeight = 144;
+  const dockedSelectionBarHeight = 86;
+  // The selection bar's laid-out size and position; a held anchor reports its held height, like a browser would.
+  let inlineSelectionBarHeight = 126;
+  let selectionAnchorBottom = 300;
   let nav: HTMLElement;
   let restoreLayout: () => void;
 
@@ -3049,9 +3053,22 @@ describe("ListPage sticky toolbar", () => {
     document.body.appendChild(nav);
     // jsdom lays nothing out: place every element (the sentinel included) below the navbar until a test scrolls, and
     // give the toolbar wrapper an expanded height to hold while condensed.
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockReturnValue({ top: 60, height: 0 } as DOMRect);
+    inlineSelectionBarHeight = 126;
+    selectionAnchorBottom = 300;
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.classList.contains("list-page-selection-anchor")) {
+        const height = this.style.height ? parseFloat(this.style.height) : inlineSelectionBarHeight;
+        return { top: selectionAnchorBottom - height, bottom: selectionAnchorBottom, height } as DOMRect;
+      }
+      if (this.classList.contains("list-page-selection-dock")) {
+        return { top: 700, bottom: 700 + dockedSelectionBarHeight, height: dockedSelectionBarHeight } as DOMRect;
+      }
+      return { top: 60, bottom: 60, height: 0 } as DOMRect;
+    });
+    const scrollBy = window.scrollBy;
+    window.scrollBy = vi.fn() as typeof window.scrollBy;
     const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight")!;
     Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
       configurable: true,
@@ -3061,8 +3078,10 @@ describe("ListPage sticky toolbar", () => {
     });
     restoreLayout = () => {
       rectSpy.mockRestore();
+      window.scrollBy = scrollBy;
       Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeight);
       document.documentElement.style.scrollPaddingTop = "";
+      document.documentElement.style.scrollPaddingBottom = "";
       nav.remove();
     };
   });
@@ -3216,5 +3235,128 @@ describe("ListPage sticky toolbar", () => {
     sticky.style.position = "sticky";
     await scrollTo(sticky.previousElementSibling as HTMLElement, -600);
     expect(sticky).not.toHaveClass("list-page-sticky-condensed");
+  });
+
+  describe("below the pinned breakpoint", () => {
+    const scrollAnchorTo = async (bottom: number) => {
+      selectionAnchorBottom = bottom;
+      await act(async () => {
+        fireEvent.scroll(window);
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+      });
+    };
+
+    const renderSelection = (selectedIds: Set<number>, onSelectNone = vi.fn()) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <RouteRegistryProvider>
+          <ListPage
+            title="Videos"
+            filter={{ page: 1, perPage: 40 }}
+            onFilterChange={vi.fn()}
+            totalCount={120}
+            loadState={{ status: "success", data: {} }}
+            selectedIds={selectedIds}
+            onSelectNone={onSelectNone}
+          >
+            <div>collection content</div>
+          </ListPage>
+        </RouteRegistryProvider>
+      </QueryClientProvider>
+    );
+
+    const spacerHeight = `${dockedSelectionBarHeight + 24}px`;
+    const findSpacer = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll<HTMLElement>(".list-page > div[aria-hidden='true']")).find(
+        (element) => element.style.height === spacerHeight,
+      );
+
+    it("docks the selection bar at the bottom once it scrolls under the navbar, holding its place in the page", async () => {
+      const { sticky } = renderListPage();
+      const container = sticky.closest<HTMLElement>(".list-page")!.parentElement!;
+      const anchor = sticky.querySelector<HTMLElement>(".list-page-selection-anchor")!;
+      const bar = screen.getByRole("group", { name: "Selection actions" });
+      const bulkEdit = screen.getByRole("button", { name: "Bulk edit" });
+      expect(bar).not.toHaveClass("list-page-selection-dock");
+      expect(screen.queryByRole("button", { name: "Clear selection" })).not.toBeInTheDocument();
+
+      await scrollAnchorTo(40);
+
+      // The same element moved into the dock, so the actions keep their state.
+      expect(screen.getByRole("group", { name: "Selection actions" })).toBe(bar);
+      expect(bar).toHaveClass("list-page-selection-dock", "fixed");
+      expect(bar).toContainElement(bulkEdit);
+      expect(screen.getByRole("button", { name: "Clear selection" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Deselect all" })).not.toBeInTheDocument();
+      expect(anchor.style.height).toBe(`${inlineSelectionBarHeight}px`);
+      // A trailing spacer, not padding on the list (which would stop scroll anchoring when the selection clears).
+      expect(findSpacer(container)).toBeDefined();
+      expect(sticky.closest<HTMLElement>(".list-page")!.style.paddingBottom).toBe("");
+      expect(document.documentElement.style.scrollPaddingBottom).toBe(spacerHeight);
+
+      await scrollAnchorTo(200);
+
+      expect(bar).not.toHaveClass("list-page-selection-dock");
+      expect(screen.getByRole("button", { name: "Bulk edit" })).toBe(bulkEdit);
+      expect(anchor.style.height).toBe("");
+      expect(findSpacer(container)).toBeUndefined();
+      expect(document.documentElement.style.scrollPaddingBottom).toBe("");
+      expect(window.scrollBy).not.toHaveBeenCalled();
+    });
+
+    it("scrolls by the difference when the bar changed size while docked", async () => {
+      renderListPage();
+      await scrollAnchorTo(40);
+      inlineSelectionBarHeight = 158;
+
+      await scrollAnchorTo(200);
+
+      expect(window.scrollBy).toHaveBeenCalledWith({ top: 32, behavior: "instant" });
+    });
+
+    it("starts a new selection inline and measures it afresh after one was cleared while docked", async () => {
+      inlineSelectionBarHeight = 158;
+      const { container, rerender } = render(renderSelection(new Set([1, 2])));
+      await scrollAnchorTo(40);
+      expect(screen.getByRole("group", { name: "Selection actions" })).toHaveClass("list-page-selection-dock");
+
+      rerender(renderSelection(new Set()));
+      expect(screen.queryByRole("group", { name: "Selection actions" })).not.toBeInTheDocument();
+      expect(findSpacer(container)).toBeUndefined();
+      expect(document.documentElement.style.scrollPaddingBottom).toBe("");
+
+      // A smaller bar this time, starting below the navbar.
+      inlineSelectionBarHeight = 126;
+      selectionAnchorBottom = 300;
+      rerender(renderSelection(new Set([3])));
+      expect(screen.getByRole("group", { name: "Selection actions" })).not.toHaveClass("list-page-selection-dock");
+
+      await scrollAnchorTo(40);
+      expect(container.querySelector<HTMLElement>(".list-page-selection-anchor")!.style.height).toBe("126px");
+      expect(window.scrollBy).not.toHaveBeenCalled();
+    });
+
+    it("clears the selection from the dock", async () => {
+      const onSelectNone = vi.fn();
+      render(renderSelection(new Set([1]), onSelectNone));
+      await scrollAnchorTo(40);
+
+      fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+      expect(onSelectNone).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the selection bar in a pinned toolbar instead of docking it", async () => {
+      const { sticky } = renderListPage();
+      sticky.style.position = "sticky";
+      await scrollAnchorTo(40);
+
+      expect(screen.getByRole("group", { name: "Selection actions" })).not.toHaveClass("list-page-selection-dock");
+    });
+
+    it("does not dock inside its own scroll container", async () => {
+      render(<div style={{ overflowY: "auto" }}>{renderSelection(new Set([1]))}</div>);
+      await scrollAnchorTo(40);
+
+      expect(screen.getByRole("group", { name: "Selection actions" })).not.toHaveClass("list-page-selection-dock");
+    });
   });
 });
