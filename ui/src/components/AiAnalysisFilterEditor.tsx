@@ -98,25 +98,26 @@ export function AiAnalysisEditor({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        {sources.length > 1 ? (
+        {sources.length > 0 ? (
           <>
             <label htmlFor={sourceSelectId} className="block text-sm font-medium text-secondary">
               Source
             </label>
             <select
               id={sourceSelectId}
-              value={value?.sourceKey ?? ""}
+              value={singleSource ?? value?.sourceKey ?? ""}
               onChange={(event) => commit({ sourceKey: event.target.value || undefined })}
               className={INPUT_CLASS}
             >
-              <option value="">Any source</option>
+              {/* With one source, "any source" is that source, so it is the only choice. */}
+              {!singleSource && <option value="">Any source</option>}
               {sources.map((source) => (
                 <option key={source.sourceKey} value={source.sourceKey}>
                   {formatSourceKeyLabel(source.sourceKey)} ({source.runCount.toLocaleString()} runs)
                 </option>
               ))}
             </select>
-            {!value?.sourceKey && (
+            {!singleSource && !value?.sourceKey && (
               <p className="text-xs text-muted">
                 With any source, the most recent run across all sources decides the status.
               </p>
@@ -125,14 +126,12 @@ export function AiAnalysisEditor({
         ) : (
           <>
             <div className="text-sm font-medium text-secondary">Source</div>
-            <div className="flex min-h-9 items-center text-sm text-foreground" data-testid="ai-analysis-source">
+            <div className="flex min-h-9 items-center text-sm text-muted" data-testid="ai-analysis-source">
               {facets.isPending
                 ? "Loading sources…"
-                : effectiveSourceKey
-                  ? formatSourceKeyLabel(effectiveSourceKey)
-                  : facets.isError
-                    ? "Sources are unavailable"
-                    : "No AI runs recorded yet"}
+                : facets.isError
+                  ? "Sources are unavailable"
+                  : "No AI runs recorded yet"}
             </div>
           </>
         )}

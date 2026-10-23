@@ -67,13 +67,17 @@ beforeEach(() => {
 });
 
 describe("AI analysis criterion editor", () => {
-  it("fixes the only source and writes it with the first state", async () => {
+  it("shows the only source preselected in the dropdown and writes it with the first state", async () => {
     facets.mockResolvedValue(oneSource);
     const onChange = vi.fn();
     renderWithQueryClient(<AiAnalysisEditor value={undefined} onChange={onChange} targetType="video" />);
 
-    expect(await screen.findByText("AI Core")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    const select = await screen.findByRole("combobox", { name: "Source" });
+    expect(select).toHaveValue("ext:ai.core");
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      expect.stringMatching(/^AI Core/),
+    ]);
+    expect(screen.queryByRole("option", { name: "Any source" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Failed" }));
 
     expect(onChange).toHaveBeenCalledWith({ sourceKey: "ext:ai.core", _singleSource: true, states: ["failed"] });
@@ -97,7 +101,7 @@ describe("AI analysis criterion editor", () => {
     facets.mockResolvedValue(oneSource);
     const onChange = vi.fn();
     renderWithQueryClient(<StatefulEditor initial={{ states: [] }} onChange={onChange} />);
-    await screen.findByText("AI Core");
+    await screen.findByRole("combobox", { name: "Source" });
 
     fireEvent.click(screen.getByRole("button", { name: "Needs analysis" }));
     const needsAnalysis = onChange.mock.lastCall?.[0];
@@ -119,7 +123,7 @@ describe("AI analysis criterion editor", () => {
     );
     const onChange = vi.fn();
     renderWithQueryClient(<StatefulEditor initial={{ states: ["completed"] }} onChange={onChange} />);
-    await screen.findByText("AI Core");
+    await screen.findByRole("combobox", { name: "Source" });
 
     const toggle = screen.getByRole("button", { name: "Model and date" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
