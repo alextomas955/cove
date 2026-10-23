@@ -159,10 +159,16 @@ public class PostgresManagerService : IHostedService
     {
         if (!_config.Managed || !_started) return;
 
+        // The host's token is not passed on: it is cancelled once the host's shutdown timeout has been
+        // spent elsewhere (draining open HTTP requests, an extension's shutdown), and a cancelled pg_ctl
+        // would mean killing the postmaster and crash recovery on the next start. pg_ctl stop bounds
+        // itself (PGCTLTIMEOUT, 60 s by default); -m fast disconnects clients rather than waiting.
+        if (ct.IsCancellationRequested)
+            _logger.LogWarning("The shutdown timeout ran out before managed PostgreSQL was stopped; stopping it cleanly anyway");
         _logger.LogInformation("Stopping managed PostgreSQL");
         try
         {
-            await PgCtlAsync(["stop", "-D", DataDir, "-m", "fast"], NoTimeout, ct);
+            await PgCtlAsync(["stop", "-D", DataDir, "-m", "fast"], NoTimeout, CancellationToken.None);
         }
         catch (Exception ex)
         {

@@ -69,6 +69,7 @@ public class CoveConfiguration
     public ScrapingConfig Scraping { get; set; } = new();
     public AuthConfig Auth { get; set; } = new();
     public PostgresConfig Postgres { get; set; } = new();
+    public UpdatesConfig Updates { get; set; } = new();
     public List<string> ExtensionPaths { get; set; } = [CoveDefaultPaths.GetDataSubdirectory("plugins")];
     public Dictionary<string, Dictionary<string, object?>> PluginConfigurations { get; set; } = [];
     public HashSet<string> DisabledPlugins { get; set; } = [];
@@ -140,6 +141,24 @@ public class PostgresConfig
     public int Port { get; set; } = 5433; // Use non-default port to avoid conflicts
     public string Database { get; set; } = "cove";
     public string? ConnectionString { get; set; } // Override: use external PG
+}
+
+/// <summary>
+/// Cove's own update checks and, for native installs, applying updates. The feed URLs are read from
+/// <c>Cove:Updates:FeedBaseUrl</c> / <c>Cove:Updates:ApiBaseUrl</c> configuration and are not persisted here.
+/// </summary>
+public class UpdatesConfig
+{
+    public bool CheckEnabled { get; set; } = true;
+    /// <summary>"auto" (follow the running build), "stable", "prerelease", or "nightly".</summary>
+    public string Channel { get; set; } = "auto";
+    public int CheckIntervalHours { get; set; } = 12;
+    /// <summary>Server-wide switch for the "update available" banner.</summary>
+    public bool ShowBanner { get; set; } = true;
+    /// <summary>"off", "safe" (same major version and no new database migrations), or "all".</summary>
+    public string AutoUpdate { get; set; } = "off";
+    /// <summary>Local time window "HH:mm-HH:mm" in which an automatic update may start.</summary>
+    public string AutoUpdateWindow { get; set; } = "03:00-05:00";
 }
 
 public class InterfaceConfig

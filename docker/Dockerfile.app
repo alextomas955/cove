@@ -162,6 +162,10 @@ ENV COVE_HOME=/config \
     COVE__BackupPath=/backups \
     COVE__Postgres__Managed=false
 
+# Tells Cove it runs in a container: it shows the update notice with `docker compose pull`
+# instructions and never tries to replace its own files.
+ENV COVE_INSTALL_KIND=docker
+
 EXPOSE 5073
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD curl -fsS http://localhost:5073/health || exit 1
 VOLUME ["/data", "/config", "/generated", "/cache", "/backups"]

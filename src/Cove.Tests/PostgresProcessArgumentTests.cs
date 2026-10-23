@@ -65,6 +65,24 @@ public sealed class PostgresProcessArgumentTests : IDisposable
         Assert.Equal([[.. connection, database]], createdb.Invocations);
     }
 
+    [Fact(Skip = "Requires Unix shell fixtures", SkipUnless = nameof(IsUnix))]
+    public async Task StopWithAnAlreadyCancelledShutdownToken_StillStopsPostgresThroughPgCtl()
+    {
+        // The host cancels the token once its shutdown timeout is spent; that must not turn the stop
+        // into a kill of the postmaster.
+        var finished = Path.Combine(_root, "pg_ctl.finished");
+        Script("pg_ctl", $"sleep 0.5\nprintf '%s' \"$*\" > '{finished.Replace("'", "'\\''")}'");
+        var manager = Manager();
+        typeof(PostgresManagerService).GetField("_started", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(manager, true);
+        using var expired = new CancellationTokenSource();
+        await expired.CancelAsync();
+
+        await manager.StopAsync(expired.Token);
+
+        Assert.True(File.Exists(finished), "pg_ctl stop was killed instead of being allowed to finish");
+        Assert.Equal($"stop -D {DataDir} -m fast", await File.ReadAllTextAsync(finished, TestContext.Current.CancellationToken));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("-cove")]

@@ -74,7 +74,13 @@ internal sealed partial class CoveApiServer : IAsyncDisposable
     internal long ProcessStartedTimestamp { get; private init; }
     internal long ReadyTimestamp { get; private init; }
 
-    public static async Task<CoveApiServer> StartAsync(CancellationToken cancellationToken = default)
+    public static Task<CoveApiServer> StartAsync(CancellationToken cancellationToken = default)
+        => StartAsync(environmentOverrides: null, cancellationToken);
+
+    /// <summary>Starts a self-hosted server with extra process environment variables (for install-kind scenarios).</summary>
+    public static async Task<CoveApiServer> StartAsync(
+        IReadOnlyDictionary<string, string>? environmentOverrides,
+        CancellationToken cancellationToken = default)
     {
         PostgreSqlTestDatabase? database = null;
         MetadataServiceSimulator? metadataService = null;
@@ -101,6 +107,7 @@ internal sealed partial class CoveApiServer : IAsyncDisposable
             metadataService = await MetadataServiceSimulator.StartAsync(cancellationToken);
             downloadSource = await DownloadSourceSimulator.StartAsync(cancellationToken);
             extensionRegistry = await ExtensionRegistrySimulator.StartAsync(cancellationToken);
+            var updateFeed = await UpdateFeedSimulator.GetSharedAsync(cancellationToken);
             database = await PostgreSqlTestDatabase.CreateAsync(cancellationToken);
             process = StartApiProcess(
                 dataRoot,
@@ -111,7 +118,9 @@ internal sealed partial class CoveApiServer : IAsyncDisposable
                 libraryPath,
                 faceSuggestionPlanPath,
                 resetToken,
-                output);
+                output,
+                updateFeed.Endpoint,
+                environmentOverrides);
             var processStartedTimestamp = Stopwatch.GetTimestamp();
             var baseAddress = await WaitForListeningAddressAsync(process, output, cancellationToken);
 
@@ -389,7 +398,9 @@ internal sealed partial class CoveApiServer : IAsyncDisposable
         string libraryPath,
         string faceSuggestionPlanPath,
         string resetToken,
-        ConcurrentQueue<string> output)
+        ConcurrentQueue<string> output,
+        Uri updateFeedEndpoint,
+        IReadOnlyDictionary<string, string>? environmentOverrides)
     {
         var assemblyPath = typeof(Program).Assembly.Location;
         var startInfo = new ProcessStartInfo
@@ -424,6 +435,15 @@ internal sealed partial class CoveApiServer : IAsyncDisposable
         startInfo.Environment["COVE__Scraping__MetadataServers__0__ApiKey"] = MetadataServiceSimulator.ApiKey;
         startInfo.Environment["COVE__Scraping__MetadataServers__0__Endpoint"] = metadataServiceEndpoint.AbsoluteUri;
         startInfo.Environment["COVE__Scraping__MetadataServers__0__Name"] = TestCatalog.MetadataServices.PulpMovieDb.Name;
+        startInfo.Environment["COVE__Updates__FeedBaseUrl"] = updateFeedEndpoint.AbsoluteUri;
+        startInfo.Environment["COVE__Updates__ApiBaseUrl"] = new Uri(updateFeedEndpoint, "api/").AbsoluteUri;
+        // The test host must not inherit the developer's own install markers.
+        startInfo.Environment.Remove("COVE_INSTALL_KIND");
+        startInfo.Environment.Remove("COVE_MANAGER_INSTANCE_ID");
+        startInfo.Environment.Remove("INVOCATION_ID");
+        startInfo.Environment.Remove("NOTIFY_SOCKET");
+        foreach (var (name, value) in environmentOverrides ?? new Dictionary<string, string>())
+            startInfo.Environment[name] = value;
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("The Cove API test process could not be started.");

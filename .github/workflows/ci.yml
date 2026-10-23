@@ -185,11 +185,12 @@ jobs:
         if: ${{ inputs.api_coverage }}
         run: dotnet tool restore
 
-      - name: Test controller coverage tooling
+      - name: Test controller coverage and release tooling
         run: >-
           node --test
           scripts/check-api-controller-coverage.test.mjs
           scripts/prepare-coverage-gutters.test.mjs
+          scripts/generate-release-manifest.test.mjs
 
       - name: Test (Fluent API)
         if: ${{ !inputs.api_coverage }}

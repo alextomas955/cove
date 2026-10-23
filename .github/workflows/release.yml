@@ -40,7 +40,7 @@ jobs:
 
   # ── Build self-contained executables per platform ───────────────
   build-native:
-    needs: build-ui
+    needs: [build-ui, check-version]
     strategy:
       matrix:
         include:
@@ -87,6 +87,8 @@ jobs:
           -p:DebugSymbols=false
           -p:Version=${{ env.VERSION }}
           -p:CoveCiVersion=true
+          -p:CoveDistribution=native-${{ matrix.rid }}
+          -p:CoveReleaseChannel=${{ needs.check-version.outputs.is_stable == 'true' && 'stable' || 'prerelease' }}
           -o publish/
 
       - name: Publish native instance manager
@@ -433,6 +435,21 @@ jobs:
         working-directory: release-files
         run: |
           sha256sum *.zip *.tar.gz 2>/dev/null > checksums.txt || true
+
+      # The manifest Cove's built-in updater reads (releases/latest/download/cove-release.json).
+      - name: Generate update manifest
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          CHANNEL: ${{ needs.check-version.outputs.is_stable == 'true' && 'stable' || 'prerelease' }}
+        run: >-
+          node scripts/generate-release-manifest.mjs
+          --version "$VERSION"
+          --channel "$CHANNEL"
+          --assets-dir release-files
+          --migrations-dir src/Cove.Data/Migrations
+          --changelog CHANGELOG.md
+          --notes-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+          --output release-files/cove-release.json
 
       - uses: softprops/action-gh-release@v3
         with:

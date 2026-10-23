@@ -625,6 +625,84 @@ public class JobServiceTests
         }
     }
 
+    [Fact]
+    public async Task JobEnqueuedWithoutRetry_IsNotTiedToTheRequestThatStartedIt()
+    {
+        var accessor = new HttpContextAccessor { HttpContext = await CaptureRequestAsync("POST", "/api/updates/apply", "{\"force\":false}") };
+        var service = new JobService(new EventBus(), new FakeHubContext(), NullLogger<JobService>.Instance, requestCapture: new JobRequestCapture(accessor));
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var jobId = service.EnqueueWithoutRetry("system-update", "Update Cove to 2.0.0", static (_, _) => Task.CompletedTask, exclusive: false);
+            await WaitForTerminalStateAsync(service, jobId, TimeSpan.FromSeconds(5));
+
+            Assert.Null(service.GetRetryRequestFor(null, jobId, includeAll: true));
+            Assert.Contains(service.GetStoredJobHistoryFor(null, includeAll: true), job => job.Info.Id == jobId && job.Request is null);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task LateFailure_MarksAFinishedJobFailed_AndSavesTheCorrection()
+    {
+        var store = new FakeJobHistoryStore([]);
+        var service = new JobService(new EventBus(), new FakeHubContext(), NullLogger<JobService>.Instance, historyStore: store);
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var jobId = service.Enqueue("system-update", "Update Cove to 2.0.0", static (_, _) => Task.CompletedTask, exclusive: false);
+            Assert.Equal(JobStatus.Completed, (await WaitForTerminalStateAsync(service, jobId, TimeSpan.FromSeconds(5)))!.Status);
+
+            service.RecordLateFailure(jobId, "Cove 2.0.0 exited during startup.");
+
+            var job = Assert.Single(service.GetJobHistory(), job => job.Id == jobId);
+            Assert.Equal(JobStatus.Failed, job.Status);
+            Assert.Equal("Cove 2.0.0 exited during startup.", job.Error);
+            Assert.Equal(JobStatus.Failed, store.Saved.Last(saved => saved.Info.Id == jobId).Info.Status);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task LateFailure_RecordedBeforeTheSavedHistoryLoads_IsAppliedWhenItDoes()
+    {
+        var saved = new StoredJob(
+            null,
+            new JobInfo("update-job", "system-update", "Update Cove to 2.0.0", JobStatus.Completed, 1, "Restarting into Cove 2.0.0", DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow.AddMinutes(-2), null),
+            null);
+        var load = new TaskCompletionSource<IReadOnlyList<StoredJob>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new FakeJobHistoryStore([saved], load.Task);
+        var service = new JobService(new EventBus(), new FakeHubContext(), NullLogger<JobService>.Instance, historyStore: store);
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            service.RecordLateFailure("update-job", "Rolled back.");
+            load.SetResult([saved]);
+
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (service.GetJobHistory().Count == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(25, TestContext.Current.CancellationToken);
+
+            var job = Assert.Single(service.GetJobHistory());
+            Assert.Equal(JobStatus.Failed, job.Status);
+            Assert.Equal("Rolled back.", job.Error);
+            Assert.Contains(store.Saved, correction => correction.Info.Id == "update-job" && correction.Info.Status == JobStatus.Failed);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task<HttpContext> CaptureRequestAsync(string method, string path, string body)
     {
         var bytes = Encoding.UTF8.GetBytes(body);
@@ -638,11 +716,11 @@ public class JobServiceTests
         return context;
     }
 
-    private sealed class FakeJobHistoryStore(IReadOnlyList<StoredJob> initial) : IJobHistoryStore
+    private sealed class FakeJobHistoryStore(IReadOnlyList<StoredJob> initial, Task<IReadOnlyList<StoredJob>>? load = null) : IJobHistoryStore
     {
         public ConcurrentQueue<StoredJob> Saved { get; } = new();
 
-        public Task<IReadOnlyList<StoredJob>> LoadRecentAsync(CancellationToken ct) => Task.FromResult(initial);
+        public Task<IReadOnlyList<StoredJob>> LoadRecentAsync(CancellationToken ct) => load ?? Task.FromResult(initial);
 
         public void Save(StoredJob job) => Saved.Enqueue(job);
     }

@@ -2095,6 +2095,67 @@ export interface SystemStatus {
   migrationStatusError?: string | null;
 }
 
+export type UpdateChannel = "auto" | "stable" | "prerelease" | "nightly";
+export type AutoUpdateMode = "off" | "safe" | "all";
+
+export interface UpdatesConfig {
+  checkEnabled: boolean;
+  channel: UpdateChannel;
+  checkIntervalHours: number;
+  showBanner: boolean;
+  autoUpdate: AutoUpdateMode;
+  autoUpdateWindow: string;
+}
+
+export interface UpdateLatest {
+  version: string;
+  publishedAt?: string | null;
+  notesMarkdown?: string | null;
+  notesUrl?: string | null;
+  assetName?: string | null;
+  assetSize?: number | null;
+  /** null when the release does not list its migrations. */
+  requiresMigration?: boolean | null;
+  /** Set when this version was tried before; automatic updates skip it, a manual install is still allowed. */
+  previousOutcome?: "failed" | "rolledBack" | "reverted" | null;
+}
+
+export type UpdateApplyState = "idle" | "downloading" | "staged" | "applying" | "failed" | "rolledBack";
+
+export interface UpdateStatus {
+  currentVersion: string;
+  channel: UpdateChannel;
+  effectiveChannel: Exclude<UpdateChannel, "auto">;
+  installKind: "docker" | "native" | "source";
+  launchMode: "direct" | "instance-manager" | "systemd";
+  rid?: string | null;
+  canApply: boolean;
+  cannotApplyReason?: string | null;
+  updateAvailable: boolean;
+  latest?: UpdateLatest | null;
+  lastCheckedAt?: string | null;
+  lastError?: string | null;
+  applyState: UpdateApplyState;
+  applyMessage?: string | null;
+  applyJobId?: string | null;
+  failedVersion?: string | null;
+  logTail?: string | null;
+  previousVersionAvailable: boolean;
+  previousVersion?: string | null;
+  revertUnavailableReason?: string | null;
+  otherInstancesSharingBinary: string[];
+  /** True when Cove cannot restart itself after installing. */
+  manualRestart?: boolean;
+  showBanner: boolean;
+  releasesUrl?: string | null;
+  settings: UpdatesConfig;
+}
+
+export interface UpdateActionResult {
+  jobId?: string | null;
+  message: string;
+}
+
 export interface DatabaseMigrationResult {
   message: string;
   appliedMigrations: string[];

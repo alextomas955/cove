@@ -604,6 +604,7 @@ internal sealed class InstanceManagerService
         try
         {
             instance = ResolveInstance(id) ?? throw new BadHttpRequestException("Instance not found.");
+            AdoptRelaunchedProcess(instance);
             if (instance.LastProcessId.HasValue)
             {
                 try
@@ -868,6 +869,7 @@ internal sealed class InstanceManagerService
 
     private static bool IsRunning(CoveInstanceRecord instance)
     {
+        AdoptRelaunchedProcess(instance);
         if (!instance.LastProcessId.HasValue)
             return false;
         try
@@ -878,6 +880,35 @@ internal sealed class InstanceManagerService
         catch (ArgumentException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Cove restarts itself after an update by re-running this instance's start script, which writes the
+    /// new PID to <c>.manager/cove.pid</c>. Adopt that process when it is alive and differs from the one
+    /// recorded here, so the instance is not shown as stopped (and Stop reaches the right process).
+    /// </summary>
+    internal static void AdoptRelaunchedProcess(CoveInstanceRecord instance)
+    {
+        var pidFile = Path.Combine(instance.HomePath, ".manager", "cove.pid");
+        try
+        {
+            if (!File.Exists(pidFile)
+                || !int.TryParse(File.ReadAllText(pidFile).Trim(), out var pid)
+                || pid <= 0
+                || pid == instance.LastProcessId
+                // A PID file older than the manager's own last start is stale; its PID may have been reused.
+                || File.GetLastWriteTimeUtc(pidFile) <= (instance.LastStartedAt?.UtcDateTime ?? DateTime.MinValue))
+            {
+                return;
+            }
+
+            using var process = Process.GetProcessById(pid);
+            if (!process.HasExited)
+                instance.LastProcessId = pid;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
         }
     }
 
@@ -999,6 +1030,7 @@ internal sealed class InstanceManagerService
             "$ErrorActionPreference = 'Stop'",
             $"$pidPath = {PsQuote(pidFile)}",
             $"  $env:{CoveDefaultPaths.DataRootEnvironmentVariable} = {PsQuote(instance.HomePath)}",
+            $"  $env:{ManagerInstanceVariable} = {PsQuote(instance.Id)}",
             $"  $env:Cove__Port = {PsQuote(instance.Port.ToString())}",
             $"  $env:Cove__Postgres__Managed = {PsQuote(instance.ManagedPostgres.ToString().ToLowerInvariant())}",
             $"  $env:Cove__Postgres__Port = {PsQuote(instance.PostgresPort.ToString())}",
@@ -1122,6 +1154,7 @@ internal sealed class InstanceManagerService
         [
             "#!/bin/sh",
             $"export {CoveDefaultPaths.DataRootEnvironmentVariable}={ShQuote(instance.HomePath)}",
+            $"export {ManagerInstanceVariable}={ShQuote(instance.Id)}",
             $"export Cove__Port={ShQuote(instance.Port.ToString())}",
             $"export Cove__Postgres__Managed={ShQuote(instance.ManagedPostgres.ToString().ToLowerInvariant())}",
             $"export Cove__Postgres__Port={ShQuote(instance.PostgresPort.ToString())}",
@@ -1181,6 +1214,8 @@ internal sealed class InstanceManagerService
         var slug = string.Join('-', new string(chars).Split('-', StringSplitOptions.RemoveEmptyEntries));
         return string.IsNullOrWhiteSpace(slug) ? $"instance-{Guid.NewGuid():N}"[..17] : slug;
     }
+
+    internal const string ManagerInstanceVariable = "COVE_MANAGER_INSTANCE_ID";
 
     private static string PsQuote(string value) => "'" + value.Replace("'", "''") + "'";
 

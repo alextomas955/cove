@@ -23,6 +23,18 @@ using Cove.Data;
 using Cove.Data.Services;
 using Cove.Plugins;
 
+// `--version` (the update smoke test) and `--cove-relaunch` (the update restarter) exit here, before
+// any host, logging, or data-root setup.
+if (Cove.Api.Updates.UpdateCommandLine.Run(args) is int earlyExitCode)
+{
+    Environment.ExitCode = earlyExitCode;
+    return;
+}
+
+// A Cove started by the update relauncher on Windows copies its start-up output to the file the
+// relauncher shows if this start fails.
+Cove.Api.Updates.UpdateConsoleCapture.StartFromEnvironment();
+
 // Ensure enough threads for async I/O under concurrent load
 ThreadPool.SetMinThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 4);
 
@@ -435,6 +447,12 @@ try
             registryBaseUrl: coveConfig.GetValue<string>("ExtensionRegistryBaseUrl"));
     });
     builder.Services.AddHttpClient("ExtensionRegistry");
+
+    // Cove's own updates: checks for every install kind, in-place install for native builds.
+    builder.Services.AddHttpClient("CoveUpdates");
+    builder.Services.AddSingleton<Cove.Api.Updates.UpdateService>();
+    if (!isTestHarness)
+        builder.Services.AddHostedService<Cove.Api.Updates.UpdateBackgroundService>();
     builder.Services.AddHostedService<ExtensionEventBridge>();
     extensionManager.ConfigureServices(builder.Services);
 
@@ -712,6 +730,7 @@ try
             Microsoft.Extensions.Caching.Memory.IMemoryCache memoryCache,
             Microsoft.AspNetCore.OutputCaching.IOutputCacheStore outputCache,
             Cove.Data.Auth.BootstrapAuthService auth,
+            Cove.Api.Updates.UpdateService updates,
             IServiceScopeFactory scopeFactory,
             CancellationToken cancellationToken) =>
         {
@@ -732,6 +751,7 @@ try
 
             await jobs.CancelAllAndWaitAsync(cancellationToken);
             await audit.FlushAsync(cancellationToken);
+            updates.ResetForTests();
 
             await using (var scope = scopeFactory.CreateAsyncScope())
             {
@@ -1051,10 +1071,35 @@ try
         coveCfgInstance.Postgres.Managed,
         coveCfgInstance.Auth.Enabled,
         runtimeLogLevelManager.LevelSwitch.MinimumLevel);
+    // ApplicationStopping callbacks run before any hosted service is stopped but inside the host's
+    // shutdown timeout, so an extension that hangs here would leave the services (managed PostgreSQL
+    // among them) an already-cancelled token. Bound it.
     app.Lifetime.ApplicationStopping.Register(() =>
-        extensionManager.ShutdownAllAsync().GetAwaiter().GetResult());
+    {
+        using var extensionShutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            extensionManager.ShutdownAllAsync(extensionShutdown.Token).WaitAsync(extensionShutdown.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (extensionShutdown.IsCancellationRequested)
+        {
+            Log.Warning("Extensions did not shut down within 10 seconds; continuing the shutdown");
+        }
+    });
+    try
+    {
+        await app.Services.GetRequiredService<Cove.Api.Updates.UpdateService>().OnStartupCompletedAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Update bookkeeping after startup failed");
+    }
+    Cove.Api.Updates.UpdateConsoleCapture.Stop();
     integrationStartupReady.TrySetResult();
     await app.WaitForShutdownAsync();
+    // An update under systemd exits with a dedicated code so Restart=on-failure starts the new binary.
+    if (Cove.Api.Updates.UpdateRestart.RequestedExitCode is int updateExitCode)
+        Environment.ExitCode = updateExitCode;
 }
 catch (Exception ex)
 {

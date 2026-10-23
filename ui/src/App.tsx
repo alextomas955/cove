@@ -13,6 +13,7 @@ import { RouteRegistryProvider, useRouteRegistry } from "./router/RouteRegistry"
 import { AppConfigProvider, useAppConfig } from "./state/AppConfigContext";
 import { ExtensionLoaderProvider, useExtensions } from "./extensions/ExtensionLoader";
 import { ExtensionLoadNotice } from "./extensions/ExtensionLoadStatus";
+import { UpdateAvailableBanner } from "./components/UpdateAvailableBanner";
 import { canAccessExtensionContribution } from "./extensions/extension-permissions";
 import { VideoQueueProvider } from "./state/VideoQueueContext";
 import { SetupWizardPage } from "./pages/SetupWizardPage";
@@ -271,6 +272,7 @@ export default function App() {
           <AuthGate>
             <ExtensionLoaderProvider>
               <ExtensionLoadNotice />
+              <UpdateAvailableBanner />
               <ThemeGate>
                 <KeyboardShortcutProvider>
                   <AppFloatingUI />

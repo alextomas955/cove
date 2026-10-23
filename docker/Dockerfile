@@ -230,6 +230,10 @@ ENV COVE_HOME=/config \
     PGDATA=/var/lib/postgresql/cove-data \
     S6_KEEP_ENV=1
 
+# Tells Cove it runs in a container: it shows the update notice with `docker compose pull`
+# instructions and never tries to replace its own files.
+ENV COVE_INSTALL_KIND=docker
+
 EXPOSE 5073
 VOLUME ["/data", "/config", "/generated", "/cache", "/backups"]
 

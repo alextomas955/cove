@@ -94,6 +94,19 @@
     <Message Importance="high" Text="Cove version: $(Version) (assembly $(AssemblyVersion))" />
   </Target>
 
+  <!--
+    Release distribution marker. release.yml / nightly.yml publish the native executables with
+    -p:CoveDistribution=native-<rid> and -p:CoveReleaseChannel=<stable|prerelease|nightly>. Cove reads
+    them at runtime to decide whether it may update itself in place; a build without the marker is
+    treated as a source/development build that only checks for updates.
+  -->
+  <ItemGroup Condition=" '$(MSBuildProjectName)' == 'Cove.Api' and '$(CoveDistribution)' != '' ">
+    <AssemblyMetadata Include="CoveDistribution" Value="$(CoveDistribution)" />
+  </ItemGroup>
+  <ItemGroup Condition=" '$(MSBuildProjectName)' == 'Cove.Api' and '$(CoveReleaseChannel)' != '' ">
+    <AssemblyMetadata Include="CoveReleaseChannel" Value="$(CoveReleaseChannel)" />
+  </ItemGroup>
+
   <!-- Extension ABI gate. The baseline and opt-in are defined in Directory.Build.props. -->
   <ItemGroup Condition=" '$(ApiCompatValidateAssemblies)' == 'true' ">
     <PackageReference Include="Microsoft.DotNet.ApiCompat.Task" Version="10.0.401" PrivateAssets="all" />

@@ -119,6 +119,7 @@ import {
 } from "../utils/batchDownloads";
 import { useAuth } from "../auth/AuthContext";
 import { UsersTab, RolesTab, AuditTab, ContentRulesTab, ApiTokensTab, ShareLinksTab } from "./settings/AdminSections";
+import { UpdatesPanel } from "./settings/UpdatesPanel";
 import { defaultRatingSystemOptions, normalizeRatingOptions } from "../components/Rating";
 import { readStoredRatingOptionsOverride, writeStoredRatingOptionsOverride } from "../utils/ratingPreferences";
 import {
@@ -181,6 +182,7 @@ type BuiltInSettingsTab =
   | "server-host-network"
   | "system-info-about"
   | "system-info-runtime-status"
+  | "system-info-updates"
   | "logs";
 type SettingsTab = BuiltInSettingsTab | string;
 type SettingsTabDefinition = {
@@ -274,6 +276,7 @@ const primaryTabs: BuiltInSettingsTabDefinition[] = [
   { key: "server-host-network", label: "Host & Network", icon: Server },
   { key: "system-info-about", label: "About", icon: Info },
   { key: "system-info-runtime-status", label: "Runtime Status", icon: Server },
+  { key: "system-info-updates", label: "Updates", icon: Download },
   { key: "logs", label: "Logs", icon: ScrollText },
 ];
 
@@ -348,7 +351,7 @@ const settingsTabGroups: SettingsTabGroupDefinition[] = [
     key: "system-info",
     label: "System Info",
     icon: Info,
-    tabs: ["system-info-about", "system-info-runtime-status", "logs"],
+    tabs: ["system-info-about", "system-info-runtime-status", "system-info-updates", "logs"],
   },
 ];
 const settingsGroupKeyByTab = new Map<BuiltInSettingsTab, SettingsTabGroupKey>(
@@ -391,6 +394,7 @@ const settingsTabCanonicalPaths: Partial<Record<BuiltInSettingsTab, string>> = {
   "server-host-network": "/settings/server/host-network",
   "system-info-about": "/settings/system-info/about",
   "system-info-runtime-status": "/settings/system-info/runtime-status",
+  "system-info-updates": "/settings/system-info/updates",
   logs: "/settings/system-info/logs",
 };
 const settingsPathAliases: Partial<Record<string, SettingsTab>> = {
@@ -461,6 +465,8 @@ const settingsPathAliases: Partial<Record<string, SettingsTab>> = {
   "system-info": "system-info-about",
   "system-info/about": "system-info-about",
   "system-info/runtime-status": "system-info-runtime-status",
+  "system-info/updates": "system-info-updates",
+  updates: "system-info-updates",
   "system-info/changelog": "system-info-about",
   "system-info/logs": "logs",
   changelog: "system-info-about",
@@ -505,6 +511,7 @@ const tabDescriptions: Partial<Record<BuiltInSettingsTab, string>> = {
   "server-host-network": "Host, port, and runtime listener settings.",
   "system-info-about": "Version, project information, and release history.",
   "system-info-runtime-status": "Effective runtime values and shutdown control.",
+  "system-info-updates": "Check for new Cove versions, install them, and revert.",
   logs: "Live application logs and server log output settings.",
 };
 
@@ -573,6 +580,7 @@ const settingsSearchKeywords: Partial<Record<BuiltInSettingsTab, string[]>> = {
   ],
   "system-info-about": ["about", "version", "release history", "changelog", "setup tour"],
   "system-info-runtime-status": ["runtime", "status", "shutdown", "database", "config file", "app directory"],
+  "system-info-updates": ["update", "upgrade", "new version", "release notes", "nightly", "revert", "auto-update"],
   logs: ["logs", "tail", "server log level", "filter", "trace", "debug"],
 };
 
@@ -1776,6 +1784,8 @@ export function SettingsPage() {
           return canWriteSystemSettings;
         case "logs":
           return canWriteSystemSettings;
+        case "system-info-updates":
+          return hasPermission("system.update");
         case "library-display-profiles":
           return canReadSegments;
         case "operations-jobs":
@@ -1786,7 +1796,7 @@ export function SettingsPage() {
           return canWriteSystemSettings;
       }
     });
-  }, [availablePluginTasks.length, canReadJobs, canReadSegments, canWriteSystemSettings]);
+  }, [availablePluginTasks.length, canReadJobs, canReadSegments, canWriteSystemSettings, hasPermission]);
 
   const visibleExtensionSettingsTabs = useMemo(
     () => (canWriteSystemSettings ? extensionSettingsTabs : []),
@@ -4529,6 +4539,7 @@ export function SettingsPage() {
         {resolvedActiveTab === "extensions-registry" && <ExtensionsPanel mode="registry" />}
 
         {resolvedActiveTab === "logs" && <LogsPanel />}
+        {resolvedActiveTab === "system-info-updates" && <UpdatesPanel />}
         {resolvedActiveTab === "system-info-about" && (
           <>
             <SectionCard title="About Cove" description="An organizer for your media library.">
@@ -4569,6 +4580,20 @@ export function SettingsPage() {
                       Discord
                     </a>
                   </div>
+                  {hasPermission("system.update") ? (
+                    <a
+                      href="/settings/system-info/updates"
+                      onClick={(event) => {
+                        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                          return;
+                        event.preventDefault();
+                        navigateToUrl("/settings/system-info/updates");
+                      }}
+                      className="block w-fit text-sm text-accent hover:underline"
+                    >
+                      Check for updates
+                    </a>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => openTutorialStoryboard("getting-started")}
