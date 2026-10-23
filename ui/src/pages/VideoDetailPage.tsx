@@ -129,6 +129,7 @@ import { getEditableTagIds, getLockedTagIds, mergeTagIds, toTagOption } from "..
 import { VideoVisualSimilarityPanel, useVideoVisualSimilarityAvailability } from "../components/VisualSimilarityPanel";
 import { VideoAudioSimilarityPanel, useVideoAudioSimilarityAvailability } from "../components/AudioSimilarityPanel";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
+import { toPerformerOption } from "../utils/performers";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { MetadataServerLinks } from "../components/MetadataServerLinks";
 import { normalizeStoredResumeTime } from "../utils/playbackResume";
@@ -3275,15 +3276,7 @@ function VideoEditPanel({
   // each selected chip re-fetch its name by id (30 tags = 30 authz-gated GETs that also starve the
   // connection pool and delay the search requests fired while typing).
   const tagSeedOptions = useMemo(() => video.tags.map(toTagOption), [video.tags]);
-  const performerSeedOptions = useMemo(
-    () =>
-      video.performers.map((performer) => ({
-        id: performer.id,
-        label: performer.name,
-        secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
-      })),
-    [video.performers],
-  );
+  const performerSeedOptions = useMemo(() => video.performers.map(toPerformerOption), [video.performers]);
 
   const inputCls =
     "w-full bg-input border border-border rounded px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent";

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { faces, galleries, groups, images, performers, videos, studios, tags } from "../api/client";
@@ -14,12 +14,13 @@ import type {
   Tag,
   TagProvenance,
 } from "../api/types";
-import { TagChipHover } from "./TagProvenanceHover";
-import type { TagMediaReference } from "./EntityMedia";
+import { CHIP_HOVER_WRAPPER, TagChipHover } from "./TagProvenanceHover";
+import { PerformerMediaHover, type TagMediaReference } from "./EntityMedia";
 import { TagActionMenu } from "./shared";
 import { TagGroupMarker, getTagChipColorStyle } from "./TagChipAppearance";
 import { rankSearchOptions } from "../utils/searchRanking";
 import { toTagOption } from "../utils/tags";
+import { toPerformerOption } from "../utils/performers";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { useAutocomplete, type AutocompleteItem } from "../hooks/useAutocomplete";
 import { getApiValidationFailureDetail } from "../utils/requestFailure";
@@ -43,6 +44,8 @@ export interface EntityReferenceOption {
   tagHasImage?: boolean;
   /** Tags only: other names the tag is known by. The server rejects a new tag named as one of them. */
   aliases?: string[];
+  /** Performers only: the portrait shown when hovering their chip or result, as on their card. */
+  performerImagePath?: string | null;
 }
 
 /** Whether the option is named `text`, by its label or one of its aliases. */
@@ -98,6 +101,38 @@ function tagHoverTag(
 
 // A result's hover area reaches into the row's padding (px-3 py-2), so hovering anywhere on the row shows it.
 const RESULT_HOVER_WRAPPER = "-mx-3 -my-2 flex min-w-0 flex-1 px-3 py-2";
+
+/** A chip's or result's hover: a tag's details or a performer's portrait, or nothing for other entities. */
+function ReferenceHover({
+  entityType,
+  option,
+  provenance,
+  wrapperClassName = CHIP_HOVER_WRAPPER,
+  children,
+}: {
+  entityType: EntityReferenceType;
+  option: EntityReferenceOption | undefined;
+  provenance?: TagProvenance[];
+  wrapperClassName?: string;
+  children: ReactNode;
+}) {
+  // Sources are a tag concept, so a chip given provenance keeps the sources popup whatever its entity.
+  if (entityType === "performer" && option && !provenance?.length) {
+    return (
+      <PerformerMediaHover
+        performer={{ id: option.id, name: option.label, imagePath: option.performerImagePath }}
+        wrapperClassName={wrapperClassName}
+      >
+        {children}
+      </PerformerMediaHover>
+    );
+  }
+  return (
+    <TagChipHover tag={tagHoverTag(entityType, option)} provenance={provenance} wrapperClassName={wrapperClassName}>
+      {children}
+    </TagChipHover>
+  );
+}
 
 type ReferenceAutocompleteValue = { kind: "entity"; option: EntityReferenceOption } | { kind: "create"; query: string };
 
@@ -334,7 +369,7 @@ export function EntityReferenceSelector({
     <div className="relative flex min-w-0 flex-col gap-2">
       {typeof value === "number" && selectedDisplay === "chip" ? (
         <div className="flex flex-wrap gap-1">
-          <TagChipHover tag={tagHoverTag(entityType, selected)}>
+          <ReferenceHover entityType={entityType} option={selected}>
             <span
               style={selectedAppearance.style}
               className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-[10px] text-foreground"
@@ -355,7 +390,7 @@ export function EntityReferenceSelector({
                 <X className="h-2.5 w-2.5" />
               </button>
             </span>
-          </TagChipHover>
+          </ReferenceHover>
         </div>
       ) : null}
 
@@ -418,11 +453,11 @@ export function EntityReferenceSelector({
               type="button"
               className={`flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2 text-left text-sm ${activeKey === autocompleteItems[index].key ? "bg-accent text-white" : "text-foreground hover:bg-card"}`}
             >
-              <TagChipHover tag={tagHoverTag(entityType, option)} wrapperClassName={RESULT_HOVER_WRAPPER}>
+              <ReferenceHover entityType={entityType} option={option} wrapperClassName={RESULT_HOVER_WRAPPER}>
                 <span className="inline-flex min-w-0 items-center gap-2">
                   <span className="truncate">{option.label}</span>
                 </span>
-              </TagChipHover>
+              </ReferenceHover>
               {option.secondaryLabel ? (
                 <span className="shrink-0 text-xs text-muted">{option.secondaryLabel}</span>
               ) : null}
@@ -656,9 +691,14 @@ export function EntityReferenceMultiSelector({
               </span>
             );
             return (
-              <TagChipHover key={id} tag={tagHoverTag(entityType, option)} provenance={selectedProvenanceById?.[id]}>
+              <ReferenceHover
+                key={id}
+                entityType={entityType}
+                option={option}
+                provenance={selectedProvenanceById?.[id]}
+              >
                 {chip}
-              </TagChipHover>
+              </ReferenceHover>
             );
           })}
         </div>
@@ -698,12 +738,12 @@ export function EntityReferenceMultiSelector({
               type="button"
               className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm ${activeKey === autocompleteItems[index].key ? "bg-accent text-white" : "text-foreground hover:bg-card"}`}
             >
-              <TagChipHover tag={tagHoverTag(entityType, option)} wrapperClassName={RESULT_HOVER_WRAPPER}>
+              <ReferenceHover entityType={entityType} option={option} wrapperClassName={RESULT_HOVER_WRAPPER}>
                 <span className="inline-flex items-center gap-2">
                   <Plus className="h-3 w-3" />
                   <span>{option.label}</span>
                 </span>
-              </TagChipHover>
+              </ReferenceHover>
               {option.secondaryLabel ? <span className="text-xs text-muted">{option.secondaryLabel}</span> : null}
             </button>
           ))}
@@ -883,15 +923,6 @@ async function getEntityReference(entityType: EntityReferenceType, id: number): 
     case "group":
       return toGroupOption(await groups.get(id));
   }
-}
-
-function toPerformerOption(performer: Performer): EntityReferenceOption {
-  return {
-    id: performer.id,
-    label: performer.name,
-    favorite: performer.favorite,
-    secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
-  };
 }
 
 function toFaceOption(face: Face): EntityReferenceOption {

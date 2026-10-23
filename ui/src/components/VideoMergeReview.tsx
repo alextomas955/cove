@@ -16,6 +16,7 @@ import { getEditableTagIds, toTagOption } from "../utils/tags";
 import { COMPARISON_ROWS, folderOf, primaryFile, rowTones, type ComparisonRow } from "./duplicates/duplicateModel";
 import { metadataServerLabel } from "./MetadataServerLinks";
 import { EntityReferenceMultiSelector, type EntityReferenceOption } from "./EntityReferenceSelector";
+import { toPerformerOption } from "../utils/performers";
 import { formatDuration } from "./shared";
 import {
   MetadataDiff,
@@ -768,13 +769,7 @@ export function VideoMergeReview({
     relationship(
       "performers",
       "performer",
-      all.flatMap((video) =>
-        video.performers.map((performer) => ({
-          id: performer.id,
-          label: performer.name,
-          secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
-        })),
-      ),
+      all.flatMap((video) => video.performers.map(toPerformerOption)),
       "Search performers...",
     );
     relationship(

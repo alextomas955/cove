@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { entityImages } from "../api/client";
-import type { Tag } from "../api/types";
+import type { Performer, Tag } from "../api/types";
 import { ExtensionComponentOverrideRenderer, useExtensions } from "../extensions/ExtensionLoader";
 import { fullscreenContainerFor } from "../utils/fullscreenPortal";
 
@@ -30,6 +30,8 @@ interface EntityMediaHoverProps extends Omit<EntityMediaRenderProps, "surface" |
   footer?: ReactNode;
   /** Shows the footer as the whole popup when there is no media, for details worth a hover on their own. */
   showFooterWithoutMedia?: boolean;
+  /** The media frame's shape unless an override declares its own; portrait media passes "2 / 3". */
+  aspectRatio?: string;
 }
 
 interface EntityMediaPreviewProps extends Omit<EntityMediaRenderProps, "renderDefault"> {
@@ -39,16 +41,16 @@ interface EntityMediaPreviewProps extends Omit<EntityMediaRenderProps, "renderDe
 const DEFAULT_HOVER_ASPECT_RATIO = "4 / 3";
 
 /** Override roots may declare their intrinsic frame shape for host-owned hover layout. */
-function readDeclaredAspectRatio(container: HTMLElement | null) {
+function readDeclaredAspectRatio(container: HTMLElement | null, fallback: string) {
   const raw = container?.querySelector<HTMLElement>("[data-entity-media-aspect-ratio]")?.dataset.entityMediaAspectRatio;
   const match = raw?.match(/^\s*(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)\s*$/);
-  if (!match) return DEFAULT_HOVER_ASPECT_RATIO;
+  if (!match) return fallback;
 
   const width = Number(match[1]);
   const height = Number(match[2]);
   return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
     ? `${width} / ${height}`
-    : DEFAULT_HOVER_ASPECT_RATIO;
+    : fallback;
 }
 
 function aspectRatioValue(aspectRatio: string) {
@@ -152,6 +154,34 @@ export function TagMediaPreview({ tag, frameClassName }: { tag: TagMediaReferenc
   );
 }
 
+export type PerformerMediaReference = Pick<Performer, "id" | "name"> & { imagePath?: string | null };
+
+/** Hover boundary for compact performer references, showing the portrait their card shows. */
+export function PerformerMediaHover({
+  performer,
+  children,
+  wrapperClassName,
+}: {
+  performer: PerformerMediaReference;
+  children: ReactNode;
+  wrapperClassName?: string;
+}) {
+  return (
+    <EntityMediaHover
+      entityType="performer"
+      entityId={performer.id}
+      imageUrl={performer.imagePath}
+      alt={performer.name}
+      fit="cover"
+      loading="lazy"
+      aspectRatio="2 / 3"
+      wrapperClassName={wrapperClassName}
+    >
+      {children}
+    </EntityMediaHover>
+  );
+}
+
 /**
  * Stable extension boundary for an entity's primary visual media. The host keeps
  * navigation and card chrome outside this component while extensions may replace
@@ -221,6 +251,7 @@ export function EntityMediaHover({
   wrapperClassName = "inline-flex",
   footer,
   showFooterWithoutMedia = false,
+  aspectRatio: defaultAspectRatio = DEFAULT_HOVER_ASPECT_RATIO,
   ...mediaProps
 }: EntityMediaHoverProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
@@ -228,18 +259,20 @@ export function EntityMediaHover({
   const [open, setOpen] = useState(false);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
-  const [aspectRatio, setAspectRatio] = useState(DEFAULT_HOVER_ASPECT_RATIO);
+  const [aspectRatio, setAspectRatio] = useState(defaultAspectRatio);
   const preview = useEntityMediaPreview({ ...mediaProps, surface: "hover", className: "h-full w-full" });
   // Without media the footer alone is the popup, when the caller says it is worth showing by itself.
   const footerAlone = showFooterWithoutMedia && Boolean(footer);
   const enabled = preview.enabled || footerAlone;
+  // Portrait media gets a narrower popup so it stays a compact preview rather than a tall one.
+  const portrait = aspectRatioValue(aspectRatio) < 1;
 
   useLayoutEffect(() => {
     if (!preview.enabled || !open) return;
 
     const tooltip = tooltipRef.current;
     const updateAspectRatio = () => {
-      const next = readDeclaredAspectRatio(tooltip);
+      const next = readDeclaredAspectRatio(tooltip, defaultAspectRatio);
       setAspectRatio((current) => (current === next ? current : next));
     };
 
@@ -254,7 +287,7 @@ export function EntityMediaHover({
       subtree: true,
     });
     return () => observer.disconnect();
-  }, [preview.enabled, open]);
+  }, [defaultAspectRatio, preview.enabled, open]);
 
   useLayoutEffect(() => {
     if (!enabled || !open) return;
@@ -263,7 +296,7 @@ export function EntityMediaHover({
       const anchor = anchorRef.current?.getBoundingClientRect();
       if (!anchor) return;
       const rect = tooltipRef.current?.getBoundingClientRect();
-      const width = rect?.width || 288;
+      const width = rect?.width || (aspectRatioValue(aspectRatio) < 1 ? 192 : 288);
       // Measure when rendered, since a footer adds height under the media frame.
       const height = rect?.height || width / aspectRatioValue(aspectRatio);
       const margin = 8;
@@ -319,7 +352,7 @@ export function EntityMediaHover({
               role="tooltip"
               aria-label={preview.enabled ? `Media for ${mediaProps.alt}` : `About ${mediaProps.alt}`}
               // Hidden while the media frame is empty, so a footer alone shows as a popup only when asked to.
-              className={`pointer-events-none fixed z-[10000] block w-72 overflow-hidden rounded-xl border border-border bg-surface/95 shadow-2xl ${footerAlone ? "" : "has-[>[data-media-frame]:empty]:hidden"}`}
+              className={`pointer-events-none fixed z-[10000] block ${portrait ? "w-48" : "w-72"} overflow-hidden rounded-xl border border-border bg-surface/95 shadow-2xl ${footerAlone ? "" : "has-[>[data-media-frame]:empty]:hidden"}`}
               style={position}
             >
               {/* The frame clips the media to its aspect ratio, so an override can't push into the footer. */}

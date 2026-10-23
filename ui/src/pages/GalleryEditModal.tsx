@@ -8,6 +8,7 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector } from "../components/EntityReferenceSelector";
+import { toPerformerOption } from "../utils/performers";
 import { toTagOption } from "../utils/tags";
 import { invalidateVideosForGalleryLinkChange } from "../utils/galleryVideoLinks";
 import { refreshSavedEntity } from "../utils/refreshSavedEntity";
@@ -89,11 +90,7 @@ export function GalleryEditModal({ gallery, open, onClose }: Props) {
   const tagProvenanceById = buildTagProvenanceById(gallery.tags, gallery.fieldProvenance);
   // Seed chip labels from the loaded gallery so selected chips don't each re-fetch their name by id.
   const tagSeedOptions = gallery.tags.map(toTagOption);
-  const performerSeedOptions = gallery.performers.map((performer) => ({
-    id: performer.id,
-    label: performer.name,
-    secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
-  }));
+  const performerSeedOptions = gallery.performers.map(toPerformerOption);
 
   const mutation = useMutation({
     mutationFn: (data: GalleryUpdate) => galleries.update(gallery.id, data),

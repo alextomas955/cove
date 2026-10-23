@@ -236,7 +236,7 @@ export function TagProvenanceHover({
 }
 
 // The hover wrapper sits between a chip and its row, so it must let a long chip shrink and truncate.
-const CHIP_HOVER_WRAPPER = "inline-flex min-w-0 max-w-full";
+export const CHIP_HOVER_WRAPPER = "inline-flex min-w-0 max-w-full";
 
 /**
  * A tag chip's hover: the tag's sources alongside its media, group and description when it has sources,

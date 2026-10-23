@@ -6,24 +6,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EntityReferenceMultiSelector, EntityReferenceSelector } from "../components/EntityReferenceSelector";
 import { toTagOption } from "../utils/tags";
+import { toPerformerOption } from "../utils/performers";
 import { MutationFailureNotice } from "../components/MutationFailureNotice";
 import { createAppQueryClient } from "../queryClient";
 import { resetMutationFailureForTests } from "../state/mutationFailure";
 
-const mocks = vi.hoisted(() => ({ tagsCreate: vi.fn(), tagsFind: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  performersFind: vi.fn(),
+  performersGet: vi.fn(),
+  tagsCreate: vi.fn(),
+  tagsFind: vi.fn(),
+}));
 
 vi.mock("../api/client", () => ({
   faces: {},
   galleries: {},
   groups: {},
   images: {},
-  performers: {},
+  performers: { find: mocks.performersFind, get: mocks.performersGet },
   studios: {},
   tags: { create: mocks.tagsCreate, find: mocks.tagsFind },
   videos: {},
 }));
 
 beforeEach(() => {
+  mocks.performersFind.mockReset();
+  mocks.performersGet.mockReset();
   mocks.tagsCreate.mockReset();
   mocks.tagsFind.mockReset();
 });
@@ -850,6 +858,89 @@ describe("tag descriptions in the selectors", () => {
     fireEvent.mouseEnter(screen.getByText("Someone"));
 
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+});
+
+describe("performer images in the selectors", () => {
+  it("shows a search result's image in a portrait hover popup, and still selects it on click", async () => {
+    const onChange = vi.fn();
+    mocks.performersFind.mockResolvedValue({
+      items: [
+        { id: 1, name: "Pictured", imagePath: "/pictured.jpg" },
+        { id: 2, name: "Unpictured" },
+      ],
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector entityType="performer" values={[]} onChange={onChange} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByPlaceholderText("Search performers..."), "pic");
+    const option = await screen.findByRole("option", { name: "Pictured" });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(within(option).getByText("Pictured"));
+
+    const popup = screen.getByRole("tooltip", { name: "Media for Pictured" });
+    expect(within(popup).getByRole("img", { name: "Pictured" })).toHaveAttribute("src", "/pictured.jpg");
+    expect(popup.querySelector<HTMLElement>("[data-media-frame]")?.style.aspectRatio).toBe("2 / 3");
+
+    fireEvent.mouseEnter(within(screen.getByRole("option", { name: "Unpictured" })).getByText("Unpictured"));
+    expect(screen.queryByRole("tooltip", { name: /Unpictured/ })).not.toBeInTheDocument();
+
+    await userEvent.click(within(screen.getByRole("option", { name: "Pictured" })).getByText("Pictured"));
+    expect(onChange).toHaveBeenCalledWith([1]);
+  });
+
+  it("shows the image on the single selector's results", async () => {
+    mocks.performersFind.mockResolvedValue({ items: [{ id: 1, name: "Pictured", imagePath: "/pictured.jpg" }] });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceSelector entityType="performer" onChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByPlaceholderText("Search performers..."), "pic");
+    fireEvent.mouseEnter(within(await screen.findByRole("option", { name: "Pictured" })).getByText("Pictured"));
+
+    expect(screen.getByRole("img", { name: "Pictured" })).toHaveAttribute("src", "/pictured.jpg");
+  });
+
+  it("shows a selected performer chip's image on hover", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceMultiSelector
+          entityType="performer"
+          values={[10]}
+          onChange={vi.fn()}
+          // Edit forms seed their chips from the performers a video, image or gallery already lists.
+          seedOptions={[toPerformerOption({ id: 10, name: "Pictured", favorite: false, imagePath: "/pictured.jpg" })]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.mouseEnter(screen.getByText("Pictured"));
+
+    expect(screen.getByRole("img", { name: "Pictured" })).toHaveAttribute("src", "/pictured.jpg");
+  });
+
+  it("shows the selected performer's image in the single selector, as loaded by id", async () => {
+    mocks.performersGet.mockResolvedValue({ id: 10, name: "Pictured", imagePath: "/pictured.jpg" });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntityReferenceSelector entityType="performer" value={10} onChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.mouseEnter(await screen.findByText("Pictured"));
+
+    expect(mocks.performersGet).toHaveBeenCalledWith(10);
+    expect(screen.getByRole("img", { name: "Pictured" })).toHaveAttribute("src", "/pictured.jpg");
   });
 });
 
