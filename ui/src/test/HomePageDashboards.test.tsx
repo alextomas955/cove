@@ -113,7 +113,11 @@ vi.mock("../api/client", () => ({
   studios: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   tags: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   galleries: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
-  images: { get: mocks.imageGet, getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.imageGet(id))), thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
+  images: {
+    get: mocks.imageGet,
+    getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.imageGet(id))),
+    thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail`,
+  },
   texts: { get: mocks.textGet },
   entityImages: { segmentCoverUrl: (id: number) => `/api/segments/${id}/cover` },
   groups: {

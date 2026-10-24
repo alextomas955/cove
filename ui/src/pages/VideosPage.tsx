@@ -1239,7 +1239,9 @@ export function VideosPage({ onNavigate }: Props) {
             <VirtualizedEntityGrid
               items={listEntries}
               getItemKey={(entry) =>
-                entry.kind === "compilation" && entry.group ? `compilation-${entry.group.id}` : `video-${entry.video?.id}`
+                entry.kind === "compilation" && entry.group
+                  ? `compilation-${entry.group.id}`
+                  : `video-${entry.video?.id}`
               }
               minCardWidth="var(--card-min-width, 200px)"
               gap={12}

@@ -2594,7 +2594,17 @@ function SavedFilterRecommendationRow({
       },
     };
     return fetchMap[mode] ?? (async () => ({ items: [], totalCount: 0 }));
-  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId, perPage, queryVideoPage, queryClient, principalKey]);
+  }, [
+    mode,
+    findFilter,
+    parsedObjectFilter,
+    hasObjectFilter,
+    segmentProfileId,
+    perPage,
+    queryVideoPage,
+    queryClient,
+    principalKey,
+  ]);
 
   const itemQuery = useDashboardRowPages<any>({
     queryKey: ["front-page-saved", principalKey, savedFilterId, mode, findFilter, parsedObjectFilter, segmentProfileId],

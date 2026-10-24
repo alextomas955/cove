@@ -622,7 +622,11 @@ export const videos = {
   get: (id: number) => request<Video>(`/videos/${id}`),
   /** The list entries for these ids (unreadable or deleted ids are simply absent), in one request. */
   getMany: async (ids: number[]) =>
-    (await request<PaginatedResponse<Video>>(`/videos${buildQuery({ page: 1, perPage: ids.length, skipCount: true }, { ids: ids.join(",") })}`)).items,
+    (
+      await request<PaginatedResponse<Video>>(
+        `/videos${buildQuery({ page: 1, perPage: ids.length, skipCount: true }, { ids: ids.join(",") })}`,
+      )
+    ).items,
   create: (data: VideoCreate) => request<Video>("/videos", { method: "POST", body: JSON.stringify(data) }),
   createFromFile: (data: FileBackedCreate) =>
     request<Video>("/videos/from-file", { method: "POST", body: JSON.stringify(data) }),
@@ -1570,7 +1574,11 @@ export const images = {
   get: (id: number) => request<Image>(`/images/${id}`),
   /** The list entries for these ids (unreadable or deleted ids are simply absent), in one request. */
   getMany: async (ids: number[]) =>
-    (await request<PaginatedResponse<Image>>(`/images${buildQuery({ page: 1, perPage: ids.length }, { ids: ids.join(",") })}`)).items,
+    (
+      await request<PaginatedResponse<Image>>(
+        `/images${buildQuery({ page: 1, perPage: ids.length }, { ids: ids.join(",") })}`,
+      )
+    ).items,
   create: (data: ImageCreate) => request<Image>("/images", { method: "POST", body: JSON.stringify(data) }),
   createFromFile: (data: FileBackedCreate) =>
     request<Image>("/images/from-file", { method: "POST", body: JSON.stringify(data) }),

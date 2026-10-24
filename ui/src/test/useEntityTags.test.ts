@@ -25,7 +25,11 @@ describe("entity tags", () => {
     ]);
     const tags = resolveEntityTags({ tags: [], tagIds: [7, 4, 99] }, lookup);
     expect(tags.map((t) => t.name)).toEqual(["Night", "Outdoor"]);
-    expect(tags[1]).toMatchObject({ color: "#0f0", hasImage: true, imagePath: expect.stringContaining("/api/tags/4/image") });
+    expect(tags[1]).toMatchObject({
+      color: "#0f0",
+      hasImage: true,
+      imagePath: expect.stringContaining("/api/tags/4/image"),
+    });
   });
 
   it("returns nothing for a list entry until the lookup has loaded, and a detail entity's own tags as given", () => {

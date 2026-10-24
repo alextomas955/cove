@@ -269,8 +269,20 @@ function loadOne<T extends { id: number }>(load: (ids: number[]) => Promise<T[]>
     return item;
   };
 }
-const loadFeedVideo = loadOne(createBatchedLoader<Video>((ids) => videos.getMany(ids), (video) => video.id, 100));
-const loadFeedImage = loadOne(createBatchedLoader<Image>((ids) => images.getMany(ids), (image) => image.id, 100));
+const loadFeedVideo = loadOne(
+  createBatchedLoader<Video>(
+    (ids) => videos.getMany(ids),
+    (video) => video.id,
+    100,
+  ),
+);
+const loadFeedImage = loadOne(
+  createBatchedLoader<Image>(
+    (ids) => images.getMany(ids),
+    (image) => image.id,
+    100,
+  ),
+);
 
 function createGroupFeedEntityQuery(item: GroupItem, host: GroupFeedHost, principalKey: string) {
   return {

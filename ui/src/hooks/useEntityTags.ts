@@ -42,9 +42,9 @@ export function useTagLookup(enabled = true) {
 const naturalCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare;
 
 /** The display order the server gives detail tags: grouped tags first by group order and name, then by name. */
-export function orderTagsForDisplay<T extends Pick<Tag, "id" | "name" | "tagGroupId" | "tagGroupName" | "tagGroupSortOrder" | "sortName">>(
-  tags: T[],
-): T[] {
+export function orderTagsForDisplay<
+  T extends Pick<Tag, "id" | "name" | "tagGroupId" | "tagGroupName" | "tagGroupSortOrder" | "sortName">,
+>(tags: T[]): T[] {
   return [...tags].sort(
     (a, b) =>
       Number(a.tagGroupId == null) - Number(b.tagGroupId == null) ||

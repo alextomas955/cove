@@ -32,7 +32,11 @@ vi.mock("../api/client", () => ({
     previewUrl: (id: number) => `/videos/${id}/preview`,
     previewStatusUrl: (id: number) => `/videos/${id}/preview/status`,
   },
-  images: { get: mocks.getImage, getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.getImage(id))), thumbnailUrl: (id: number) => `/images/${id}/thumbnail` },
+  images: {
+    get: mocks.getImage,
+    getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.getImage(id))),
+    thumbnailUrl: (id: number) => `/images/${id}/thumbnail`,
+  },
   audios: { get: vi.fn() },
   texts: { get: vi.fn() },
   performers: { get: vi.fn() },
@@ -156,14 +160,25 @@ describe("GroupItemFeed", () => {
   it("loads a row's videos with one request instead of one per item", async () => {
     mocks.pageItems.mockResolvedValue({
       items: [21, 23, 25].map((videoId, index) => ({
-        id: 100 + index, groupId: 4, orderIndex: index, kind: "video", videoId, createdAt: "", updatedAt: "",
+        id: 100 + index,
+        groupId: 4,
+        orderIndex: index,
+        kind: "video",
+        videoId,
+        createdAt: "",
+        updatedAt: "",
       })),
       totalCount: 3,
       page: 1,
       perPage: 10,
     });
     mocks.getVideo.mockImplementation(async (id: number) => ({
-      id, title: `Video ${id}`, files: [{ width: 1920, height: 1080, duration: 60 }], updatedAt: "", tags: [], performers: [],
+      id,
+      title: `Video ${id}`,
+      files: [{ width: 1920, height: 1080, duration: 60 }],
+      updatedAt: "",
+      tags: [],
+      performers: [],
     }));
 
     render(

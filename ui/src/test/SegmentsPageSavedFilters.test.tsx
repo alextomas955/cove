@@ -8,10 +8,16 @@ const useRawSegmentsQueryMock = vi.hoisted(() =>
   vi.fn(() => ({ data: { items: [], totalCount: 0, duration: 3600 }, isLoading: false })),
 );
 const useDerivedSpansQueryMock = vi.hoisted(() =>
-  vi.fn<(options: Record<string, unknown>) => unknown>(() => ({ data: { items: [], totalCount: 0 }, isLoading: false })),
+  vi.fn<(options: Record<string, unknown>) => unknown>(() => ({
+    data: { items: [], totalCount: 0 },
+    isLoading: false,
+  })),
 );
 const useDerivedSpansCountQueryMock = vi.hoisted(() =>
-  vi.fn<(options: Record<string, unknown>) => unknown>(() => ({ data: { totalCount: 0, duration: 0 }, isLoading: false })),
+  vi.fn<(options: Record<string, unknown>) => unknown>(() => ({
+    data: { totalCount: 0, duration: 0 },
+    isLoading: false,
+  })),
 );
 
 vi.mock("../api/client", () => ({
@@ -117,7 +123,9 @@ describe("SegmentsPage saved-filter modes", () => {
     }));
     useDerivedSpansCountQueryMock.mockImplementation(() => ({ data: undefined, isLoading: false, isError: false }));
     const { segmentDisplayProfiles } = await import("../api/client");
-    vi.mocked(segmentDisplayProfiles.list).mockResolvedValueOnce([{ id: 2, name: "Default", isDefault: true } as never]);
+    vi.mocked(segmentDisplayProfiles.list).mockResolvedValueOnce([
+      { id: 2, name: "Default", isDefault: true } as never,
+    ]);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
