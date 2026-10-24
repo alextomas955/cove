@@ -23,8 +23,8 @@ public sealed class ScanCanonicalFolderIndexTests
         var index = new ScanCanonicalFolderIndex(NullLogger.Instance);
         var found = await index.FindAsync(db, [target, root + "/missing"], TestContext.Current.CancellationToken);
 
-        Assert.Equal(5, Assert.Single(found).Value);
-        Assert.Equal(5, found[target]);
+        Assert.Equal(new CanonicalFolderMatch(5, target + "/."), Assert.Single(found).Value);
+        Assert.Equal(5, found[target].Id);
     }
 
     [Fact]

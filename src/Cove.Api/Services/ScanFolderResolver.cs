@@ -57,23 +57,10 @@ internal sealed class ScanFolderResolver(ILogger logger)
             .ThenBy(dir => dir, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // A discovered directory that didn't match an existing folder by exact stored path may still be
-        // the SAME physical directory as a folder already in the DB that was stored under a differently
-        // normalized path — most commonly a Stash-migrated folder, whose path was stored with only
-        // backslash->slash conversion rather than the scanner's full canonicalization (Path.GetFullPath +
-        // trailing-slash trim). Reuse it by matching on canonicalized path; otherwise the scan creates a
-        // duplicate folder and therefore a duplicate entry for every file under it. Canonical full-path
-        // equality means the same directory, so this can never merge genuinely distinct folders.
         if (missing.Count > 0)
         {
-            var reusedByCanonicalPath = await canonicalFolders.FindAsync(db, missing, ct);
-            foreach (var (dir, id) in reusedByCanonicalPath)
+            foreach (var (dir, id) in await AdoptCanonicalMatchesAsync(db, missing, canonicalFolders, ct))
                 folderIdsByPath[dir] = id;
-
-            if (reusedByCanonicalPath.Count > 0)
-                logger.LogInformation(
-                    "Scan reused {Count} existing folder(s) matched by canonicalized path (differently-normalized stored paths, e.g. Stash-migrated) to avoid duplicate folders.",
-                    reusedByCanonicalPath.Count);
 
             missing = missing.Where(dir => !folderIdsByPath.ContainsKey(dir)).ToList();
         }
@@ -108,8 +95,8 @@ internal sealed class ScanFolderResolver(ILogger logger)
                     var parent = await db.Folders.AsNoTracking().FirstOrDefaultAsync(f => f.Path == parentDir, ct);
                     if (parent != null)
                         folder.ParentFolderId = parent.Id;
-                    else if ((await canonicalFolders.FindAsync(db, [parentDir], ct)).TryGetValue(parentDir, out var canonicalParentId))
-                        folder.ParentFolderId = canonicalParentId;
+                    else if ((await canonicalFolders.FindAsync(db, [parentDir], ct)).TryGetValue(parentDir, out var canonicalParent))
+                        folder.ParentFolderId = canonicalParent.Id;
                 }
             }
 
@@ -134,6 +121,88 @@ internal sealed class ScanFolderResolver(ILogger logger)
         }
 
         return folderIdsByPath;
+    }
+
+    /// <summary>
+    /// Re-points stored folders that are the same directory as one of <paramref name="directories"/> but are
+    /// stored under a differently-normalized path, so exact stored-path lookups (the existing-file index, path
+    /// filters, generation scopes) find them and their files. Directories already stored exactly, or not
+    /// stored at all, are left alone.
+    /// </summary>
+    internal async Task AdoptCanonicalStoredPathsAsync(
+        CoveContext db,
+        IReadOnlyCollection<string> directories,
+        ScanCanonicalFolderIndex canonicalFolders,
+        CancellationToken ct)
+    {
+        if (directories.Count == 0)
+            return;
+
+        var stored = new HashSet<string>(FilesystemPaths.PathComparer);
+        foreach (var chunk in directories.Chunk(1000))
+        {
+            stored.UnionWith(await db.Folders
+                .AsNoTracking()
+                .Where(folder => chunk.Contains(folder.Path))
+                .Select(folder => folder.Path)
+                .ToListAsync(ct));
+        }
+
+        var missing = directories.Where(dir => !stored.Contains(dir)).ToList();
+        if (missing.Count > 0)
+            await AdoptCanonicalMatchesAsync(db, missing, canonicalFolders, ct);
+    }
+
+    // A discovered directory that didn't match an existing folder by exact stored path may still be the SAME
+    // physical directory as a folder already in the DB that was stored under a differently normalized path,
+    // most commonly a Stash-migrated folder (seen in the field: `r:( . )( . )/Anal`, drive-relative and
+    // lower-case, for `R:\( . )( . )\Anal`). Reusing only its id is not enough: its files' denormalized Path
+    // is built from the stored folder path, so the existing-file index (exact path match) would miss them and
+    // the scan would insert duplicates that violate the unique (ParentFolderId, Basename) index on every scan.
+    // So the folder is renamed to the canonical path, which cascades to its files. Canonical full-path
+    // equality means the same directory, so this can never merge genuinely distinct folders.
+    private async Task<Dictionary<string, int>> AdoptCanonicalMatchesAsync(
+        CoveContext db,
+        IReadOnlyCollection<string> missing,
+        ScanCanonicalFolderIndex canonicalFolders,
+        CancellationToken ct)
+    {
+        var adopted = new Dictionary<string, int>(FilesystemPaths.PathComparer);
+        foreach (var (dir, match) in await canonicalFolders.FindAsync(db, missing, ct))
+        {
+            adopted[dir] = match.Id;
+            await RenameToCanonicalPathAsync(db, match, dir, ct);
+        }
+
+        return adopted;
+    }
+
+    private async Task RenameToCanonicalPathAsync(CoveContext db, CanonicalFolderMatch match, string canonicalPath, CancellationToken ct)
+    {
+        var folder = await db.Folders.SingleAsync(f => f.Id == match.Id, ct);
+        // Track the folder's files so SaveChanges cascades the new folder path into their denormalized Path
+        // (and refreshes the owning videos'/images' path summaries).
+        var files = await db.Set<BaseFileEntity>().Where(file => file.ParentFolderId == match.Id).ToListAsync(ct);
+        folder.Path = canonicalPath;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation(
+                "Scan matched stored folder {FolderId} \"{StoredPath}\" to scanned directory \"{CanonicalPath}\" by canonicalized path and renamed it, updating {FileCount} file path(s).",
+                match.Id, match.StoredPath, canonicalPath, files.Count);
+        }
+        catch (DbUpdateException ex)
+        {
+            logger.LogWarning(ex,
+                "Scan matched stored folder {FolderId} \"{StoredPath}\" to scanned directory \"{CanonicalPath}\" by canonicalized path but could not rename it; files already in it will fail to save until the conflict is resolved.",
+                match.Id, match.StoredPath, canonicalPath);
+        }
+        finally
+        {
+            // The save also loads and tracks the owning videos/images to refresh their path summaries; the
+            // scan's resolution context holds no other pending state, so drop all of it.
+            db.ChangeTracker.Clear();
+        }
     }
 
     private static DateTime TryGetDirectoryModTime(string dirPath)

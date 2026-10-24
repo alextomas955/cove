@@ -19,15 +19,16 @@ internal sealed class ScanCanonicalFolderIndex(ILogger logger)
     private long[]? entries;
 
     /// <summary>
-    /// Returns the lowest-id stored folder whose canonical path equals each requested path. Paths are
-    /// expected in stored (canonical) form; paths with no such folder are absent from the result.
+    /// Returns the lowest-id stored folder whose canonical path equals each requested path, with the path it
+    /// is stored under. Paths are expected in stored (canonical) form; paths with no such folder are absent
+    /// from the result.
     /// </summary>
-    internal async Task<Dictionary<string, int>> FindAsync(
+    internal async Task<Dictionary<string, CanonicalFolderMatch>> FindAsync(
         CoveContext db,
         IReadOnlyCollection<string> canonicalPaths,
         CancellationToken ct)
     {
-        var found = new Dictionary<string, int>(FilesystemPaths.PathComparer);
+        var found = new Dictionary<string, CanonicalFolderMatch>(FilesystemPaths.PathComparer);
         if (canonicalPaths.Count == 0)
             return found;
 
@@ -49,11 +50,13 @@ internal sealed class ScanCanonicalFolderIndex(ILogger logger)
                 .ToListAsync(ct);
             foreach (var row in rows)
             {
+                // Key by the requested spelling: canonicalizing keeps the stored path's case (e.g. a lower-case
+                // drive letter), which the path comparer ignores but callers renaming to the key must not.
                 var canonical = ScanPath.TryCanonicalizeStoredFolderPath(row.Path);
-                if (canonical == null || !wanted.Contains(canonical))
+                if (canonical == null || !wanted.TryGetValue(canonical, out var requested))
                     continue;
-                if (!found.TryGetValue(canonical, out var existingId) || row.Id < existingId)
-                    found[canonical] = row.Id;
+                if (!found.TryGetValue(requested, out var existing) || row.Id < existing.Id)
+                    found[requested] = new CanonicalFolderMatch(row.Id, row.Path);
             }
         }
 
@@ -97,3 +100,5 @@ internal sealed class ScanCanonicalFolderIndex(ILogger logger)
 
     private static long Pack(int hash, int id) => ((long)hash << 32) | (uint)id;
 }
+
+internal sealed record CanonicalFolderMatch(int Id, string StoredPath);

@@ -171,8 +171,20 @@ internal sealed class ScanJobRunner(
                     ScanSortKey.OrdinalIgnoreCase,
                     StringComparer.OrdinalIgnoreCase,
                     ct);
+                // Shared by classification and folder resolution so the library-wide index is built at most once.
+                var canonicalFolders = new ScanCanonicalFolderIndex(logger);
                 foreach (var filePage in files.Chunk(256))
                 {
+                    // The existing-file index matches by exact stored path, so first rename any folder stored under
+                    // a differently-normalized path (e.g. Stash-migrated) to the path discovery produced; otherwise
+                    // its files are classified as new and re-inserted into the same folder.
+                    await folderResolver.AdoptCanonicalStoredPathsAsync(
+                        db,
+                        filePage.Select(file => ScanPath.NormalizeStoredFolderPath(Path.GetDirectoryName(file.Path) ?? file.Path))
+                            .Distinct(FilesystemPaths.PathComparer)
+                            .ToArray(),
+                        canonicalFolders,
+                        ct);
                     var existingFiles = await ScanExistingFileIndex.LoadAsync(db, filePage, videoExts, imageExts, galleryExts, audioExts, textExts, progress, logger, ct);
                     foreach (var file in filePage)
                     {
@@ -283,7 +295,6 @@ internal sealed class ScanJobRunner(
                 // built only if one of them has no folder under its exact stored path.
                 using var directoryPaths = new ScanDiskCollection<string>(db, path => path, FilesystemPaths.PathComparer, ScanSortKey.DirectoryDepth, ScanDirectoryDepthComparer.Instance, ct);
                 using var directoryIds = new ScanDiskCollection<ResolvedScanFolder>(db, folder => folder.Path, FilesystemPaths.PathComparer, ScanSortKey.Filesystem, FilesystemPaths.PathComparer, ct);
-                var canonicalFolders = new ScanCanonicalFolderIndex(logger);
                 foreach (var work in filesToProcess)
                 {
                     ct.ThrowIfCancellationRequested();
