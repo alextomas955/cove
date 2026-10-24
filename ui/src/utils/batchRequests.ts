@@ -15,19 +15,19 @@ export function createBatchedLoader<T>(
 
   const flush = (waiters: Waiter[]) => {
     const ids = [...new Set(waiters.flatMap((waiter) => waiter.ids))];
-    for (let start = 0; start < ids.length; start += maxBatch) {
-      const chunk = new Set(ids.slice(start, start + maxBatch));
-      const chunkWaiters = waiters.filter((waiter) => waiter.ids.some((id) => chunk.has(id)));
-      fetchMany([...chunk]).then(
-        (items) => {
-          const byId = new Map(items.map((item) => [keyOf(item), item]));
-          for (const waiter of chunkWaiters) {
-            waiter.resolve(waiter.ids.flatMap((id) => (chunk.has(id) && byId.has(id) ? [byId.get(id)!] : [])));
-          }
-        },
-        (error) => chunkWaiters.forEach((waiter) => waiter.reject(error)),
-      );
-    }
+    const chunks: number[][] = [];
+    for (let start = 0; start < ids.length; start += maxBatch) chunks.push(ids.slice(start, start + maxBatch));
+    // Every caller waits for all chunks: one caller's ids can straddle two of them. Starting each fetch
+    // inside a promise turns a synchronous throw into a rejection the callers see, not a stuck query.
+    Promise.all(chunks.map((chunk) => Promise.resolve().then(() => fetchMany(chunk)))).then(
+      (results) => {
+        const byId = new Map(results.flat().map((item) => [keyOf(item), item]));
+        for (const waiter of waiters) {
+          waiter.resolve(waiter.ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])));
+        }
+      },
+      (error) => waiters.forEach((waiter) => waiter.reject(error)),
+    );
   };
 
   return (ids) =>
