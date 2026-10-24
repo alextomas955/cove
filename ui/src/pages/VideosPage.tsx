@@ -14,7 +14,6 @@ import type {
   VideoListEntry,
 } from "../api/types";
 import { ListPage, type DisplayMode } from "../components/ListPage";
-import { EntityCardGrid } from "../components/EntityCardGrid";
 import { useListUrlState } from "../hooks/useListUrlState";
 import { usePaginatedInfiniteQuery } from "../hooks/usePaginatedInfiniteQuery";
 import { useSettledListKey } from "../hooks/useSettledListKey";
