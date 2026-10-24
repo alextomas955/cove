@@ -22,6 +22,11 @@ export interface Video {
   studioName?: string;
   urls: string[];
   tags: Tag[];
+  /**
+   * On list entries, the item's tag ids; `tags` is then empty and names come from the tag lookup
+   * (see useEntityTags). Absent on detail responses, which carry full `tags`.
+   */
+  tagIds?: number[];
   performers: PerformerSummary[];
   files: VideoFile[];
   primaryFileId?: number | null;
@@ -296,6 +301,21 @@ export interface PerformerScrapePreview {
   scraped: ScrapedPerformer;
   inputKind: "url" | "name";
   sourceValue?: string;
+}
+
+/** A tag as the tag lookup lists it: what cards and chips render for a list entry's tag ids. */
+export interface TagLookupEntry {
+  id: number;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  tagGroupId?: number | null;
+  tagGroupName?: string | null;
+  tagGroupColor?: string | null;
+  tagGroupSortOrder?: number | null;
+  sortName?: string | null;
+  favorite: boolean;
+  hasImage: boolean;
 }
 
 export interface Tag {
@@ -636,6 +656,11 @@ export interface Image {
   date?: string;
   urls: string[];
   tags: Tag[];
+  /**
+   * On list entries, the item's tag ids; `tags` is then empty and names come from the tag lookup
+   * (see useEntityTags). Absent on detail responses, which carry full `tags`.
+   */
+  tagIds?: number[];
   performers: PerformerSummary[];
   galleryCount: number;
   galleryIds: number[];
@@ -738,6 +763,11 @@ export interface Audio {
   imagePath?: string | null;
   urls: string[];
   tags: Tag[];
+  /**
+   * On list entries, the item's tag ids; `tags` is then empty and names come from the tag lookup
+   * (see useEntityTags). Absent on detail responses, which carry full `tags`.
+   */
+  tagIds?: number[];
   performers: PerformerSummary[];
   tracks: AudioTrackInfo[];
   files: AudioFile[];
@@ -804,6 +834,11 @@ export interface TextDocument {
   imagePath?: string | null;
   urls: string[];
   tags: Tag[];
+  /**
+   * On list entries, the item's tag ids; `tags` is then empty and names come from the tag lookup
+   * (see useEntityTags). Absent on detail responses, which carry full `tags`.
+   */
+  tagIds?: number[];
   performers: PerformerSummary[];
   files: TextFile[];
   groups: GroupSummary[];
@@ -2093,6 +2128,8 @@ export interface SystemStatus {
   authEnabled?: boolean;
   migrationStatusUnknown?: boolean;
   migrationStatusError?: string | null;
+  /** The step of a database migration now running, or absent when none is. */
+  migrationInProgress?: "prepare" | "backup" | "migrate" | null;
 }
 
 export type UpdateChannel = "auto" | "stable" | "prerelease" | "nightly";
@@ -2456,6 +2493,8 @@ export interface CoveConfig {
   cachePath?: string;
   host: string;
   port: number;
+  /** Memory the managed database keeps for caching, in MB; applied on restart. */
+  databaseCacheMb?: number;
   maxParallelTasks: number;
   maxConcurrentDownloads: number;
   maxDownloadHeight: number;

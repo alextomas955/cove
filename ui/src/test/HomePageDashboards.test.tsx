@@ -105,6 +105,7 @@ vi.mock("../api/client", () => ({
     find: mocks.videosFind,
     findFiltered: mocks.videosFindFiltered,
     get: mocks.videoGet,
+    getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.videoGet(id))),
     screenshotUrl: (id: number) => `/api/stream/video/${id}/screenshot`,
     streamUrl: (id: number) => `/api/stream/video/${id}`,
   },
@@ -112,7 +113,7 @@ vi.mock("../api/client", () => ({
   studios: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   tags: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
   galleries: { find: vi.fn(async () => ({ items: [], totalCount: 0 })), findFiltered: vi.fn() },
-  images: { get: mocks.imageGet, thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
+  images: { get: mocks.imageGet, getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.imageGet(id))), thumbnailUrl: (id: number) => `/api/images/${id}/thumbnail` },
   texts: { get: mocks.textGet },
   entityImages: { segmentCoverUrl: (id: number) => `/api/segments/${id}/cover` },
   groups: {
@@ -912,7 +913,7 @@ describe("HomePage dashboards", () => {
     expect(await within(heading.parentElement!).findByTitle("40 items")).toHaveTextContent("40 items");
   });
 
-  it("counts a segment row whose search stopped early through the span count", async () => {
+  it("leaves a segment row whose search stopped early uncounted rather than resolving every span", async () => {
     const savedFilter = {
       id: 5,
       name: "Tagged segments",
@@ -945,8 +946,6 @@ describe("HomePage dashboards", () => {
       page: 1,
       perPage: 25,
     });
-    let resolveCount!: (value: { totalCount: number; duration: number }) => void;
-    mocks.segmentSpansCount.mockImplementation(() => new Promise((resolve) => (resolveCount = resolve)));
     state.active = dashboard(1, "Home", true, [
       {
         instanceId: "saved",
@@ -960,14 +959,9 @@ describe("HomePage dashboards", () => {
     renderHome();
 
     const heading = await screen.findByRole("heading", { name: "Tagged segments" });
-    // The cards don't wait for the count, and an uncounted total shows nothing meanwhile.
     expect(await screen.findByText(/Spanned video/)).toBeInTheDocument();
     expect(within(heading.parentElement!).queryByText(/match/)).not.toBeInTheDocument();
-    await waitFor(() => expect(mocks.segmentSpansCount).toHaveBeenCalledTimes(1));
-    expect(mocks.segmentSpansCount).toHaveBeenCalledWith(mocks.segmentSpansSearch.mock.calls[0][0]);
-    resolveCount({ totalCount: 1234, duration: 0 });
-    const label = `${(1234).toLocaleString()} matches`;
-    expect(await within(heading.parentElement!).findByTitle(label)).toHaveTextContent(label);
+    expect(mocks.segmentSpansCount).not.toHaveBeenCalled();
   });
 
   it("skips the span count when a segment search already counted its matches", async () => {

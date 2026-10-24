@@ -1007,11 +1007,14 @@ public class PostgresManagerService : IHostedService
             port = {_config.Port}
             listen_addresses = '127.0.0.1'
             max_connections = 150
-            shared_buffers = 128MB
+            shared_buffers = {SharedBuffersSetting}
             log_destination = 'stderr'
             logging_collector = off
             """, ct);
     }
+
+    private string SharedBuffersSetting
+        => $"{Math.Clamp(_config.SharedBuffersMb, PostgresConfig.MinSharedBuffersMb, PostgresConfig.MaxSharedBuffersMb)}MB";
 
     private async Task EnsureManagedConfigurationAsync(CancellationToken ct)
     {
@@ -1024,7 +1027,7 @@ public class PostgresManagerService : IHostedService
             ["port"] = _config.Port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["listen_addresses"] = "'127.0.0.1'",
             ["max_connections"] = "150",
-            ["shared_buffers"] = "128MB",
+            ["shared_buffers"] = SharedBuffersSetting,
             ["log_destination"] = "'stderr'",
             ["logging_collector"] = "off",
             // Keep standard PostgreSQL modules (such as plpgsql) available alongside Cove extensions.

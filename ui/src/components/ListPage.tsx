@@ -97,6 +97,8 @@ export interface ListPageProps {
    * is not the result count yet, so paging neither clamps to it nor navigates by it until it arrives.
    */
   totalCountPending?: boolean;
+  /** The total is only known to be at least `totalCount` (more pages exist past it); shown as "N+". */
+  totalCountIsLowerBound?: boolean;
   error?: Error | null;
   onRetry?: () => void;
   loadState?: QueryLoadState<unknown>;
@@ -196,6 +198,7 @@ export function ListPage({
   isLoading = false,
   summaryLoading = false,
   totalCountPending = false,
+  totalCountIsLowerBound = false,
   error,
   onRetry,
   loadState,
@@ -823,7 +826,7 @@ export function ListPage({
               : resolvedLoadState.status === "error"
                 ? "Unavailable"
                 : shownTotalCount > 0
-                  ? `${start.toLocaleString()}-${end.toLocaleString()} of ${shownTotalCount.toLocaleString()}`
+                  ? `${start.toLocaleString()}-${end.toLocaleString()} of ${shownTotalCount.toLocaleString()}${totalCountIsLowerBound ? "+" : ""}`
                   : "0 items"}
           </span>
           <span className="text-xs text-muted sm:hidden">
@@ -832,7 +835,7 @@ export function ListPage({
               : resolvedLoadState.status === "error"
                 ? "—"
                 : shownTotalCount > 0
-                  ? shownTotalCount.toLocaleString()
+                  ? `${shownTotalCount.toLocaleString()}${totalCountIsLowerBound ? "+" : ""}`
                   : "0"}
           </span>
           {!summaryPending && metadataByline}

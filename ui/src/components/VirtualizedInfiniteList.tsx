@@ -1,4 +1,4 @@
-import { ReactNode, RefObject, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, RefObject, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, useWindowVirtualizer, Virtualizer } from "@tanstack/react-virtual";
 
 /**
@@ -285,9 +285,10 @@ function GridWindowScroll<TItem>(props: GridProps<TItem>) {
   const columns = Math.max(1, Math.floor((containerWidth + gap) / (props.minColumnWidth + gap)));
   const rowCount = Math.ceil(props.items.length / columns);
 
+  const rowHeightRef = useRef<number | null>(null);
   const virtualizer = useWindowVirtualizer({
     count: rowCount,
-    estimateSize: () => props.estimateSize,
+    estimateSize: () => rowHeightRef.current ?? props.estimateSize,
     overscan: props.overscan ?? 3,
     scrollMargin: parentOffsetTop,
     getItemKey: (rowIndex) => {
@@ -298,6 +299,7 @@ function GridWindowScroll<TItem>(props: GridProps<TItem>) {
   // oxlint-disable-next-line react/immutability -- TanStack Virtual configures this by assignment on the instance
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     props.adjustScrollOnItemSizeChange === false ? () => false : undefined;
+  const measureRow = useUniformRowHeight(virtualizer, rowHeightRef);
 
   useInfiniteLoadTriggerRows({
     virtualItems: virtualizer.getVirtualItems(),
@@ -317,6 +319,7 @@ function GridWindowScroll<TItem>(props: GridProps<TItem>) {
       columns={columns}
       gap={gap}
       renderItem={props.renderItem}
+      measureRow={measureRow}
       className={props.className}
       style={props.style}
       endContent={props.endContent}
@@ -326,6 +329,50 @@ function GridWindowScroll<TItem>(props: GridProps<TItem>) {
       windowScroll
     />
   );
+}
+
+// ---------- Uniform grid rows ----------
+
+/**
+ * The rows of a card grid all have one height, so the first row's measured height stands in for every
+ * row not yet measured. With a fixed guess instead, each row that scrolled into view replaced the guess
+ * with its real height, and the page's total height — the scrollbar — shifted with it. Rows are still
+ * measured one by one, so an unusually tall row cannot overlap the next.
+ */
+function useUniformRowHeight(
+  virtualizer: Virtualizer<Window, Element> | Virtualizer<HTMLElement, Element>,
+  rowHeightRef: React.MutableRefObject<number | null>,
+) {
+  const observed = useRef<{ node: HTMLElement; observer: ResizeObserver } | null>(null);
+
+  const apply = useCallback(
+    (node: HTMLElement) => {
+      const height = Math.round(node.getBoundingClientRect().height);
+      if (height > 0 && rowHeightRef.current !== height) {
+        rowHeightRef.current = height;
+        // Re-measures the rows on screen and re-estimates the rest at the new height.
+        virtualizer.measure();
+      }
+    },
+    [rowHeightRef, virtualizer],
+  );
+
+  const measureRow = useCallback(
+    (node: HTMLElement | null) => {
+      virtualizer.measureElement(node);
+      if (!node || typeof ResizeObserver === "undefined" || observed.current?.node.isConnected) return;
+      observed.current?.observer.disconnect();
+      const observer = new ResizeObserver(() => apply(node));
+      observer.observe(node);
+      observed.current = { node, observer };
+      apply(node);
+    },
+    [apply, virtualizer],
+  );
+
+  useEffect(() => () => observed.current?.observer.disconnect(), []);
+
+  return measureRow;
 }
 
 // ---------- Grid, inner container scroll ----------
@@ -348,10 +395,11 @@ function GridContainerScroll<TItem>(props: GridProps<TItem> & { scrollElementRef
   const columns = Math.max(1, Math.floor((containerWidth + gap) / (props.minColumnWidth + gap)));
   const rowCount = Math.ceil(props.items.length / columns);
 
+  const rowHeightRef = useRef<number | null>(null);
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => props.scrollElementRef.current,
-    estimateSize: () => props.estimateSize,
+    estimateSize: () => rowHeightRef.current ?? props.estimateSize,
     overscan: props.overscan ?? 3,
     getItemKey: (rowIndex) => {
       const first = props.items[rowIndex * columns];
@@ -360,6 +408,7 @@ function GridContainerScroll<TItem>(props: GridProps<TItem> & { scrollElementRef
   });
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     props.adjustScrollOnItemSizeChange === false ? () => false : undefined;
+  const measureRow = useUniformRowHeight(virtualizer, rowHeightRef);
 
   useInfiniteLoadTriggerRows({
     virtualItems: virtualizer.getVirtualItems(),
@@ -379,6 +428,7 @@ function GridContainerScroll<TItem>(props: GridProps<TItem> & { scrollElementRef
       columns={columns}
       gap={gap}
       renderItem={props.renderItem}
+      measureRow={measureRow}
       className={props.className}
       style={props.style}
       endContent={props.endContent}
@@ -398,6 +448,7 @@ interface GridFrameProps<TItem> {
   columns: number;
   gap: number;
   renderItem: (arg: VirtualizedRenderArg<TItem>) => ReactNode;
+  measureRow: (node: HTMLElement | null) => void;
   className?: string;
   style?: React.CSSProperties;
   endContent?: ReactNode;
@@ -416,6 +467,7 @@ function GridFrame<TItem>({
   columns,
   gap,
   renderItem,
+  measureRow,
   className,
   style,
   endContent,
@@ -457,7 +509,7 @@ function GridFrame<TItem>({
             <div
               key={virtualRow.key}
               data-index={virtualRow.index}
-              ref={virtualizer.measureElement}
+              ref={measureRow}
               style={{
                 position: "absolute",
                 top: 0,

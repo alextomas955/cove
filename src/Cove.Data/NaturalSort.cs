@@ -41,6 +41,13 @@ public static class NaturalSort
                 builder.HasIndex(image => image.MinPath, "IX_images_MinPath_natural").UseCollation(CollationName);
                 builder.HasIndex(image => image.MaxPath, "IX_images_MaxPath_natural").UseCollation(CollationName);
             });
+            // The image-list "title" sort falls back to each untitled image's first file name in natural
+            // order — a correlated lookup per image. Keyed in that collation it is one index-only seek;
+            // in the default collation every image's files would be read and sorted instead.
+            modelBuilder.Entity<ImageFile>(builder =>
+                builder.HasIndex(file => new { file.ImageId, file.Basename }, "IX_files_ImageId_Basename_natural")
+                    .UseCollation(null!, CollationName)
+                    .HasFilter("\"ImageId\" IS NOT NULL"));
         }
         else
         {

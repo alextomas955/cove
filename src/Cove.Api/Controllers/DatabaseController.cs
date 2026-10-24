@@ -20,7 +20,8 @@ public class DatabaseController(
     ILogger<DatabaseController> logger,
     ConfigService configService,
     NameRuleEnforcementService? nameRuleEnforcement = null,
-    CustomFieldJsonIndexJobService? jsonIndexJobs = null) : ControllerBase
+    CustomFieldJsonIndexJobService? jsonIndexJobs = null,
+    DatabaseMigrationCoordinator? migrations = null) : ControllerBase
 {
     [HttpPost("backup")]
     [RequiresPermission(Permissions.SystemBackup)]
@@ -55,13 +56,29 @@ public class DatabaseController(
     [RequiresUnscopedEntityAccess("delete")]
     public async Task<ActionResult<DatabaseMigrationResultDto>> MigrateDatabase(CancellationToken ct)
     {
+        if (migrations == null)
+            throw new InvalidOperationException("The database migration coordinator is unavailable.");
+
+        // The request only waits: closing or reloading the page leaves the migration running, and a
+        // request made while one runs joins it rather than starting another.
+        return await migrations.RunOrJoin(RunMigrationAsync).WaitAsync(ct);
+    }
+
+    private static async Task<ActionResult> RunMigrationAsync(IServiceProvider services, Action<string> setPhase, CancellationToken ct)
+    {
+        var db = services.GetRequiredService<CoveContext>();
+        var backupService = services.GetRequiredService<IBackupService>();
+        var logger = services.GetRequiredService<ILogger<DatabaseController>>();
+        var nameRuleEnforcement = services.GetService<NameRuleEnforcementService>();
+        var jsonIndexJobs = services.GetService<CustomFieldJsonIndexJobService>();
+
         var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).ToArray();
         if (pendingMigrations.Length == 0)
         {
             // A retry after a committed migration may arrive after the original request was
             // cancelled, before it could enqueue post-migration index reconciliation.
             jsonIndexJobs?.RequestReconcile();
-            return Ok(new DatabaseMigrationResultDto(
+            return new OkObjectResult(new DatabaseMigrationResultDto(
                 "Database is already up to date",
                 [],
                 [],
@@ -90,7 +107,7 @@ public class DatabaseController(
                     "Name-rule upgrade preflight blocked migration with {GroupCount} unresolved groups and {ClaimCount} claims",
                     exception.UnresolvedGroupCount,
                     exception.UnresolvedClaimCount);
-                return Conflict(new
+                return new ConflictObjectResult(new
                 {
                     code = "NAME_RULE_CONFLICTS",
                     message = exception.Message,
@@ -103,14 +120,16 @@ public class DatabaseController(
             }
         }
 
+        setPhase(DatabaseMigrationCoordinator.BackupPhase);
         var backup = await backupService.CreateBackupAsync("pre_migration", ct);
         logger.LogInformation("Pre-migration database backup created at {Path}", backup.BackupPath);
 
         // Data-backfill migrations (e.g. BackfillDenormalizedIdArrays) rewrite whole tables and can
         // easily exceed the default 30s command timeout on a large library — the command then times
         // out and EF's retry strategy re-runs it, looping. Lift the timeout for the gated migration
-        // run so big datasets can finish. The context is request-scoped, so this only affects this call.
+        // run so big datasets can finish. The context belongs to this run's scope, so this affects nothing else.
         db.Database.SetCommandTimeout(TimeSpan.FromHours(2));
+        setPhase(DatabaseMigrationCoordinator.MigratePhase);
         await using var nameRuleStaging = nameRulePreparation != null
             ? await nameRuleEnforcement!.StageAsync(nameRulePreparation, ct)
             : null;
@@ -124,7 +143,7 @@ public class DatabaseController(
         catch (PostgresException exception) when (NameRuleEnforcementService.IsGuardFailure(exception))
         {
             logger.LogWarning("Name-rule upgrade guard rejected a concurrently changed or unstaged database");
-            return Conflict(new
+            return new ConflictObjectResult(new
             {
                 code = "NAME_RULE_PREFLIGHT_CHANGED",
                 message = NameRuleEnforcementService.GuardFailureMessage,
@@ -137,7 +156,7 @@ public class DatabaseController(
             "Manual database migration completed. Applied {Count} migration(s); {RemainingCount} remain pending",
             pendingMigrations.Length,
             remainingMigrations.Length);
-        return Ok(new DatabaseMigrationResultDto(
+        return new OkObjectResult(new DatabaseMigrationResultDto(
             "Database migrations applied successfully",
             pendingMigrations,
             remainingMigrations,

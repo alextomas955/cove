@@ -30,7 +30,8 @@ public class SystemController(
     IAuditService auditService,
     IHostApplicationLifetime applicationLifetime,
     RuntimeLogLevelManager runtimeLogLevelManager,
-    ILogger<SystemController> logger) : ControllerBase
+    ILogger<SystemController> logger,
+    DatabaseMigrationCoordinator? migrations = null) : ControllerBase
 {
     private const string RedactedPath = "[redacted]";
 
@@ -105,7 +106,10 @@ public class SystemController(
             MigrationStatusError: canSeeSensitivePaths
                 ? migrationStatusError
                 : migrationStatusUnknown ? "Migration status check failed. See server logs." : null
-        ));
+        )
+        {
+            MigrationInProgress = migrations?.Phase,
+        });
     }
 
     [HttpPost("shutdown")]

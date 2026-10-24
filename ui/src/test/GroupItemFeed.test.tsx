@@ -18,6 +18,7 @@ const { authState, mocks } = vi.hoisted(() => ({
     pageItems: vi.fn(),
     getVideo: vi.fn(),
     getImage: vi.fn(),
+    getManyVideos: vi.fn(),
     useEntityEngagement: vi.fn(),
   },
 }));
@@ -26,11 +27,12 @@ vi.mock("../api/client", () => ({
   groups: { get: mocks.getGroup, items: { page: mocks.pageItems } },
   videos: {
     get: mocks.getVideo,
+    getMany: mocks.getManyVideos,
     streamUrl: (id: number) => `/videos/${id}/stream`,
     previewUrl: (id: number) => `/videos/${id}/preview`,
     previewStatusUrl: (id: number) => `/videos/${id}/preview/status`,
   },
-  images: { get: mocks.getImage, thumbnailUrl: (id: number) => `/images/${id}/thumbnail` },
+  images: { get: mocks.getImage, getMany: (ids: number[]) => Promise.all(ids.map((id) => mocks.getImage(id))), thumbnailUrl: (id: number) => `/images/${id}/thumbnail` },
   audios: { get: vi.fn() },
   texts: { get: vi.fn() },
   performers: { get: vi.fn() },
@@ -98,6 +100,7 @@ describe("GroupItemFeed", () => {
       setRating: vi.fn(),
       ratingPending: false,
     });
+    mocks.getManyVideos.mockImplementation((ids: number[]) => Promise.all(ids.map((id) => mocks.getVideo(id))));
     mocks.getGroup.mockResolvedValue({ id: 4, name: "Mixed group", kind: "static" });
     mocks.pageItems.mockResolvedValue({
       items: [
@@ -148,6 +151,30 @@ describe("GroupItemFeed", () => {
         (call) => call[2]?.enabled === true && String(call[2]?.queryScope).startsWith("user:7:"),
       ),
     ).toBe(true);
+  });
+
+  it("loads a row's videos with one request instead of one per item", async () => {
+    mocks.pageItems.mockResolvedValue({
+      items: [21, 23, 25].map((videoId, index) => ({
+        id: 100 + index, groupId: 4, orderIndex: index, kind: "video", videoId, createdAt: "", updatedAt: "",
+      })),
+      totalCount: 3,
+      page: 1,
+      perPage: 10,
+    });
+    mocks.getVideo.mockImplementation(async (id: number) => ({
+      id, title: `Video ${id}`, files: [{ width: 1920, height: 1080, duration: 60 }], updatedAt: "", tags: [], performers: [],
+    }));
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <GroupItemFeed groupId={4} onNavigate={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("Video 25")).toBeInTheDocument();
+    expect(mocks.getManyVideos).toHaveBeenCalledTimes(1);
+    expect(mocks.getManyVideos).toHaveBeenCalledWith([21, 23, 25]);
   });
 
   it("renders feed details as Markdown when the viewer enables it", async () => {

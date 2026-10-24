@@ -2874,6 +2874,9 @@ public class ImageRepository : IImageRepository
         };
     }
 
+    // The display title is the title, else the first file name in natural order. Untitled images without
+    // files sort last; that is read from the maintained FileCount rather than by repeating the per-image
+    // file lookup, which PostgreSQL would otherwise run twice for every image.
     private static IQueryable<Image> ApplyDisplayTitleSort(IQueryable<Image> query, bool desc)
     {
         if (desc)
@@ -2890,7 +2893,7 @@ public class ImageRepository : IImageRepository
             });
 
             return descendingQuery
-                .OrderBy(item => item.DisplayTitle == null ? 1 : 0)
+                .OrderBy(item => (item.Image.Title == null || item.Image.Title == "") && item.Image.FileCount == 0 ? 1 : 0)
                 .ThenByDescending(item => NaturalSort.Key(item.DisplayTitle))
                 .ThenByDescending(item => item.Image.Id)
                 .Select(item => item.Image);
@@ -2908,7 +2911,7 @@ public class ImageRepository : IImageRepository
         });
 
         return ascendingQuery
-            .OrderBy(item => item.DisplayTitle == null ? 1 : 0)
+            .OrderBy(item => (item.Image.Title == null || item.Image.Title == "") && item.Image.FileCount == 0 ? 1 : 0)
             .ThenBy(item => NaturalSort.Key(item.DisplayTitle))
             .ThenBy(item => item.Image.Id)
             .Select(item => item.Image);

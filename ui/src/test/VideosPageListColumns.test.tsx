@@ -6,6 +6,7 @@ import { VideosPage } from "../pages/VideosPage";
 import { DEFAULT_VIDEO_LIST_COLUMN_IDS, VIDEO_LIST_COLUMN_BY_ID } from "../components/videoListColumns";
 
 vi.mock("../api/client", () => ({
+  tags: { lookup: vi.fn(async () => []) },
   videos: {
     find: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 40 }),
     findFiltered: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, perPage: 40 }),

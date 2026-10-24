@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { resolveEntityTags, useTagLookup } from "../hooks/useEntityTags";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Clapperboard,
@@ -518,6 +519,7 @@ export function BulkSelectionActions({
         ? textItems?.find((item) => item.id === selectedId)
         : undefined;
   }, [audioItems, isAudios, isTexts, selectedIds, textItems]);
+  const { lookup: tagLookup } = useTagLookup(!!selectedMediaItem);
   const mediaScrapeType = isAudios ? "audio" : isTexts ? "text" : null;
   const canScrapeMedia = canWrite && !!mediaScrapeType && !!selectedMediaItem;
   const generateScope: "videoIds" | "imageIds" | "audioIds" | "textIds" | null =
@@ -752,7 +754,7 @@ export function BulkSelectionActions({
         <MediaScrapeDialog
           open
           entityType={mediaScrapeType}
-          entity={selectedMediaItem}
+          entity={{ ...selectedMediaItem, tags: resolveEntityTags(selectedMediaItem, tagLookup) }}
           onClose={() => setShowScrape(false)}
         />
       ) : null}

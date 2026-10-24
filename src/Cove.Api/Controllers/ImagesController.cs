@@ -342,7 +342,7 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
         i.StudioId, i.Studio?.Name,
         PartialDate.Format(i.Date, i.DatePrecision),
         i.Urls.Select(u => u.Url).ToList(),
-        i.ImageTags.Where(it => it.Tag != null).Select(it => TagDtoMapping.MapTagDto(it.Tag!, favorites)).OrderForDisplay().ToList(),
+        [],  // a list entry carries TagIds instead
         i.ImagePerformers.Where(ip => ip.Performer != null).Select(ip => ip.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(performer.Id, performer.Name, performer.Disambiguation, performer.Gender?.ToString(), PartialDate.Format(performer.Birthdate, performer.BirthdatePrecision), favorites.IsPerformer(performer.Id), EntityImageUrls.PerformerOrNull(ControllerContext.HttpContext, performer), Country: performer.Country, DeathDate: PartialDate.Format(performer.DeathDate, performer.DeathDatePrecision))).ToList(),
         galleryCount,
         i.ImageGalleries?.Select(ig => ig.GalleryId).ToList() ?? [],
@@ -358,7 +358,10 @@ public class ImagesController(IImageRepository imageRepo, Data.CoveContext db, I
             f.Size)).ToList() ?? [],
         customFieldValues,
         i.CreatedAt.ToString("o"), i.UpdatedAt.ToString("o")
-    );
+    )
+    {
+        TagIds = i.ImageTags.Where(it => it.Tag != null).Select(it => it.TagId).Order().ToList(),
+    };
 
     private static Dictionary<string, object>? GetCustomFields(IReadOnlyDictionary<int, Dictionary<string, object>> lookup, int id)
         => lookup.TryGetValue(id, out var values) && values.Count > 0 ? values : null;

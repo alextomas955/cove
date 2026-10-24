@@ -53,9 +53,9 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         };
         var (items, totalCount) = await Audios.FindAsync(null, findFilter, ct);
 
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);
+        var tagIds = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
-        var dtos = items.Select(audio => MapToDto(audio, favorites, null, null, effectiveTags)).ToList();
+        var dtos = items.Select(audio => MapToDto(audio, favorites, null, null, tagIdsByAudioId: tagIds)).ToList();
         return Ok(new PaginatedResponse<AudioDto>(dtos, totalCount, page, perPage));
     }
 
@@ -69,9 +69,9 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, ListPaging.MaxPerPage);
         var (items, totalCount) = await Audios.FindAsync(req.ObjectFilter, findFilter, ct, req.FilterExpression);
 
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);
+        var tagIds = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Audio, items.Select(audio => audio.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
-        var dtos = items.Select(audio => MapToDto(audio, favorites, null, null, effectiveTags)).ToList();
+        var dtos = items.Select(audio => MapToDto(audio, favorites, null, null, tagIdsByAudioId: tagIds)).ToList();
         return Ok(new PaginatedResponse<AudioDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
@@ -579,7 +579,7 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         return MapToDto(audio, favorites, groups, customFieldValues, effectiveTags, contextTagApplications, fieldProvenance, performerCounts);
     }
 
-    private AudioDto MapToDto(Audio audio, CatalogFavorites favorites, List<GroupSummaryDto>? groups, Dictionary<string, object>? customFieldValues, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByAudioId = null, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null) => new(
+    private AudioDto MapToDto(Audio audio, CatalogFavorites favorites, List<GroupSummaryDto>? groups, Dictionary<string, object>? customFieldValues, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByAudioId = null, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null, IReadOnlyDictionary<int, List<int>>? tagIdsByAudioId = null) => new(
         audio.Id,
         audio.Title,
         audio.Code,
@@ -589,7 +589,8 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         audio.Studio?.Name,
         PartialDate.Format(audio.Date, audio.DatePrecision),
         audio.Urls.Select(url => url.Url).ToList(),
-        GetEffectiveTags(audio, favorites, effectiveTagsByAudioId),
+        // A list entry carries tag ids instead; see TagIds.
+        tagIdsByAudioId != null ? [] : GetEffectiveTags(audio, favorites, effectiveTagsByAudioId),
         audio.AudioPerformers.Where(link => link.Performer != null).Select(link => link.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(
             performer.Id,
             performer.Name,
@@ -627,7 +628,10 @@ public class AudiosController(CoveContext db, CustomFieldService customFields, I
         audio.HasVideoFiles,
         audio.ImageBlobId != null ? EntityImageUrls.Audio(ControllerContext.HttpContext, audio.Id, audio.UpdatedAt) : null,
         contextTagApplications,
-        fieldProvenance);
+        fieldProvenance)
+    {
+        TagIds = tagIdsByAudioId?.GetValueOrDefault(audio.Id),
+    };
 
     private async Task<List<TagApplicationDto>?> GetContextTagApplicationsAsync(int audioId, CancellationToken ct)
     {

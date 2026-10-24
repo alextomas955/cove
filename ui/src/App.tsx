@@ -2,12 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } fro
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Database, Loader2 } from "lucide-react";
 import { Navbar } from "./components/Navbar";
-import {
-  TutorialStoryboardDialog,
-  TUTORIAL_STORYBOARD_EVENT,
-  openTutorialStoryboard,
-  type TutorialOpenRequest,
-} from "./components/TutorialStoryboardDialog";
+import { TUTORIAL_STORYBOARD_EVENT, openTutorialStoryboard } from "./components/tutorialStoryboardEvents";
+import type { TutorialOpenRequest } from "./components/ManualContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RouteRegistryProvider, useRouteRegistry } from "./router/RouteRegistry";
 import { AppConfigProvider, useAppConfig } from "./state/AppConfigContext";
@@ -51,6 +47,17 @@ import { ExtensionKeyboardActions } from "./extensions/ExtensionKeyboardActions"
 import { DocumentTitleScope } from "./hooks/useDocumentTitle";
 import { ThemeGate } from "./components/ThemeGate";
 import { DashboardSkeleton } from "./components/DashboardSkeleton";
+
+// The storyboard loads the first time it opens instead of with every page.
+const TutorialStoryboardDialog = lazy(() =>
+  import("./components/TutorialStoryboardDialog").then((module) => ({ default: module.TutorialStoryboardDialog })),
+);
+
+const MIGRATION_PHASE_LABELS: Record<"prepare" | "backup" | "migrate", string> = {
+  prepare: "Preparing the database update…",
+  backup: "Backing up the database…",
+  migrate: "Applying database migrations…",
+};
 
 function normalizeRoute(route: Route): Route {
   if (route.page === "logs") {
@@ -456,6 +463,9 @@ function AppShell({ route, navigate }: { route: Route; navigate: (r: Route) => v
   const [setupDismissed, setSetupDismissed] = useState(() => sessionStorage.getItem("cove-setup-dismissed") === "true");
   const [setupFlowActive, setSetupFlowActive] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  // Mounted from the first opening on, so it keeps its state across closing and reopening.
+  const [tutorialLoaded, setTutorialLoaded] = useState(false);
+  if (tutorialOpen && !tutorialLoaded) setTutorialLoaded(true);
   const [tutorialRequest, setTutorialRequest] = useState<TutorialOpenRequest | undefined>();
 
   // Owner account status: initial setup must produce an owner before the app is usable. If the wizard
@@ -543,6 +553,9 @@ function AppShell({ route, navigate }: { route: Route; navigate: (r: Route) => v
   if (status?.migrationRequired) {
     const migrationError = migrateMutation.error ? getApiValidationFailureDetail(migrateMutation.error) : null;
     const migrationResult = migrateMutation.data;
+    // The server runs one migration at a time and reports it, so a reloaded page or another tab shows
+    // the run in progress rather than offering to start one.
+    const migrationPhase = status.migrationInProgress ?? (migrateMutation.isPending ? "prepare" : null);
 
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -564,20 +577,31 @@ function AppShell({ route, navigate }: { route: Route; navigate: (r: Route) => v
               ))}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">A database backup will be created before any migration runs.</p>
-          <button
-            type="button"
-            onClick={() => migrateMutation.mutate()}
-            disabled={migrateMutation.isPending}
-            className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-background transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {migrateMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Database className="h-4 w-4" aria-hidden="true" />
-            )}
-            Run Migration
-          </button>
+          {migrationPhase ? (
+            <div role="status" className="space-y-2">
+              <div className="inline-flex items-center justify-center gap-2 text-sm font-medium text-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                {MIGRATION_PHASE_LABELS[migrationPhase]}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This can take several minutes on a large library. It keeps running if you close or reload this page.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                A database backup will be created before any migration runs.
+              </p>
+              <button
+                type="button"
+                onClick={() => migrateMutation.mutate()}
+                className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-background transition hover:bg-accent/90"
+              >
+                <Database className="h-4 w-4" aria-hidden="true" />
+                Run Migration
+              </button>
+            </>
+          )}
           {migrationResult?.preMigrationBackupPath ? (
             <div className="rounded bg-background/70 p-3 text-left text-xs text-muted-foreground">
               <div className="mb-1 flex items-center gap-2 font-medium text-foreground">
@@ -635,27 +659,31 @@ function AppShell({ route, navigate }: { route: Route; navigate: (r: Route) => v
           </Suspense>
         </ErrorBoundary>
       </main>
-      <TutorialStoryboardDialog
-        open={tutorialOpen}
-        onClose={() => {
-          setTutorialOpen(false);
-          if (route.page === "manual") navigate({ page: "home" });
-        }}
-        request={tutorialRequest}
-        currentPage={route.page}
-        extensionTopics={manifest?.tutorialTopics ?? []}
-        onTopicChange={(topicId, slideId) => {
-          if (route.page === "manual") {
-            navigateToUrl(buildRoutePath({ page: "manual", manualTopicId: topicId, manualSlideId: slideId }), {
-              replace: true,
-              state: { page: "manual", manualTopicId: topicId, manualSlideId: slideId },
-            });
-          }
-        }}
-        onAppNavigate={(href) => {
-          if (navigateToUrl(href)) setTutorialOpen(false);
-        }}
-      />
+      {tutorialLoaded ? (
+        <Suspense fallback={null}>
+          <TutorialStoryboardDialog
+            open={tutorialOpen}
+            onClose={() => {
+              setTutorialOpen(false);
+              if (route.page === "manual") navigate({ page: "home" });
+            }}
+            request={tutorialRequest}
+            currentPage={route.page}
+            extensionTopics={manifest?.tutorialTopics ?? []}
+            onTopicChange={(topicId, slideId) => {
+              if (route.page === "manual") {
+                navigateToUrl(buildRoutePath({ page: "manual", manualTopicId: topicId, manualSlideId: slideId }), {
+                  replace: true,
+                  state: { page: "manual", manualTopicId: topicId, manualSlideId: slideId },
+                });
+              }
+            }}
+            onAppNavigate={(href) => {
+              if (navigateToUrl(href)) setTutorialOpen(false);
+            }}
+          />
+        </Suspense>
+      ) : null}
       <KeyboardShortcutsDialog open={shortcutDialogOpen} onClose={() => setShortcutDialogOpen(false)} />
     </div>
   );

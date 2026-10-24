@@ -188,6 +188,8 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
   const statusQuery = useQuery({
     queryKey: ["system-status"],
     queryFn: system.status,
+    // While a database migration runs (started here or in another tab) follow it until it ends.
+    refetchInterval: (query) => (query.state.data?.migrationInProgress ? 2000 : false),
   });
 
   const canReadSystemConfig =

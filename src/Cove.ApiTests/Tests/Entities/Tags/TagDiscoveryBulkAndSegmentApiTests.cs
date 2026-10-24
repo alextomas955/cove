@@ -11,6 +11,20 @@ public sealed class TagDiscoveryBulkAndSegmentApiTests(
     CoveApiTestFixture fixture) : ApiTest(output, fixture)
 {
     [Fact]
+    [CoversEndpoint("GET", "/api/tags/lookup")]
+    public async Task GivenATag_WhenAMemberLoadsTheTagLookup_ThenItListsTheTagAsCardsShowIt()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var tag = await AsUser().CreateTagAsync($"Lookup tag {suffix}");
+
+        var lookup = await AsUser(ApiTestUsers.Eva).GetTagLookupAsync(TestContext.Current.CancellationToken);
+
+        var entry = lookup.Should().ContainSingle(item => item.Id == tag.Id).Subject;
+        entry.Name.Should().Be($"Lookup tag {suffix}");
+        entry.HasImage.Should().BeFalse();
+    }
+
+    [Fact]
     [CoversEndpoint("GET", "/api/tags")]
     public async Task GivenTaggedAudioAndText_WhenMemberListsTags_ThenUsageCountsAreSerialized()
     {

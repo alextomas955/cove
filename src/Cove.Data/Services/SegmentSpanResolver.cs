@@ -75,12 +75,8 @@ public sealed class SegmentSpanResolver(
         if (uncachedIds.Count == 0)
             return results;
 
-        var allSegments = await db.VisibleSegments(SegmentHostType.Video).AsNoTracking()
-            .Include(segment => segment.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Where(s => uncachedIds.Contains(s.HostId))
-            .OrderBy(s => s.StartSec)
-            .ThenBy(s => s.Id)
-            .ToListAsync(ct);
+        var allSegments = await LoadSegmentsWithTagsAsync(
+            db.VisibleSegments(SegmentHostType.Video).AsNoTracking().Where(s => uncachedIds.Contains(s.HostId)), ct);
 
         var segmentsByHost = allSegments.GroupBy(s => s.HostId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -133,12 +129,8 @@ public sealed class SegmentSpanResolver(
         if (uncachedIds.Count == 0)
             return results;
 
-        var allSegments = await db.VisibleSegments(SegmentHostType.Video).AsNoTracking()
-            .Include(segment => segment.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Where(s => uncachedIds.Contains(s.HostId))
-            .OrderBy(s => s.StartSec)
-            .ThenBy(s => s.Id)
-            .ToListAsync(ct);
+        var allSegments = await LoadSegmentsWithTagsAsync(
+            db.VisibleSegments(SegmentHostType.Video).AsNoTracking().Where(s => uncachedIds.Contains(s.HostId)), ct);
 
         var segmentsByHost = allSegments.GroupBy(s => s.HostId).ToDictionary(g => g.Key, g => g.ToList());
         var operators = queryRequest.Operator.Trim().ToLowerInvariant();
@@ -417,6 +409,37 @@ public sealed class SegmentSpanResolver(
         return await EnsureDefaultProfileAsync(principalAccessor.Current?.UserId, ct);
     }
 
+    /// <summary>
+    /// The segments in video order (by host, then start), each with its readable tag and the tag's group.
+    /// The tags are looked up once rather than included, which would repeat the whole tag row on every
+    /// segment, and the order is the one the (host type, host, start) index already holds, so resolving
+    /// a library's spans neither ships millions of duplicate tag rows nor sorts them all on disk.
+    /// </summary>
+    private async Task<List<Segment>> LoadSegmentsWithTagsAsync(IQueryable<Segment> query, CancellationToken ct)
+    {
+        var segments = await query
+            .OrderBy(segment => segment.HostId)
+            .ThenBy(segment => segment.StartSec)
+            .ThenBy(segment => segment.Id)
+            .ToListAsync(ct);
+
+        var tagIds = segments.Where(segment => segment.TagId.HasValue).Select(segment => segment.TagId!.Value).Distinct().ToList();
+        if (tagIds.Count == 0)
+            return segments;
+
+        var tags = await db.Tags.AsNoTracking()
+            .Include(tag => tag.TagGroup)
+            .Where(tag => tagIds.Contains(tag.Id))
+            .ToDictionaryAsync(tag => tag.Id, ct);
+        foreach (var segment in segments)
+        {
+            if (segment.TagId is { } tagId && tags.TryGetValue(tagId, out var tag))
+                segment.Tag = tag;
+        }
+
+        return segments;
+    }
+
     private async Task<List<Segment>> LoadVideoSegmentsAsync(int videoId, CancellationToken ct)
     {
         var allChangeToken = _cacheRegistry.GetAllChangeToken();
@@ -425,12 +448,8 @@ public sealed class SegmentSpanResolver(
         if (memoryCache.TryGetValue<List<Segment>>(cacheKey, out var cached) && cached is not null)
             return cached;
 
-        var segments = await db.VisibleSegments(SegmentHostType.Video).AsNoTracking()
-            .Include(segment => segment.Tag).ThenInclude(tag => tag!.TagGroup)
-            .Where(segment => segment.HostId == videoId)
-            .OrderBy(segment => segment.StartSec)
-            .ThenBy(segment => segment.Id)
-            .ToListAsync(ct);
+        var segments = await LoadSegmentsWithTagsAsync(
+            db.VisibleSegments(SegmentHostType.Video).AsNoTracking().Where(segment => segment.HostId == videoId), ct);
 
         SetVideoCache(videoId, cacheKey, segments, TimeSpan.FromMinutes(5), allChangeToken, videoChangeLease.Token);
         return segments;

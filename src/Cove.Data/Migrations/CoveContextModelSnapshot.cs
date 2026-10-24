@@ -195,7 +195,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Details\", '')), 'B') ||\nsetweight(to_tsvector('simple', coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Details\", '')), 'B') ||\r\nsetweight(to_tsvector('simple', coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
 
                     b.Property<int?>("StudioId")
                         .HasColumnType("integer");
@@ -1753,7 +1753,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Label\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"PrimarySourceKey\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Label\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"PrimarySourceKey\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
 
                     b.Property<DateTime?>("TopSuggestionComputedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2134,7 +2134,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"Photographer\", '')), 'B') ||\nsetweight(to_tsvector('simple', coalesce(\"SearchText\", '')), 'C')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"Photographer\", '')), 'B') ||\r\nsetweight(to_tsvector('simple', coalesce(\"SearchText\", '')), 'C')", true);
 
                     b.Property<int?>("StudioId")
                         .HasColumnType("integer");
@@ -2346,7 +2346,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '') || ' ' || coalesce(\"Aliases\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Synopsis\", '') || ' ' || coalesce(\"Director\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '') || ' ' || coalesce(\"Aliases\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Synopsis\", '') || ' ' || coalesce(\"Director\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
 
                     b.Property<bool>("ShowInVideoLists")
                         .HasColumnType("boolean");
@@ -2619,7 +2619,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"Photographer\", '')), 'B') ||\nsetweight(to_tsvector('simple', coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"Photographer\", '')), 'B') ||\r\nsetweight(to_tsvector('simple', coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
 
                     b.Property<int?>("StudioId")
                         .HasColumnType("integer");
@@ -3006,7 +3006,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Disambiguation\", '') || ' ' || coalesce(\"Details\", '') || ' ' || coalesce(\"SearchText\", '')), 'B') ||\nsetweight(to_tsvector('simple', coalesce(\"Country\", '') || ' ' || coalesce(\"Ethnicity\", '') || ' ' || coalesce(\"Tattoos\", '') || ' ' || coalesce(\"Piercings\", '')), 'C')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Disambiguation\", '') || ' ' || coalesce(\"Details\", '') || ' ' || coalesce(\"SearchText\", '')), 'B') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Country\", '') || ' ' || coalesce(\"Ethnicity\", '') || ' ' || coalesce(\"Tattoos\", '') || ' ' || coalesce(\"Piercings\", '')), 'C')", true);
 
                     b.Property<int>("TagCount")
                         .ValueGeneratedOnAdd()
@@ -3560,11 +3560,15 @@ namespace Cove.Data.Migrations
 
                     b.HasIndex("SourceRunId");
 
-                    b.HasIndex("TagId");
-
                     b.HasIndex("Kind", "RefId");
 
+                    b.HasIndex("HostType", "CreatedAt", "Id");
+
                     b.HasIndex("HostType", "HostId", "StartSec");
+
+                    b.HasIndex("HostType", "UpdatedAt", "Id");
+
+                    b.HasIndex("TagId", "HostType", "HostId");
 
                     b.ToTable("segments", (string)null);
                 });
@@ -3755,7 +3759,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
 
                     b.Property<int>("TagCount")
                         .ValueGeneratedOnAdd()
@@ -3952,7 +3956,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '') || ' ' || coalesce(\"SortName\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Description\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Name\", '') || ' ' || coalesce(\"SortName\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Description\", '') || ' ' || coalesce(\"SearchText\", '')), 'B')", true);
 
                     b.Property<string>("SegmentColorOverride")
                         .HasColumnType("text");
@@ -4276,7 +4280,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Details\", '')), 'B') ||\nsetweight(to_tsvector('simple', coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Details\", '')), 'B') ||\r\nsetweight(to_tsvector('simple', coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
 
                     b.Property<int?>("StudioId")
                         .HasColumnType("integer");
@@ -4711,7 +4715,7 @@ namespace Cove.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
-                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"Director\", '')), 'B') ||\nsetweight(to_tsvector('simple', coalesce(\"Captions\", '') || ' ' || coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
+                        .HasComputedColumnSql("setweight(to_tsvector('simple', coalesce(\"Title\", '') || ' ' || coalesce(\"Code\", '')), 'A') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Details\", '') || ' ' || coalesce(\"Director\", '')), 'B') ||\r\nsetweight(to_tsvector('simple', coalesce(\"Captions\", '') || ' ' || coalesce(\"FileSearchText\", '') || ' ' || coalesce(\"SearchText\", '')), 'C')", true);
 
                     b.Property<int?>("StudioId")
                         .HasColumnType("integer");
@@ -5035,7 +5039,7 @@ namespace Cove.Data.Migrations
 
                     b.ToTable("video_shot_sets", null, t =>
                         {
-                            t.HasCheckConstraint("CK_video_shot_sets_array_shapes", "cardinality(\"ShotTypes\") = \"ShotCount\" AND cardinality(\"CutTimes\") = \"ShotCount\" - 1\nAND cardinality(\"Transitions\") = \"ShotCount\" - 1\nAND (\"CutFrames\" IS NULL OR cardinality(\"CutFrames\") = \"ShotCount\" - 1)\nAND coalesce(array_ndims(\"ShotTypes\"), 1) = 1 AND coalesce(array_ndims(\"CutTimes\"), 1) = 1\nAND coalesce(array_ndims(\"Transitions\"), 1) = 1 AND coalesce(array_ndims(\"CutFrames\"), 1) = 1");
+                            t.HasCheckConstraint("CK_video_shot_sets_array_shapes", "cardinality(\"ShotTypes\") = \"ShotCount\" AND cardinality(\"CutTimes\") = \"ShotCount\" - 1\r\nAND cardinality(\"Transitions\") = \"ShotCount\" - 1\r\nAND (\"CutFrames\" IS NULL OR cardinality(\"CutFrames\") = \"ShotCount\" - 1)\r\nAND coalesce(array_ndims(\"ShotTypes\"), 1) = 1 AND coalesce(array_ndims(\"CutTimes\"), 1) = 1\r\nAND coalesce(array_ndims(\"Transitions\"), 1) = 1 AND coalesce(array_ndims(\"CutFrames\"), 1) = 1");
 
                             t.HasCheckConstraint("CK_video_shot_sets_cut_frames", "\"CutFrames\" IS NULL OR (\"FrameCount\" IS NOT NULL AND public.cove_video_shot_cut_frames_valid(\"CutFrames\", \"FrameCount\"))");
 
@@ -5173,11 +5177,13 @@ namespace Cove.Data.Migrations
                     b.Property<int>("Width")
                         .HasColumnType("integer");
 
-                    b.HasIndex("ImageId", "Basename")
-                        .HasFilter("\"ImageId\" IS NOT NULL");
-
                     b.HasIndex("ImageId", "Path")
                         .HasFilter("\"ImageId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "ImageId", "Basename" }, "IX_files_ImageId_Basename_natural")
+                        .HasFilter("\"ImageId\" IS NOT NULL");
+
+                    NpgsqlIndexBuilderExtensions.UseCollation(b.HasIndex(new[] { "ImageId", "Basename" }, "IX_files_ImageId_Basename_natural"), new[] { null, "cove_natural" });
 
                     b.ToTable("files", t =>
                         {

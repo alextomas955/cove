@@ -141,6 +141,17 @@ public class PostgresConfig
     public int Port { get; set; } = 5433; // Use non-default port to avoid conflicts
     public string Database { get; set; } = "cove";
     public string? ConnectionString { get; set; } // Override: use external PG
+
+    /// <summary>
+    /// Memory the managed PostgreSQL keeps for caching database pages (its <c>shared_buffers</c>), in MB.
+    /// More keeps a large library's lists fast after other work has pushed them out of the operating
+    /// system's file cache, at the cost of that memory being held while Cove runs. Applied on restart.
+    /// </summary>
+    public int SharedBuffersMb { get; set; } = DefaultSharedBuffersMb;
+
+    public const int DefaultSharedBuffersMb = 128;
+    public const int MinSharedBuffersMb = 32;
+    public const int MaxSharedBuffersMb = 32768;
 }
 
 /// <summary>

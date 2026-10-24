@@ -70,6 +70,24 @@ static bool IsWeakJwtSecret(string? secret)
         || secret == "CHANGE_ME_TO_A_RANDOM_SECRET_AT_LEAST_32_CHARS"
         || Encoding.UTF8.GetByteCount(secret) < 32;
 
+static int? ReadSavedDatabaseCacheMb(string configPath)
+{
+    try
+    {
+        if (!File.Exists(configPath))
+            return null;
+        using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+        return document.RootElement.TryGetProperty("databaseCacheMb", out var value) && value.TryGetInt32(out var mb)
+            ? Math.Clamp(mb, PostgresConfig.MinSharedBuffersMb, PostgresConfig.MaxSharedBuffersMb)
+            : null;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+    {
+        // The settings file is loaded and reported in full after startup; the default applies until then.
+        return null;
+    }
+}
+
 static string GenerateJwtSecret()
     => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
@@ -329,6 +347,7 @@ try
     builder.Services.AddScoped<IStreamService, StreamService>();
     builder.Services.AddScoped<ICleanService, CleanService>();
     builder.Services.AddSingleton<Cove.Api.Services.MaintenanceState>();
+    builder.Services.AddSingleton<Cove.Api.Services.DatabaseMigrationCoordinator>();
     builder.Services.AddScoped<IBackupService, BackupService>();
     builder.Services.AddSingleton<IBlobReferenceCounter, BlobReferenceCounter>();
     builder.Services.AddSingleton<IBlobService, BlobService>();
@@ -459,7 +478,13 @@ try
     // Managed PostgreSQL — auto-downloads and runs a local PG instance
     var pgManaged = pgSection.GetValue<bool?>("Managed") ?? true;
     if (pgManaged)
+    {
+        // Saved settings are applied once the app has started, after the managed database is already
+        // running, so its cache size is read from the settings file beforehand.
+        if (ReadSavedDatabaseCacheMb(Path.Combine(CoveDefaultPaths.GetDataRoot(), "cove-config.json")) is { } databaseCacheMb)
+            builder.Services.PostConfigure<PostgresConfig>(postgres => postgres.SharedBuffersMb = databaseCacheMb);
         builder.Services.AddHostedService<PostgresManagerService>();
+    }
 
     // Recovery touches the database during startup, so it must run after the managed PostgreSQL
     // service has made that database reachable.
@@ -527,11 +552,13 @@ try
         .AddJsonOptions(options =>
         {
             options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+            Cove.Api.Http.CompactTagJson.Apply(options.JsonSerializerOptions);
         });
     // Minimal APIs + extension endpoints + generated schema document
     builder.Services.ConfigureHttpJsonOptions(options =>
     {
         options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        Cove.Api.Http.CompactTagJson.Apply(options.SerializerOptions);
     });
     builder.Services.AddOpenApi();
     builder.Services.AddEndpointsApiExplorer();

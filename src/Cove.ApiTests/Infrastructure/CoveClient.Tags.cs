@@ -126,6 +126,9 @@ public sealed partial class CoveClient
         return result.Items;
     }
 
+    public Task<List<TagLookupDto>> GetTagLookupAsync(CancellationToken cancellationToken = default)
+        => SendAsync<List<TagLookupDto>>(HttpMethod.Get, WithCacheNonce("/api/tags/lookup"), payload: null, cancellationToken);
+
     public Task<PaginatedResponse<TagListDto>> FindTagsAsync(
         FilteredQueryRequest<TagFilter> request,
         CancellationToken cancellationToken = default)

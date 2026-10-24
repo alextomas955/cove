@@ -1,4 +1,5 @@
 import { VideoCreateModal } from "../components/VideoCreateModal";
+import { useEntityTags } from "../hooks/useEntityTags";
 import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore, lazy, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { entityEngagement, entityImages, videos } from "../api/client";
@@ -1235,17 +1236,21 @@ export function VideosPage({ onNavigate }: Props) {
               )}
             />
           ) : (
-            <EntityCardGrid minCardWidth="var(--card-min-width, 200px)">
-              {listEntries.map((entry) =>
+            <VirtualizedEntityGrid
+              items={listEntries}
+              getItemKey={(entry) =>
+                entry.kind === "compilation" && entry.group ? `compilation-${entry.group.id}` : `video-${entry.video?.id}`
+              }
+              minCardWidth="var(--card-min-width, 200px)"
+              gap={12}
+              estimateRowHeight={320}
+              overscan={3}
+              infinitePageSize={false}
+              renderItem={(entry) =>
                 entry.kind === "compilation" && entry.group ? (
-                  <CompilationGroupCard
-                    key={`compilation-${entry.group.id}`}
-                    group={entry.group}
-                    onNavigate={onNavigate}
-                  />
+                  <CompilationGroupCard group={entry.group} onNavigate={onNavigate} />
                 ) : entry.video ? (
                   <VideoCard
-                    key={`video-${entry.video.id}`}
                     video={entry.video}
                     engagement={engagementById.get(entry.video.id)}
                     onClick={(toggleOptions) =>
@@ -1257,9 +1262,9 @@ export function VideosPage({ onNavigate }: Props) {
                     selecting={selecting}
                     onQuickView={() => setQuickViewId(entry.video!.id)}
                   />
-                ) : null,
-              )}
-            </EntityCardGrid>
+                ) : null
+              }
+            />
           ))}
         {displayMode === "list" && (
           <VideoListTable
@@ -1499,6 +1504,7 @@ function VideoFeedCard({
   selecting?: boolean;
   onSelect?: BoundMultiSelectToggleHandler;
 }) {
+  const videoTags = useEntityTags(video);
   const file = getVideoPrimaryFile(video);
   const { coverUrl, videoSrc, videoStatusSrc } = getVideoFeedMedia(video, feedVideoSource);
   const title = video.title || file?.basename || `Video ${video.id}`;
@@ -1525,8 +1531,8 @@ function VideoFeedCard({
     },
   });
   const ratingValue = ratingMut.data?.rating ?? engagement?.rating;
-  const visibleTags = video.tags.slice(0, 4);
-  const hiddenTags = video.tags.slice(4);
+  const visibleTags = videoTags.slice(0, 4);
+  const hiddenTags = videoTags.slice(4);
   const renderVideoControls = (controls: WallMediaVideoControlsState) => (
     <VideoFeedVideoControls controls={controls} soundEnabled={soundEnabled} onToggleSound={onToggleSound} />
   );
@@ -1824,6 +1830,7 @@ function VideoVerticalViewerCard({
   selecting?: boolean;
   onSelect?: BoundMultiSelectToggleHandler;
 }) {
+  const videoTags = useEntityTags(video);
   const file = getVideoPrimaryFile(video);
   const { coverUrl, videoSrc, videoStatusSrc } = getVideoFeedMedia(video, feedVideoSource);
   const title = video.title || file?.basename || `Video ${video.id}`;
@@ -1922,7 +1929,7 @@ function VideoVerticalViewerCard({
             {video.performers.slice(0, 3).map((performer) => (
               <span key={performer.id}>@{performer.name}</span>
             ))}
-            {video.tags.slice(0, 3).map((tag) => (
+            {videoTags.slice(0, 3).map((tag) => (
               <span key={tag.id}>#{tag.name}</span>
             ))}
           </div>
