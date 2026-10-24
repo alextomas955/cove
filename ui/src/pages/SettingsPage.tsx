@@ -128,7 +128,7 @@ import {
   updateAuthenticatedUserUiPreferences,
 } from "../utils/userUiPreferences";
 import { KeyboardShortcutSettings } from "../components/KeyboardShortcutSettings";
-import { openTutorialStoryboard } from "../components/TutorialStoryboardDialog";
+import { openTutorialStoryboard } from "../components/tutorialStoryboardEvents";
 import { customFieldDefinitionsQueryKey } from "../hooks/useCustomFieldDefinitions";
 import { LibraryFolderTree } from "../components/LibraryFolderTree";
 
@@ -4506,7 +4506,7 @@ export function SettingsPage() {
         {resolvedActiveTab === "server-host-network" && (
           <SectionCard
             title="Server"
-            description="Host and port are persisted immediately but require a restart to rebind the listener."
+            description="Saved immediately; host and port apply when Cove restarts and rebinds the listener, and the database cache when its built-in database restarts with it."
           >
             <div className="grid gap-4 md:grid-cols-2">
               <TextField
@@ -4519,6 +4519,16 @@ export function SettingsPage() {
                 value={draft.port}
                 min={1}
                 onChange={(value) => updateDraft((current) => ({ ...current, port: value ?? current.port }))}
+              />
+              <NumberField
+                label="Database cache (MB)"
+                description="Memory Cove's built-in database keeps for caching library data. Raising it keeps large libraries fast after other work, such as playback or scans, has pushed data out of the system's file cache; the memory stays in use while Cove runs. Applies after a restart, and only to the built-in database."
+                value={draft.databaseCacheMb ?? 128}
+                min={32}
+                max={32768}
+                onChange={(value) =>
+                  updateDraft((current) => ({ ...current, databaseCacheMb: value ?? current.databaseCacheMb }))
+                }
               />
             </div>
           </SectionCard>

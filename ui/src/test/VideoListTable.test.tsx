@@ -6,6 +6,12 @@ import { ListPageCardSizeContext } from "../components/ListPageCardSizeContext";
 import { getVideoListThumbnailHeightPx, VideoListTable } from "../components/VideoListTable";
 import { DEFAULT_VIDEO_LIST_COLUMN_IDS } from "../components/videoListColumns";
 
+// The table resolves list entries' tag ids through the tag lookup; these rows carry their tags directly.
+vi.mock("../hooks/useEntityTags", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../hooks/useEntityTags")>()),
+  useTagLookup: () => ({ lookup: undefined, isLoading: false }),
+}));
+
 vi.mock("../components/Rating", () => ({
   RatingBadge: ({ rating }: { rating?: number }) => <span>{rating}</span>,
 }));

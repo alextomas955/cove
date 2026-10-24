@@ -39,6 +39,29 @@ public sealed class PostgresManagedConfigurationTests : IDisposable
         Assert.Equal(updated, await File.ReadAllTextAsync(configPath, TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData(null, "shared_buffers = 128MB")]
+    [InlineData(1024, "shared_buffers = 1024MB")]
+    [InlineData(1, "shared_buffers = 32MB")]
+    public async Task WritesTheConfiguredDatabaseCacheSize(int? sharedBuffersMb, string expectedLine)
+    {
+        var data = Path.Combine(_root, "pgdata");
+        Directory.CreateDirectory(data);
+        var configPath = Path.Combine(data, "postgresql.conf");
+        await File.WriteAllTextAsync(configPath, "shared_buffers = 128MB" + Environment.NewLine, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(data, "PG_VERSION"), "18", TestContext.Current.CancellationToken);
+        var config = new PostgresConfig { DataPath = _root };
+        if (sharedBuffersMb is { } mb)
+            config.SharedBuffersMb = mb;
+        var manager = new PostgresManagerService(Options.Create(config), NullLogger<PostgresManagerService>.Instance);
+        var method = typeof(PostgresManagerService).GetMethod("EnsureManagedConfigurationAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        await (Task)method.Invoke(manager, [TestContext.Current.CancellationToken])!;
+
+        var line = Assert.Single((await File.ReadAllLinesAsync(configPath, TestContext.Current.CancellationToken)), l => l.StartsWith("shared_buffers"));
+        Assert.Equal(expectedLine, line);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);

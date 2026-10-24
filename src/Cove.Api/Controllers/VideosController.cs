@@ -70,11 +70,10 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         };
 
         var (items, totalCount) = await videoRepo.FindAsync(filter, findFilter, ct);
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Video, items.Select(video => video.Id), ct);
+        var tagIdsByVideo = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Video, items.Select(video => video.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
-        var engagement = await engagementService.GetVideoSnapshotsAsync(items.Select(video => video.Id), ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, items.Select(video => video.Id), ct);
-        var dtos = items.Select(video => MapListToDto(video, favorites, GetCustomFields(customFieldValues, video.Id), engagement.GetValueOrDefault(video.Id), HasUserScopedEngagement, effectiveTags)).ToList();
+        var dtos = items.Select(video => MapListToDto(video, favorites, GetCustomFields(customFieldValues, video.Id), tagIdsByVideo)).ToList();
         return Ok(new PaginatedResponse<VideoDto>(dtos, totalCount, page, perPage));
     }
 
@@ -237,14 +236,13 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
                 .Where(group => groupIds.Contains(group.Id))
                 .ToDictionaryAsync(group => group.Id, ct);
 
-        var engagement = await engagementService.GetVideoSnapshotsAsync(videoIds, ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, videoIds, ct);
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Video, videoIds, ct);
+        var tagIdsByVideo = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Video, videoIds, ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
         var entries = rows.Select(row =>
         {
             if (row.Kind == "video" && videoLookup.TryGetValue(row.Id, out var video))
-            return new VideoListEntryDto("video", video.Id, MapListToDto(video, favorites, GetCustomFields(customFieldValues, video.Id), engagement.GetValueOrDefault(video.Id), HasUserScopedEngagement, effectiveTags));
+            return new VideoListEntryDto("video", video.Id, MapListToDto(video, favorites, GetCustomFields(customFieldValues, video.Id), tagIdsByVideo));
             if (row.Kind == "compilation" && groupLookup.TryGetValue(row.Id, out var group))
                 return new VideoListEntryDto("compilation", group.Id, Group: MapCompilationGroupToDto(group, favorites));
             return null;
@@ -313,11 +311,10 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
             }
         }
 
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Video, items.Select(video => video.Id), ct);
+        var tagIdsByVideo = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Video, items.Select(video => video.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
-        var engagement = await engagementService.GetVideoSnapshotsAsync(items.Select(video => video.Id), ct);
         var customFieldValues = await customFields.GetValuesAsync(CustomFieldEntityTypes.Video, items.Select(video => video.Id), ct);
-        var dtos = items.Select(video => MapListToDto(video, favorites, GetCustomFields(customFieldValues, video.Id), engagement.GetValueOrDefault(video.Id), HasUserScopedEngagement, effectiveTags)).ToList();
+        var dtos = items.Select(video => MapListToDto(video, favorites, GetCustomFields(customFieldValues, video.Id), tagIdsByVideo)).ToList();
         var result = new PaginatedResponse<VideoDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage);
 
         if (canCache)
@@ -1090,13 +1087,13 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         ProductionDate = PartialDate.Format(s.ProductionDate, s.ProductionDatePrecision),
     };
 
-    private VideoDto MapListToDto(Video s, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null, UserEngagementSnapshot? engagement = null, bool preferUserSnapshot = false, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByVideoId = null) => new(
+    private VideoDto MapListToDto(Video s, CatalogFavorites favorites, Dictionary<string, object>? customFieldValues = null, IReadOnlyDictionary<int, List<int>>? tagIdsByVideoId = null) => new(
         s.Id, s.Title, s.Code, s.Details, s.Director,
         PartialDate.Format(s.Date, s.DatePrecision),
         s.Organized, s.IsVr, s.StudioId, s.Studio?.Name,
         s.Captions,
         s.Urls.Select(u => u.Url).ToList(),
-        GetEffectiveTags(s, favorites, effectiveTagsByVideoId),
+        [],
         s.VideoPerformers.Where(sp => sp.Performer != null).Select(sp => sp.Performer!).OrderForDisplay().Select(performer => MapPerformerSummary(performer, favorites, null)).ToList(),
         EffectiveFiles(s).Select(f => new VideoFileDto(
             f.Id,
@@ -1132,6 +1129,7 @@ public partial class VideosController(IVideoRepository videoRepo, Data.CoveConte
         PrimaryFileId = s.ParentVideo?.PrimaryFileId ?? s.PrimaryFileId,
         Vr = ResolveVr(s),
         ProductionDate = PartialDate.Format(s.ProductionDate, s.ProductionDatePrecision),
+        TagIds = tagIdsByVideoId?.GetValueOrDefault(s.Id) ?? [],
     };
 
     private static List<TagDto> GetEffectiveTags(Video video, CatalogFavorites favorites, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByVideoId)

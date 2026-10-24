@@ -33,7 +33,7 @@ describe("NarrativeText", () => {
     expect(screen.queryByText("literal", { selector: "strong" })).not.toBeInTheDocument();
   });
 
-  it("renders safe textual Markdown when enabled", () => {
+  it("renders safe textual Markdown when enabled", async () => {
     mocks.user.uiPreferences = { renderMarkdown: true };
 
     render(
@@ -42,14 +42,14 @@ describe("NarrativeText", () => {
       </NarrativeText>,
     );
 
-    expect(screen.getByRole("heading", { name: "Heading" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Heading" })).toBeInTheDocument();
     expect(screen.getByText("Bold", { selector: "strong" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "safe" })).toHaveAttribute("target", "_blank");
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(document.querySelector("div div")).not.toHaveTextContent("raw");
   });
 
-  it("keeps safe relative links and suppresses unsafe protocols", () => {
+  it("keeps safe relative links and suppresses unsafe protocols", async () => {
     mocks.user.uiPreferences = { renderMarkdown: true };
 
     render(
@@ -60,7 +60,7 @@ describe("NarrativeText", () => {
       </NarrativeText>,
     );
 
-    expect(screen.getByRole("link", { name: "relative" })).toHaveAttribute("href", "notes/123");
+    expect(await screen.findByRole("link", { name: "relative" })).toHaveAttribute("href", "notes/123");
     expect(screen.getByRole("link", { name: "dot" })).toHaveAttribute("href", "./notes");
     expect(screen.getByRole("link", { name: "root" })).toHaveAttribute("href", "/notes");
     expect(screen.getByRole("link", { name: "fragment" })).toHaveAttribute("href", "#notes");

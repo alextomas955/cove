@@ -58,6 +58,13 @@ public record VideoDto(
 
     /// <summary>When the video was shot, as a partial date; <see cref="Date"/> is when it was released.</summary>
     public string? ProductionDate { get; init; }
+
+    /// <summary>
+    /// On list entries, the ids of the item's tags; <c>Tags</c> is then empty. A list repeats the same
+    /// few hundred tags across every item, so lists send ids and clients resolve them through the tag
+    /// lookup. Null on detail responses, which carry the full tags.
+    /// </summary>
+    public List<int>? TagIds { get; init; }
 }
 
 /// <summary>How a VR video should be projected. <paramref name="FieldOfView"/> is the horizontal
@@ -205,6 +212,20 @@ public record TagDto(
     public int? TagGroupSortOrder { get; init; }
     public string? SortName { get; init; }
 }
+
+/// <summary>A tag as lists need it to show an item's tag ids: the fields a card or chip renders.</summary>
+public record TagLookupDto(
+    int Id,
+    string Name,
+    string? Description,
+    string? Color,
+    int? TagGroupId,
+    string? TagGroupName,
+    string? TagGroupColor,
+    int? TagGroupSortOrder,
+    string? SortName,
+    bool Favorite,
+    bool HasImage);
 
 public record TagListDto(
     int Id,
@@ -412,7 +433,15 @@ public record ImageDto(int Id, string? Title, string? Code, string? Details, str
     List<string> Urls, List<TagDto> Tags, List<PerformerSummaryDto> Performers,
     int GalleryCount, List<int> GalleryIds, List<GallerySummaryDto> Galleries, List<GroupSummaryDto> Groups, List<ImageFileDto> Files, Dictionary<string, object>? CustomFields, string CreatedAt, string UpdatedAt,
     List<TagApplicationDto>? ContextTagApplications = null,
-    List<FieldProvenanceDto>? FieldProvenance = null);
+    List<FieldProvenanceDto>? FieldProvenance = null)
+{
+    /// <summary>
+    /// On list entries, the ids of the item's tags; <c>Tags</c> is then empty. A list repeats the same
+    /// few hundred tags across every item, so lists send ids and clients resolve them through the tag
+    /// lookup. Null on detail responses, which carry the full tags.
+    /// </summary>
+    public List<int>? TagIds { get; init; }
+}
 
 public record ImageFileDto(int Id, string Path, string Basename, string Format, int Width, int Height, long Size);
 
@@ -434,7 +463,15 @@ public record AudioDto(
     Dictionary<string, object>? CustomFields, string CreatedAt, string UpdatedAt,
     int FileCount, double MaxDuration, bool HasVideoFiles, string? ImagePath = null,
     List<TagApplicationDto>? ContextTagApplications = null,
-    List<FieldProvenanceDto>? FieldProvenance = null);
+    List<FieldProvenanceDto>? FieldProvenance = null)
+{
+    /// <summary>
+    /// On list entries, the ids of the item's tags; <c>Tags</c> is then empty. A list repeats the same
+    /// few hundred tags across every item, so lists send ids and clients resolve them through the tag
+    /// lookup. Null on detail responses, which carry the full tags.
+    /// </summary>
+    public List<int>? TagIds { get; init; }
+}
 
 public record AudioFileDto(
     int Id, string Path, string Basename, string Format, double Duration,
@@ -463,7 +500,15 @@ public record TextDocumentDto(
     Dictionary<string, object>? CustomFields, string CreatedAt, string UpdatedAt,
     int FileCount, int? MaxWordCount, int? MaxPageCount, string? ImagePath = null,
     List<TagApplicationDto>? ContextTagApplications = null,
-    List<FieldProvenanceDto>? FieldProvenance = null);
+    List<FieldProvenanceDto>? FieldProvenance = null)
+{
+    /// <summary>
+    /// On list entries, the ids of the item's tags; <c>Tags</c> is then empty. A list repeats the same
+    /// few hundred tags across every item, so lists send ids and clients resolve them through the tag
+    /// lookup. Null on detail responses, which carry the full tags.
+    /// </summary>
+    public List<int>? TagIds { get; init; }
+}
 
 public record TextFileDto(
     int Id, string Path, string Basename, string Format, int? PageCount,
@@ -1413,7 +1458,14 @@ public record SystemStatusDto(
     string[]? PendingMigrations = null,
     bool AuthEnabled = false,
     bool MigrationStatusUnknown = false,
-    string? MigrationStatusError = null);
+    string? MigrationStatusError = null)
+{
+    /// <summary>
+    /// The step of a database migration now running — "prepare", "backup" or "migrate" — or null when
+    /// none is. Lets a page opened during the migration show its progress instead of offering to start it.
+    /// </summary>
+    public string? MigrationInProgress { get; init; }
+}
 
 public record CoveConfigDto
 {
@@ -1422,6 +1474,8 @@ public record CoveConfigDto
     public string? CachePath { get; init; }
     public string Host { get; init; } = "0.0.0.0";
     public int Port { get; init; } = 5073;
+    /// <summary>Memory the managed database keeps for caching, in MB; applied on restart.</summary>
+    public int DatabaseCacheMb { get; init; } = PostgresConfig.DefaultSharedBuffersMb;
     // Mirrors CoveConfiguration: fresh-install default leaves ~3 logical processors free.
     public int MaxParallelTasks { get; init; } = System.Math.Max(1, System.Environment.ProcessorCount - 3);
     public int MaxConcurrentDownloads { get; init; } = 3;

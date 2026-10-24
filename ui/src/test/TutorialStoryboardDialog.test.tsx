@@ -789,7 +789,7 @@ describe("TutorialStoryboardDialog", () => {
 
     expect(screen.getByRole("heading", { name: "Docs Child" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Open nested docs" })).toBeInTheDocument();
-    expect(screen.getByText("extension manual pages")).toBeInTheDocument();
+    expect(await screen.findByText("extension manual pages")).toBeInTheDocument();
     expect(screen.getByAltText("Docs topic screenshot")).toHaveAttribute(
       "src",
       "/api/extensions/assets/docs.bundle/docs/topic.png",

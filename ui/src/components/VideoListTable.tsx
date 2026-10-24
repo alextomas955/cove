@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Layers } from "lucide-react";
+import { resolveEntityTags, useTagLookup } from "../hooks/useEntityTags";
 import type { EntityEngagement, Group, VideoListEntry } from "../api/types";
 import { toggleOptionsFromEvent, type MultiSelectToggleHandler } from "../hooks/useMultiSelect";
 import { useListPageCardSizeContext } from "./ListPageCardSizeContext";
@@ -115,9 +116,10 @@ export function VideoListTable({
   const columns = useMemo(() => resolveVideoListColumnDefinitions(columnIds), [columnIds]);
   const zoomLevel = useListPageCardSizeContext()?.zoomLevel;
   const thumbnailHeightPx = getVideoListThumbnailHeightPx(zoomLevel);
+  const { lookup: tagLookup } = useTagLookup();
   const cellContext = useMemo<VideoListCellContext>(
-    () => ({ onNavigate, thumbnailHeightPx }),
-    [onNavigate, thumbnailHeightPx],
+    () => ({ onNavigate, thumbnailHeightPx, tagsOf: (video) => resolveEntityTags(video, tagLookup) }),
+    [onNavigate, tagLookup, thumbnailHeightPx],
   );
   const videoIds = useMemo(() => entries.flatMap((entry) => (entry.video ? [entry.video.id] : [])), [entries]);
   const showSelection = Boolean(onToggle);

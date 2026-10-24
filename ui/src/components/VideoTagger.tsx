@@ -3081,8 +3081,15 @@ function TaggerResultRow({
     !taggerConfig.onlyExistingPerformers,
   );
   const lookupNote = lookupWaitingNote(relationLookup);
+  // Which current tags only an extension applied (and so cannot be removed here) is detail data that
+  // list entries leave out, so the row being reviewed reads its video's detail.
+  const { data: detailVideo } = useQuery({
+    queryKey: ["video", video.id],
+    queryFn: () => videos.get(video.id),
+    enabled: isSelected,
+  });
   const reviewInput: TaggerReviewInput = {
-    video,
+    video: detailVideo ?? video,
     result,
     sourceName:
       result.serverName ||
@@ -3131,7 +3138,7 @@ function TaggerResultRow({
     tagEdits,
     performerEdits,
   };
-  const review = isSelected ? buildTaggerReview(reviewInput) : null;
+  const review = isSelected && detailVideo ? buildTaggerReview(reviewInput) : null;
   const summary = review ? summarizeDiff(review.fields, review.source, review.target, review.selection) : null;
   const handleSelectionChange = (next: DiffSelection) => {
     if (!review) return;

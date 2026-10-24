@@ -763,11 +763,15 @@ public class SegmentConfiguration : IEntityTypeConfiguration<Segment>
         builder.HasOne(segment => segment.Tag).WithMany().HasForeignKey(segment => segment.TagId).OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(segment => new { segment.HostType, segment.HostId, segment.StartSec });
-        builder.HasIndex(segment => segment.TagId);
+        // Covers the per-tag segment counts the tags list shows, without reading the segments heap.
+        builder.HasIndex(segment => new { segment.TagId, segment.HostType, segment.HostId });
         builder.HasIndex(segment => segment.SourceKey);
         builder.HasIndex(segment => segment.SourceRunId);
         builder.HasIndex(segment => segment.Kind);
         builder.HasIndex(segment => new { segment.Kind, segment.RefId });
+        // The segment library's default and second sorts: without these every page sorts all segments.
+        builder.HasIndex(segment => new { segment.HostType, segment.UpdatedAt, segment.Id });
+        builder.HasIndex(segment => new { segment.HostType, segment.CreatedAt, segment.Id });
     }
 }
 
@@ -1195,12 +1199,7 @@ public class ImageFileConfiguration : IEntityTypeConfiguration<ImageFile>
     {
         builder.HasIndex(i => new { i.ImageId, i.Path })
             .HasFilter("\"ImageId\" IS NOT NULL");
-        // The image-list "title" sort falls back to MIN/MAX(Basename) WHERE ImageId = ? (images have no
-        // denormalized title). Without this, that correlated subquery scans files per row and the list times
-        // out. (ImageId, Basename) lets it be answered by an index seek. PostgreSQL indexes nulls, so
-        // explicitly exclude non-image files.
-        builder.HasIndex(i => new { i.ImageId, i.Basename })
-            .HasFilter("\"ImageId\" IS NOT NULL");
+        // The image-list "title" sort's (ImageId, Basename) index is a natural-collation twin, declared in NaturalSort.
     }
 }
 

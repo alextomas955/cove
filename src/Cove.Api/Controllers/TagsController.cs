@@ -69,6 +69,31 @@ public class TagsController(
             spanResolver.EvictVideo(videoId);
     }
 
+    /// <summary>
+    /// Every tag the caller may read, as list entries' tag ids are shown: name, colours, group, image.
+    /// One small response a client keeps for the session instead of every list repeating its tags.
+    /// </summary>
+    [HttpGet("lookup")]
+    [OutputCache(PolicyName = "ShortCache")]
+    public async Task<ActionResult<List<TagLookupDto>>> Lookup(CancellationToken ct)
+    {
+        var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
+        var tags = await db.Tags.AsNoTracking()
+            .Select(tag => new
+            {
+                tag.Id, tag.Name, tag.Description, tag.Color, tag.TagGroupId,
+                TagGroupName = tag.TagGroup != null ? tag.TagGroup.Name : null,
+                TagGroupColor = tag.TagGroup != null ? tag.TagGroup.Color : null,
+                TagGroupSortOrder = tag.TagGroup != null ? (int?)tag.TagGroup.SortOrder : null,
+                tag.SortName,
+                HasImage = tag.ImageOverrideBlobId != null || tag.ImageBlobId != null,
+            })
+            .ToListAsync(ct);
+        return Ok(tags
+            .Select(tag => new TagLookupDto(tag.Id, tag.Name, tag.Description, tag.Color, tag.TagGroupId, tag.TagGroupName, tag.TagGroupColor, tag.TagGroupSortOrder, tag.SortName, favorites.IsTag(tag.Id), tag.HasImage))
+            .ToList());
+    }
+
     [HttpGet]
     [OutputCache(PolicyName = "ShortCache")]
     public async Task<ActionResult<PaginatedResponse<TagListDto>>> Find(

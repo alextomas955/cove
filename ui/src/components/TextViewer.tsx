@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify";
-import ReactMarkdown from "react-markdown";
+import { LazyMarkdown } from "./LazyMarkdown";
 import { BookOpenText } from "lucide-react";
 
 const MARKDOWN_COMPONENTS = {
@@ -155,7 +155,7 @@ export function TextViewer({
           </article>
         ) : renderMode === "markdown" ? (
           <article className="min-h-full w-full max-w-none rounded-2xl border border-border bg-card/70 px-5 py-6 shadow-[0_18px_42px_rgba(15,23,42,0.05)] sm:px-7 sm:py-7 lg:px-8">
-            <ReactMarkdown components={MARKDOWN_COMPONENTS}>{content}</ReactMarkdown>
+            <LazyMarkdown components={MARKDOWN_COMPONENTS}>{content}</LazyMarkdown>
           </article>
         ) : (
           <article className="min-h-full w-full max-w-none rounded-2xl border border-border bg-card/70 px-5 py-6 shadow-[0_18px_42px_rgba(15,23,42,0.05)] sm:px-7 sm:py-7 lg:px-8">

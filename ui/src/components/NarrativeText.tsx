@@ -1,4 +1,4 @@
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import { LazyMarkdown, safeMarkdownLinkHref } from "./LazyMarkdown";
 import type { ComponentPropsWithoutRef } from "react";
 import { useAuth } from "../auth/AuthContext";
 
@@ -10,11 +10,6 @@ export interface NarrativeTextProps {
 export function useMarkdownRenderingEnabled() {
   const { user } = useAuth();
   return user?.uiPreferences?.renderMarkdown === true;
-}
-
-function safeLinkHref(href: string | undefined) {
-  if (!href) return undefined;
-  return defaultUrlTransform(href) || undefined;
 }
 
 const COMPONENTS = {
@@ -59,7 +54,7 @@ const COMPONENTS = {
     />
   ),
   a: ({ href, children, ...props }: ComponentPropsWithoutRef<"a">) => {
-    const safeHref = safeLinkHref(href);
+    const safeHref = safeMarkdownLinkHref(href);
     return safeHref ? (
       <a
         href={safeHref}
@@ -88,9 +83,9 @@ export function NarrativeText({ children, className = "" }: NarrativeTextProps) 
 
   return (
     <div className={classes}>
-      <ReactMarkdown components={COMPONENTS} skipHtml>
+      <LazyMarkdown components={COMPONENTS} skipHtml>
         {children}
-      </ReactMarkdown>
+      </LazyMarkdown>
     </div>
   );
 }
@@ -99,9 +94,9 @@ export function NarrativeText({ children, className = "" }: NarrativeTextProps) 
 export function MarkdownText({ children, className = "" }: NarrativeTextProps) {
   return (
     <div className={["break-words", className].filter(Boolean).join(" ")}>
-      <ReactMarkdown components={COMPONENTS} skipHtml>
+      <LazyMarkdown components={COMPONENTS} skipHtml>
         {children}
-      </ReactMarkdown>
+      </LazyMarkdown>
     </div>
   );
 }

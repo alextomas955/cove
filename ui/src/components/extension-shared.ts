@@ -43,7 +43,7 @@ export { NarrativeText, useMarkdownRenderingEnabled } from "./NarrativeText";
 export type { NarrativeTextProps } from "./NarrativeText";
 export { EditModal, Field, TextInput, TextArea, NumberInput, SelectInput, SaveButton } from "./EditModal";
 export { ImageInput } from "./ImageInput";
-export { openTutorialStoryboard } from "./TutorialStoryboardDialog";
+export { openTutorialStoryboard } from "./tutorialStoryboardEvents";
 export { registerManualContext, useManualContext } from "./ManualContext";
 export type { TutorialOpenRequest } from "./ManualContext";
 

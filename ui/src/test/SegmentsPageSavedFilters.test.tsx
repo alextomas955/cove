@@ -8,7 +8,16 @@ const useRawSegmentsQueryMock = vi.hoisted(() =>
   vi.fn(() => ({ data: { items: [], totalCount: 0, duration: 3600 }, isLoading: false })),
 );
 const useDerivedSpansQueryMock = vi.hoisted(() =>
-  vi.fn(() => ({ data: { items: [], totalCount: 0 }, isLoading: false })),
+  vi.fn<(options: Record<string, unknown>) => unknown>(() => ({
+    data: { items: [], totalCount: 0 },
+    isLoading: false,
+  })),
+);
+const useDerivedSpansCountQueryMock = vi.hoisted(() =>
+  vi.fn<(options: Record<string, unknown>) => unknown>(() => ({
+    data: { totalCount: 0, duration: 0 },
+    isLoading: false,
+  })),
 );
 
 vi.mock("../api/client", () => ({
@@ -34,7 +43,9 @@ vi.mock("../components/ListPage", () => ({
       data-object-filter={JSON.stringify(props.objectFilter)}
       data-display-mode={props.displayMode}
       data-profile-id={String(props.savedFilterUIOptions?.profileId ?? "")}
+      data-total-lower-bound={String(Boolean(props.totalCountIsLowerBound))}
     >
+      {props.metadataByline}
       <button type="button" onClick={() => props.onApplySavedFilterUIOptions?.({ profileId: 33 })}>
         Apply test profile
       </button>
@@ -66,7 +77,7 @@ vi.mock("../hooks/usePaginatedInfiniteQuery", () => ({
 }));
 vi.mock("../pages/segments/useDerivedSpansQuery", () => ({
   useDerivedSpansQuery: useDerivedSpansQueryMock,
-  useDerivedSpansCountQuery: () => ({ data: { totalCount: 0, duration: 0 }, isLoading: false }),
+  useDerivedSpansCountQuery: useDerivedSpansCountQueryMock,
 }));
 vi.mock("../pages/segments/useRawSegmentsQuery", () => ({
   useRawSegmentsQuery: useRawSegmentsQueryMock,
@@ -79,6 +90,7 @@ describe("SegmentsPage saved-filter modes", () => {
   beforeEach(() => {
     useRawSegmentsQueryMock.mockClear();
     useDerivedSpansQueryMock.mockClear();
+    useDerivedSpansCountQueryMock.mockClear();
     localStorage.clear();
     window.history.replaceState({}, "", "/segments");
   });
@@ -102,6 +114,39 @@ describe("SegmentsPage saved-filter modes", () => {
         }),
       ),
     );
+  });
+
+  it("counts every span only when asked, showing a lower bound until then", async () => {
+    useDerivedSpansQueryMock.mockImplementation(() => ({
+      data: { items: [], totalCount: -1, hasMore: true },
+      isLoading: false,
+    }));
+    useDerivedSpansCountQueryMock.mockImplementation(() => ({ data: undefined, isLoading: false, isError: false }));
+    const { segmentDisplayProfiles } = await import("../api/client");
+    vi.mocked(segmentDisplayProfiles.list).mockResolvedValueOnce([
+      { id: 2, name: "Default", isDefault: true } as never,
+    ]);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SegmentsPage onNavigate={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(useDerivedSpansQueryMock).toHaveBeenLastCalledWith(expect.objectContaining({ activeProfileId: 2 })),
+    );
+    const countButton = await screen.findByRole("button", { name: "Count all" });
+    expect(screen.getByTestId("list-page")).toHaveAttribute("data-total-lower-bound", "true");
+    expect(useDerivedSpansCountQueryMock.mock.calls.every(([options]) => options.enabled === false)).toBe(true);
+
+    await userEvent.click(countButton);
+
+    await waitFor(() =>
+      expect(useDerivedSpansCountQueryMock).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true })),
+    );
+    expect(await screen.findByText("Counting…")).toBeInTheDocument();
   });
 
   it("requests a dedicated aggregate for a direct raw infinite view", async () => {

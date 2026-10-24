@@ -2427,6 +2427,7 @@ function SavedFilterRecommendationRow({
     normalizedFallbackLabel && normalizedFallbackLabel !== "Saved filter"
       ? normalizedFallbackLabel
       : `Saved filter #${savedFilterId}`;
+  const queryClient = useQueryClient();
   const filterQuery = useQuery({
     queryKey: savedFilterQueryKey(principalKey, savedFilterId),
     queryFn: () => savedFilters.get(savedFilterId),
@@ -2511,8 +2512,13 @@ function SavedFilterRecommendationRow({
         const derivedFilter = readDerivedSpanQueryFilter(parsedObjectFilter?.derivedSpanQuery);
         const performerIds = Array.from(new Set(derivedFilter.operands.flatMap((operand) => operand.performerIds)));
         const performerFaceEntries = await Promise.all(
+          // The row's pages share these lookups instead of repeating them for every page.
           performerIds.map(async (performerId) => {
-            const response = await faces.list({ performerId, merged: false, page: 1, perPage: 200 });
+            const response = await queryClient.fetchQuery({
+              queryKey: ["front-page-performer-faces", principalKey, performerId],
+              queryFn: () => faces.list({ performerId, merged: false, page: 1, perPage: 200 }),
+              staleTime: 60_000,
+            });
             return [performerId, response.items.map((face) => face.id)] as const;
           }),
         );
@@ -2588,7 +2594,17 @@ function SavedFilterRecommendationRow({
       },
     };
     return fetchMap[mode] ?? (async () => ({ items: [], totalCount: 0 }));
-  }, [mode, findFilter, parsedObjectFilter, hasObjectFilter, segmentProfileId, perPage, queryVideoPage]);
+  }, [
+    mode,
+    findFilter,
+    parsedObjectFilter,
+    hasObjectFilter,
+    segmentProfileId,
+    perPage,
+    queryVideoPage,
+    queryClient,
+    principalKey,
+  ]);
 
   const itemQuery = useDashboardRowPages<any>({
     queryKey: ["front-page-saved", principalKey, savedFilterId, mode, findFilter, parsedObjectFilter, segmentProfileId],
@@ -2596,13 +2612,10 @@ function SavedFilterRecommendationRow({
     enabled: !!mode,
   });
   const { items, isLoading } = itemQuery;
+  // An exact span total means resolving every span in the filter's scope; a row pages by "has more"
+  // and goes without it rather than pay that on every dashboard load.
   const uncountedSpanRequest: SegmentSpanSearchRequest | undefined = (itemQuery.firstPage as any)?.spanRequest;
-  const spanCountQuery = useQuery({
-    queryKey: ["front-page-saved-span-count", principalKey, uncountedSpanRequest],
-    queryFn: () => segmentSpans.count(uncountedSpanRequest!),
-    enabled: uncountedSpanRequest !== undefined,
-  });
-  const totalCount: number | undefined = uncountedSpanRequest ? spanCountQuery.data?.totalCount : itemQuery.totalCount;
+  const totalCount: number | undefined = uncountedSpanRequest ? undefined : itemQuery.totalCount;
   const engagementHostType = getRecommendationEngagementHostType(mode ?? undefined);
   const { engagementById } = useEntityEngagementBatch(
     engagementHostType ?? "video",

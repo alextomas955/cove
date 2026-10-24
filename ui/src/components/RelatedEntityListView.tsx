@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { entityTagCount, useEntityTags } from "../hooks/useEntityTags";
 import type { Dispatch, SetStateAction } from "react";
 import {
   Building2,
@@ -1332,6 +1333,7 @@ function RelatedVideoFeedCard({
   soundEnabled: boolean;
   onPlaybackEligibilityChange?: (eligible: boolean) => void;
 }) {
+  const videoTags = useEntityTags(video);
   const file = video.files.find((candidate) => candidate.id === video.primaryFileId);
   const title = video.title || file?.basename || `Video ${video.id}`;
   const coverAlt = video.imagePath ? title : "";
@@ -1452,7 +1454,7 @@ function RelatedVideoFeedCard({
       chips={
         <RelatedFeedChips
           performers={video.performers}
-          tags={video.tags}
+          tags={videoTags}
           selecting={selecting}
           onSelect={onSelect}
           onNavigate={onNavigate}
@@ -1475,6 +1477,7 @@ function RelatedImageFeedCard({
   onSelect?: (options?: MultiSelectToggleOptions) => void;
   onNavigate: (route: any) => void;
 }) {
+  const imageTags = useEntityTags(image);
   const title = getImageDisplayTitle(image);
   const file = image.files[0];
   const imageSrc = imageApi.thumbnailUrl(image.id, 1280);
@@ -1563,7 +1566,7 @@ function RelatedImageFeedCard({
       chips={
         <RelatedFeedChips
           performers={image.performers}
-          tags={image.tags}
+          tags={imageTags}
           selecting={selecting}
           onSelect={onSelect}
           onNavigate={onNavigate}
@@ -1731,6 +1734,7 @@ function RelatedVideoVerticalCard({
   onToggleSound: () => void;
   viewerHeight: number | null;
 }) {
+  const videoTags = useEntityTags(video);
   const file = video.files.find((candidate) => candidate.id === video.primaryFileId);
   const title = video.title || file?.basename || `Video ${video.id}`;
   const duration = getVideoDisplayDuration(video);
@@ -1813,7 +1817,7 @@ function RelatedVideoVerticalCard({
             {video.performers.slice(0, 3).map((performer) => (
               <span key={performer.id}>@{performer.name}</span>
             ))}
-            {video.tags.slice(0, 3).map((tag) => (
+            {videoTags.slice(0, 3).map((tag) => (
               <span key={tag.id}>#{tag.name}</span>
             ))}
           </div>
@@ -2099,7 +2103,7 @@ function getRelatedStats(entityType: RelatedEntityType, item: RelatedEntityItem)
         file ? getResolutionLabel(file.width, file.height) : null,
         file?.size ? formatFileSize(file.size) : null,
         video.performers.length ? `${video.performers.length} performers` : null,
-        video.tags.length ? `${video.tags.length} tags` : null,
+        entityTagCount(video) ? `${entityTagCount(video)} tags` : null,
       ].filter(Boolean) as string[];
     }
     case "images": {
@@ -2110,7 +2114,7 @@ function getRelatedStats(entityType: RelatedEntityType, item: RelatedEntityItem)
         file ? getResolutionLabel(file.width, file.height) : null,
         file?.size ? formatFileSize(file.size) : null,
         image.galleryCount ? `${image.galleryCount} galleries` : null,
-        image.tags.length ? `${image.tags.length} tags` : null,
+        entityTagCount(image) ? `${entityTagCount(image)} tags` : null,
       ].filter(Boolean) as string[];
     }
     case "performers": {

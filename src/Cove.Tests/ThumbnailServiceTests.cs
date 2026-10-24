@@ -618,6 +618,41 @@ public class ThumbnailServiceTests
         }
     }
 
+    [Fact]
+    public async Task DeleteBlobGeneratedFilesAsync_RemovesTheBlobsScaledCopies()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"cove-thumbnail-{Guid.NewGuid():N}");
+        var generatedPath = Path.Combine(tempRoot, "generated");
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            using var image = new Image<Rgba32>(1000, 500);
+            using var buffer = new MemoryStream();
+            image.SaveAsJpeg(buffer);
+            var service = new ThumbnailService(
+                new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+                new StubJobService(),
+                new CoveConfiguration { GeneratedPath = generatedPath, WriteImageThumbnails = true },
+                new ZipFileReader(),
+                new BlobServiceWithContent(buffer.ToArray(), "image/jpeg"),
+                NullLogger<ThumbnailService>.Instance);
+            var ct = TestContext.Current.CancellationToken;
+
+            var result = await service.GetBlobImageThumbnailStreamAsync("7b41d0aa-large", 640, ct);
+            Assert.NotNull(result);
+            await result.Value.stream.DisposeAsync();
+            Assert.Single(Directory.GetFiles(generatedPath, "*", SearchOption.AllDirectories));
+
+            await service.DeleteBlobGeneratedFilesAsync("7b41d0aa-large", ct);
+            Assert.Empty(Directory.GetFiles(generatedPath, "*", SearchOption.AllDirectories));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     public static bool IsUnix => !OperatingSystem.IsWindows();
 
     [Fact(Skip = "Requires Unix shell fixtures", SkipUnless = nameof(IsUnix))]

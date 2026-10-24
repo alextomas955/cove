@@ -17,7 +17,7 @@ import {
   Tag,
   X,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { LazyMarkdown } from "./LazyMarkdown";
 import type { ExtensionTutorialTopic } from "../api/types";
 import { normalizeManualContext, uniqueManualContexts, type TutorialOpenRequest } from "./ManualContext";
 
@@ -33,8 +33,14 @@ function resolveSharedFeatureGuideImage(source?: string) {
   return sharedFeatureGuideImages[`../../../docs/feature-guides/${source}`];
 }
 
-export const TUTORIAL_STORYBOARD_STORAGE_KEY = "cove-tutorial-storyboard-complete";
-export const TUTORIAL_STORYBOARD_EVENT = "cove:tutorial-storyboard-open";
+import { TUTORIAL_STORYBOARD_STORAGE_KEY } from "./tutorialStoryboardEvents";
+
+export {
+  TUTORIAL_STORYBOARD_EVENT,
+  TUTORIAL_STORYBOARD_STORAGE_KEY,
+  hasCompletedTutorialStoryboard,
+  openTutorialStoryboard,
+} from "./tutorialStoryboardEvents";
 
 export type TutorialSlideMockKind =
   | "tasks"
@@ -179,15 +185,6 @@ interface TutorialTopicEntry {
 }
 
 export const builtinTutorialTopics: TutorialStoryboardTopic[] = sharedFeatureGuideTopics;
-
-export function hasCompletedTutorialStoryboard() {
-  return localStorage.getItem(TUTORIAL_STORYBOARD_STORAGE_KEY) === "true";
-}
-
-export function openTutorialStoryboard(request?: TutorialOpenRequest | string) {
-  const detail = typeof request === "string" ? { topicId: request } : request;
-  window.dispatchEvent(new CustomEvent<TutorialOpenRequest | undefined>(TUTORIAL_STORYBOARD_EVENT, { detail }));
-}
 
 // Stable default so an omitted prop does not rebuild the topic list on every render.
 const noExtensionTopics: ExtensionTutorialTopic[] = [];
@@ -869,7 +866,7 @@ function isAbsoluteManualAssetUrl(value: string) {
 function ManualMarkdown({ markdown }: { markdown: string }) {
   return (
     <div className="mt-4 text-sm leading-6 text-secondary">
-      <ReactMarkdown
+      <LazyMarkdown
         components={{
           p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
           ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
@@ -892,7 +889,7 @@ function ManualMarkdown({ markdown }: { markdown: string }) {
         }}
       >
         {markdown}
-      </ReactMarkdown>
+      </LazyMarkdown>
     </div>
   );
 }

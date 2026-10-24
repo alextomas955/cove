@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
+import { useEntityTags } from "../hooks/useEntityTags";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { entityEngagement, images } from "../api/client";
 import type { EntityEngagement, FindFilter, Image, ImageFilterCriteria } from "../api/types";
@@ -582,6 +583,7 @@ function ImageFeedCard({
   onSelect?: BoundMultiSelectToggleHandler;
   selecting?: boolean;
 }) {
+  const imageTags = useEntityTags(image);
   const displayTitle = getImageDisplayTitle(image);
   const file = image.files[0];
   const aspectRatio = file?.width && file.height ? `${file.width} / ${file.height}` : "1 / 1";
@@ -742,7 +744,7 @@ function ImageFeedCard({
             </FeedChipButton>
           ))}
           <FeedTagChips
-            tags={image.tags}
+            tags={imageTags}
             onTagClick={(tag, event) =>
               selecting ? onSelect?.(toggleOptionsFromEvent(event)) : onNavigate({ page: "tag", id: tag.id })
             }

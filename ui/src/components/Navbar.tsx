@@ -15,7 +15,7 @@ import { useAppConfig } from "../state/AppConfigContext";
 import { useExtensions } from "../extensions/ExtensionLoader";
 import { useAuth } from "../auth/AuthContext";
 import { canShowNavPage } from "../auth/visibility";
-import { openTutorialStoryboard } from "./TutorialStoryboardDialog";
+import { openTutorialStoryboard } from "./tutorialStoryboardEvents";
 import { createManualOpenRequest } from "./ManualContext";
 import { buildRouteUrl, type Route } from "../router/location";
 import { BUILT_IN_NAVIGATION_ITEMS } from "./navigationItems";

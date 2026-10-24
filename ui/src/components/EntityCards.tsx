@@ -87,6 +87,7 @@ import { SegmentPreviewMedia } from "./SegmentPreviewMedia";
 import { toggleOptionsFromEvent, type MultiSelectToggleOptions } from "../hooks/useMultiSelect";
 import { EntityMedia, TagMediaHover } from "./EntityMedia";
 import { VideoPreviewThumbnail } from "./VideoPreviewThumbnail";
+import { entityTagCount, useEntityTags, type TaggedEntity } from "../hooks/useEntityTags";
 import { GalleryScrubThumbnail, type GalleryScrubThumbnailHandle } from "./GalleryScrubThumbnail";
 import { getAgeAtDate, getPerformerAge, hasDeathOccurred } from "../utils/performerAge";
 import { CountryFlag } from "./Country";
@@ -415,6 +416,12 @@ function EntityLinkList({
       })}
     </div>
   );
+}
+
+/** A card's tag links: the entity's own tags, or on a list entry its tag ids resolved through the lookup. */
+function EntityTagLinks({ entity, onNavigate }: { entity: TaggedEntity; onNavigate?: (route: any) => void }) {
+  const tags = useEntityTags(entity);
+  return <TagLinkList items={tags} onNavigate={onNavigate} />;
 }
 
 function TagLinkList({ items, onNavigate }: { items: TagType[]; onNavigate?: (route: any) => void }) {
@@ -982,7 +989,7 @@ export function VideoCardPopovers({
   const likeCount = engagement?.likeCount ?? 0;
   const hasFavorite = engagement?.isFavorite === true;
   const hasPopovers =
-    video.tags.length > 0 ||
+    entityTagCount(video) > 0 ||
     video.performers.length > 0 ||
     video.groups.length > 0 ||
     video.galleries.length > 0 ||
@@ -1005,9 +1012,9 @@ export function VideoCardPopovers({
             <PerformerPreviewGrid performers={video.performers} onNavigate={onNavigate} />
           </PopoverButton>
         )}
-        {video.tags.length > 0 && (
-          <PopoverButton icon={<Tag className="w-3.5 h-3.5" />} count={video.tags.length} title="Tags" preferBelow>
-            <TagLinkList items={video.tags} onNavigate={onNavigate} />
+        {entityTagCount(video) > 0 && (
+          <PopoverButton icon={<Tag className="w-3.5 h-3.5" />} count={entityTagCount(video)} title="Tags" preferBelow>
+            <EntityTagLinks entity={video} onNavigate={onNavigate} />
           </PopoverButton>
         )}
         {likeCount > 0 && <LikeCounter count={likeCount} />}
@@ -2044,7 +2051,7 @@ export function ImageTile({
   const hasFavorite = engagement?.isFavorite === true;
   const imageGroups = image.groups ?? [];
   const hasFooter =
-    (image.tags?.length ?? 0) > 0 ||
+    entityTagCount(image) > 0 ||
     (image.performers?.length ?? 0) > 0 ||
     (image.galleries?.length ?? 0) > 0 ||
     imageGroups.length > 0 ||
@@ -2800,6 +2807,7 @@ interface AudioTileProps {
 }
 
 export function AudioTile({ audio, engagement, selected, onSelect, selecting, onClick, onNavigate }: AudioTileProps) {
+  const audioTags = useEntityTags(audio);
   const imageFit = useConfiguredImageFit();
   const title = getAudioDisplayTitle(audio);
   const duration = audio.maxDuration > 0 ? formatDuration(audio.maxDuration) : null;
@@ -2943,7 +2951,7 @@ export function AudioTile({ audio, engagement, selected, onSelect, selecting, on
           hostType="audio"
           hostId={audio.id}
           performers={audio.performers}
-          tags={audio.tags}
+          tags={audioTags}
           groups={audio.groups}
           engagement={engagement}
           organized={audio.organized}
@@ -2965,6 +2973,7 @@ interface TextTileProps {
 }
 
 export function TextTile({ text, engagement, selected, onSelect, selecting, onClick, onNavigate }: TextTileProps) {
+  const textTags = useEntityTags(text);
   const imageFit = useConfiguredImageFit();
   const title = getTextDisplayTitle(text);
   const primaryFile = pickPrimaryTextFile(text);
@@ -3056,7 +3065,7 @@ export function TextTile({ text, engagement, selected, onSelect, selecting, onCl
         hostType="text"
         hostId={text.id}
         performers={text.performers}
-        tags={text.tags}
+        tags={textTags}
         groups={text.groups}
         engagement={engagement}
         organized={text.organized}

@@ -23,6 +23,8 @@ interface VirtualizedEntityGridProps<TItem> extends InfiniteEntityLoadingState {
   gapClassName?: string;
 }
 
+const PAGED_VIRTUALIZATION_THRESHOLD = 100;
+
 export function VirtualizedEntityGrid<TItem>({
   items,
   getItemKey,
@@ -43,7 +45,9 @@ export function VirtualizedEntityGrid<TItem>({
   const inferredMinCardWidthPx = inferMinCardWidthPx(minCardWidth);
   const resolvedVirtualMinColumnWidth = virtualMinColumnWidth ?? sharedCardMinWidthPx ?? inferredMinCardWidthPx ?? 220;
 
-  if (infinitePageSize && items.length > 0) {
+  // A page of a few dozen cards renders plainly; a large page (lists allow up to a thousand per page) or
+  // an infinite list mounts only the rows near the viewport.
+  if (items.length > 0 && (infinitePageSize || items.length > PAGED_VIRTUALIZATION_THRESHOLD)) {
     return (
       <VirtualizedInfiniteList
         layout="grid"
@@ -53,9 +57,9 @@ export function VirtualizedEntityGrid<TItem>({
         gap={gap}
         estimateSize={estimateRowHeight}
         overscan={overscan}
-        hasNextPage={Boolean(hasNextPage)}
-        isFetchingNextPage={Boolean(isFetchingNextPage)}
-        loadMore={loadMore ?? noop}
+        hasNextPage={infinitePageSize && Boolean(hasNextPage)}
+        isFetchingNextPage={infinitePageSize && Boolean(isFetchingNextPage)}
+        loadMore={infinitePageSize ? (loadMore ?? noop) : noop}
         className={className}
         renderItem={({ item, index }) => renderItem(item, index)}
       />

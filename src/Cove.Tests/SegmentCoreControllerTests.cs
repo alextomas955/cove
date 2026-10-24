@@ -1042,6 +1042,64 @@ public class SegmentCoreControllerTests
     }
 
     [Fact]
+    public async Task SegmentRepository_PerformerFilterMatchesFaceAndDirectPerformerSegments()
+    {
+        await using var scope = await CreateContextAsync();
+        var context = scope.Context;
+        var ct = TestContext.Current.CancellationToken;
+
+        var video = new Video { Title = "Performer Video" };
+        var jane = new Performer { Name = "Jane" };
+        var kim = new Performer { Name = "Kim" };
+        context.Videos.Add(video);
+        context.Performers.AddRange(jane, kim);
+        // Unassigned faces first, so jane's face id differs from both performer ids and a RefId equal to
+        // a performer id cannot reach a performer through a face.
+        context.Faces.AddRange(
+            new Face { Label = "unassigned 1", PrimarySourceKey = "ext:ai.faces" },
+            new Face { Label = "unassigned 2", PrimarySourceKey = "ext:ai.faces" });
+        await context.SaveChangesAsync(ct);
+        var janeFace = new Face { Label = "jane", PrimarySourceKey = "ext:ai.faces", PerformerId = jane.Id };
+        context.Faces.Add(janeFace);
+        await context.SaveChangesAsync(ct);
+        Assert.NotEqual(jane.Id, janeFace.Id);
+        Assert.NotEqual(kim.Id, janeFace.Id);
+
+        Segment Seg(string title, string kind, long? refId, int day) => new()
+        {
+            HostType = SegmentHostType.Video,
+            HostId = video.Id,
+            StartSec = day,
+            EndSec = day + 1,
+            Kind = kind,
+            RefId = refId,
+            Title = title,
+            SourceKey = "user",
+            UpdatedAt = new DateTime(2024, 1, day, 12, 0, 0, DateTimeKind.Utc),
+        };
+        context.Segments.AddRange(
+            Seg("jane face", "face", janeFace.Id, 1),
+            Seg("jane direct", "performer", jane.Id, 2),
+            Seg("not a performer kind", "highlight", jane.Id, 3),
+            Seg("kim direct", "performer", kim.Id, 4),
+            Seg("no ref", "highlight", null, 5));
+        await context.SaveChangesAsync(ct);
+
+        var repository = new SegmentRepository(context);
+        var findFilter = new FindFilter { Page = 1, PerPage = 20, Sort = "updated_at", Direction = Cove.Core.Enums.SortDirection.Desc };
+
+        var (included, includedTotal) = await repository.FindAsync(new SegmentFilter { PerformerIds = [jane.Id] }, findFilter, ct);
+        Assert.Equal(2, includedTotal);
+        Assert.Equal(new string?[] { "jane direct", "jane face" }, included.Select(item => item.Segment.Title).ToArray());
+        Assert.All(included, item => Assert.Equal(jane.Id, item.PerformerId));
+
+        var (excluded, excludedTotal) = await repository.FindAsync(
+            new SegmentFilter { PerformersCriterion = new MultiIdCriterion { Excludes = [jane.Id] } }, findFilter, ct);
+        Assert.Equal(3, excludedTotal);
+        Assert.Equal(new string?[] { "no ref", "kim direct", "not a performer kind" }, excluded.Select(item => item.Segment.Title).ToArray());
+    }
+
+    [Fact]
     public async Task SegmentsController_RemoveTagFromSegmentsClearsOnlyMatchingRequestedSegments()
     {
         await using var scope = await CreateContextAsync();

@@ -4,6 +4,20 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoTagger } from "../components/VideoTagger";
 
+// The reviewed row reads its video's detail; here the detail is the video the test handed the tagger.
+const renderedVideos = vi.hoisted(() => new Map<number, unknown>());
+vi.mock("../components/VideoTagger", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../components/VideoTagger")>();
+  const { createElement } = await import("react");
+  return {
+    ...actual,
+    VideoTagger: (props: Parameters<typeof actual.VideoTagger>[0]) => {
+      for (const video of props.videos) renderedVideos.set(video.id, video);
+      return createElement(actual.VideoTagger, props);
+    },
+  };
+});
+
 const mocks = vi.hoisted(() => ({
   findMetadataServerByIds: vi.fn(),
   importFromMetadataServer: vi.fn(),
@@ -27,6 +41,7 @@ vi.mock("../api/client", () => ({
     apply: mocks.applyScrapeAttempt,
   },
   videos: {
+    get: vi.fn(async (id: number) => renderedVideos.get(id)),
     previewUrl: vi.fn(() => "/video-preview.mp4"),
     screenshotUrl: vi.fn(() => "/video-cover.jpg"),
     findMetadataServerByIds: mocks.findMetadataServerByIds,

@@ -12,11 +12,37 @@ namespace Cove.Api.Services;
 
 internal static class EffectiveTagDtoLoader
 {
-    public static async Task<IReadOnlyDictionary<int, List<TagDto>>> LoadAsync(
+    /// <summary>The ids of each host's effective tags, for list entries; clients resolve them through the tag lookup.</summary>
+    public static async Task<IReadOnlyDictionary<int, List<int>>> LoadIdsAsync(
         CoveContext db,
         AffinityHostType hostType,
         IEnumerable<int> hostIds,
         CancellationToken cancellationToken)
+    {
+        var ids = hostIds.Where(id => id > 0).Distinct().ToArray();
+        var result = ids.ToDictionary(id => id, _ => new List<int>());
+        if (ids.Length == 0)
+            return result;
+
+        var rows = await EffectiveHostTagQuery.ForHostType(db, hostType)
+            .AsNoTracking()
+            .Where(row => ids.Contains(row.HostId))
+            .Select(row => new { row.HostId, row.TagId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var row in rows)
+            result[row.HostId].Add(row.TagId);
+        foreach (var list in result.Values)
+            list.Sort();
+        return result;
+    }
+
+    public static async Task<IReadOnlyDictionary<int, List<TagDto>>> LoadAsync(
+        CoveContext db,
+        AffinityHostType hostType,
+        IEnumerable<int> hostIds,
+        CancellationToken cancellationToken,
+        bool includeProvenance = true)
     {
         var ids = hostIds.Where(id => id > 0).Distinct().ToArray();
         if (ids.Length == 0)
@@ -43,35 +69,11 @@ internal static class EffectiveTagDtoLoader
         var favoriteTagIds = await EngagementQueryHelpers.GetFavoriteHostIdsAsync(db, AffinityHostType.Tag, tagIds, cancellationToken);
         var favorites = CatalogFavorites.None with { TagIds = favoriteTagIds };
 
-        // Project to just the provenance fields rather than materializing whole TagApplication rows:
-        // tag_applications is one of the largest tables in the database and carries a payload column
-        // that nothing on this path reads.
-        var provenanceRows = await db.TagApplications
-            .AsNoTracking()
-            .Where(application => application.HostType == hostType
-                && ids.Contains(application.HostId)
-                && tagIds.Contains(application.TagId))
-            .OrderBy(application => application.SourceKey)
-            .ThenBy(application => application.CreatedAt)
-            .Select(application => new ProvenanceRow(
-                application.HostId,
-                application.TagId,
-                application.SourceKey,
-                application.SourceRunId,
-                application.ModelKey,
-                application.Confidence,
-                application.CreatedAt,
-                application.ContextType,
-                application.ContextId,
-                application.TotalDurationSec,
-                application.HostDurationSec))
-            .ToListAsync(cancellationToken);
-
-        var provenanceLookup = provenanceRows
-            .GroupBy(row => (row.HostId, row.TagId))
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(MapProvenance).ToList());
+        // Where each tag came from, how long it runs, and whether it can be removed here are detail data
+        // derived from every application's provenance; lists show tags and read none of them.
+        var provenanceLookup = includeProvenance
+            ? await LoadProvenanceAsync(db, hostType, ids, tagIds, cancellationToken)
+            : null;
 
         var result = ids.ToDictionary(id => id, _ => new List<TagDto>());
         foreach (var hostGroup in rows.GroupBy(row => row.HostId))
@@ -84,6 +86,9 @@ internal static class EffectiveTagDtoLoader
                     {
                         return null;
                     }
+
+                    if (provenanceLookup is null)
+                        return ForList(TagDtoMapping.MapTagDto(tag, favorites));
 
                     var isManual = group.Any(row => row.IsManual);
                     var isDerived = group.Any(row => row.IsDerived);
@@ -121,6 +126,60 @@ internal static class EffectiveTagDtoLoader
         }
 
         return result;
+    }
+
+    // A list card shows a tag's name, colors, group and description; the tag's own display settings
+    // (player bar, occurrence thresholds) and sort keys belong to the tag's pages and are left out of
+    // every tag of every listed item. Unset fields are not serialized.
+    private static TagDto ForList(TagDto tag)
+        => tag with
+        {
+            ShowAsSegment = null,
+            SegmentColorOverride = null,
+            SegmentLaneOverride = null,
+            MinOccurrenceSec = null,
+            MinOccurrencePercent = null,
+            CustomFields = null,
+            TagGroupSortOrder = null,
+            SortName = null,
+        };
+
+    private static async Task<Dictionary<(int HostId, int TagId), List<TagProvenanceDto>>> LoadProvenanceAsync(
+        CoveContext db,
+        AffinityHostType hostType,
+        int[] ids,
+        int[] tagIds,
+        CancellationToken cancellationToken)
+    {
+        // Project to just the provenance fields rather than materializing whole TagApplication rows:
+        // tag_applications is one of the largest tables in the database and carries a payload column
+        // that nothing on this path reads.
+        var provenanceRows = await db.TagApplications
+            .AsNoTracking()
+            .Where(application => application.HostType == hostType
+                && ids.Contains(application.HostId)
+                && tagIds.Contains(application.TagId))
+            .OrderBy(application => application.SourceKey)
+            .ThenBy(application => application.CreatedAt)
+            .Select(application => new ProvenanceRow(
+                application.HostId,
+                application.TagId,
+                application.SourceKey,
+                application.SourceRunId,
+                application.ModelKey,
+                application.Confidence,
+                application.CreatedAt,
+                application.ContextType,
+                application.ContextId,
+                application.TotalDurationSec,
+                application.HostDurationSec))
+            .ToListAsync(cancellationToken);
+
+        return provenanceRows
+            .GroupBy(row => (row.HostId, row.TagId))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(MapProvenance).ToList());
     }
 
     private sealed record ProvenanceRow(

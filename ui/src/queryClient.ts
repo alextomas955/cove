@@ -9,6 +9,10 @@ declare module "@tanstack/react-query" {
   }
 }
 
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "TimeoutError";
+}
+
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
     mutationCache: new MutationCache({
@@ -22,7 +26,9 @@ export function createAppQueryClient(): QueryClient {
     defaultOptions: {
       queries: {
         staleTime: 30_000,
-        retry: 1,
+        // A request that hit the client timeout would only run the same slow query again, doubling
+        // both the wait and the server's work before the error shows.
+        retry: (failureCount, error) => failureCount < 1 && !isTimeoutError(error),
       },
     },
   });

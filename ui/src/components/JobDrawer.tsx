@@ -137,12 +137,15 @@ export function JobDrawer({ open, onClose }: Props) {
         next.set(job.id, job);
         return next;
       });
-      // Apply the event to the cached job list so the badge and queue update at once. Updates arrive up
-      // to ten times a second per job, so the follow-up refetch must not cancel one already in flight,
-      // or no refetch would ever finish while jobs run.
+      // Apply the event to the cached job list so the badge and queue update at once. Progress events
+      // arrive up to ten times a second per job and carry the whole job, so only an ending changes what
+      // the server lists: it leaves the active queue and enters history. Refetch both then, without
+      // cancelling a refetch already in flight.
       queryClient.setQueryData<JobInfo[]>(["jobs"], (list) => applyJobUpdate(list, job));
-      queryClient.invalidateQueries({ queryKey: ["jobs"] }, { cancelRefetch: false });
-      queryClient.invalidateQueries({ queryKey: ["jobs-history"] }, { cancelRefetch: false });
+      if (isTerminalJob(job)) {
+        queryClient.invalidateQueries({ queryKey: ["jobs"] }, { cancelRefetch: false });
+        queryClient.invalidateQueries({ queryKey: ["jobs-history"] }, { cancelRefetch: false });
+      }
       observeTerminalJob(job);
     });
 

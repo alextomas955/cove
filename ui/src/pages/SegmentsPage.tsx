@@ -603,8 +603,22 @@ export function SegmentsPage({ onNavigate }: Props) {
     enabled: derivedQueryEnabled && !infinitePageSize,
   });
 
-  // Exact span total (cached, async). Kept independent of page/sort/direction so it's fetched once per
-  // filter set and reused while paging — the search response itself only carries -1 on the fast path.
+  // The exact span total resolves every span the filters reach, which on a large library takes far
+  // longer than the page itself, so it is only fetched when asked for. Changing the filters forgets the
+  // request; a total the page already knows (it resolved the whole scope) needs no request at all.
+  const spanCountKey = JSON.stringify([
+    activeProfileId,
+    q,
+    videoTitle,
+    videoTagIds,
+    videoTagDepth,
+    videoSelection.includeIds,
+    videoSelection.excludeIds,
+    appliedQuery ?? null,
+    combinedRawSegmentFilter,
+  ]);
+  const [spanCountRequestedFor, setSpanCountRequestedFor] = useState<string | null>(null);
+  const spanCountRequested = spanCountRequestedFor === spanCountKey;
   const spansCountQuery = useDerivedSpansCountQuery({
     activeProfileId,
     pageNumber,
@@ -621,7 +635,7 @@ export function SegmentsPage({ onNavigate }: Props) {
     appliedQuery,
     derivedQueryDescriptor: appliedQuery != null ? derivedQueryDescriptor : undefined,
     rawFilter: combinedRawSegmentFilter,
-    enabled: derivedQueryEnabled,
+    enabled: derivedQueryEnabled && spanCountRequested,
   });
 
   const rawSegmentsQuery = useRawSegmentsQuery({
@@ -748,6 +762,7 @@ export function SegmentsPage({ onNavigate }: Props) {
   const spansTotalCount =
     spansCountQuery.data?.totalCount ??
     (spansPageTotal >= 0 ? spansPageTotal : pageNumber * perPage + (spansHasMore ? perPage : 0));
+  const spansTotalUnknown = !isRawView && spansCountQuery.data == null && spansPageTotal < 0;
   const totalCount = isRawView
     ? infinitePageSize
       ? rawInfiniteQuery.totalCount
@@ -982,13 +997,36 @@ export function SegmentsPage({ onNavigate }: Props) {
           setActiveProfileId(typeof options.profileId === "number" ? options.profileId : undefined);
         }}
         customFilterSections={customFilterSections}
+        totalCountIsLowerBound={spansTotalUnknown}
         metadataByline={
-          <MediaAggregateMetadata
-            duration={isRawView ? rawAggregateQuery.data?.duration : spansCountQuery.data?.duration}
-            loading={false}
-          />
+          spansTotalUnknown ? (
+            spanCountRequested && spansCountQuery.isError ? (
+              <button
+                type="button"
+                onClick={() => void spansCountQuery.refetch()}
+                className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Couldn't count — retry
+              </button>
+            ) : spanCountRequested ? (
+              <span className="text-xs text-muted">Counting…</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSpanCountRequestedFor(spanCountKey)}
+                className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Count all
+              </button>
+            )
+          ) : (
+            <MediaAggregateMetadata
+              duration={isRawView ? rawAggregateQuery.data?.duration : spansCountQuery.data?.duration}
+              loading={false}
+            />
+          )
         }
-        summaryLoading={isRawView ? rawAggregateQuery.isLoading : spansCountQuery.isLoading}
+        summaryLoading={isRawView ? rawAggregateQuery.isLoading : false}
         renderOperations={() => (
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-border bg-card/70 p-1 text-xs">

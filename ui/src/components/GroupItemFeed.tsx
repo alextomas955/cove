@@ -34,6 +34,7 @@ import { useAuth } from "../auth/AuthContext";
 import { canReadEntity, type EntityResource } from "../auth/visibility";
 import { useEntityEngagement } from "../hooks/useEntityEngagement";
 import { useOptionalAppConfig } from "../state/AppConfigContext";
+import { createBatchedLoader } from "../utils/batchRequests";
 import { getAudioDisplayTitle, getTextDisplayTitle } from "../utils/audioTextDisplay";
 import { getGalleryDisplayTitle } from "../utils/galleryDisplay";
 import { getImageDisplayTitle } from "../utils/imageDisplay";
@@ -259,6 +260,30 @@ export function useGroupFeedEntities(
   }, [queries, queryItems]);
 }
 
+// A row's items load together: one list request per entity type instead of a detail request per item.
+// An id the list does not return (deleted, or not readable) fails just that item, as a 404 would.
+function loadOne<T extends { id: number }>(load: (ids: number[]) => Promise<T[]>) {
+  return async (id: number) => {
+    const [item] = await load([id]);
+    if (!item) throw new Error(`API Error 404: item ${id} not found`);
+    return item;
+  };
+}
+const loadFeedVideo = loadOne(
+  createBatchedLoader<Video>(
+    (ids) => videos.getMany(ids),
+    (video) => video.id,
+    100,
+  ),
+);
+const loadFeedImage = loadOne(
+  createBatchedLoader<Image>(
+    (ids) => images.getMany(ids),
+    (image) => image.id,
+    100,
+  ),
+);
+
 function createGroupFeedEntityQuery(item: GroupItem, host: GroupFeedHost, principalKey: string) {
   return {
     queryKey: ["group-feed", principalKey, "host", host.hostType, host.id, item.updatedAt],
@@ -266,9 +291,9 @@ function createGroupFeedEntityQuery(item: GroupItem, host: GroupFeedHost, princi
     queryFn: async (): Promise<GroupFeedEntity> => {
       switch (host.resource) {
         case "video":
-          return { type: "video", value: await videos.get(host.id) };
+          return { type: "video", value: await loadFeedVideo(host.id) };
         case "image":
-          return { type: "image", value: await images.get(host.id) };
+          return { type: "image", value: await loadFeedImage(host.id) };
         case "audio":
           return { type: "audio", value: await audios.get(host.id) };
         case "text":

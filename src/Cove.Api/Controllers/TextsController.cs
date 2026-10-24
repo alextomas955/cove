@@ -108,9 +108,9 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         };
         var (items, totalCount) = await Texts.FindAsync(null, findFilter, ct);
 
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
+        var tagIds = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
-        var dtos = items.Select(text => MapToDto(text, favorites, null, null, effectiveTags)).ToList();
+        var dtos = items.Select(text => MapToDto(text, favorites, null, null, tagIdsByTextId: tagIds)).ToList();
         return Ok(new PaginatedResponse<TextDocumentDto>(dtos, totalCount, page, perPage));
     }
 
@@ -124,9 +124,9 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         findFilter.PerPage = Math.Clamp(findFilter.PerPage, 1, ListPaging.MaxPerPage);
         var (items, totalCount) = await Texts.FindAsync(req.ObjectFilter, findFilter, ct, req.FilterExpression);
 
-        var effectiveTags = await EffectiveTagDtoLoader.LoadAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
+        var tagIds = await EffectiveTagDtoLoader.LoadIdsAsync(db, AffinityHostType.Text, items.Select(text => text.Id), ct);
         var favorites = await EngagementQueryHelpers.GetCatalogFavoritesAsync(db, ct);
-        var dtos = items.Select(text => MapToDto(text, favorites, null, null, effectiveTags)).ToList();
+        var dtos = items.Select(text => MapToDto(text, favorites, null, null, tagIdsByTextId: tagIds)).ToList();
         return Ok(new PaginatedResponse<TextDocumentDto>(dtos, totalCount, findFilter.Page, findFilter.PerPage));
     }
 
@@ -549,7 +549,7 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         return MapToDto(text, favorites, groups, customFieldValues, effectiveTags, contextTagApplications, fieldProvenance, performerCounts);
     }
 
-    private TextDocumentDto MapToDto(TextDocument text, CatalogFavorites favorites, List<GroupSummaryDto>? groups, Dictionary<string, object>? customFieldValues, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId = null, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null) => new(
+    private TextDocumentDto MapToDto(TextDocument text, CatalogFavorites favorites, List<GroupSummaryDto>? groups, Dictionary<string, object>? customFieldValues, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId = null, List<TagApplicationDto>? contextTagApplications = null, List<FieldProvenanceDto>? fieldProvenance = null, IReadOnlyDictionary<int, PerformerSummaryCounts>? performerCounts = null, IReadOnlyDictionary<int, List<int>>? tagIdsByTextId = null) => new(
         text.Id,
         text.Title,
         text.Code,
@@ -559,7 +559,8 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         text.Studio?.Name,
         PartialDate.Format(text.Date, text.DatePrecision),
         text.Urls.Select(url => url.Url).ToList(),
-        GetEffectiveTags(text, favorites, effectiveTagsByTextId),
+        // A list entry carries tag ids instead; see TagIds.
+        tagIdsByTextId != null ? [] : GetEffectiveTags(text, favorites, effectiveTagsByTextId),
         text.TextPerformers.Where(link => link.Performer != null).Select(link => link.Performer!).OrderForDisplay().Select(performer => new PerformerSummaryDto(
             performer.Id,
             performer.Name,
@@ -593,7 +594,10 @@ public class TextsController(CoveContext db, CustomFieldService customFields, Te
         text.MaxPageCount,
         text.ImageBlobId != null ? EntityImageUrls.Text(ControllerContext.HttpContext, text.Id, text.UpdatedAt) : null,
         contextTagApplications,
-        fieldProvenance);
+        fieldProvenance)
+    {
+        TagIds = tagIdsByTextId?.GetValueOrDefault(text.Id),
+    };
 
     private static List<TagDto> GetEffectiveTags(TextDocument text, CatalogFavorites favorites, IReadOnlyDictionary<int, List<TagDto>>? effectiveTagsByTextId)
         => effectiveTagsByTextId != null && effectiveTagsByTextId.TryGetValue(text.Id, out var tags)

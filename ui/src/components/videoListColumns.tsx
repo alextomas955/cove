@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import type { Tag } from "../api/types";
 import { Check, Film, Heart } from "lucide-react";
 import { entityImages } from "../api/client";
 import type { EntityEngagement, SavedFilterUIOptions, Video, VideoFile } from "../api/types";
@@ -18,6 +19,8 @@ export const VIDEO_LIST_CELL_PADDING_PX = 24;
 export interface VideoListCellContext {
   onNavigate: (route: any) => void;
   thumbnailHeightPx: number;
+  /** A row's tags for rendering; a list entry's tag ids are resolved through the tag lookup. */
+  tagsOf: (video: Video) => Tag[];
 }
 
 export interface VideoListColumnDefinition {
@@ -299,8 +302,9 @@ export const VIDEO_LIST_COLUMNS: readonly VideoListColumnDefinition[] = [
     label: "Tags",
     widthPx: 208,
     render: (video, _engagement, context) => {
-      if (video.tags.length === 0) return null;
-      const shown = video.tags.slice(0, MAX_INLINE_TAGS);
+      const tags = context.tagsOf(video);
+      if (tags.length === 0) return null;
+      const shown = tags.slice(0, MAX_INLINE_TAGS);
       return (
         <span className="flex flex-wrap items-center gap-1 whitespace-nowrap" onClick={stopRowClick}>
           {shown.map((tag) => (
@@ -311,7 +315,7 @@ export const VIDEO_LIST_COLUMNS: readonly VideoListColumnDefinition[] = [
               onClick={() => context.onNavigate({ page: "tag", id: tag.id })}
             />
           ))}
-          <OverflowCount count={video.tags.length - shown.length} />
+          <OverflowCount count={tags.length - shown.length} />
         </span>
       );
     },

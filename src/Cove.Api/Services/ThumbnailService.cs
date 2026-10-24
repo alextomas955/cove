@@ -328,7 +328,7 @@ public class ThumbnailService(
 
     public Task DeleteBlobGeneratedFilesAsync(string blobId, CancellationToken ct = default)
     {
-        DeleteFilesByPattern(Path.GetDirectoryName(GetBlobImageThumbnailBasePath(blobId, 1))!, $"{blobId}_m*.*");
+        DeleteFilesByPattern(Path.GetDirectoryName(GetBlobImageThumbnailBasePath(blobId, 1))!, $"{blobId}-*.*");
         return Task.CompletedTask;
     }
 

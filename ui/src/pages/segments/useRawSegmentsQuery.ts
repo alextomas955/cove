@@ -252,10 +252,13 @@ export function useRawSegmentsQuery({
         rawSegmentIds,
         rawFilter,
       });
-      const [response, aggregate] = await Promise.all([
-        segmentLibrary.findFiltered(request),
-        includeAggregate ? segmentLibrary.aggregate(request) : Promise.resolve(null),
-      ]);
+      // The aggregate carries the count as well, so a summary-only query must not also run the page
+      // query: on a large library each is a full scan of the matching segments.
+      if (includeAggregate) {
+        const aggregate = await segmentLibrary.aggregate(request);
+        return { items: [], totalCount: aggregate.count, duration: aggregate.duration };
+      }
+      const response = await segmentLibrary.findFiltered(request);
 
       return {
         items: response.items.map((item) => ({
@@ -265,7 +268,7 @@ export function useRawSegmentsQuery({
           videoTitle: item.hostTitle?.trim() || `Video #${item.hostId}`,
         })),
         totalCount: response.totalCount,
-        duration: aggregate?.duration ?? 0,
+        duration: 0,
       };
     },
     enabled,

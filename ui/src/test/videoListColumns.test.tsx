@@ -102,7 +102,7 @@ const engagement: EntityEngagement = {
   completeCount: 0,
 };
 
-const context = { onNavigate: vi.fn(), thumbnailHeightPx: 64 };
+const context = { onNavigate: vi.fn(), thumbnailHeightPx: 64, tagsOf: (video: Video) => video.tags };
 
 describe("videoListColumns", () => {
   it("defines unique ids and valid defaults", () => {

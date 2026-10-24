@@ -47,6 +47,9 @@ public class SegmentRepository : ISegmentRepository
         var descending = primarySort?.Direction == Core.Enums.SortDirection.Desc
             || (primarySort is null && findFilter.Direction == Core.Enums.SortDirection.Desc);
 
+        if (!library.RequiresJoinedCount && ApplySegmentOrdering(library, sort, descending, findFilter.Seed) is { } segmentOrder)
+            return (await FindPageBySegmentOrderAsync(library, segmentOrder, page, perPage, ct), totalCount);
+
         var items = await ApplyOrdering(library.Query, sort, descending, findFilter.Seed)
             .Skip((page - 1) * perPage)
             .Take(perPage)
@@ -54,14 +57,34 @@ public class SegmentRepository : ISegmentRepository
         return (items, totalCount);
     }
 
+    /// <summary>
+    /// The page for a sort that needs at most one display join: the page's ids are picked from the
+    /// segments (plus that join) and only those rows get every display join. Ordering the fully joined
+    /// query instead makes PostgreSQL join every matching segment to faces and performers before it can
+    /// sort, which on millions of rows is a multi-gigabyte on-disk sort for a page of 24.
+    /// </summary>
+    private static async Task<IReadOnlyList<SegmentLibraryItem>> FindPageBySegmentOrderAsync(
+        LibraryQuery library, IQueryable<Segment> segmentOrder, int page, int perPage, CancellationToken ct)
+    {
+        var pageIds = await segmentOrder
+            .Skip((page - 1) * perPage)
+            .Take(perPage)
+            .Select(segment => segment.Id)
+            .ToListAsync(ct);
+        if (pageIds.Count == 0)
+            return [];
+
+        var rows = await library.Query.Where(item => pageIds.Contains(item.Segment.Id)).ToListAsync(ct);
+        var position = pageIds.Select((id, index) => (id, index)).ToDictionary(entry => entry.id, entry => entry.index);
+        return [.. rows.OrderBy(item => position[item.Segment.Id])];
+    }
+
     public async Task<SegmentAggregate> AggregateAsync(SegmentFilter? filter, FindFilter? findFilter, CancellationToken ct = default)
     {
         using var relativeDates = RelativeDateEvaluation.Begin();
         var library = await BuildLibraryQueryAsync(filter ?? new SegmentFilter(), findFilter?.Q, ct);
         var count = await library.CountAsync(ct);
-        var duration = await library.Query.SumAsync(
-            item => Math.Max(0, (item.Segment.EndSec ?? item.Segment.StartSec) - item.Segment.StartSec),
-            ct);
+        var duration = await library.DurationSumAsync(ct);
         return new SegmentAggregate(count, duration);
     }
 
@@ -176,6 +199,25 @@ public class SegmentRepository : ISegmentRepository
         segmentQuery = FilterHelpers.ApplyTimestamp(segmentQuery, filter.CreatedAtCriterion, segment => segment.CreatedAt);
         segmentQuery = FilterHelpers.ApplyTimestamp(segmentQuery, filter.UpdatedAtCriterion, segment => segment.UpdatedAt);
 
+        // A segment belongs to a performer through its face (RefId is a face of theirs) or directly (a
+        // "performer" segment whose RefId is the performer) — the joins' FacePerformerId and
+        // DirectPerformerId. Resolving those ref ids first keeps the filter on the bare segments.
+        var performerIds = (filter.PerformerIds ?? []).Concat(filter.PerformersCriterion?.Value ?? []).Where(id => id > 0).Distinct().ToList();
+        if (performerIds.Count > 0)
+        {
+            var (faceRefIds, performerRefIds) = await LoadPerformerRefIdsAsync(performerIds, ct);
+            segmentQuery = segmentQuery.Where(segment => segment.RefId.HasValue
+                && (faceRefIds.Contains(segment.RefId.Value)
+                    || (performerRefIds.Contains(segment.RefId.Value) && segment.Kind != null && segment.Kind.ToLower() == "performer")));
+        }
+        if (filter.PerformersCriterion?.Excludes is { Count: > 0 } excludedPerformerIds)
+        {
+            var (faceRefIds, performerRefIds) = await LoadPerformerRefIdsAsync(excludedPerformerIds, ct);
+            segmentQuery = segmentQuery.Where(segment => !(segment.RefId.HasValue
+                && (faceRefIds.Contains(segment.RefId.Value)
+                    || (performerRefIds.Contains(segment.RefId.Value) && segment.Kind != null && segment.Kind.ToLower() == "performer"))));
+        }
+
         // Now add the display joins. Every join key is the target table's primary key, so none of them
         // can fan out a segment into multiple rows — the row count of `query` equals the row count of
         // `segmentQuery` restricted to segments whose host video still exists.
@@ -213,22 +255,6 @@ public class SegmentRepository : ISegmentRepository
             requiresJoinedCount = true;
         }
 
-        var performerIds = (filter.PerformerIds ?? []).Concat(filter.PerformersCriterion?.Value ?? []).Where(id => id > 0).Distinct().ToList();
-        if (performerIds.Count > 0)
-        {
-            query = query.Where(item =>
-                (item.DirectPerformerId.HasValue && performerIds.Contains(item.DirectPerformerId.Value)) ||
-                (item.FacePerformerId.HasValue && performerIds.Contains(item.FacePerformerId.Value)));
-            requiresJoinedCount = true;
-        }
-        if (filter.PerformersCriterion?.Excludes is { Count: > 0 } excludedPerformerIds)
-        {
-            query = query.Where(item =>
-                !(item.DirectPerformerId.HasValue && excludedPerformerIds.Contains(item.DirectPerformerId.Value)) &&
-                !(item.FacePerformerId.HasValue && excludedPerformerIds.Contains(item.FacePerformerId.Value)));
-            requiresJoinedCount = true;
-        }
-
         if (!string.IsNullOrWhiteSpace(q))
         {
             requiresJoinedCount = true;
@@ -247,6 +273,25 @@ public class SegmentRepository : ISegmentRepository
         }
 
         return new LibraryQuery(query, segmentQuery, requiresJoinedCount, db);
+    }
+
+    /// <summary>
+    /// The segment ref ids that resolve to these performers through the library joins: the readable faces
+    /// assigned to a readable one of them, and the readable performers themselves.
+    /// </summary>
+    private async Task<(List<long> FaceRefIds, List<long> PerformerRefIds)> LoadPerformerRefIdsAsync(IReadOnlyCollection<int> performerIds, CancellationToken ct)
+    {
+        var performerRefIds = await _db.Performers.AsNoTracking()
+            .Where(performer => performerIds.Contains(performer.Id))
+            .Select(performer => (long)performer.Id)
+            .ToListAsync(ct);
+        var faceRefIds = await _db.Faces.AsNoTracking()
+            .Where(face => face.PerformerId.HasValue
+                && performerIds.Contains(face.PerformerId.Value)
+                && _db.Performers.Any(performer => performer.Id == face.PerformerId))
+            .Select(face => (long)face.Id)
+            .ToListAsync(ct);
+        return (faceRefIds, performerRefIds);
     }
 
     /// <summary>Flat tag ids, with the descendants of each tag added when the depth asks for them.</summary>
@@ -285,6 +330,60 @@ public class SegmentRepository : ISegmentRepository
         };
     }
 
+    /// <summary>
+    /// The sorts that need at most one display join, ordered exactly as <see cref="ApplyOrdering"/> orders
+    /// them; null for the performer sorts, which read the face and performer joins.
+    /// </summary>
+    private static IQueryable<Segment>? ApplySegmentOrdering(LibraryQuery library, string sort, bool descending, int? seed)
+    {
+        var query = library.ExistingSegments;
+        var db = library.Db;
+        var withTagName =
+            from segment in query
+            join tag in db.Tags.AsNoTracking() on segment.TagId equals tag.Id into tagJoin
+            from tag in tagJoin.DefaultIfEmpty()
+            select new SegmentSortRow { Segment = segment, JoinedName = tag != null ? tag.Name : null };
+        var withVideoTitle =
+            from segment in library.SegmentQuery
+            join video in db.Videos.AsNoTracking() on segment.HostId equals video.Id
+            select new SegmentSortRow { Segment = segment, JoinedName = video.Title };
+
+        return sort switch
+        {
+            "random" => SeededRandomOrdering.OrderBy(query, seed, segment => segment.Id, descending),
+            "created_at" => OrderSegmentsBy(query, segment => segment.CreatedAt, descending),
+            "start_sec" => OrderSegmentsBy(query, segment => segment.StartSec, descending),
+            "end_sec" => OrderSegmentsBy(query, segment => segment.EndSec ?? segment.StartSec, descending),
+            "duration" => OrderSegmentsBy(query, segment => (segment.EndSec ?? segment.StartSec) - segment.StartSec, descending),
+            "confidence" => OrderSegmentsBy(query, segment => segment.Confidence ?? -1f, descending),
+            "kind" => OrderSegmentsBy(query, segment => NaturalSort.Key(segment.Kind ?? string.Empty), descending),
+            "source_key" => OrderSegmentsBy(query, segment => NaturalSort.Key(segment.SourceKey), descending),
+            "title" => OrderSortRowsBy(withTagName, row => NaturalSort.Key(row.Segment.Title ?? row.Segment.Kind ?? row.JoinedName ?? string.Empty), descending),
+            "video_title" => OrderSortRowsBy(withVideoTitle, row => NaturalSort.Key(row.JoinedName ?? string.Empty), descending),
+            "tag_name" => OrderSortRowsBy(withTagName, row => NaturalSort.Key(row.JoinedName ?? string.Empty), descending),
+            "performer" or "ref" => null,
+            _ => OrderSegmentsBy(query, segment => segment.UpdatedAt, descending),
+        };
+    }
+
+    private static IQueryable<Segment> OrderSortRowsBy<T>(IQueryable<SegmentSortRow> rows, Expression<Func<SegmentSortRow, T>> keySelector, bool descending)
+        => (descending
+                ? rows.OrderByDescending(keySelector).ThenByDescending(row => row.Segment.Id)
+                : rows.OrderBy(keySelector).ThenBy(row => row.Segment.Id))
+            .Select(row => row.Segment);
+
+    /// <summary>A segment with the one joined name its sort reads.</summary>
+    private sealed class SegmentSortRow
+    {
+        public required Segment Segment { get; init; }
+        public string? JoinedName { get; init; }
+    }
+
+    private static IOrderedQueryable<Segment> OrderSegmentsBy<T>(IQueryable<Segment> query, Expression<Func<Segment, T>> keySelector, bool descending)
+        => descending
+            ? query.OrderByDescending(keySelector).ThenByDescending(segment => segment.Id)
+            : query.OrderBy(keySelector).ThenBy(segment => segment.Id);
+
     private static IOrderedQueryable<SegmentLibraryItem> OrderBy<T>(
         IQueryable<SegmentLibraryItem> query,
         Expression<Func<SegmentLibraryItem, T>> keySelector,
@@ -303,10 +402,21 @@ public class SegmentRepository : ISegmentRepository
     /// </summary>
     private sealed record LibraryQuery(IQueryable<SegmentLibraryItem> Query, IQueryable<Segment> SegmentQuery, bool RequiresJoinedCount, CoveContext Db)
     {
+        /// <summary>
+        /// The filtered segments whose host video exists — the same rows as <see cref="Query"/> while
+        /// no join-dependent filter is active, without the display joins.
+        /// </summary>
+        public IQueryable<Segment> ExistingSegments
+            => SegmentQuery.Where(segment => Db.Videos.Any(video => video.Id == segment.HostId));
+
         public Task<int> CountAsync(CancellationToken ct)
+            => RequiresJoinedCount ? Query.CountAsync(ct) : ExistingSegments.CountAsync(ct);
+
+        // Same reasoning as the count: without a join-dependent filter the sum only needs the segments.
+        public Task<double> DurationSumAsync(CancellationToken ct)
             => RequiresJoinedCount
-                ? Query.CountAsync(ct)
-                : SegmentQuery.Where(segment => Db.Videos.Any(video => video.Id == segment.HostId)).CountAsync(ct);
+                ? Query.SumAsync(item => Math.Max(0, (item.Segment.EndSec ?? item.Segment.StartSec) - item.Segment.StartSec), ct)
+                : ExistingSegments.SumAsync(segment => Math.Max(0, (segment.EndSec ?? segment.StartSec) - segment.StartSec), ct);
     }
 
     public void Add(Segment segment) => _db.Segments.Add(segment);

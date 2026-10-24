@@ -122,6 +122,7 @@ public class ConfigService
             CachePath = cfg.CachePath,
             Host = cfg.Host,
             Port = cfg.Port,
+            DatabaseCacheMb = cfg.Postgres.SharedBuffersMb,
             MaxParallelTasks = cfg.MaxParallelTasks,
             MaxConcurrentDownloads = cfg.MaxConcurrentDownloads,
             MaxDownloadHeight = cfg.MaxDownloadHeight,
@@ -449,6 +450,7 @@ public class ConfigService
         if (dto.Host != null)
             cfg.Host = dto.Host;
         cfg.Port = dto.Port;
+        cfg.Postgres.SharedBuffersMb = Math.Clamp(dto.DatabaseCacheMb, PostgresConfig.MinSharedBuffersMb, PostgresConfig.MaxSharedBuffersMb);
         cfg.MaxParallelTasks = dto.MaxParallelTasks;
         cfg.MaxConcurrentDownloads = dto.MaxConcurrentDownloads > 0 ? dto.MaxConcurrentDownloads : cfg.MaxConcurrentDownloads;
         cfg.MaxDownloadHeight = Math.Max(0, dto.MaxDownloadHeight);

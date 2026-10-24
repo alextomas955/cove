@@ -2331,12 +2331,18 @@ public class VideoFilterBehaviorTests
         var ok = Assert.IsType<OkObjectResult>(response.Result);
         var payload = Assert.IsType<PaginatedResponse<AudioDto>>(ok.Value);
         var audio = Assert.Single(payload.Items);
-        var effectiveTag = Assert.Single(audio.Tags);
 
         Assert.Equal("matching-audio", audio.Title);
-        Assert.True(effectiveTag.IsDerived);
-        Assert.False(effectiveTag.CanRemove);
-        Assert.Equal(6, effectiveTag.EffectiveDurationSec.GetValueOrDefault(), 3);
+        // A list entry carries its tag ids and leaves the tags themselves to the tag lookup.
+        Assert.Equal([tag.Id], audio.TagIds);
+        Assert.Empty(audio.Tags);
+
+        var detail = Assert.IsType<AudioDto>(Assert.IsType<OkObjectResult>((await controller.GetById(matchingAudio.Id, CancellationToken.None)).Result).Value);
+        var detailTag = Assert.Single(detail.Tags);
+        Assert.True(detailTag.IsDerived);
+        Assert.False(detailTag.CanRemove);
+        Assert.Equal("test", Assert.Single(detailTag.Provenance!).SourceKey);
+        Assert.Equal(6, detailTag.EffectiveDurationSec.GetValueOrDefault(), 3);
     }
 
     [Fact]

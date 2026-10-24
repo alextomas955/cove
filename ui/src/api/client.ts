@@ -24,6 +24,7 @@ import type {
   PerformerUpdate,
   PerformerCountryOption,
   Tag,
+  TagLookupEntry,
   TagDetail,
   TagCreate,
   TagUpdate,
@@ -619,6 +620,13 @@ export const videos = {
       body: JSON.stringify(normalizeCriterionPayload(req)),
     }),
   get: (id: number) => request<Video>(`/videos/${id}`),
+  /** The list entries for these ids (unreadable or deleted ids are simply absent), in one request. */
+  getMany: async (ids: number[]) =>
+    (
+      await request<PaginatedResponse<Video>>(
+        `/videos${buildQuery({ page: 1, perPage: ids.length, skipCount: true }, { ids: ids.join(",") })}`,
+      )
+    ).items,
   create: (data: VideoCreate) => request<Video>("/videos", { method: "POST", body: JSON.stringify(data) }),
   createFromFile: (data: FileBackedCreate) =>
     request<Video>("/videos/from-file", { method: "POST", body: JSON.stringify(data) }),
@@ -1275,6 +1283,8 @@ export const performers = {
 export const tags = {
   find: (filter?: FindFilter, extra?: Record<string, string | number | boolean | undefined>) =>
     request<PaginatedResponse<Tag>>(`/tags${buildQuery(filter, extra)}`),
+  /** Every readable tag, as list entries' tag ids are shown. */
+  lookup: () => request<TagLookupEntry[]>("/tags/lookup"),
   findFiltered: (req: FilteredQueryRequest<TagFilterCriteria>) =>
     request<PaginatedResponse<Tag>>("/tags/find", {
       method: "POST",
@@ -1562,6 +1572,13 @@ export const images = {
       body: JSON.stringify(normalizeCriterionPayload(req)),
     }),
   get: (id: number) => request<Image>(`/images/${id}`),
+  /** The list entries for these ids (unreadable or deleted ids are simply absent), in one request. */
+  getMany: async (ids: number[]) =>
+    (
+      await request<PaginatedResponse<Image>>(
+        `/images${buildQuery({ page: 1, perPage: ids.length }, { ids: ids.join(",") })}`,
+      )
+    ).items,
   create: (data: ImageCreate) => request<Image>("/images", { method: "POST", body: JSON.stringify(data) }),
   createFromFile: (data: FileBackedCreate) =>
     request<Image>("/images/from-file", { method: "POST", body: JSON.stringify(data) }),
@@ -1783,8 +1800,13 @@ export const segmentSpans = {
   search: (data: SegmentSpanSearchRequest) =>
     request<SegmentSpanSearchResponse>("/segments/spans/search", { method: "POST", body: JSON.stringify(data) }),
   // Exact span total for a filter set, computed/cached server-side. Independent of page/sort/direction.
+  // Asked for on demand, and on a large library it resolves every span in scope, so it gets the long timeout.
   count: (data: SegmentSpanSearchRequest) =>
-    request<SegmentSpanCountResponse>("/segments/spans/count", { method: "POST", body: JSON.stringify(data) }),
+    request<SegmentSpanCountResponse>("/segments/spans/count", {
+      method: "POST",
+      body: JSON.stringify(data),
+      timeoutMs: LONG_API_REQUEST_TIMEOUT_MS,
+    }),
 };
 
 // ===== Entity Images =====
