@@ -1,8 +1,11 @@
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,22 +27,20 @@ public class PostgresManagerService : IHostedService
     // PostgreSQL 18.3 - latest stable release
     private const string PgMajor = "18";
     private const string PgFullVersion = "18.3";
-    private const string PgvectorVersion = "0.8.2";
     private const string EmbeddedPgvectorResourcePrefix = "cove.pgvector/";
 
-    // Windows: EDB portable binaries (still available for Windows/macOS)
-    private const string WinUrl = "https://sbp.enterprisedb.com/getfile.jsp?fileid=1260146";
-    // macOS: EDB portable binaries
-    private const string MacUrl = "https://sbp.enterprisedb.com/getfile.jsp?fileid=1260163";
+    // The binaries come from a "Build PostgreSQL Payload" release on Cove's own repository
+    // (.github/workflows/build-postgres-payload.yml). EDB and PGDG delete superseded builds, which
+    // broke every fresh install once a pinned version disappeared upstream.
+    private const string PayloadRepository = "yourcove/cove";
+    private const string PayloadReleaseTag = "postgres-payload-v" + PgFullVersion;
 
-    // Bounds for the tools whose work does not grow with the library: they finish in seconds, and the
-    // extraction handles a fixed set of PostgreSQL packages. pg_ctl gets no bound here, because it bounds
-    // itself (start -t 300; stop waits PGCTLTIMEOUT, 60 s unless the user raised it) and a shutdown
-    // checkpoint or crash recovery legitimately takes longer on a large database.
+    // Bounds for the tools whose work does not grow with the library: they finish in seconds. pg_ctl gets
+    // no bound here, because it bounds itself (start -t 300; stop waits PGCTLTIMEOUT, 60 s unless the user
+    // raised it) and a shutdown checkpoint or crash recovery legitimately takes longer on a large database.
     private static readonly TimeSpan NoTimeout = Timeout.InfiniteTimeSpan;
     private static readonly TimeSpan ClientToolTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan ExtractionTimeout = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan KillWaitTimeout = TimeSpan.FromSeconds(5);
 
     public PostgresManagerService(IOptions<PostgresConfig> config, ILogger<PostgresManagerService> logger)
@@ -77,6 +78,13 @@ public class PostgresManagerService : IHostedService
 
         _logger.LogInformation("Managed PostgreSQL mode enabled");
         ValidateDatabaseName(_config.Database);
+
+        // initdb and the postmaster both refuse to run as root, so say so before downloading anything.
+        if (!OperatingSystem.IsWindows() && Environment.IsPrivilegedProcess)
+            throw new InvalidOperationException(
+                "Managed PostgreSQL cannot run as root because PostgreSQL refuses to start under the root account. " +
+                "Run Cove as a regular user that owns Cove's home directory (for example a dedicated 'cove' user), " +
+                "or set Cove__Postgres__Managed=false and provide Cove__Postgres__ConnectionString for an external pgvector-enabled PostgreSQL server.");
 
         // 1. On Linux/macOS, check if a system postgres is already available in PATH
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -209,108 +217,124 @@ public class PostgresManagerService : IHostedService
 
     // ─── Download ───────────────────────────────────────────────────
 
+    private string PayloadManifestUrl => string.IsNullOrWhiteSpace(_config.PayloadManifestUrl)
+        ? $"https://github.com/{PayloadRepository}/releases/download/{PayloadReleaseTag}/postgres-payload-manifest.json"
+        : _config.PayloadManifestUrl;
+
     private async Task DownloadPostgresAsync(CancellationToken ct)
     {
         Directory.CreateDirectory(CoveDir);
+        var tempDir = Path.Combine(CoveDir, "_pg_download_tmp");
+        if (Directory.Exists(tempDir))
+            Directory.Delete(tempDir, recursive: true);
+        Directory.CreateDirectory(tempDir);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        try
         {
-            await DownloadAndExtractZipAsync(WinUrl, ct);
+            var manifestUrl = PayloadManifestUrl;
+            var manifestPath = Path.Combine(tempDir, "postgres-payload-manifest.json");
+            try
+            {
+                await DownloadFileAsync(manifestUrl, manifestPath, ct);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Could not download the PostgreSQL payload manifest from {manifestUrl}: {ex.Message}. " +
+                    "Check that this machine can reach github.com, or set Cove__Postgres__Managed=false and provide " +
+                    "Cove__Postgres__ConnectionString for an external pgvector-enabled PostgreSQL server.", ex);
+            }
+
+            var asset = SelectPayloadAsset(await File.ReadAllTextAsync(manifestPath, ct), CurrentRuntimeId(), PgMajor, manifestUrl);
+            var archivePath = Path.Combine(tempDir, Path.GetFileName(asset.FileName));
+            await DownloadFileAsync(asset.Url, archivePath, ct);
+            await VerifySha256Async(archivePath, asset.Sha256, ct);
+
+            _logger.LogDebug("Extracting PostgreSQL binaries to {PgsqlDir}", PgsqlDir);
+            Directory.CreateDirectory(PgsqlDir);
+            await using (var archiveStream = File.OpenRead(archivePath))
+            await using (var gzipStream = new GZipStream(archiveStream, CompressionMode.Decompress))
+            {
+                await TarFile.ExtractToDirectoryAsync(gzipStream, PgsqlDir, overwriteFiles: true, ct);
+            }
+            if (Directory.Exists(BinDir))
+                MakeExecutable(BinDir);
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        finally
         {
-            await DownloadAndExtractZipAsync(MacUrl, ct);
-        }
-        else
-        {
-            // Linux: EDB no longer provides portable binaries, so Cove downloads PGDG
-            // .deb packages and extracts them into CoveDir without installing system packages.
-            await InstallLinuxPostgresAsync(ct);
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
 
         if (!File.Exists(Exe("pg_ctl")))
             throw new FileNotFoundException(
-                $"Installation succeeded but pg_ctl not found at expected path: {Exe("pg_ctl")}. " +
-                $"Contents of {CoveDir}: {string.Join(", ", Directory.GetDirectories(CoveDir))}");
+                $"The PostgreSQL payload was extracted but pg_ctl is not at the expected path: {Exe("pg_ctl")}. " +
+                $"Contents of {PgsqlDir}: {string.Join(", ", Directory.GetDirectories(PgsqlDir).Select(Path.GetFileName))}");
 
         _logger.LogInformation("PostgreSQL {Version} binaries ready at {BinDir}", PgFullVersion, BinDir);
     }
 
-    private async Task DownloadAndExtractZipAsync(string url, CancellationToken ct)
+    internal sealed record PostgresPayloadAsset(string FileName, string Url, string Sha256);
+
+    /// <summary>
+    /// Picks this platform's archive out of a payload manifest, the JSON that build-postgres-payload.yml
+    /// publishes beside the archives: <c>postgresMajor</c> plus <c>assets</c> keyed by runtime identifier.
+    /// </summary>
+    internal static PostgresPayloadAsset SelectPayloadAsset(string manifestJson, string rid, string pgMajor, string manifestSource)
     {
-        string archivePath = Path.Combine(CoveDir, "postgresql.zip");
-
-        await DownloadFileAsync(url, archivePath, ct);
-
-        _logger.LogDebug("Extracting PostgreSQL binaries to {BinDir}", BinDir);
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        JsonDocument document;
+        try
         {
-            var exitCode = await RunAsync("/usr/bin/unzip", ["-q", "-o", archivePath, "-d", CoveDir], CoveDir, ExtractionTimeout, ct);
-            if (exitCode != 0)
-                throw new InvalidOperationException("Failed to extract PostgreSQL archive");
+            document = JsonDocument.Parse(manifestJson);
         }
-        else
+        catch (JsonException ex)
         {
-            ZipFile.ExtractToDirectory(archivePath, CoveDir, overwriteFiles: true);
-        }
-
-        File.Delete(archivePath);
-    }
-
-    private sealed record LinuxOsRelease(string? Id, string? IdLike, string? VersionCodename, string? VersionId, string? PrettyName);
-
-    private static async Task<LinuxOsRelease> ReadLinuxOsReleaseAsync(CancellationToken ct)
-    {
-        if (!File.Exists("/etc/os-release"))
-            return new LinuxOsRelease(null, null, null, null, null);
-
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var osRelease = await File.ReadAllTextAsync("/etc/os-release", ct);
-        foreach (var rawLine in osRelease.Split('\n'))
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith('#'))
-                continue;
-
-            var equalsIndex = line.IndexOf('=');
-            if (equalsIndex <= 0)
-                continue;
-
-            var key = line[..equalsIndex];
-            var value = line[(equalsIndex + 1)..].Trim().Trim('"');
-            values[key] = value;
+            throw new InvalidOperationException($"The PostgreSQL payload manifest at {manifestSource} is not valid JSON.", ex);
         }
 
-        return new LinuxOsRelease(
-            values.GetValueOrDefault("ID"),
-            values.GetValueOrDefault("ID_LIKE"),
-            values.GetValueOrDefault("VERSION_CODENAME"),
-            values.GetValueOrDefault("VERSION_ID"),
-            values.GetValueOrDefault("PRETTY_NAME"));
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException($"The PostgreSQL payload manifest at {manifestSource} is not a JSON object.");
+
+            var manifestMajor = root.TryGetProperty("postgresMajor", out var majorElement) && majorElement.ValueKind == JsonValueKind.String
+                ? majorElement.GetString()
+                : null;
+            if (!string.Equals(manifestMajor, pgMajor, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"The PostgreSQL payload manifest at {manifestSource} is for PostgreSQL {manifestMajor ?? "(unknown)"}, but this Cove build manages PostgreSQL {pgMajor}.");
+
+            if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException($"The PostgreSQL payload manifest at {manifestSource} has no assets.");
+
+            if (!assets.TryGetProperty(rid, out var asset) || asset.ValueKind != JsonValueKind.Object)
+            {
+                var available = string.Join(", ", assets.EnumerateObject().Select(property => property.Name));
+                throw new InvalidOperationException(
+                    $"The PostgreSQL payload manifest at {manifestSource} has no binaries for {rid} (available: {available}). " +
+                    $"Install PostgreSQL {pgMajor} with pgvector yourself so pg_ctl is on PATH, or set Cove__Postgres__Managed=false " +
+                    "and provide Cove__Postgres__ConnectionString for an external pgvector-enabled PostgreSQL server.");
+            }
+
+            string Required(string name)
+            {
+                if (asset.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
+                    return value.GetString()!;
+                throw new InvalidOperationException($"The PostgreSQL payload manifest at {manifestSource} is missing '{name}' for {rid}.");
+            }
+
+            return new PostgresPayloadAsset(Required("fileName"), Required("url"), Required("sha256"));
+        }
     }
 
-    private static bool IsDebianFamilyLinux(LinuxOsRelease osRelease)
+    internal static async Task VerifySha256Async(string path, string expectedSha256, CancellationToken ct)
     {
-        var ids = new[] { osRelease.Id, osRelease.IdLike }
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .SelectMany(value => value!.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-        return ids.Any(value =>
-            value.Equals("debian", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("ubuntu", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string BuildUnsupportedLinuxManagedPostgresMessage(LinuxOsRelease osRelease)
-    {
-        var detected = osRelease.PrettyName
-            ?? osRelease.Id
-            ?? "this Linux distribution";
-
-        return $"Managed PostgreSQL automatic download currently supports Debian/Ubuntu-family Linux only; detected {detected}. " +
-            "Cove will not download Debian .deb packages on this distribution. " +
-            $"Install PostgreSQL {PgMajor} and pgvector with your distribution packages so pg_ctl is on PATH, use Docker, " +
-            "or set Cove__Postgres__Managed=false and provide Cove__Postgres__ConnectionString for an external pgvector-enabled PostgreSQL server.";
+        await using var stream = File.OpenRead(path);
+        var actual = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct));
+        if (!string.Equals(actual, expectedSha256.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"The downloaded PostgreSQL archive {Path.GetFileName(path)} is corrupt: its SHA-256 {actual} does not match the manifest's {expectedSha256}. Restart Cove to download it again.");
     }
 
     private static IEnumerable<string> FindExecutablesInPath(string executableName)
@@ -459,120 +483,6 @@ public class PostgresManagerService : IHostedService
             var intendedBinDir = BinDir;
             _binDirOverride = systemBinDir;
             _logger.LogWarning("Could not symlink {SystemBin} to {BinDir} — using system path directly", systemBinDir, intendedBinDir);
-        }
-    }
-
-    private async Task InstallLinuxPostgresAsync(CancellationToken ct)
-    {
-        var osRelease = await ReadLinuxOsReleaseAsync(ct);
-        if (!IsDebianFamilyLinux(osRelease))
-            throw new InvalidOperationException(BuildUnsupportedLinuxManagedPostgresMessage(osRelease));
-
-        // Download .deb packages from the PGDG APT repository and extract locally.
-        var tempDir = Path.Combine(CoveDir, "_pg_install_tmp");
-        var extractDir = Path.Combine(CoveDir, "_pg_extract_tmp");
-        Directory.CreateDirectory(tempDir);
-        Directory.CreateDirectory(extractDir);
-
-        try
-        {
-            // Detect distro codename for PGDG repo (default to noble/Ubuntu 24.04)
-            var codename = string.IsNullOrWhiteSpace(osRelease.VersionCodename) ? "noble" : osRelease.VersionCodename;
-
-            // Map distro codename to PGDG numeric suffix (e.g. noble=24.04, jammy=22.04)
-            var pgdgSuffix = codename switch
-            {
-                "noble" => "24.04",
-                "jammy" => "22.04",
-                "focal" => "20.04",
-                "bookworm" => "12",
-                "bullseye" => "11",
-                "buster" => "10",
-                _ => "24.04", // default to latest
-            };
-
-            var arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "amd64";
-            var pgdgBase = $"https://apt.postgresql.org/pub/repos/apt/pool/main/p/postgresql-{PgMajor}";
-
-            var serverDownloaded = await TryDownloadDebPackageAsync(pgdgBase, tempDir, new[]
-            {
-                $"postgresql-{PgMajor}_{PgFullVersion}-1.pgdg{pgdgSuffix}+1_{arch}.deb",
-                $"postgresql-{PgMajor}_{PgFullVersion}-1_{arch}.deb",
-            }, ct);
-
-            if (!serverDownloaded)
-                throw new InvalidOperationException(
-                    $"Could not download postgresql-{PgMajor} for {codename}/{arch}. " +
-                    "Configure Cove with an external PostgreSQL connection string or use the Docker package.");
-
-            // Client utilities and libpq are required for initdb, readiness checks, and database creation.
-            await TryDownloadDebPackageAsync(pgdgBase, tempDir, new[]
-            {
-                $"postgresql-client-{PgMajor}_{PgFullVersion}-1.pgdg{pgdgSuffix}+1_{arch}.deb",
-                $"postgresql-client-{PgMajor}_{PgFullVersion}-1_{arch}.deb",
-            }, ct);
-
-            await TryDownloadDebPackageAsync(pgdgBase, tempDir, new[]
-            {
-                $"libpq5_{PgFullVersion}-1.pgdg{pgdgSuffix}+1_{arch}.deb",
-                $"libpq5_{PgFullVersion}-1_{arch}.deb",
-            }, ct);
-            await TryDownloadLinuxRuntimeDependencyAsync("liburing2", codename, arch, tempDir, ct);
-
-            var pgvectorBase = "https://apt.postgresql.org/pub/repos/apt/pool/main/p/pgvector";
-            var pgvectorDownloaded = await TryDownloadDebPackageAsync(pgvectorBase, tempDir, new[]
-            {
-                $"postgresql-{PgMajor}-pgvector_{PgvectorVersion}-1.pgdg{pgdgSuffix}+1_{arch}.deb",
-                $"postgresql-{PgMajor}-pgvector_{PgvectorVersion}-1_{arch}.deb",
-            }, ct, required: false);
-
-            if (!pgvectorDownloaded)
-            {
-                throw new InvalidOperationException(
-                    $"Could not download postgresql-{PgMajor}-pgvector {PgvectorVersion} for {codename}/{arch}. " +
-                    "Configure Cove with an external pgvector-enabled PostgreSQL connection string or use the Docker package.");
-            }
-
-            // Extract .deb packages
-            foreach (var debFile in Directory.GetFiles(tempDir, "*.deb"))
-            {
-                _logger.LogTrace("Extracting {File}", Path.GetFileName(debFile));
-                var exitCode = await RunAsync("/usr/bin/dpkg-deb", ["-x", debFile, extractDir], tempDir, ExtractionTimeout, ct);
-                if (exitCode != 0)
-                {
-                    exitCode = await RunAsync("/usr/bin/ar", ["x", debFile], tempDir, ExtractionTimeout, ct);
-                    if (exitCode != 0)
-                        throw new InvalidOperationException($"Failed to extract {debFile}");
-
-                    var dataTar = Directory.GetFiles(tempDir, "data.tar.*").FirstOrDefault()
-                        ?? throw new FileNotFoundException("data.tar not found in .deb package");
-                    exitCode = await RunAsync("/bin/tar", ["xf", dataTar, "-C", extractDir], tempDir, ExtractionTimeout, ct);
-                    if (exitCode != 0)
-                        throw new InvalidOperationException($"Failed to extract {dataTar}");
-                }
-            }
-
-            // Move extracted PG binaries to expected location
-            var pgBinSrc = Path.Combine(extractDir, "usr", "lib", "postgresql", PgMajor, "bin");
-            var pgLibSrc = Path.Combine(extractDir, "usr", "lib", "postgresql", PgMajor, "lib");
-            var pgShareSrc = Path.Combine(extractDir, "usr", "share", "postgresql", PgMajor);
-            Directory.CreateDirectory(PgsqlDir);
-
-            if (Directory.Exists(pgBinSrc))
-                Directory.Move(pgBinSrc, BinDir);
-            if (Directory.Exists(pgLibSrc))
-                Directory.Move(pgLibSrc, PgLibDir);
-            if (Directory.Exists(pgShareSrc))
-                Directory.Move(pgShareSrc, PgShareDir);
-
-            CopyLinuxRuntimeLibraries(extractDir, PgLibDir);
-
-            MakeExecutable(BinDir);
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
-            if (Directory.Exists(extractDir)) Directory.Delete(extractDir, recursive: true);
         }
     }
 
@@ -782,88 +692,11 @@ public class PostgresManagerService : IHostedService
     private static string BuildPgvectorCreateExtensionFailureMessage(string database)
         => $"Could not enable pgvector in database '{database}'. Install pgvector extension files for this PostgreSQL server and rerun Cove migrations.";
 
-    private async Task<bool> TryDownloadDebPackageAsync(string baseUrl, string tempDir, IEnumerable<string> packageNames, CancellationToken ct, bool required = true)
-    {
-        foreach (var pkgName in packageNames)
-        {
-            var pkgUrl = $"{baseUrl}/{pkgName}";
-            var pkgPath = Path.Combine(tempDir, pkgName);
-            _logger.LogDebug("Trying package URL {Url}", pkgUrl);
-            try
-            {
-                await DownloadFileAsync(pkgUrl, pkgPath, ct);
-                return true;
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogDebug(ex, "Package {PackageName} was not available at {Url}", pkgName, pkgUrl);
-            }
-        }
-
-        if (required)
-            throw new InvalidOperationException($"Could not download any of these packages: {string.Join(", ", packageNames)}");
-
-        return false;
-    }
-
-    private async Task TryDownloadLinuxRuntimeDependencyAsync(string packageName, string codename, string arch, string tempDir, CancellationToken ct)
-    {
-        var urls = LinuxRuntimeDependencyPackageUrls(packageName, codename, arch);
-        if (urls.Length == 0)
-            return;
-
-        foreach (var url in urls)
-        {
-            var fileName = Path.GetFileName(new Uri(url).LocalPath);
-            try
-            {
-                await DownloadFileAsync(url, Path.Combine(tempDir, fileName), ct);
-                return;
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogDebug(ex, "Optional Linux runtime dependency {PackageName} was not available at {Url}", packageName, url);
-            }
-        }
-    }
-
-    private static string[] LinuxRuntimeDependencyPackageUrls(string packageName, string codename, string arch)
-    {
-        if (!string.Equals(packageName, "liburing2", StringComparison.OrdinalIgnoreCase) || !string.Equals(arch, "amd64", StringComparison.OrdinalIgnoreCase))
-            return [];
-
-        return codename switch
-        {
-            "noble" => ["https://archive.ubuntu.com/ubuntu/pool/main/libu/liburing/liburing2_2.5-1build1_amd64.deb"],
-            "jammy" => ["https://archive.ubuntu.com/ubuntu/pool/main/libu/liburing/liburing2_2.1-2build1_amd64.deb"],
-            "bookworm" => ["https://deb.debian.org/debian/pool/main/libu/liburing/liburing2_2.3-3_amd64.deb"],
-            _ => [],
-        };
-    }
-
-    private static void CopyLinuxRuntimeLibraries(string extractDir, string pgLibDir)
-    {
-        Directory.CreateDirectory(pgLibDir);
-        var runtimeLibraryNames = new[] { "libpq.so*", "liburing.so*" };
-        var usrLibDir = Path.Combine(extractDir, "usr", "lib");
-        if (!Directory.Exists(usrLibDir))
-            return;
-
-        foreach (var pattern in runtimeLibraryNames)
-        {
-            foreach (var libraryPath in Directory.EnumerateFiles(usrLibDir, pattern, SearchOption.AllDirectories))
-            {
-                File.Copy(libraryPath, Path.Combine(pgLibDir, Path.GetFileName(libraryPath)), overwrite: true);
-            }
-        }
-    }
-
     private async Task DownloadFileAsync(string url, string destPath, CancellationToken ct)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        // EDB's download redirector rejects requests that carry no User-Agent with 403.
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Cove/1.0");
-        _logger.LogInformation("Downloading managed PostgreSQL component");
+        _logger.LogInformation("Downloading {Url}", url);
 
         using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
@@ -1010,6 +843,8 @@ public class PostgresManagerService : IHostedService
             shared_buffers = {SharedBuffersSetting}
             log_destination = 'stderr'
             logging_collector = off
+            jit = off
+            unix_socket_directories = ''
             """, ct);
     }
 
@@ -1030,6 +865,13 @@ public class PostgresManagerService : IHostedService
             ["shared_buffers"] = SharedBuffersSetting,
             ["log_destination"] = "'stderr'",
             ["logging_collector"] = "off",
+            // The Linux payload ships without llvmjit (libLLVM alone is over 100 MB), and JIT only pays off
+            // on long analytical queries, not Cove's; off everywhere keeps the platforms alike.
+            ["jit"] = "off",
+            // Cove and its tools connect over TCP only. Debian builds default the socket directory to
+            // /var/run/postgresql, which only the distribution's postgres user can write, so a managed
+            // server run by any other user failed to start with "could not create lock file".
+            ["unix_socket_directories"] = "''",
             // Keep standard PostgreSQL modules (such as plpgsql) available alongside Cove extensions.
             ["dynamic_library_path"] = QuotePostgresSettingValue(string.Join(Path.PathSeparator, new[] { ToPostgresConfigPath(PgLibDir), "$libdir" })),
             ["extension_control_path"] = QuotePostgresSettingValue(string.Join(Path.PathSeparator, new[] { ToPostgresConfigPath(PgShareDir), "$system" })),

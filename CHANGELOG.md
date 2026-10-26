@@ -10,6 +10,10 @@ here. Keep the `## [version] - date` heading format below so the parser can read
 
 ## [Unreleased]
 
+- Fixed: a fresh standalone install on Linux failed to start because the pgvector package Cove downloaded had been removed from the PostgreSQL apt server. Managed PostgreSQL now downloads its binaries from a release on Cove's own GitHub repository for every platform, verifies them against a checksum, and no longer depends on Debian or Ubuntu package names, so it also works on distributions it did not recognise before, such as Debian 13. The Linux download bundles the libraries PostgreSQL needs and runs on any distribution with glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). The Windows download is much smaller because it leaves out pgAdmin and StackBuilder, which Cove never used.
+- Starting Cove as `root` on Linux or macOS with managed PostgreSQL now stops with a message explaining that PostgreSQL refuses to run as root, instead of failing later during database initialisation.
+- Managed PostgreSQL runs with `jit = off`. The query compiler never helped Cove's short queries, and leaving it out keeps the Linux download small.
+
 ## [1.7.0] - 2026-10-24
 
 - Large libraries load much faster, especially the Segments page, which could take 30 seconds or more per page and often failed with a server error on libraries with millions of segments. On a copy of a library with 5.9 million segments, the raw segment list loads in about 1 second instead of 45, its other sorts in 0.5 to 2 seconds instead of 26 to 31, a segment text search in under 5 seconds instead of 40, and a filter by performer almost instantly instead of 33 seconds.
