@@ -20,19 +20,34 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-releas
 
 install -d -m 0755 /usr/share/postgresql-common/pgdg
 curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
-echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-  > /etc/apt/sources.list.d/pgdg.list
+codename="$(lsb_release -cs)"
+# apt.postgresql.org keeps only the newest few builds of each major. apt-archive.postgresql.org keeps
+# every build ever published, signed with the same key, so the pinned version stays installable
+# after PGDG moves on (the Windows and macOS payloads pin their EDB builds the same way).
+{
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main"
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt-archive.postgresql.org/pub/repos/apt ${codename}-pgdg-archive main"
+} > /etc/apt/sources.list.d/pgdg.list
 apt-get update
+
+# The Debian package version for the requested PostgreSQL version, e.g. 18.3 -> 18.3-1.pgdg22.04+1.
+deb_version="$(apt-cache madison "postgresql-${PG_MAJOR}" | awk -v want="${PG_VERSION}-" 'index($3, want) == 1 { print $3 }' | sort -V | tail -1)"
+if [[ -z "$deb_version" ]]; then
+  echo "PGDG has no postgresql-${PG_MAJOR} ${PG_VERSION} build for $(lsb_release -ds). Available versions:" >&2
+  apt-cache madison "postgresql-${PG_MAJOR}" | awk '{ print "  " $3 }' | sort -uV >&2
+  exit 1
+fi
 
 # postgresql-common would otherwise create a cluster in the container during install.
 mkdir -p /etc/postgresql-common
 echo "create_main_cluster = false" > /etc/postgresql-common/createcluster.conf
-apt-get install -y --no-install-recommends "postgresql-${PG_MAJOR}" "postgresql-client-${PG_MAJOR}"
+# libpq5 is built from the same source package; pin it too so the bundled libpq matches the server.
+apt-get install -y --no-install-recommends "postgresql-${PG_MAJOR}=${deb_version}" "postgresql-client-${PG_MAJOR}=${deb_version}" "libpq5=${deb_version}"
 
 installed="$(dpkg-query -W -f='${Version}' "postgresql-${PG_MAJOR}")"
 case "$installed" in
   "${PG_VERSION}-"*) ;;
-  *) echo "PGDG now ships postgresql-${PG_MAJOR} ${installed}; this payload was requested as ${PG_VERSION}. Rerun with the current version." >&2; exit 1 ;;
+  *) echo "Installed postgresql-${PG_MAJOR} ${installed} but ${PG_VERSION} was requested." >&2; exit 1 ;;
 esac
 
 work="$(mktemp -d)"

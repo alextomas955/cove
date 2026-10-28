@@ -1,8 +1,9 @@
 # PostgreSQL payload
 
 Cove's managed PostgreSQL downloads its binaries on first run. They come from a release on this
-repository, not from EDB or PGDG directly: both delete superseded builds, and once a pinned version
-disappeared upstream every fresh install failed until a Cove release pointed at a new one.
+repository, not from EDB or PGDG directly: EDB deletes superseded builds and PGDG moves them to a
+slower archive, and once a pinned version disappeared upstream every fresh install failed until a Cove
+release pointed at a new one.
 
 Two workflows publish the pieces, each as a release whose assets are one `.tar.gz` per runtime
 identifier plus a manifest with the URL and SHA-256 of each:
@@ -23,8 +24,10 @@ PostgreSQL with `jit = off`.
 
 1. Find the EDB "binaries" zip file ids for the new version on
    <https://www.enterprisedb.com/download-postgresql-binaries> and run **Build PostgreSQL Payload**
-   with the version and both URLs. The Linux job fails if PGDG no longer ships that exact version, in
-   which case use the version it does ship.
+   with the version and both URLs. The Linux job installs that exact version from PGDG: the main
+   apt repository keeps only the newest few builds of each major, so the script also adds
+   `apt-archive.postgresql.org`, which keeps every build ever published. The job fails only if PGDG
+   never built that version for Ubuntu 22.04, and then lists the versions it has.
 2. Run **Build pgvector Payload** for the same major if the pgvector version or major changed.
 3. Set `PgFullVersion` (and `PgMajor` if it changed) in `src/Cove.Data/PostgresManagerService.cs`;
    the release tag Cove downloads from is derived from `PgFullVersion`. The pgvector version lives in

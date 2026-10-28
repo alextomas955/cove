@@ -12,7 +12,7 @@ on:
         required: true
         default: '18'
       postgres_version:
-        description: PostgreSQL full version (the Linux job fails if PGDG now ships a newer one)
+        description: PostgreSQL full version (must exist as an EDB and a PGDG build)
         required: true
         default: '18.3'
       windows_url:
