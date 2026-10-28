@@ -862,6 +862,122 @@ public sealed class DeletionSafetyTests
     }
 
     [Theory]
+    [InlineData(BulkDeletionEntityKind.Studio)]
+    [InlineData(BulkDeletionEntityKind.Performer)]
+    public async Task DeletionThatLosesARaceReportsNotFoundAndStillCleansUp(BulkDeletionEntityKind kind)
+    {
+        const string blobId = "race-artwork";
+        var concurrentDelete = new ConcurrentRowDeleteInterceptor();
+        await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
+        BaseEntity entity = kind == BulkDeletionEntityKind.Studio
+            ? new Studio { Name = "Deleted twice", ImageBlobId = blobId }
+            : new Performer { Name = "Deleted twice", ImageBlobId = blobId };
+        db.Add(entity);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var (service, blobs) = CreateDeletionService(db);
+        concurrentDelete.Arm(kind == BulkDeletionEntityKind.Studio ? "studios" : "performers", entity.Id);
+
+        Assert.False(await service.DeleteAsync(
+            kind,
+            entity.Id,
+            new BulkDeletionExecutionContext(),
+            deleteFiles: false,
+            deleteGenerated: true,
+            CancellationToken.None,
+            publishEvent: false));
+
+        Assert.False(kind == BulkDeletionEntityKind.Studio
+            ? await db.Studios.AsNoTracking().AnyAsync(item => item.Id == entity.Id)
+            : await db.Performers.AsNoTracking().AnyAsync(item => item.Id == entity.Id));
+        Assert.Equal([blobId], blobs.DeletedBlobIds);
+    }
+
+    [Fact]
+    public async Task DeletionWhoseFollowUpCountSaveConflictsStillReportsTheCommittedDelete()
+    {
+        var concurrentDelete = new ConcurrentRowDeleteInterceptor();
+        await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
+        var tag = new Tag { Name = "Counted" };
+        var performer = new Performer { Name = "Target", ImageBlobId = "followup-artwork" };
+        performer.PerformerTags.Add(new PerformerTag { Tag = tag });
+        db.Add(performer);
+        await db.SaveChangesAsync();
+        // A stale count guarantees the follow-up save writes the tag row.
+        await db.Database.ExecuteSqlAsync($"UPDATE tags SET \"PerformerCount\" = 5 WHERE \"Id\" = {tag.Id}");
+        db.ChangeTracker.Clear();
+        var eventBus = new EventBus();
+        var deletedEventIds = new List<int>();
+        using var subscription = eventBus.Subscribe<EntityEvent>(evt =>
+        {
+            if (evt.Type == EventType.PerformerDeleted)
+                deletedEventIds.Add(evt.EntityId);
+        });
+        var (service, blobs) = CreateDeletionService(db, eventBus);
+        // The performer delete commits; the competing request removes the tag whose count the
+        // follow-up save refreshes.
+        concurrentDelete.Arm("tags", tag.Id, beforeSave: 2);
+
+        Assert.True(await service.DeleteAsync(
+            BulkDeletionEntityKind.Performer,
+            performer.Id,
+            new BulkDeletionExecutionContext(),
+            deleteFiles: false,
+            deleteGenerated: true,
+            CancellationToken.None));
+
+        Assert.False(await db.Performers.AsNoTracking().AnyAsync(item => item.Id == performer.Id));
+        Assert.Equal([performer.Id], deletedEventIds);
+        Assert.Equal(["followup-artwork"], blobs.DeletedBlobIds);
+    }
+
+    [Fact]
+    public async Task StudioDeletionConflictRethrowsWhenTheStudioStillExists()
+    {
+        var concurrentDelete = new ConcurrentRowDeleteInterceptor();
+        await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
+        var tag = new Tag { Name = "Applied" };
+        var studio = new Studio { Name = "Survivor" };
+        db.AddRange(tag, studio);
+        await db.SaveChangesAsync();
+        var application = new TagApplication { HostType = AffinityHostType.Studio, HostId = studio.Id, TagId = tag.Id };
+        db.TagApplications.Add(application);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var (service, _) = CreateDeletionService(db);
+        // Only a staged dependency disappears, so the conflict is not a lost race for the studio itself.
+        concurrentDelete.Arm("tag_applications", application.Id);
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => service.DeleteAsync(
+            BulkDeletionEntityKind.Studio,
+            studio.Id,
+            new BulkDeletionExecutionContext(),
+            deleteFiles: false,
+            deleteGenerated: true,
+            CancellationToken.None,
+            publishEvent: false));
+
+        Assert.True(await db.Studios.AsNoTracking().AnyAsync(item => item.Id == studio.Id));
+    }
+
+    private static (BulkEntityDeletionService Service, ReferenceAwareBlobService Blobs) CreateDeletionService(
+        CoveContext db,
+        EventBus? eventBus = null)
+    {
+        var customFields = new CustomFieldService(db);
+        var thumbnails = new RecordingThumbnailService();
+        var blobs = new ReferenceAwareBlobService(db);
+        var service = new BulkEntityDeletionService(
+            db,
+            customFields,
+            new ImageDeletionService(db, customFields, thumbnails, blobService: blobs),
+            thumbnails,
+            blobs,
+            eventBus ?? new EventBus());
+        return (service, blobs);
+    }
+
+    [Theory]
     [InlineData(PostgresErrorCodes.RestrictViolation)]
     [InlineData(PostgresErrorCodes.ForeignKeyViolation)]
     public async Task TagDeletionMapsLatePostgresReferenceFailuresToASafeConflict(string sqlState)
@@ -1072,6 +1188,35 @@ public sealed class DeletionSafetyTests
         context.Database.OpenConnection();
         context.Database.EnsureCreated();
         return context;
+    }
+
+    private sealed class ConcurrentRowDeleteInterceptor : SaveChangesInterceptor
+    {
+        private (string Table, int Id)? _target;
+        private int _savesUntilDelete;
+
+        // beforeSave counts SaveChanges calls from 1, so 2 targets CoveContext's follow-up derived-count save.
+        public void Arm(string table, int id, int beforeSave = 1)
+        {
+            _target = (table, id);
+            _savesUntilDelete = beforeSave;
+        }
+
+        // Removes the row after the deletion service loaded it, as a competing request would.
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (_target is { } target && --_savesUntilDelete == 0)
+            {
+                _target = null;
+#pragma warning disable EF1002 // The table name comes from the test itself, not from input.
+                await eventData.Context!.Database.ExecuteSqlRawAsync($"DELETE FROM {target.Table} WHERE \"Id\" = {{0}}", [target.Id], cancellationToken);
+#pragma warning restore EF1002
+            }
+            return result;
+        }
     }
 
     private sealed class PostgresSaveFailureInterceptor(string sqlState) : SaveChangesInterceptor

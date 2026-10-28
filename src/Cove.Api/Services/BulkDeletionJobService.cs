@@ -630,12 +630,31 @@ public sealed class BulkEntityDeletionService(
         var hostCleanup = await _hostDependencies.StageDeleteAsync(hostType, id, ct);
         await customFields.StageDeleteValuesForEntityAsync(customFieldEntityType, id, ct);
         entities.Remove(entity);
-        await db.SaveChangesAsync(ct);
+        var deleted = true;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex) when (db.Entry(entity).State != EntityState.Deleted)
+        {
+            // The delete committed and was accepted; only CoveContext's follow-up derived-count save
+            // conflicted, so the deletion stands and its cleanup and event must still happen.
+            logger?.LogWarning(ex, "Deleted {EntityType} {EntityId}, but refreshing derived counts conflicted with a concurrent change.", typeof(TEntity).Name, id);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A competing request deleted the entity after it was loaded; report it as already gone.
+            if (await entities.IgnoreQueryFilters().AsNoTracking().AnyAsync(item => item.Id == id, ct))
+                throw;
+            deleted = false;
+        }
+        // Still clean up after losing the race: the winner may not have finished, and every step here is
+        // reference-checked and idempotent.
         InvalidateSegmentCaches(hostCleanup);
         await CleanupDependencyBlobsBestEffortAsync(hostCleanup.BlobIds, ct);
         foreach (var blobId in ownedBlobIds)
             await CleanupBlobBestEffortAsync(blobId, deleteGenerated: true, ct);
-        return true;
+        return deleted;
     }
 
     private async Task<bool> DeleteTagAsync(int id, CancellationToken ct)

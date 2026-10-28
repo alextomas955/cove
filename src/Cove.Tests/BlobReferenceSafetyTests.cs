@@ -5,6 +5,7 @@ using Cove.Data;
 using Cove.Data.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -211,6 +212,88 @@ public sealed class BlobReferenceSafetyTests
             if (Directory.Exists(tempRoot))
                 Directory.Delete(tempRoot, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConcurrencyConflict_ReleasesTheBlobReferenceLease(bool saveAsync)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var provider = CreateInterceptorProvider(connection);
+        await using var winnerScope = provider.CreateAsyncScope();
+        await using var loserScope = provider.CreateAsyncScope();
+        var winner = winnerScope.ServiceProvider.GetRequiredService<CoveContext>();
+        var loser = loserScope.ServiceProvider.GetRequiredService<CoveContext>();
+        await winner.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+        var studio = new Studio { Name = "target", ImageBlobId = "11111111-1111-4111-8111-111111111111" };
+        winner.Studios.Add(studio);
+        await winner.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var stale = await loser.Studios.SingleAsync(item => item.Id == studio.Id, TestContext.Current.CancellationToken);
+
+        winner.Studios.Remove(studio);
+        await winner.SaveChangesAsync(TestContext.Current.CancellationToken);
+        loser.Studios.Remove(stale);
+        if (saveAsync)
+            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => loser.SaveChangesAsync(TestContext.Current.CancellationToken));
+        else
+            Assert.Throws<DbUpdateConcurrencyException>(() => loser.SaveChanges());
+
+        // The coordinator gate is process-wide, so a lease leaked by the failed save would block every
+        // later blob-referencing save until restart.
+        await AssertLeaseAvailableAsync(provider.GetRequiredService<IBlobReferenceCoordinator>());
+    }
+
+    [Fact]
+    public async Task LeaseHeldWhenTheScopeEnds_IsReleasedOnDispose()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IBlobReferenceCoordinator, BlobReferenceCoordinator>();
+        services.AddScoped<BlobReferenceSaveChangesInterceptor>();
+        var failingInterceptor = new FailingSavingChangesInterceptor();
+        // A later interceptor failing in SavingChanges ends the save without any interceptor hook.
+        services.AddDbContext<CoveContext>((provider, options) =>
+            options.UseSqlite(connection)
+                .AddInterceptors(provider.GetRequiredService<BlobReferenceSaveChangesInterceptor>(), failingInterceptor));
+        await using var provider = services.BuildServiceProvider();
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<CoveContext>();
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Studios.Add(new Studio { Name = "target", ImageBlobId = "11111111-1111-4111-8111-111111111111" });
+            failingInterceptor.Armed = true;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync(TestContext.Current.CancellationToken));
+
+            // A further save in the same scope must fail fast rather than wait on its own leaked lease.
+            failingInterceptor.Armed = false;
+            var retry = context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.Same(retry, await Task.WhenAny(retry, Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => retry);
+        }
+
+        await AssertLeaseAvailableAsync(provider.GetRequiredService<IBlobReferenceCoordinator>());
+    }
+
+    private static async Task AssertLeaseAvailableAsync(IBlobReferenceCoordinator coordinator)
+    {
+        var acquire = coordinator.AcquireAsync(TestContext.Current.CancellationToken).AsTask();
+        Assert.Same(acquire, await Task.WhenAny(acquire, Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)));
+        await (await acquire).DisposeAsync();
+    }
+
+    private sealed class FailingSavingChangesInterceptor : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+            => Armed ? throw new InvalidOperationException("Injected interceptor failure") : ValueTask.FromResult(result);
     }
 
     [Fact]

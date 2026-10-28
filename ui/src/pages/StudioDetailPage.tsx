@@ -625,6 +625,7 @@ export function StudioDetailPage({ id, onNavigate }: Props) {
         message={`Delete "${studio.name}"? This cannot be undone.`}
         onConfirm={() => deleteMut.mutate()}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
       />
       <DetailMergeDialog
         open={mergeOpen}
