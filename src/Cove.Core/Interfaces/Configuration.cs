@@ -143,6 +143,13 @@ public class PostgresConfig
     public string? ConnectionString { get; set; } // Override: use external PG
 
     /// <summary>
+    /// Where the managed PostgreSQL downloads its binaries from on first run: the manifest of a
+    /// "Build PostgreSQL Payload" release. Unset means the release on Cove's own GitHub repository for
+    /// the PostgreSQL version this build manages; set it to test a payload before publishing it.
+    /// </summary>
+    public string? PayloadManifestUrl { get; set; }
+
+    /// <summary>
     /// Memory the managed PostgreSQL keeps for caching database pages (its <c>shared_buffers</c>), in MB.
     /// More keeps a large library's lists fast after other work has pushed them out of the operating
     /// system's file cache, at the cost of that memory being held while Cove runs. Applied on restart.
@@ -378,10 +385,17 @@ public static class CoveDefaultPaths
         if (!string.IsNullOrWhiteSpace(configured))
             return Path.GetFullPath(Environment.ExpandEnvironmentVariables(configured.Trim()));
 
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "cove"
-        );
+        // On Linux and macOS this is $XDG_DATA_HOME or $HOME/.local/share, and empty when neither is set
+        // (a container console entered with no HOME, for example). The relative "cove" that Path.Combine
+        // would then give resolves against each process's own working directory, so Cove and the
+        // PostgreSQL tools it runs would each look for the data somewhere else.
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+            throw new InvalidOperationException(
+                $"Cove cannot find a home directory for its data: neither {DataRootEnvironmentVariable} nor HOME is set. " +
+                $"Set {DataRootEnvironmentVariable} to the directory Cove should keep its data in.");
+
+        return Path.Combine(localAppData, "cove");
     }
 
     public static string GetDataSubdirectory(string name)
