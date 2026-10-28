@@ -23,6 +23,10 @@ import {
   MonitorPlay,
   Play,
   Pause,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import type { ExtensionListSortContribution, FindFilter } from "../api/types";
 import { ExtensionSlot } from "../router/RouteRegistry";
@@ -34,6 +38,15 @@ import type { CriterionDefinition, FilterDialogCustomSection } from "./filterCri
 import { migrateLegacyPerformerFavoriteCriterion } from "./filterCriterionState";
 import { useResolvedKeybindingOverrides } from "../hooks/useResolvedKeybindingOverrides";
 import { useKeySequence } from "../hooks/useKeySequence";
+import {
+  CONDENSE_HIDDEN_ATTRIBUTE,
+  CONDENSE_ONLY_ATTRIBUTE,
+  useCondensingStickyToolbar,
+} from "../hooks/useCondensingStickyToolbar";
+import { useDockingSelectionBar } from "../hooks/useDockingSelectionBar";
+
+const condenseHiddenProps = { [CONDENSE_HIDDEN_ATTRIBUTE]: "" };
+const condenseOnlyProps = { [CONDENSE_ONLY_ATTRIBUTE]: "" };
 import { resolveKeybinding } from "../keyboard/keybindings";
 import { useCustomFieldDefinitions } from "../hooks/useCustomFieldDefinitions";
 import {
@@ -449,6 +462,31 @@ export function ListPage({
     infinitePageSize &&
     (displayMode === "grid" || displayMode === "wall" || displayMode === "feed" || displayMode === "vertical");
   const wakeAutoScrollControls = useCallback(() => setAutoScrollControlsAwake(true), []);
+  const {
+    sentinelRef: stickyToolbarSentinelRef,
+    toolbarRef: stickyToolbarRef,
+    barRef: stickyToolbarBarRef,
+    pinnable: toolbarPinnable,
+    navHeight,
+    condensed: toolbarCondensed,
+    expandedHeight: expandedToolbarHeight,
+  } = useCondensingStickyToolbar();
+  const {
+    anchorRef: selectionBarAnchorRef,
+    barRef: selectionBarRef,
+    docked: selectionBarDocked,
+    anchorHeight: selectionBarAnchorHeight,
+    dockHeight: selectionBarDockHeight,
+  } = useDockingSelectionBar({
+    active: showSelectionBar && toolbarPinnable,
+    navHeight,
+    toolbarRef: stickyToolbarRef,
+  });
+  const cardSizeContextValue = useMemo(() => ({ cardMinWidthPx, zoomLevel }), [cardMinWidthPx, zoomLevel]);
+  const scrollToTop = useCallback(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }, []);
 
   if ((!infinitePageSize || !showAutoScrollControls) && autoScrollEnabled) {
     setAutoScrollEnabled(false);
@@ -811,225 +849,461 @@ export function ListPage({
 
   return (
     <div className="list-page space-y-0">
-      {/* Toolbar - matches standard FilteredListToolbar. From the lg breakpoint it is three sections:
+      <div ref={stickyToolbarSentinelRef} aria-hidden="true" />
+      {/* From lg, the toolbar, filter chips and selection bar stay pinned under the navbar. Once scrolled past, the
+          same elements condense in place: secondary controls hide (staying mounted) and a compact pager replaces the
+          operations. The outer element keeps the expanded height while condensed so nothing below moves; it is
+          transparent to the pointer outside the visible bar. Many dialogs and menus are rendered inside the bar
+          without a portal, so while one is open the wrapper is lifted above the navbar and every other overlay. */}
+      <div
+        ref={stickyToolbarRef}
+        className={`list-page-sticky ${toolbarPinnable ? "lg:sticky lg:z-40 lg:has-[:is(.fixed.inset-0,[role=dialog])]:z-[150]" : ""} ${toolbarCondensed ? "list-page-sticky-condensed pointer-events-none" : ""}`}
+        style={{
+          top: toolbarPinnable ? navHeight : undefined,
+          height: toolbarCondensed && expandedToolbarHeight > 0 ? expandedToolbarHeight : undefined,
+        }}
+      >
+        <div
+          ref={stickyToolbarBarRef}
+          className={toolbarCondensed ? "pointer-events-auto bg-background pb-1 shadow-lg shadow-black/30" : undefined}
+        >
+          {/* Toolbar - matches standard FilteredListToolbar. From the lg breakpoint it is three sections:
           the title section keeps a reserved minimum width so a changing item range never moves the
           controls, the controls section wraps internally, and the operations stay right-aligned.
           Between sm and lg the title takes its own row above the controls; below sm the controls
           wrapper is display: contents so the phone layout is unchanged. */}
-      <div className="list-page-toolbar mx-1 mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 shadow-sm shadow-black/20 sm:px-2.5 sm:py-2 lg:flex-nowrap">
-        {/* Title + count + byline */}
-        <div className="list-page-title-group flex min-w-0 basis-full flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 lg:flex-1 lg:basis-0 lg:min-w-[12rem]">
-          <h1 className="text-sm font-semibold text-foreground whitespace-nowrap">{title}</h1>
-          <span className="text-xs text-muted hidden sm:inline">
-            {summaryPending
-              ? "Loading…"
-              : resolvedLoadState.status === "error"
-                ? "Unavailable"
-                : shownTotalCount > 0
-                  ? `${start.toLocaleString()}-${end.toLocaleString()} of ${shownTotalCount.toLocaleString()}${totalCountIsLowerBound ? "+" : ""}`
-                  : "0 items"}
-          </span>
-          <span className="text-xs text-muted sm:hidden">
-            {summaryPending
-              ? "…"
-              : resolvedLoadState.status === "error"
-                ? "—"
-                : shownTotalCount > 0
-                  ? `${shownTotalCount.toLocaleString()}${totalCountIsLowerBound ? "+" : ""}`
-                  : "0"}
-          </span>
-          {!summaryPending && metadataByline}
-        </div>
+          <div className="list-page-toolbar mx-1 mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/90 px-3 py-3 shadow-sm shadow-black/20 sm:px-2.5 sm:py-2 lg:flex-nowrap">
+            {/* Title + count + byline */}
+            <div className="list-page-title-group flex min-w-0 basis-full flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 lg:flex-1 lg:basis-0 lg:min-w-[12rem]">
+              <h1 className="text-sm font-semibold text-foreground whitespace-nowrap">{title}</h1>
+              <span className="text-xs text-muted hidden sm:inline">
+                {summaryPending
+                  ? "Loading…"
+                  : resolvedLoadState.status === "error"
+                    ? "Unavailable"
+                    : shownTotalCount > 0
+                      ? `${start.toLocaleString()}-${end.toLocaleString()} of ${shownTotalCount.toLocaleString()}${totalCountIsLowerBound ? "+" : ""}`
+                      : "0 items"}
+              </span>
+              <span className="text-xs text-muted sm:hidden">
+                {summaryPending
+                  ? "…"
+                  : resolvedLoadState.status === "error"
+                    ? "—"
+                    : shownTotalCount > 0
+                      ? `${shownTotalCount.toLocaleString()}${totalCountIsLowerBound ? "+" : ""}`
+                      : "0"}
+              </span>
+              {!summaryPending && !toolbarCondensed && metadataByline}
+            </div>
 
-        {/* Controls */}
-        <div className="list-page-controls flex min-w-0 flex-1 basis-0 flex-wrap items-center gap-2 max-sm:contents lg:flex-initial">
-          {/* Search */}
-          <ListSearchControl
-            query={filter.q}
-            onQueryChange={handleSearchChange}
-            placeholder={searchPlaceholder}
-            searchMode={searchMode}
-            searchModes={searchModes}
-            onSearchModeChange={onSearchModeChange}
-            className={`list-page-search ${searchModes && searchModes.length > 1 ? "sm:w-[22rem]" : "sm:w-[18rem]"}`}
-          />
+            {/* Controls */}
+            <div className="list-page-controls flex min-w-0 flex-1 basis-0 flex-wrap items-center gap-2 max-sm:contents lg:flex-initial">
+              {/* Search */}
+              <ListSearchControl
+                query={filter.q}
+                onQueryChange={handleSearchChange}
+                placeholder={searchPlaceholder}
+                searchMode={searchMode}
+                searchModes={searchModes}
+                onSearchModeChange={onSearchModeChange}
+                className={`list-page-search ${searchModes && searchModes.length > 1 ? "sm:w-[22rem]" : "sm:w-[18rem]"}`}
+              />
 
-          {/* Sort */}
-          {sortedSortOptions && (
-            <MultiSortControl
-              filter={filter}
-              onFilterChange={onFilterChange}
-              options={sortedSortOptions}
-              multiSortKeys={multiSortKeys}
-            />
-          )}
+              {/* Sort */}
+              {sortedSortOptions && (
+                <MultiSortControl
+                  filter={filter}
+                  onFilterChange={onFilterChange}
+                  options={sortedSortOptions}
+                  multiSortKeys={multiSortKeys}
+                />
+              )}
 
-          {/* Saved filters */}
-          {resolvedSavedFilterScope && (
-            <SavedFilterMenu
-              mode={resolvedSavedFilterScope}
-              currentFilter={filter}
-              currentObjectFilter={objectFilter}
-              currentUIOptions={{ ...savedFilterUIOptions, displayMode, zoomLevel }}
-              onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
-              onApplyObjectFilter={onObjectFilterChange}
-              onApplyUIOptions={applySavedFilterUIOptions}
-              criteria={mergedCriteriaDefinitions}
-            />
-          )}
+              {/* Saved filters */}
+              {resolvedSavedFilterScope && (
+                <SavedFilterMenu
+                  mode={resolvedSavedFilterScope}
+                  currentFilter={filter}
+                  currentObjectFilter={objectFilter}
+                  currentUIOptions={{ ...savedFilterUIOptions, displayMode, zoomLevel }}
+                  onApplyFilter={(nextFilter) => onFilterChange(withSeededRandomSort(filter, nextFilter))}
+                  onApplyObjectFilter={onObjectFilterChange}
+                  onApplyUIOptions={applySavedFilterUIOptions}
+                  criteria={mergedCriteriaDefinitions}
+                />
+              )}
 
-          {/* Filter button */}
-          {mergedCriteriaDefinitions && onObjectFilterChange && (
-            <FilterButton
-              activeCount={countActiveObjectFilters(mergedCriteriaDefinitions, editorObjectFilter)}
-              onClick={() => {
-                setFilterDialogPreselect(undefined);
-                setFilterDialogExpressionPath(undefined);
-                setFilterDialogInitialView("simple");
-                setFilterDialogOpenAtRoot(true);
-                setFilterDialogOpen(true);
-              }}
-            />
-          )}
+              {/* Filter button */}
+              {mergedCriteriaDefinitions && onObjectFilterChange && (
+                <FilterButton
+                  activeCount={countActiveObjectFilters(mergedCriteriaDefinitions, editorObjectFilter)}
+                  onClick={() => {
+                    setFilterDialogPreselect(undefined);
+                    setFilterDialogExpressionPath(undefined);
+                    setFilterDialogInitialView("simple");
+                    setFilterDialogOpenAtRoot(true);
+                    setFilterDialogOpen(true);
+                  }}
+                />
+              )}
 
-          {/* Display mode */}
-          {onDisplayModeChange && availableDisplayModes && (
-            <div className={`${toolbarSegmentClass} gap-0.5`}>
-              {availableDisplayModes.includes("grid") && (
-                <button
-                  onClick={() => onDisplayModeChange("grid")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "grid" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="Grid"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
+              {/* Display mode */}
+              {onDisplayModeChange && availableDisplayModes && (
+                <div className={`${toolbarSegmentClass} gap-0.5`}>
+                  {availableDisplayModes.includes("grid") && (
+                    <button
+                      onClick={() => onDisplayModeChange("grid")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "grid" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="Grid"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("list") && (
+                    <button
+                      onClick={() => onDisplayModeChange("list")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "list" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="List"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("wall") && (
+                    <button
+                      onClick={() => onDisplayModeChange("wall")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "wall" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="Wall"
+                    >
+                      <Grid3X3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("tagger") && (
+                    <button
+                      onClick={() => onDisplayModeChange("tagger")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "tagger" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="Tagger"
+                    >
+                      <Tags className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("graph") && (
+                    <button
+                      onClick={() => onDisplayModeChange("graph")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "graph" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="Graph/Tree"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("byGroup") && (
+                    <button
+                      onClick={() => onDisplayModeChange("byGroup")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "byGroup" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="By Group"
+                    >
+                      <FolderTree className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("feed") && (
+                    <button
+                      onClick={() => onDisplayModeChange("feed")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "feed" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="Feed"
+                    >
+                      <Rows3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {availableDisplayModes.includes("vertical") && (
+                    <button
+                      onClick={() => onDisplayModeChange("vertical")}
+                      className={`${toolbarIconButtonClass} ${displayMode === "vertical" ? "bg-background/60 text-accent shadow-sm" : ""}`}
+                      title="Vertical Viewer"
+                    >
+                      <MonitorPlay className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               )}
-              {availableDisplayModes.includes("list") && (
+
+              {/* Per page */}
+              <div className={toolbarSegmentClass} hidden={toolbarCondensed} {...condenseHiddenProps}>
+                <PageSizeSelect
+                  perPage={perPage}
+                  allowInfinite={allowInfinitePageSize}
+                  infinitePageSize={infinitePageSize}
+                  infinitePageSizeOnly={infinitePageSizeOnly}
+                  maxPageSize={maxPageSize}
+                  onChange={(nextPerPage) =>
+                    onFilterChange({
+                      ...filter,
+                      perPage: maxPageSize == null ? nextPerPage : Math.min(nextPerPage, maxPageSize),
+                      page: 1,
+                    })
+                  }
+                />
+
+                {/* Zoom slider (standard card size slider) */}
+                {(displayMode === "grid" || displayMode === "list") && (
+                  <div className="hidden items-center gap-1 pl-1 md:flex">
+                    <ZoomOut className="w-3 h-3 text-muted" />
+                    <input
+                      type="range"
+                      min={0}
+                      max={cardSizeMaxLevel}
+                      step={0.25}
+                      value={zoomLevel}
+                      onChange={(e) =>
+                        setZoomLevel(clampEntityCardSizeLevel(cardSizeEntityType, Number(e.target.value)))
+                      }
+                      style={
+                        { "--range-fill": `${(zoomLevel / Math.max(0.25, cardSizeMaxLevel)) * 100}%` } as CSSProperties
+                      }
+                      className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
+                      title={`Card size: ${getEntityCardMinWidthPx(cardSizeEntityType, zoomLevel)}px`}
+                    />
+                    <ZoomIn className="w-3 h-3 text-muted" />
+                  </div>
+                )}
+
+                {displayMode === "wall" && wallColumnCount != null && onWallColumnCountChange && (
+                  <WallSizeControl
+                    sizeLevel={getWallSizeLevelFromColumnCount(wallColumnCount)}
+                    onChange={(sizeLevel) => onWallColumnCountChange(getWallColumnCountFromSizeLevel(sizeLevel))}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Operations */}
+            <div
+              className="list-page-operations ml-auto flex flex-wrap items-center justify-end gap-2 sm:ml-0 lg:flex-1 lg:basis-0 lg:min-w-fit"
+              hidden={toolbarCondensed}
+              {...condenseHiddenProps}
+            >
+              {vrListSource && onNavigate ? <ViewInVrButton source={vrListSource} onNavigate={onNavigate} /> : null}
+              {renderOperations?.()}
+              <ExtensionSlot slot="list-page-toolbar-end" context={slotContext} />
+              {pageKey && <ExtensionSlot slot={`${pageKey}-list-toolbar-end`} context={slotContext} />}
+              {onNew && (
                 <button
-                  onClick={() => onDisplayModeChange("list")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "list" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="List"
+                  onClick={onNew}
+                  className="inline-flex min-h-10 items-center rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover sm:min-h-0 sm:py-1 sm:text-xs"
                 >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {availableDisplayModes.includes("wall") && (
-                <button
-                  onClick={() => onDisplayModeChange("wall")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "wall" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="Wall"
-                >
-                  <Grid3X3 className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {availableDisplayModes.includes("tagger") && (
-                <button
-                  onClick={() => onDisplayModeChange("tagger")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "tagger" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="Tagger"
-                >
-                  <Tags className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {availableDisplayModes.includes("graph") && (
-                <button
-                  onClick={() => onDisplayModeChange("graph")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "graph" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="Graph/Tree"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {availableDisplayModes.includes("byGroup") && (
-                <button
-                  onClick={() => onDisplayModeChange("byGroup")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "byGroup" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="By Group"
-                >
-                  <FolderTree className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {availableDisplayModes.includes("feed") && (
-                <button
-                  onClick={() => onDisplayModeChange("feed")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "feed" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="Feed"
-                >
-                  <Rows3 className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {availableDisplayModes.includes("vertical") && (
-                <button
-                  onClick={() => onDisplayModeChange("vertical")}
-                  className={`${toolbarIconButtonClass} ${displayMode === "vertical" ? "bg-background/60 text-accent shadow-sm" : ""}`}
-                  title="Vertical Viewer"
-                >
-                  <MonitorPlay className="w-3.5 h-3.5" />
+                  + New
                 </button>
               )}
             </div>
-          )}
 
-          {/* Per page */}
-          <div className={toolbarSegmentClass}>
-            <PageSizeSelect
-              perPage={perPage}
-              allowInfinite={allowInfinitePageSize}
-              infinitePageSize={infinitePageSize}
-              infinitePageSizeOnly={infinitePageSizeOnly}
-              maxPageSize={maxPageSize}
-              onChange={(nextPerPage) =>
-                onFilterChange({
-                  ...filter,
-                  perPage: maxPageSize == null ? nextPerPage : Math.min(nextPerPage, maxPageSize),
-                  page: 1,
-                })
-              }
-            />
-
-            {/* Zoom slider (standard card size slider) */}
-            {(displayMode === "grid" || displayMode === "list") && (
-              <div className="hidden items-center gap-1 pl-1 md:flex">
-                <ZoomOut className="w-3 h-3 text-muted" />
-                <input
-                  type="range"
-                  min={0}
-                  max={cardSizeMaxLevel}
-                  step={0.25}
-                  value={zoomLevel}
-                  onChange={(e) => setZoomLevel(clampEntityCardSizeLevel(cardSizeEntityType, Number(e.target.value)))}
-                  style={
-                    { "--range-fill": `${(zoomLevel / Math.max(0.25, cardSizeMaxLevel)) * 100}%` } as CSSProperties
-                  }
-                  className="themed-range-input h-1 w-16 cursor-pointer sm:w-20"
-                  title={`Card size: ${getEntityCardMinWidthPx(cardSizeEntityType, zoomLevel)}px`}
-                />
-                <ZoomIn className="w-3 h-3 text-muted" />
+            {toolbarCondensed && (
+              <div
+                className="list-page-condensed-nav ml-auto flex items-center justify-end gap-1 sm:ml-0 lg:flex-1 lg:basis-0 lg:min-w-fit"
+                {...condenseOnlyProps}
+              >
+                {showPagingControls && !infinitePageSize && resolvedLoadState.status !== "error" && totalPages > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => goTo(page - 1)}
+                      disabled={page <= 1}
+                      className={`${toolbarIconButtonClass} disabled:opacity-40`}
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="px-1 text-xs whitespace-nowrap text-secondary tabular-nums">
+                      Page <span className="font-semibold text-foreground">{page.toLocaleString()}</span> /{" "}
+                      {totalPages.toLocaleString()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => goTo(page + 1)}
+                      disabled={page >= totalPages}
+                      className={`${toolbarIconButtonClass} disabled:opacity-40`}
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={scrollToTop}
+                  className={toolbarIconButtonClass}
+                  aria-label="Back to top"
+                  title="Back to top"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
-
-            {displayMode === "wall" && wallColumnCount != null && onWallColumnCountChange && (
-              <WallSizeControl
-                sizeLevel={getWallSizeLevelFromColumnCount(wallColumnCount)}
-                onChange={(sizeLevel) => onWallColumnCountChange(getWallColumnCountFromSizeLevel(sizeLevel))}
-              />
-            )}
           </div>
-        </div>
 
-        {/* Operations */}
-        <div className="list-page-operations ml-auto flex flex-wrap items-center justify-end gap-2 sm:ml-0 lg:flex-1 lg:basis-0 lg:min-w-fit">
-          {vrListSource && onNavigate ? <ViewInVrButton source={vrListSource} onNavigate={onNavigate} /> : null}
-          {renderOperations?.()}
-          <ExtensionSlot slot="list-page-toolbar-end" context={slotContext} />
-          {pageKey && <ExtensionSlot slot={`${pageKey}-list-toolbar-end`} context={slotContext} />}
-          {onNew && (
-            <button
-              onClick={onNew}
-              className="inline-flex min-h-10 items-center rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover sm:min-h-0 sm:py-1 sm:text-xs"
+          <div hidden={toolbarCondensed} {...condenseHiddenProps}>
+            {/* Active filter tags (criterion badges) */}
+            {objectFilter &&
+              onObjectFilterChange &&
+              mergedCriteriaDefinitions &&
+              Object.keys(editorObjectFilter).length > 0 && (
+                <ActiveObjectFilterChips
+                  criteriaDefinitions={mergedCriteriaDefinitions}
+                  objectFilter={editorObjectFilter}
+                  customFilterSections={mergedCustomFilterSections}
+                  onEdit={(target) => {
+                    const key = getFilterChipTargetKey(target);
+                    setFilterDialogExpressionPath(target.kind === "expression" ? target.path : undefined);
+                    const criterion = mergedCriteriaDefinitions.find(
+                      (item) =>
+                        item.id === key ||
+                        item.filterKey === key ||
+                        item.secondaryFilterKey === key ||
+                        item.auxiliaryToggleKey === key,
+                    );
+                    const customSection =
+                      target.kind === "root"
+                        ? mergedCustomFilterSections?.find((section) => section.filterKey === key)
+                        : undefined;
+                    setFilterDialogPreselect(
+                      target.kind === "expression"
+                        ? target.criterionId
+                          ? {
+                              criterionId: target.criterionId,
+                              relatedFacet: target.relatedFacet ?? (target.nestedCriterionId ? "criterion" : "mode"),
+                              nestedCriterionId: target.nestedCriterionId,
+                            }
+                          : undefined
+                        : target.kind === "related"
+                          ? {
+                              criterionId: criterion?.id ?? key,
+                              relatedFacet: target.facet,
+                              nestedCriterionId: target.nestedCriterionId,
+                            }
+                          : (customSection?.id ?? criterion?.id ?? key),
+                    );
+                    setFilterDialogInitialView(
+                      key === "_filterExpression" && target.kind !== "expression" ? "advanced" : "simple",
+                    );
+                    setFilterDialogOpenAtRoot(false);
+                    setFilterDialogOpen(true);
+                  }}
+                  onRemove={(target) => {
+                    const key = getFilterChipTargetKey(target);
+                    if (pageKey) {
+                      trackInteraction({
+                        hostType: "collection",
+                        kind: "filterClear",
+                        meta: { pageKey, source: "filterChip", criteriaKeys: [key] },
+                      });
+                    }
+                    const next = removeObjectFilterChipTarget(editorObjectFilter, mergedCriteriaDefinitions, target);
+                    onObjectFilterChange(collapseExtensionCriteria(next, objectFilter, multiIdExtensionFilterKeys));
+                    onFilterChange({ ...filter, page: 1 });
+                  }}
+                  onClearAll={
+                    showClearAllObjectFilters
+                      ? () => {
+                          if (pageKey) {
+                            trackInteraction({
+                              hostType: "collection",
+                              kind: "filterClear",
+                              meta: { pageKey, source: "filterChip", clearedAll: true },
+                            });
+                          }
+                          onObjectFilterChange({});
+                          onFilterChange({ ...filter, page: 1 });
+                        }
+                      : undefined
+                  }
+                />
+              )}
+
+            {/* A full-width `<pageKey>-list-row` slot below the toolbar — separate from the toolbar-end slots, which
+          sit in the right-aligned operations group and cannot host a row. Empty (no extension) renders nothing. */}
+            {pageKey && <ExtensionSlot slot={`${pageKey}-list-row`} context={slotContext} />}
+          </div>
+
+          {/* Selection bar. Below lg, once it scrolls up under the navbar it docks at the bottom of the screen: the same
+              element moves (so the actions and their dialogs keep their state) while the anchor holds its place. The
+              dock sits below the navbar, but is lifted above every overlay while one of its dialogs is open. */}
+          {showSelectionBar && (
+            <div
+              ref={selectionBarAnchorRef}
+              // flow-root keeps the bar's top margin inside the anchor, so the held height includes it.
+              className="list-page-selection-anchor flow-root"
+              style={selectionBarDocked ? { height: selectionBarAnchorHeight } : undefined}
             >
-              + New
-            </button>
+              <div
+                ref={selectionBarRef}
+                role="group"
+                aria-label="Selection actions"
+                className={
+                  selectionBarDocked
+                    ? "list-page-selection-dock fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[45] flex flex-col gap-1.5 rounded-2xl border border-border bg-background px-3 py-2 shadow-2xl shadow-black/60 has-[:is(.fixed.inset-0,[role=dialog])]:z-[150]"
+                    : "grid grid-cols-1 items-center gap-2 bg-card/80 border border-border rounded-lg px-3 py-1.5 mx-1 mt-1 sm:grid-cols-[1fr_auto_1fr]"
+                }
+              >
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-secondary">
+                  {onSelectNone && (
+                    <button
+                      type="button"
+                      onClick={onSelectNone}
+                      hidden={!selectionBarDocked}
+                      className={`${toolbarIconButtonClass} -ml-1.5`}
+                      aria-label="Clear selection"
+                      title="Clear selection"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  <span className={selectionBarDocked ? "text-sm font-semibold text-foreground" : undefined}>
+                    {selectedIds!.size} selected
+                  </span>
+                  {selectionMetadata}
+                </div>
+                <div
+                  className={
+                    selectionBarDocked
+                      ? "-mx-1 flex flex-nowrap items-center gap-3 overflow-x-auto px-1 py-1 [&>*]:shrink-0 [&>button]:min-h-10"
+                      : "flex flex-wrap items-center justify-center gap-3"
+                  }
+                >
+                  {onSelectAll && (
+                    <button
+                      onClick={onSelectAll}
+                      disabled={selectAllPending}
+                      className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {selectAllPending ? "Selecting..." : selectAllLabel}
+                    </button>
+                  )}
+                  {onSelectAllMatching && (
+                    <button
+                      onClick={onSelectAllMatching}
+                      disabled={selectAllMatchingPending}
+                      className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {selectAllMatchingPending ? "Selecting..." : selectAllMatchingLabel}
+                    </button>
+                  )}
+                  {onInvertSelection && (
+                    <button onClick={onInvertSelection} className="text-xs text-secondary hover:text-foreground">
+                      Invert
+                    </button>
+                  )}
+                  {onSelectNone && (
+                    <button
+                      onClick={onSelectNone}
+                      hidden={selectionBarDocked}
+                      className="text-xs text-secondary hover:text-foreground"
+                    >
+                      Deselect all
+                    </button>
+                  )}
+                  {selectionActions}
+                </div>
+                {!selectionBarDocked && <div className="hidden sm:block" aria-hidden="true" />}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1082,129 +1356,6 @@ export function ListPage({
         </div>
       )}
 
-      {/* Active filter tags (criterion badges) */}
-      {objectFilter &&
-        onObjectFilterChange &&
-        mergedCriteriaDefinitions &&
-        Object.keys(editorObjectFilter).length > 0 && (
-          <ActiveObjectFilterChips
-            criteriaDefinitions={mergedCriteriaDefinitions}
-            objectFilter={editorObjectFilter}
-            customFilterSections={mergedCustomFilterSections}
-            onEdit={(target) => {
-              const key = getFilterChipTargetKey(target);
-              setFilterDialogExpressionPath(target.kind === "expression" ? target.path : undefined);
-              const criterion = mergedCriteriaDefinitions.find(
-                (item) =>
-                  item.id === key ||
-                  item.filterKey === key ||
-                  item.secondaryFilterKey === key ||
-                  item.auxiliaryToggleKey === key,
-              );
-              const customSection =
-                target.kind === "root"
-                  ? mergedCustomFilterSections?.find((section) => section.filterKey === key)
-                  : undefined;
-              setFilterDialogPreselect(
-                target.kind === "expression"
-                  ? target.criterionId
-                    ? {
-                        criterionId: target.criterionId,
-                        relatedFacet: target.relatedFacet ?? (target.nestedCriterionId ? "criterion" : "mode"),
-                        nestedCriterionId: target.nestedCriterionId,
-                      }
-                    : undefined
-                  : target.kind === "related"
-                    ? {
-                        criterionId: criterion?.id ?? key,
-                        relatedFacet: target.facet,
-                        nestedCriterionId: target.nestedCriterionId,
-                      }
-                    : (customSection?.id ?? criterion?.id ?? key),
-              );
-              setFilterDialogInitialView(
-                key === "_filterExpression" && target.kind !== "expression" ? "advanced" : "simple",
-              );
-              setFilterDialogOpenAtRoot(false);
-              setFilterDialogOpen(true);
-            }}
-            onRemove={(target) => {
-              const key = getFilterChipTargetKey(target);
-              if (pageKey) {
-                trackInteraction({
-                  hostType: "collection",
-                  kind: "filterClear",
-                  meta: { pageKey, source: "filterChip", criteriaKeys: [key] },
-                });
-              }
-              const next = removeObjectFilterChipTarget(editorObjectFilter, mergedCriteriaDefinitions, target);
-              onObjectFilterChange(collapseExtensionCriteria(next, objectFilter, multiIdExtensionFilterKeys));
-              onFilterChange({ ...filter, page: 1 });
-            }}
-            onClearAll={
-              showClearAllObjectFilters
-                ? () => {
-                    if (pageKey) {
-                      trackInteraction({
-                        hostType: "collection",
-                        kind: "filterClear",
-                        meta: { pageKey, source: "filterChip", clearedAll: true },
-                      });
-                    }
-                    onObjectFilterChange({});
-                    onFilterChange({ ...filter, page: 1 });
-                  }
-                : undefined
-            }
-          />
-        )}
-
-      {/* A full-width `<pageKey>-list-row` slot below the toolbar — separate from the toolbar-end slots, which
-          sit in the right-aligned operations group and cannot host a row. Empty (no extension) renders nothing. */}
-      {pageKey && <ExtensionSlot slot={`${pageKey}-list-row`} context={slotContext} />}
-
-      {/* Selection bar */}
-      {showSelectionBar && (
-        <div className="grid grid-cols-1 items-center gap-2 bg-card/80 border border-border rounded-lg px-3 py-1.5 mx-1 mt-1 sm:grid-cols-[1fr_auto_1fr]">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-secondary">
-            <span>{selectedIds!.size} selected</span>
-            {selectionMetadata}
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {onSelectAll && (
-              <button
-                onClick={onSelectAll}
-                disabled={selectAllPending}
-                className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {selectAllPending ? "Selecting..." : selectAllLabel}
-              </button>
-            )}
-            {onSelectAllMatching && (
-              <button
-                onClick={onSelectAllMatching}
-                disabled={selectAllMatchingPending}
-                className="text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {selectAllMatchingPending ? "Selecting..." : selectAllMatchingLabel}
-              </button>
-            )}
-            {onInvertSelection && (
-              <button onClick={onInvertSelection} className="text-xs text-secondary hover:text-foreground">
-                Invert
-              </button>
-            )}
-            {onSelectNone && (
-              <button onClick={onSelectNone} className="text-xs text-secondary hover:text-foreground">
-                Deselect all
-              </button>
-            )}
-            {selectionActions}
-          </div>
-          <div className="hidden sm:block" aria-hidden="true" />
-        </div>
-      )}
-
       {/* Top pager: rendered outside the load gate so it survives page changes */}
       {showPagingControls && resolvedLoadState.status !== "error" && totalPages > 1 && (
         <div className="mx-1 mt-1 flex flex-wrap items-center justify-center gap-1 py-1">
@@ -1224,7 +1375,7 @@ export function ListPage({
         errorClassName="mx-1 mt-3"
       >
         <>
-          <ListPageCardSizeContext.Provider value={{ cardMinWidthPx, zoomLevel }}>
+          <ListPageCardSizeContext.Provider value={cardSizeContextValue}>
             <div
               aria-busy={reloading || undefined}
               className="list-page-content pt-3"
@@ -1288,6 +1439,10 @@ export function ListPage({
           openAtRoot={filterDialogOpenAtRoot}
         />
       )}
+
+      {/* Keeps the last rows and the bottom pager clear of the docked selection bar. A trailing spacer rather than
+          padding on the list, which would stop scroll anchoring from correcting the jump when the selection clears. */}
+      {selectionBarDocked && <div aria-hidden="true" style={{ height: selectionBarDockHeight + 24 }} />}
     </div>
   );
 }
