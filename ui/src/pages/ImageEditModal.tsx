@@ -10,6 +10,7 @@ import { CustomFieldsEditor, buildTagProvenanceById } from "../components/shared
 import { StringListEditor } from "../components/StringListEditor";
 import { StudioSelector } from "../components/StudioSelector";
 import { EntityReferenceMultiSelector, EntityReferenceValue } from "../components/EntityReferenceSelector";
+import { toPerformerOption } from "../utils/performers";
 import { toTagOption } from "../utils/tags";
 import {
   PerformerContextTagEditor,
@@ -230,11 +231,7 @@ function ImageMetadataModal({
   const tagProvenanceById = buildTagProvenanceById(image?.tags ?? [], image?.fieldProvenance);
   // Seed chip labels from the loaded image so selected chips don't each re-fetch their name by id.
   const tagSeedOptions = (image?.tags ?? []).map(toTagOption);
-  const performerSeedOptions = (image?.performers ?? []).map((performer) => ({
-    id: performer.id,
-    label: performer.name,
-    secondaryLabel: performer.disambiguation ? `(${performer.disambiguation})` : undefined,
-  }));
+  const performerSeedOptions = (image?.performers ?? []).map(toPerformerOption);
 
   const buildPayload = (form: ImageFormState): ImageCreate & { clearFields?: string[] } => {
     const urlList = form.urls.map((url) => url.trim()).filter(Boolean);

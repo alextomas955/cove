@@ -29,7 +29,7 @@ vi.mock("../extensions/ExtensionLoader", () => ({
   },
 }));
 
-import { EntityMedia, EntityMediaHover, TagMediaHover } from "../components/EntityMedia";
+import { EntityMedia, EntityMediaHover, PerformerMediaHover, TagMediaHover } from "../components/EntityMedia";
 import { TagBadge } from "../components/shared";
 import { TagChipHover } from "../components/TagProvenanceHover";
 
@@ -198,6 +198,63 @@ describe("EntityMedia", () => {
     await waitFor(() => {
       expect(screen.getByTestId("extension-media").parentElement).toHaveStyle({ aspectRatio: "1 / 1" });
     });
+  });
+
+  it("shows a performer's portrait in a narrower portrait popup, and a landscape tag in the wide one", () => {
+    const { unmount } = render(
+      <PerformerMediaHover performer={{ id: 3, name: "Portrait", imagePath: "/performer.jpg" }}>
+        <button type="button">Performer reference</button>
+      </PerformerMediaHover>,
+    );
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Performer reference" }));
+
+    const portrait = screen.getByRole("tooltip", { name: "Media for Portrait" });
+    expect(portrait).toHaveClass("w-48");
+    expect(portrait.querySelector("[data-media-frame]")).toHaveStyle({ aspectRatio: "2 / 3" });
+    unmount();
+
+    render(
+      <EntityMediaHover entityType="tag" entityId={17} imageUrl="/tag.jpg" alt="Landscape" fit="cover">
+        <button type="button">Tag reference</button>
+      </EntityMediaHover>,
+    );
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Tag reference" }));
+
+    const landscape = screen.getByRole("tooltip", { name: "Media for Landscape" });
+    expect(landscape).toHaveClass("w-72");
+    expect(landscape.querySelector("[data-media-frame]")).toHaveStyle({ aspectRatio: "4 / 3" });
+  });
+
+  it("lets an override's declared aspect ratio replace a performer's portrait shape and width", async () => {
+    overrideRenderState.active = true;
+    overrideRenderState.replace = true;
+    overrideRenderState.aspectRatio = "16:9";
+
+    render(
+      <PerformerMediaHover performer={{ id: 3, name: "Clip", imagePath: null }}>
+        <button type="button">Performer reference</button>
+      </PerformerMediaHover>,
+    );
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Performer reference" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("extension-media").parentElement).toHaveStyle({ aspectRatio: "16 / 9" });
+    });
+    expect(screen.getByRole("tooltip", { name: "Media for Clip" })).toHaveClass("w-72");
+  });
+
+  it("keeps a performer's portrait shape when an override declares none", () => {
+    overrideRenderState.active = true;
+    overrideRenderState.replace = true;
+
+    render(
+      <PerformerMediaHover performer={{ id: 3, name: "Undeclared", imagePath: null }}>
+        <button type="button">Performer reference</button>
+      </PerformerMediaHover>,
+    );
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Performer reference" }));
+
+    expect(screen.getByTestId("extension-media").parentElement).toHaveStyle({ aspectRatio: "2 / 3" });
   });
 
   it("uses the core static image when an active contribution falls through", () => {
