@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppRoutes } from "../App";
 import { useDocumentTitle } from "../components/extension-shared";
@@ -76,7 +76,8 @@ describe("extension page titles", () => {
     );
 
     expect(await screen.findByText("Studio page")).toBeInTheDocument();
-    expect(document.title).toBe("Studio | Cove");
+    // The page appears when its bundle resolves, outside act, so the title effect can still be pending.
+    await waitFor(() => expect(document.title).toBe("Studio | Cove"));
 
     rerender(
       <ExtensionLoaderProvider importBundle={importBundle}>
