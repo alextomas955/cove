@@ -864,34 +864,107 @@ public sealed class DeletionSafetyTests
     [Theory]
     [InlineData(BulkDeletionEntityKind.Studio)]
     [InlineData(BulkDeletionEntityKind.Performer)]
-    public async Task DeletionThatLosesARaceReportsNotFoundAndStillCleansUp(BulkDeletionEntityKind kind)
+    [InlineData(BulkDeletionEntityKind.Tag)]
+    [InlineData(BulkDeletionEntityKind.Gallery)]
+    [InlineData(BulkDeletionEntityKind.Group)]
+    [InlineData(BulkDeletionEntityKind.Audio)]
+    [InlineData(BulkDeletionEntityKind.Text)]
+    [InlineData(BulkDeletionEntityKind.Image)]
+    public async Task DeletionThatLosesARaceReportsNotFoundAndLeavesTheContextUsable(BulkDeletionEntityKind kind)
     {
-        const string blobId = "race-artwork";
         var concurrentDelete = new ConcurrentRowDeleteInterceptor();
         await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
-        BaseEntity entity = kind == BulkDeletionEntityKind.Studio
-            ? new Studio { Name = "Deleted twice", ImageBlobId = blobId }
-            : new Performer { Name = "Deleted twice", ImageBlobId = blobId };
-        db.Add(entity);
+        var folder = new Folder { Path = "/race", ModTime = DateTime.UtcNow };
+        var lost = CreateRaceTarget(kind, "lost", folder);
+        var next = CreateRaceTarget(kind, "next", folder);
+        db.AddRange(lost, next);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var (service, blobs) = CreateDeletionService(db);
-        concurrentDelete.Arm(kind == BulkDeletionEntityKind.Studio ? "studios" : "performers", entity.Id);
+        var context = new BulkDeletionExecutionContext();
+        concurrentDelete.Arm(RaceTargetTable(kind), lost.Id);
 
         Assert.False(await service.DeleteAsync(
             kind,
-            entity.Id,
-            new BulkDeletionExecutionContext(),
-            deleteFiles: false,
+            lost.Id,
+            context,
+            deleteFiles: true,
+            deleteGenerated: true,
+            CancellationToken.None,
+            publishEvent: false));
+        // Clean deletes a whole batch through one context, so the lost race must not fail the next deletion.
+        Assert.True(await service.DeleteAsync(
+            kind,
+            next.Id,
+            context,
+            deleteFiles: true,
             deleteGenerated: true,
             CancellationToken.None,
             publishEvent: false));
 
-        Assert.False(kind == BulkDeletionEntityKind.Studio
-            ? await db.Studios.AsNoTracking().AnyAsync(item => item.Id == entity.Id)
-            : await db.Performers.AsNoTracking().AnyAsync(item => item.Id == entity.Id));
-        Assert.Equal([blobId], blobs.DeletedBlobIds);
+        Assert.False(await RaceTargetExistsAsync(db, kind, lost.Id));
+        Assert.False(await RaceTargetExistsAsync(db, kind, next.Id));
+        Assert.Equal(kind == BulkDeletionEntityKind.Image ? [] : ["lost-artwork", "next-artwork"], blobs.DeletedBlobIds);
+        // The winner owns the lost entity's file deletion; only the second deletion stages its own file.
+        string[] expectedFiles = kind is BulkDeletionEntityKind.Audio or BulkDeletionEntityKind.Text or BulkDeletionEntityKind.Image
+            ? ["/race/next"]
+            : [];
+        Assert.Equal(expectedFiles, context.GetPhysicalFiles());
+        Assert.Equal(expectedFiles, await db.PendingPhysicalFileDeletions.Select(item => item.Path).ToArrayAsync());
     }
+
+    private static BaseEntity CreateRaceTarget(BulkDeletionEntityKind kind, string name, Folder folder) => kind switch
+    {
+        BulkDeletionEntityKind.Studio => new Studio { Name = name, ImageBlobId = $"{name}-artwork" },
+        BulkDeletionEntityKind.Performer => new Performer { Name = name, ImageBlobId = $"{name}-artwork" },
+        BulkDeletionEntityKind.Tag => new Tag { Name = name, ImageBlobId = $"{name}-artwork" },
+        BulkDeletionEntityKind.Gallery => new Gallery { Title = name, ImageBlobId = $"{name}-artwork" },
+        BulkDeletionEntityKind.Group => new Group { Name = name, FrontImageBlobId = $"{name}-artwork" },
+        BulkDeletionEntityKind.Audio => new Audio
+        {
+            Title = name,
+            ImageBlobId = $"{name}-artwork",
+            Files = [new AudioFile { Basename = name, ParentFolder = folder, Path = $"/race/{name}", ModTime = DateTime.UtcNow }],
+        },
+        BulkDeletionEntityKind.Text => new TextDocument
+        {
+            Title = name,
+            ImageBlobId = $"{name}-artwork",
+            Files = [new TextFile { Basename = name, ParentFolder = folder, Path = $"/race/{name}", ModTime = DateTime.UtcNow }],
+        },
+        BulkDeletionEntityKind.Image => new Image
+        {
+            Title = name,
+            Files = [new ImageFile { Basename = name, ParentFolder = folder, Path = $"/race/{name}", ModTime = DateTime.UtcNow }],
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+    };
+
+    private static string RaceTargetTable(BulkDeletionEntityKind kind) => kind switch
+    {
+        BulkDeletionEntityKind.Studio => "studios",
+        BulkDeletionEntityKind.Performer => "performers",
+        BulkDeletionEntityKind.Tag => "tags",
+        BulkDeletionEntityKind.Gallery => "galleries",
+        BulkDeletionEntityKind.Group => "groups",
+        BulkDeletionEntityKind.Audio => "audios",
+        BulkDeletionEntityKind.Text => "text_documents",
+        BulkDeletionEntityKind.Image => "images",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+    };
+
+    private static Task<bool> RaceTargetExistsAsync(CoveContext db, BulkDeletionEntityKind kind, int id) => kind switch
+    {
+        BulkDeletionEntityKind.Studio => db.Studios.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Performer => db.Performers.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Tag => db.Tags.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Gallery => db.Galleries.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Group => db.Groups.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Audio => db.Audios.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Text => db.TextDocuments.AsNoTracking().AnyAsync(item => item.Id == id),
+        BulkDeletionEntityKind.Image => db.Images.AsNoTracking().AnyAsync(item => item.Id == id),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+    };
 
     [Fact]
     public async Task DeletionWhoseFollowUpCountSaveConflictsStillReportsTheCommittedDelete()
@@ -901,7 +974,8 @@ public sealed class DeletionSafetyTests
         var tag = new Tag { Name = "Counted" };
         var performer = new Performer { Name = "Target", ImageBlobId = "followup-artwork" };
         performer.PerformerTags.Add(new PerformerTag { Tag = tag });
-        db.Add(performer);
+        var next = new Performer { Name = "Next" };
+        db.AddRange(performer, next);
         await db.SaveChangesAsync();
         // A stale count guarantees the follow-up save writes the tag row.
         await db.Database.ExecuteSqlAsync($"UPDATE tags SET \"PerformerCount\" = 5 WHERE \"Id\" = {tag.Id}");
@@ -926,8 +1000,17 @@ public sealed class DeletionSafetyTests
             deleteGenerated: true,
             CancellationToken.None));
 
-        Assert.False(await db.Performers.AsNoTracking().AnyAsync(item => item.Id == performer.Id));
-        Assert.Equal([performer.Id], deletedEventIds);
+        // The conflicting count update must not be replayed by the next deletion through this context.
+        Assert.True(await service.DeleteAsync(
+            BulkDeletionEntityKind.Performer,
+            next.Id,
+            new BulkDeletionExecutionContext(),
+            deleteFiles: false,
+            deleteGenerated: true,
+            CancellationToken.None));
+
+        Assert.False(await db.Performers.AsNoTracking().AnyAsync());
+        Assert.Equal([performer.Id, next.Id], deletedEventIds);
         Assert.Equal(["followup-artwork"], blobs.DeletedBlobIds);
     }
 
@@ -938,7 +1021,8 @@ public sealed class DeletionSafetyTests
         await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
         var tag = new Tag { Name = "Applied" };
         var studio = new Studio { Name = "Survivor" };
-        db.AddRange(tag, studio);
+        var next = new Studio { Name = "Next" };
+        db.AddRange(tag, studio, next);
         await db.SaveChangesAsync();
         var application = new TagApplication { HostType = AffinityHostType.Studio, HostId = studio.Id, TagId = tag.Id };
         db.TagApplications.Add(application);
@@ -956,8 +1040,17 @@ public sealed class DeletionSafetyTests
             deleteGenerated: true,
             CancellationToken.None,
             publishEvent: false));
+        // The rejected delete must not be replayed by the next deletion through this context.
+        Assert.True(await service.DeleteAsync(
+            BulkDeletionEntityKind.Studio,
+            next.Id,
+            new BulkDeletionExecutionContext(),
+            deleteFiles: false,
+            deleteGenerated: true,
+            CancellationToken.None,
+            publishEvent: false));
 
-        Assert.True(await db.Studios.AsNoTracking().AnyAsync(item => item.Id == studio.Id));
+        Assert.Equal([studio.Id], await db.Studios.AsNoTracking().Select(item => item.Id).ToArrayAsync());
     }
 
     private static (BulkEntityDeletionService Service, ReferenceAwareBlobService Blobs) CreateDeletionService(

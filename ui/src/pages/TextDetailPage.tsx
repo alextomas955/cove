@@ -602,6 +602,7 @@ export function TextDetailPage({ id, onNavigate }: Props) {
           confirmLabel={deleteTextMut.isPending ? "Deleting..." : "Delete Text"}
           onConfirm={(options) => deleteTextMut.mutate(options)}
           onCancel={() => setConfirmDelete(false)}
+          isPending={deleteTextMut.isPending}
           showDeleteFile={canDeleteFiles}
           showDeleteGenerated
         />

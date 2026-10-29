@@ -49,7 +49,10 @@ public sealed class ImageDeletionService(
         db.Images.Remove(image);
         var physicalContext = executionContext ?? new BulkDeletionExecutionContext();
         physicalContext.StagePhysicalFiles(db, physicalPaths);
-        await db.SaveChangesAsync(ct);
+        var deleted = await DeletionRace.SaveAsync(db, image, logger, ct);
+        // A lost race rolled back the staged file deletions; the winner owns the files.
+        if (!deleted)
+            physicalPaths = [];
 
         foreach (var videoId in hostCleanup.SegmentVideoIds)
             segmentSpanCacheInvalidator?.InvalidateVideo(videoId);
@@ -96,7 +99,7 @@ public sealed class ImageDeletionService(
                 logger?.LogWarning(ex, "Image {ImageId} was deleted, but its generated files could not be fully removed.", image.Id);
             }
         }
-        return true;
+        return deleted;
     }
 
 }

@@ -843,6 +843,7 @@ export function ImageDetailPage({ id, onNavigate }: Props) {
         message={`Delete "${displayTitle}"? This cannot be undone.`}
         onConfirm={() => deleteMut.mutate()}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
       />
 
       <GenerateDialog open={showGenerate} onClose={() => setShowGenerate(false)} imageIds={[id]} />
