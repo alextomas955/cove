@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Segment } from "../api/types";
+import { videos } from "../api/client";
 import { VideoSegmentsPanel } from "../components/VideoSegmentsPanel";
 import { EMPTY_SEGMENT_FILTER } from "../components/segmentFilter";
 
@@ -103,5 +104,43 @@ describe("VideoSegmentsPanel add at current time", () => {
     renderPanel({ currentTime: 83.4, canEdit: false, addRequested: true, onAddRequestHandled: vi.fn() });
 
     expect(screen.queryByPlaceholderText("0:00")).not.toBeInTheDocument();
+  });
+
+  it("shows stored times to the hundredth and saves them unchanged when only the title is edited", async () => {
+    vi.mocked(videos.segments.update).mockResolvedValue({} as Segment);
+    const segment = { id: 3, kind: "tag", startSec: 1734.025, endSec: 1754.458, tagId: 9, title: "Intro" } as Segment;
+    const span = {
+      spanKey: "s3",
+      startSec: 1734.025,
+      endSec: 1754.458,
+      segmentIds: [3],
+    } as PanelProps["spans"][number];
+    renderPanel({ rawSegments: [segment], spans: [span] });
+    fireEvent.click(screen.getByTitle("Edit segment"));
+
+    expect(startInput().value).toBe("28:54.03");
+    expect((screen.getByPlaceholderText("Optional") as HTMLInputElement).value).toBe("29:14.46");
+
+    fireEvent.change(screen.getByDisplayValue("Intro"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => {
+      expect(videos.segments.update).toHaveBeenCalledWith(
+        7,
+        3,
+        expect.objectContaining({ title: "Renamed", startSec: 1734.025, endSec: 1754.458 }),
+      );
+    });
+  });
+
+  it("does not save while the end time cannot be parsed", () => {
+    const segment = { id: 3, kind: "tag", startSec: 12, endSec: 20, tagId: 9, title: "Intro" } as Segment;
+    const span = { spanKey: "s3", startSec: 12, endSec: 20, segmentIds: [3] } as PanelProps["spans"][number];
+    renderPanel({ rawSegments: [segment], spans: [span] });
+    fireEvent.click(screen.getByTitle("Edit segment"));
+
+    fireEvent.change(screen.getByPlaceholderText("Optional"), { target: { value: "0:2x" } });
+
+    expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
   });
 });

@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import type { ResolvedSpan } from "../../api/types";
 import { SegmentPreviewMedia } from "../../components/SegmentPreviewMedia";
 import { formatDate } from "../../components/shared";
+import { formatSegmentTime } from "../../utils/segmentTime";
 import { formatOperatorLabel } from "./derivedQueryCriterion";
 import type { DerivedSpanItem, RawSegmentItem } from "./types";
 
@@ -138,28 +139,4 @@ export function formatSegmentCardEyebrow(startSec: number, endSec?: number) {
   return formatSegmentRange(startSec, endSec);
 }
 
-export function formatSegmentTime(value: number) {
-  const totalHundredths = Math.max(0, Math.round(value * 100));
-  const hours = Math.floor(totalHundredths / 360000);
-  const minutes = Math.floor((totalHundredths % 360000) / 6000);
-  const seconds = Math.floor((totalHundredths % 6000) / 100);
-  const hundredths = totalHundredths % 100;
-
-  if (hundredths === 0) {
-    if (hours > 0) {
-      return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-    }
-
-    return `${minutes}:${String(seconds).padStart(2, "0")}`;
-  }
-
-  const fractional = hundredths % 10 === 0 ? String(Math.floor(hundredths / 10)) : String(hundredths).padStart(2, "0");
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${fractional}`;
-  }
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}.${fractional}`;
-}
-
-export { formatDate };
+export { formatDate, formatSegmentTime };

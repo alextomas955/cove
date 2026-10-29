@@ -300,6 +300,67 @@ describe("SegmentDetailPage", () => {
     expect(save).not.toHaveClass("bg-accent");
   });
 
+  it("shows stored times to the hundredth and saves them unchanged when only other fields are edited", async () => {
+    const segment = buildSegment({ startSec: 1734.025, endSec: 1754.458 });
+    mockSegmentLibrary.get.mockResolvedValue(segment);
+    mockVideos.get.mockResolvedValue(buildVideo());
+    mockVideos.segments.list.mockResolvedValue([segment]);
+    mockVideos.segments.spans.mockResolvedValue({ profileId: 3, spans: [] });
+    mockVideos.segments.update.mockResolvedValue(segment);
+    mockTags.find.mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Episode Intro" });
+    fireEvent.keyDown(window, { key: "e" });
+    await screen.findByRole("heading", { name: "Edit Segment" });
+
+    expect(screen.getByLabelText(/^Start/)).toHaveValue("28:54.03");
+    expect(screen.getByLabelText(/^End/)).toHaveValue("29:14.46");
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).not.toHaveClass("bg-accent");
+
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Renamed Intro" } });
+    fireEvent.click(save);
+
+    await waitFor(() => {
+      expect(mockVideos.segments.update).toHaveBeenCalledWith(
+        99,
+        7,
+        expect.objectContaining({ title: "Renamed Intro", startSec: 1734.025, endSec: 1754.458 }),
+      );
+    });
+  });
+
+  it("saves an edited start time as typed and clears the end when its input is emptied", async () => {
+    const segment = buildSegment({ startSec: 1734.025, endSec: 1754.458 });
+    mockSegmentLibrary.get.mockResolvedValue(segment);
+    mockVideos.get.mockResolvedValue(buildVideo());
+    mockVideos.segments.list.mockResolvedValue([segment]);
+    mockVideos.segments.spans.mockResolvedValue({ profileId: 3, spans: [] });
+    mockVideos.segments.update.mockResolvedValue(segment);
+    mockTags.find.mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Episode Intro" });
+    fireEvent.keyDown(window, { key: "e" });
+    await screen.findByRole("heading", { name: "Edit Segment" });
+
+    fireEvent.change(screen.getByLabelText(/^Start/), { target: { value: "1:02:03.5" } });
+    fireEvent.blur(screen.getByLabelText(/^Start/));
+    fireEvent.change(screen.getByLabelText(/^End/), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mockVideos.segments.update).toHaveBeenCalledWith(
+        99,
+        7,
+        expect.objectContaining({ startSec: 3723.5, endSec: undefined }),
+      );
+    });
+  });
+
   it("creates a metadata-preserving sub-video from the current segment", async () => {
     mockSegmentLibrary.get.mockResolvedValue(buildSegment());
     mockVideos.get.mockResolvedValue(buildVideo());

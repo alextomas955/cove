@@ -37,6 +37,7 @@ import { useAppConfig } from "../state/AppConfigContext";
 import { SegmentVisualSimilarityPanel, useSegmentVisualSimilarityAvailable } from "../components/VisualSimilarityPanel";
 import { buildSubVideoCreate } from "../utils/subVideoCreation";
 import { getLoadError, isApiNotFoundError } from "../utils/queryLoadState";
+import { formatSegmentTime, parseSegmentTimeInput } from "../utils/segmentTime";
 import { formatSourceKeyLabel } from "../utils/sourceKeyLabel";
 
 interface Props {
@@ -70,37 +71,6 @@ function getSegmentPerformerId(segment: SegmentRecord) {
 function getSegmentFaceId(segment: SegmentRecord) {
   const normalizedKind = segment.kind?.trim().toLowerCase() ?? "";
   return normalizedKind.includes("face") && segment.refId != null ? Number(segment.refId) : null;
-}
-
-function parseSegmentTimeInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  const parts = trimmed.split(":").map((part) => part.trim());
-  if (parts.length > 3 || parts.some((part) => part === "" || Number.isNaN(Number(part)))) return null;
-
-  const numbers = parts.map(Number);
-  if (numbers.some((part) => part < 0 || !Number.isFinite(part))) return null;
-
-  if (numbers.length === 1) return numbers[0];
-  if (numbers.length === 2) return numbers[0] * 60 + numbers[1];
-  return numbers[0] * 3600 + numbers[1] * 60 + numbers[2];
-}
-
-function formatSegmentTimeInput(seconds: number) {
-  const safeSeconds = Math.max(0, seconds || 0);
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const wholeSeconds = Math.floor(safeSeconds % 60);
-  const tenths = Math.round((safeSeconds - Math.floor(safeSeconds)) * 10);
-  const normalizedWholeSeconds = tenths === 10 ? wholeSeconds + 1 : wholeSeconds;
-  const normalizedTenths = tenths === 10 ? 0 : tenths;
-  const secondText =
-    normalizedTenths > 0
-      ? `${normalizedWholeSeconds.toString().padStart(2, "0")}.${normalizedTenths}`
-      : normalizedWholeSeconds.toString().padStart(2, "0");
-
-  return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${secondText}` : `${minutes}:${secondText}`;
 }
 
 function isHexColorValue(value?: string | null) {
@@ -175,7 +145,7 @@ function setStartTimeFromSeconds(
 ) {
   const normalized = Math.max(0, seconds);
   setStartSec(normalized);
-  setStartText(formatSegmentTimeInput(normalized));
+  setStartText(formatSegmentTime(normalized));
 }
 
 function setEndTimeFromSeconds(
@@ -191,7 +161,7 @@ function setEndTimeFromSeconds(
 
   const normalized = Math.max(0, seconds);
   setEndSec(normalized);
-  setEndText(formatSegmentTimeInput(normalized));
+  setEndText(formatSegmentTime(normalized));
 }
 
 export function SegmentDetailPage({ id, onNavigate }: Props) {
@@ -281,11 +251,13 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
   const normalizedTitle = title.trim() || undefined;
   const normalizedKind = kind;
   const normalizedColorHint = colorHint.trim() || undefined;
+  // startSec/endSec hold the exact time behind each input: the stored or chosen time, or the typed text once it
+  // parses. Saving them instead of re-parsing the displayed text keeps untouched times at full precision.
   const parsedStart = parseSegmentTimeInput(startText);
   const endTextIsBlank = endText.trim() === "";
   const parsedEnd = endTextIsBlank ? null : parseSegmentTimeInput(endText);
   const endTimeIsValid = endTextIsBlank || parsedEnd != null;
-  const normalizedEndSec = parsedEnd == null ? undefined : parsedEnd;
+  const normalizedEndSec = endSec === "" ? undefined : endSec;
   const hasSelectedReference =
     kind === "tag"
       ? selectedTagId != null
@@ -297,19 +269,16 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
     parsedStart != null &&
     parsedStart >= 0 &&
     endTimeIsValid &&
-    (parsedEnd == null || parsedEnd >= parsedStart) &&
+    (normalizedEndSec == null || normalizedEndSec >= startSec) &&
     hasSelectedReference;
 
-  // Compare against what the form holds right after resetEditState, so a just-loaded segment reads unchanged
-  // even when its times are rounded for display.
   const hasChanges =
     !!segment &&
     (normalizedTitle !== (segment.title?.trim() || undefined) ||
       kind !== getEditableSegmentKind(segment) ||
       normalizedColorHint !== (segment.colorHint?.trim() || undefined) ||
-      parsedStart !== parseSegmentTimeInput(formatSegmentTimeInput(Math.max(0, segment.startSec))) ||
-      parsedEnd !==
-        (segment.endSec == null ? null : parseSegmentTimeInput(formatSegmentTimeInput(Math.max(0, segment.endSec)))) ||
+      startSec !== Math.max(0, segment.startSec) ||
+      normalizedEndSec !== (segment.endSec == null ? undefined : Math.max(0, segment.endSec)) ||
       // Only the reference of the chosen kind is saved.
       (kind === "tag"
         ? selectedTagId !== (segment.tagId ?? null)
@@ -355,7 +324,7 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
             : undefined;
 
       return videos.segments.update(segment.hostId, segment.id, {
-        startSec: parsedStart,
+        startSec,
         endSec: normalizedEndSec,
         tagId: nextTagId,
         kind: normalizedKind,
@@ -695,7 +664,7 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
                   const parsed = parseSegmentTimeInput(next);
                   if (parsed != null) setStartSec(parsed);
                 }}
-                onBlur={() => setStartText(formatSegmentTimeInput(startSec))}
+                onBlur={() => setStartText(formatSegmentTime(startSec))}
                 className="min-w-0 flex-1 rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm font-normal text-foreground outline-none focus:border-accent"
               />
               <button
@@ -727,7 +696,7 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
                   const parsed = parseSegmentTimeInput(next);
                   if (parsed != null) setEndSec(parsed);
                 }}
-                onBlur={() => setEndText(endSec === "" ? "" : formatSegmentTimeInput(endSec))}
+                onBlur={() => setEndText(endSec === "" ? "" : formatSegmentTime(endSec))}
                 placeholder="Optional"
                 className="min-w-0 flex-1 rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm font-normal text-foreground outline-none focus:border-accent"
               />
@@ -813,7 +782,7 @@ export function SegmentDetailPage({ id, onNavigate }: Props) {
               ? "Start must be a valid time."
               : !endTimeIsValid
                 ? "End must be a valid time."
-                : parsedEnd != null && parsedEnd < parsedStart
+                : normalizedEndSec != null && normalizedEndSec < startSec
                   ? "End time must be after the start time."
                   : !hasSelectedReference
                     ? `Choose a ${kind}.`
@@ -1594,30 +1563,6 @@ function getSegmentDuration(startSec?: number, endSec?: number) {
   }
 
   return Math.max(0, endSec - startSec);
-}
-
-function formatSegmentTime(value: number) {
-  const totalHundredths = Math.max(0, Math.round(value * 100));
-  const hours = Math.floor(totalHundredths / 360000);
-  const minutes = Math.floor((totalHundredths % 360000) / 6000);
-  const seconds = Math.floor((totalHundredths % 6000) / 100);
-  const hundredths = totalHundredths % 100;
-
-  if (hundredths === 0) {
-    if (hours > 0) {
-      return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-    }
-
-    return `${minutes}:${String(seconds).padStart(2, "0")}`;
-  }
-
-  const fractional = hundredths % 10 === 0 ? String(Math.floor(hundredths / 10)) : String(hundredths).padStart(2, "0");
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${fractional}`;
-  }
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}.${fractional}`;
 }
 
 function formatConfidence(confidence?: number) {
