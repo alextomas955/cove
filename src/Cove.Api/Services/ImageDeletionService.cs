@@ -23,12 +23,20 @@ public sealed class ImageDeletionService(
     public Task<bool> DeleteAsync(int id, bool deleteFile, bool deleteGenerated, CancellationToken ct = default)
         => DeleteAsync(id, deleteFile, deleteGenerated, null, ct);
 
-    public async Task<bool> DeleteAsync(
+    public Task<bool> DeleteAsync(
         int id,
         bool deleteFile,
         bool deleteGenerated,
         BulkDeletionExecutionContext? executionContext,
         CancellationToken ct = default)
+        => DeletionRace.RetryAsync(db, nameof(Image), id, () => DeleteOnceAsync(id, deleteFile, deleteGenerated, executionContext, ct), logger);
+
+    private async Task<bool> DeleteOnceAsync(
+        int id,
+        bool deleteFile,
+        bool deleteGenerated,
+        BulkDeletionExecutionContext? executionContext,
+        CancellationToken ct)
     {
         // Deletion only needs the file rows. Loading tags, performers, galleries, URLs, studios, and
         // parent folders for every image made large jobs spend most of their time materializing data

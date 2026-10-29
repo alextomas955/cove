@@ -349,14 +349,15 @@ public sealed class BulkEntityDeletionService(
         var deleted = kind switch
         {
             BulkDeletionEntityKind.Video => await DeleteVideoAsync(id, executionContext, deleteFiles, deleteGenerated, authorizationPrincipal, ct),
+            // ImageDeletionService retries internally because ImagesController calls it directly.
             BulkDeletionEntityKind.Image => await imageDeletionService.DeleteAsync(id, deleteFiles, deleteGenerated, executionContext, ct),
-            BulkDeletionEntityKind.Audio => await DeleteAudioAsync(id, executionContext, deleteFiles, deleteGenerated, ct),
-            BulkDeletionEntityKind.Text => await DeleteTextAsync(id, executionContext, deleteFiles, deleteGenerated, ct),
-            BulkDeletionEntityKind.Gallery => await DeleteGalleryAsync(id, ct),
-            BulkDeletionEntityKind.Performer => await DeleteSimpleAsync(db.Performers, id, CustomFieldEntityTypes.Performer, AffinityHostType.Performer, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct),
-            BulkDeletionEntityKind.Tag => await DeleteTagAsync(id, ct),
-            BulkDeletionEntityKind.Studio => await DeleteSimpleAsync(db.Studios, id, CustomFieldEntityTypes.Studio, AffinityHostType.Studio, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct),
-            BulkDeletionEntityKind.Group => await DeleteGroupAsync(id, ct),
+            BulkDeletionEntityKind.Audio => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Audio), id, () => DeleteAudioAsync(id, executionContext, deleteFiles, deleteGenerated, ct), logger),
+            BulkDeletionEntityKind.Text => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Text), id, () => DeleteTextAsync(id, executionContext, deleteFiles, deleteGenerated, ct), logger),
+            BulkDeletionEntityKind.Gallery => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Gallery), id, () => DeleteGalleryAsync(id, ct), logger),
+            BulkDeletionEntityKind.Performer => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Performer), id, () => DeleteSimpleAsync(db.Performers, id, CustomFieldEntityTypes.Performer, AffinityHostType.Performer, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct), logger),
+            BulkDeletionEntityKind.Tag => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Tag), id, () => DeleteTagAsync(id, ct), logger),
+            BulkDeletionEntityKind.Studio => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Studio), id, () => DeleteSimpleAsync(db.Studios, id, CustomFieldEntityTypes.Studio, AffinityHostType.Studio, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct), logger),
+            BulkDeletionEntityKind.Group => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Group), id, () => DeleteGroupAsync(id, ct), logger),
             BulkDeletionEntityKind.Face => await DeleteFaceAsync(id, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };

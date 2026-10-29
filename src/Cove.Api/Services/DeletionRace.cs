@@ -11,6 +11,32 @@ namespace Cove.Api.Services;
 internal static class DeletionRace
 {
     /// <summary>
+    /// Runs a deletion that saves through <see cref="SaveAsync"/>, staging it once more when a row it staged
+    /// alongside the entity (a file row, tag application, custom field value, ...) disappeared first, as when a
+    /// scan removes a missing file. The deletion must only read and stage changes before that save, and must do
+    /// its post-commit work after it, so the conflict surfaces before anything that the retry could repeat.
+    /// </summary>
+    public static async Task<bool> RetryAsync(
+        CoveContext db,
+        string entityType,
+        int id,
+        Func<Task<bool>> deletion,
+        ILogger? logger)
+    {
+        try
+        {
+            return await deletion();
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            logger?.LogInformation("A row staged with {EntityType} {EntityId} changed concurrently ({Reason}); retrying the deletion once.", entityType, id, ex.Message);
+            // SaveAsync already cleared it; clearing here keeps the retry from replaying stale changes regardless.
+            db.ChangeTracker.Clear();
+            return await deletion();
+        }
+    }
+
+    /// <summary>
     /// On any concurrency conflict the context's change tracker is cleared, including before the conflict is
     /// rethrown, so the caller can keep using the context for further deletions.
     /// </summary>

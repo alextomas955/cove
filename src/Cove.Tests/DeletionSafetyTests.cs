@@ -1014,8 +1014,94 @@ public sealed class DeletionSafetyTests
         Assert.Equal(["followup-artwork"], blobs.DeletedBlobIds);
     }
 
+    [Theory]
+    [InlineData(BulkDeletionEntityKind.Studio)]
+    [InlineData(BulkDeletionEntityKind.Performer)]
+    [InlineData(BulkDeletionEntityKind.Tag)]
+    [InlineData(BulkDeletionEntityKind.Gallery)]
+    [InlineData(BulkDeletionEntityKind.Group)]
+    [InlineData(BulkDeletionEntityKind.Audio)]
+    [InlineData(BulkDeletionEntityKind.Text)]
+    [InlineData(BulkDeletionEntityKind.Image)]
+    public async Task DeletionRetriesWhenAStagedTagApplicationDisappears(BulkDeletionEntityKind kind)
+    {
+        var concurrentDelete = new ConcurrentRowDeleteInterceptor();
+        await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
+        var target = CreateRaceTarget(kind, "target", new Folder { Path = "/race", ModTime = DateTime.UtcNow });
+        var applied = new Tag { Name = "Applied" };
+        db.AddRange(target, applied);
+        await db.SaveChangesAsync();
+        var application = new TagApplication { HostType = Enum.Parse<AffinityHostType>(kind.ToString()), HostId = target.Id, TagId = applied.Id };
+        db.TagApplications.Add(application);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var eventBus = new EventBus();
+        var deletedEvents = new List<EntityEvent>();
+        using var subscription = eventBus.Subscribe<EntityEvent>(evt =>
+        {
+            if (evt.Type.ToString().EndsWith("Deleted", StringComparison.Ordinal))
+                deletedEvents.Add(evt);
+        });
+        var (service, blobs) = CreateDeletionService(db, eventBus);
+        var context = new BulkDeletionExecutionContext();
+        // Only a staged dependency disappears, as when a tagger removes it; the entity itself still exists.
+        concurrentDelete.Arm("tag_applications", application.Id);
+
+        Assert.True(await service.DeleteAsync(
+            kind,
+            target.Id,
+            context,
+            deleteFiles: true,
+            deleteGenerated: true,
+            CancellationToken.None));
+
+        Assert.False(await RaceTargetExistsAsync(db, kind, target.Id));
+        Assert.Empty(await db.TagApplications.ToArrayAsync());
+        // The retried deletion publishes its event once.
+        Assert.Equal([target.Id], deletedEvents.Select(evt => evt.EntityId));
+        Assert.Equal(kind == BulkDeletionEntityKind.Image ? [] : ["target-artwork"], blobs.DeletedBlobIds);
+        // The retry stages the file once; the first attempt's staged deletion rolled back.
+        string[] expectedFiles = kind is BulkDeletionEntityKind.Audio or BulkDeletionEntityKind.Text or BulkDeletionEntityKind.Image
+            ? ["/race/target"]
+            : [];
+        Assert.Equal(expectedFiles, context.GetPhysicalFiles());
+        Assert.Equal(expectedFiles, await db.PendingPhysicalFileDeletions.Select(item => item.Path).ToArrayAsync());
+    }
+
+    [Theory]
+    [InlineData(BulkDeletionEntityKind.Audio)]
+    [InlineData(BulkDeletionEntityKind.Text)]
+    [InlineData(BulkDeletionEntityKind.Image)]
+    public async Task DeletionRetriesWhenAScanRemovesItsFileRowFirst(BulkDeletionEntityKind kind)
+    {
+        var concurrentDelete = new ConcurrentRowDeleteInterceptor();
+        await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
+        var target = CreateRaceTarget(kind, "target", new Folder { Path = "/race", ModTime = DateTime.UtcNow });
+        db.Add(target);
+        await db.SaveChangesAsync();
+        var fileId = await db.Set<BaseFileEntity>().Select(file => file.Id).SingleAsync();
+        db.ChangeTracker.Clear();
+        var (service, _) = CreateDeletionService(db);
+        var context = new BulkDeletionExecutionContext();
+        concurrentDelete.Arm("files", fileId);
+
+        Assert.True(await service.DeleteAsync(
+            kind,
+            target.Id,
+            context,
+            deleteFiles: true,
+            deleteGenerated: true,
+            CancellationToken.None,
+            publishEvent: false));
+
+        Assert.False(await RaceTargetExistsAsync(db, kind, target.Id));
+        // The retry no longer sees the removed file row, so it leaves that path to whatever removed the row.
+        Assert.Empty(context.GetPhysicalFiles());
+        Assert.Empty(await db.PendingPhysicalFileDeletions.ToArrayAsync());
+    }
+
     [Fact]
-    public async Task StudioDeletionConflictRethrowsWhenTheStudioStillExists()
+    public async Task StudioDeletionRethrowsWhenItsDependentsKeepChanging()
     {
         var concurrentDelete = new ConcurrentRowDeleteInterceptor();
         await using var db = CreateContext(saveChangesInterceptor: concurrentDelete);
@@ -1024,13 +1110,15 @@ public sealed class DeletionSafetyTests
         var next = new Studio { Name = "Next" };
         db.AddRange(tag, studio, next);
         await db.SaveChangesAsync();
-        var application = new TagApplication { HostType = AffinityHostType.Studio, HostId = studio.Id, TagId = tag.Id };
-        db.TagApplications.Add(application);
+        var first = new TagApplication { HostType = AffinityHostType.Studio, HostId = studio.Id, TagId = tag.Id, SourceKey = "first" };
+        var second = new TagApplication { HostType = AffinityHostType.Studio, HostId = studio.Id, TagId = tag.Id, SourceKey = "second" };
+        db.TagApplications.AddRange(first, second);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var (service, _) = CreateDeletionService(db);
-        // Only a staged dependency disappears, so the conflict is not a lost race for the studio itself.
-        concurrentDelete.Arm("tag_applications", application.Id);
+        // A staged dependency disappears before the first attempt and another before the retry.
+        concurrentDelete.Arm("tag_applications", first.Id);
+        concurrentDelete.Arm("tag_applications", second.Id);
 
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => service.DeleteAsync(
             BulkDeletionEntityKind.Studio,
@@ -1040,6 +1128,8 @@ public sealed class DeletionSafetyTests
             deleteGenerated: true,
             CancellationToken.None,
             publishEvent: false));
+        // Both queued removals ran, so the second conflict came from the one retry.
+        Assert.Empty(await db.TagApplications.AsNoTracking().ToArrayAsync());
         // The rejected delete must not be replayed by the next deletion through this context.
         Assert.True(await service.DeleteAsync(
             BulkDeletionEntityKind.Studio,
@@ -1285,14 +1375,15 @@ public sealed class DeletionSafetyTests
 
     private sealed class ConcurrentRowDeleteInterceptor : SaveChangesInterceptor
     {
-        private (string Table, int Id)? _target;
-        private int _savesUntilDelete;
+        private readonly Queue<(string Table, int Id)?> _deletes = new();
 
-        // beforeSave counts SaveChanges calls from 1, so 2 targets CoveContext's follow-up derived-count save.
+        // Each call queues one deletion for a later SaveChanges call. beforeSave counts those calls from 1 after
+        // any deletion already queued, so 2 targets CoveContext's follow-up derived-count save.
         public void Arm(string table, int id, int beforeSave = 1)
         {
-            _target = (table, id);
-            _savesUntilDelete = beforeSave;
+            for (var save = 1; save < beforeSave; save++)
+                _deletes.Enqueue(null);
+            _deletes.Enqueue((table, id));
         }
 
         // Removes the row after the deletion service loaded it, as a competing request would.
@@ -1301,9 +1392,8 @@ public sealed class DeletionSafetyTests
             InterceptionResult<int> result,
             CancellationToken cancellationToken = default)
         {
-            if (_target is { } target && --_savesUntilDelete == 0)
+            if (_deletes.TryDequeue(out var next) && next is { } target)
             {
-                _target = null;
 #pragma warning disable EF1002 // The table name comes from the test itself, not from input.
                 await eventData.Context!.Database.ExecuteSqlRawAsync($"DELETE FROM {target.Table} WHERE \"Id\" = {{0}}", [target.Id], cancellationToken);
 #pragma warning restore EF1002
