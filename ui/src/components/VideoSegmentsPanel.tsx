@@ -20,6 +20,7 @@ import { AddToGroupDialog, type AddToGroupEntry } from "./AddToGroupDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EntityReferenceSelector, EntityReferenceMultiSelector } from "./EntityReferenceSelector";
 import { compareNatural } from "../utils/naturalCompare";
+import { formatSegmentTime, parseSegmentTimeInput } from "../utils/segmentTime";
 import {
   type SegmentFilterState,
   type SegmentFilterContext,
@@ -230,11 +231,19 @@ export function VideoSegmentsPanel({
   });
 
   // ----- Edit form helpers -----
+  // startSec/endSec hold the exact time behind each input: the stored or chosen time, or the typed text once it
+  // parses. Saving them instead of re-parsing the displayed text keeps untouched times at full precision.
   const parsedStart = parseSegmentTimeInput(startText);
-  const parsedEnd = endText.trim() === "" ? null : parseSegmentTimeInput(endText);
+  const endTextIsBlank = endText.trim() === "";
+  const parsedEnd = endTextIsBlank ? null : parseSegmentTimeInput(endText);
+  const nextEndSec = endSec === "" ? undefined : endSec;
   const hasSelectedEntity = kind === "performer" ? selectedPerformerId != null : selectedTagId != null;
   const canSaveSegment =
-    parsedStart != null && parsedStart >= 0 && (parsedEnd == null || parsedEnd >= parsedStart) && hasSelectedEntity;
+    parsedStart != null &&
+    parsedStart >= 0 &&
+    (endTextIsBlank || parsedEnd != null) &&
+    (nextEndSec == null || nextEndSec >= startSec) &&
+    hasSelectedEntity;
 
   function resetForm() {
     setAdding(false);
@@ -256,7 +265,7 @@ export function VideoSegmentsPanel({
   function setStartTimeFromSeconds(seconds: number) {
     const normalized = Math.max(0, seconds);
     setStartSec(normalized);
-    setStartText(formatSegmentTimeInput(normalized));
+    setStartText(formatSegmentTime(normalized));
   }
   function setEndTimeFromSeconds(seconds: number | "") {
     if (seconds === "") {
@@ -266,7 +275,7 @@ export function VideoSegmentsPanel({
     }
     const normalized = Math.max(0, seconds);
     setEndSec(normalized);
-    setEndText(formatSegmentTimeInput(normalized));
+    setEndText(formatSegmentTime(normalized));
   }
   function startEditSegment(segment: Segment) {
     setChooser(null);
@@ -304,14 +313,13 @@ export function VideoSegmentsPanel({
 
   const editingSegment = editingId != null ? (rawSegmentsById.get(editingId) ?? null) : null;
   const saveSegment = () => {
-    if (!canSaveSegment || parsedStart == null) return;
-    const nextEndSec = parsedEnd == null ? undefined : parsedEnd;
+    if (!canSaveSegment) return;
     const nextTagId = kind === "tag" ? (selectedTagId ?? undefined) : undefined;
     const nextRefId = kind === "performer" ? (selectedPerformerId ?? undefined) : undefined;
     if (editingSegment) {
       updateMutation.mutate({
         segment: editingSegment,
-        startSec: parsedStart,
+        startSec,
         endSec: nextEndSec,
         tagId: nextTagId,
         refId: nextRefId,
@@ -322,7 +330,7 @@ export function VideoSegmentsPanel({
     }
     createMutation.mutate({
       title: title || undefined,
-      startSec: parsedStart,
+      startSec,
       endSec: nextEndSec,
       tagId: nextTagId,
       refId: nextRefId,
@@ -451,7 +459,7 @@ export function VideoSegmentsPanel({
             const parsed = parseSegmentTimeInput(value);
             if (parsed != null) setStartSec(parsed);
           }}
-          onStartBlur={() => setStartText(formatSegmentTimeInput(startSec))}
+          onStartBlur={() => setStartText(formatSegmentTime(startSec))}
           onEndChange={(value) => {
             setEndText(value);
             if (value.trim() === "") {
@@ -461,7 +469,7 @@ export function VideoSegmentsPanel({
             const parsed = parseSegmentTimeInput(value);
             if (parsed != null) setEndSec(parsed);
           }}
-          onEndBlur={() => setEndText(endSec === "" ? "" : formatSegmentTimeInput(endSec))}
+          onEndBlur={() => setEndText(endSec === "" ? "" : formatSegmentTime(endSec))}
           onUseCurrentStart={() => setStartTimeFromSeconds(currentTime)}
           onUseCurrentEnd={() => setEndTimeFromSeconds(currentTime)}
           selectedTagId={selectedTagId}
@@ -1080,31 +1088,4 @@ function formatTime(seconds: number) {
   return hours > 0
     ? `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
     : `${minutes}:${secText}`;
-}
-
-function parseSegmentTimeInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parts = trimmed.split(":").map((part) => part.trim());
-  if (parts.length > 3 || parts.some((part) => part === "" || Number.isNaN(Number(part)))) return null;
-  const numbers = parts.map(Number);
-  if (numbers.some((part) => part < 0 || !Number.isFinite(part))) return null;
-  if (numbers.length === 1) return numbers[0];
-  if (numbers.length === 2) return numbers[0] * 60 + numbers[1];
-  return numbers[0] * 3600 + numbers[1] * 60 + numbers[2];
-}
-
-function formatSegmentTimeInput(seconds: number) {
-  const safeSeconds = Math.max(0, seconds || 0);
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const wholeSeconds = Math.floor(safeSeconds % 60);
-  const tenths = Math.round((safeSeconds - Math.floor(safeSeconds)) * 10);
-  const normalizedWholeSeconds = tenths === 10 ? wholeSeconds + 1 : wholeSeconds;
-  const normalizedTenths = tenths === 10 ? 0 : tenths;
-  const secondText =
-    normalizedTenths > 0
-      ? `${normalizedWholeSeconds.toString().padStart(2, "0")}.${normalizedTenths}`
-      : normalizedWholeSeconds.toString().padStart(2, "0");
-  return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${secondText}` : `${minutes}:${secondText}`;
 }
