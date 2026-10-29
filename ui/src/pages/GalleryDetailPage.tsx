@@ -426,6 +426,7 @@ export function GalleryDetailPage({ id, onNavigate }: Props) {
         message={`Delete "${galleryTitle}"? This cannot be undone.`}
         onConfirm={() => deleteMut.mutate()}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
       />
 
       <EntityHeroLayout

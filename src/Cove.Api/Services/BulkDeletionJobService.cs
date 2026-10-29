@@ -349,14 +349,15 @@ public sealed class BulkEntityDeletionService(
         var deleted = kind switch
         {
             BulkDeletionEntityKind.Video => await DeleteVideoAsync(id, executionContext, deleteFiles, deleteGenerated, authorizationPrincipal, ct),
+            // ImageDeletionService retries internally because ImagesController calls it directly.
             BulkDeletionEntityKind.Image => await imageDeletionService.DeleteAsync(id, deleteFiles, deleteGenerated, executionContext, ct),
-            BulkDeletionEntityKind.Audio => await DeleteAudioAsync(id, executionContext, deleteFiles, deleteGenerated, ct),
-            BulkDeletionEntityKind.Text => await DeleteTextAsync(id, executionContext, deleteFiles, deleteGenerated, ct),
-            BulkDeletionEntityKind.Gallery => await DeleteGalleryAsync(id, ct),
-            BulkDeletionEntityKind.Performer => await DeleteSimpleAsync(db.Performers, id, CustomFieldEntityTypes.Performer, AffinityHostType.Performer, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct),
-            BulkDeletionEntityKind.Tag => await DeleteTagAsync(id, ct),
-            BulkDeletionEntityKind.Studio => await DeleteSimpleAsync(db.Studios, id, CustomFieldEntityTypes.Studio, AffinityHostType.Studio, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct),
-            BulkDeletionEntityKind.Group => await DeleteGroupAsync(id, ct),
+            BulkDeletionEntityKind.Audio => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Audio), id, () => DeleteAudioAsync(id, executionContext, deleteFiles, deleteGenerated, ct), logger),
+            BulkDeletionEntityKind.Text => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Text), id, () => DeleteTextAsync(id, executionContext, deleteFiles, deleteGenerated, ct), logger),
+            BulkDeletionEntityKind.Gallery => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Gallery), id, () => DeleteGalleryAsync(id, ct), logger),
+            BulkDeletionEntityKind.Performer => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Performer), id, () => DeleteSimpleAsync(db.Performers, id, CustomFieldEntityTypes.Performer, AffinityHostType.Performer, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct), logger),
+            BulkDeletionEntityKind.Tag => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Tag), id, () => DeleteTagAsync(id, ct), logger),
+            BulkDeletionEntityKind.Studio => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Studio), id, () => DeleteSimpleAsync(db.Studios, id, CustomFieldEntityTypes.Studio, AffinityHostType.Studio, item => [item.ImageBlobId, item.ImageOverrideBlobId], ct), logger),
+            BulkDeletionEntityKind.Group => await DeletionRace.RetryAsync(db, nameof(BulkDeletionEntityKind.Group), id, () => DeleteGroupAsync(id, ct), logger),
             BulkDeletionEntityKind.Face => await DeleteFaceAsync(id, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
@@ -562,16 +563,20 @@ public sealed class BulkEntityDeletionService(
         var blobId = audio.ImageBlobId;
         db.Audios.Remove(audio);
         context.StagePhysicalFiles(db, physicalPaths);
-        await db.SaveChangesAsync(ct);
+        var deleted = await DeletionRace.SaveAsync(db, audio, logger, ct);
 
-        foreach (var path in physicalPaths)
-            context.TrackPhysicalFile(path);
+        // A lost race rolled back the staged file deletions; the winner owns the files.
+        if (deleted)
+        {
+            foreach (var path in physicalPaths)
+                context.TrackPhysicalFile(path);
+        }
         InvalidateSegmentCaches(hostCleanup);
         await CleanupDependencyBlobsBestEffortAsync(hostCleanup.BlobIds, ct);
 
         if (!string.IsNullOrWhiteSpace(blobId))
             await CleanupBlobBestEffortAsync(blobId, deleteGenerated, ct);
-        return true;
+        return deleted;
     }
 
     private async Task<bool> DeleteTextAsync(
@@ -597,16 +602,20 @@ public sealed class BulkEntityDeletionService(
         var blobId = text.ImageBlobId;
         db.TextDocuments.Remove(text);
         context.StagePhysicalFiles(db, physicalPaths);
-        await db.SaveChangesAsync(ct);
+        var deleted = await DeletionRace.SaveAsync(db, text, logger, ct);
 
-        foreach (var path in physicalPaths)
-            context.TrackPhysicalFile(path);
+        // A lost race rolled back the staged file deletions; the winner owns the files.
+        if (deleted)
+        {
+            foreach (var path in physicalPaths)
+                context.TrackPhysicalFile(path);
+        }
         InvalidateSegmentCaches(hostCleanup);
         await CleanupDependencyBlobsBestEffortAsync(hostCleanup.BlobIds, ct);
 
         if (!string.IsNullOrWhiteSpace(blobId))
             await CleanupBlobBestEffortAsync(blobId, deleteGenerated, ct);
-        return true;
+        return deleted;
     }
 
     private async Task<bool> DeleteSimpleAsync<TEntity>(
@@ -630,12 +639,14 @@ public sealed class BulkEntityDeletionService(
         var hostCleanup = await _hostDependencies.StageDeleteAsync(hostType, id, ct);
         await customFields.StageDeleteValuesForEntityAsync(customFieldEntityType, id, ct);
         entities.Remove(entity);
-        await db.SaveChangesAsync(ct);
+        var deleted = await DeletionRace.SaveAsync(db, entity, logger, ct);
+        // Still clean up after losing the race: the winner may not have finished, and every step here is
+        // reference-checked and idempotent.
         InvalidateSegmentCaches(hostCleanup);
         await CleanupDependencyBlobsBestEffortAsync(hostCleanup.BlobIds, ct);
         foreach (var blobId in ownedBlobIds)
             await CleanupBlobBestEffortAsync(blobId, deleteGenerated: true, ct);
-        return true;
+        return deleted;
     }
 
     private async Task<bool> DeleteTagAsync(int id, CancellationToken ct)
@@ -710,13 +721,13 @@ public sealed class BulkEntityDeletionService(
         var hostCleanup = await _hostDependencies.StageDeleteAsync(AffinityHostType.Gallery, id, ct);
         await customFields.StageDeleteValuesForEntityAsync(CustomFieldEntityTypes.Gallery, id, ct);
         db.Galleries.Remove(gallery);
-        await db.SaveChangesAsync(ct);
+        var deleted = await DeletionRace.SaveAsync(db, gallery, logger, ct);
 
         InvalidateSegmentCaches(hostCleanup);
         await CleanupDependencyBlobsBestEffortAsync(hostCleanup.BlobIds, ct);
         foreach (var blobId in ownedBlobIds)
             await CleanupBlobBestEffortAsync(blobId, deleteGenerated: true, ct);
-        return true;
+        return deleted;
     }
 
     private async Task<bool> DeleteGroupAsync(int id, CancellationToken ct)
@@ -733,12 +744,12 @@ public sealed class BulkEntityDeletionService(
         var hostCleanup = await _hostDependencies.StageDeleteAsync(AffinityHostType.Group, id, ct);
         await customFields.StageDeleteValuesForEntityAsync(CustomFieldEntityTypes.Group, id, ct);
         db.Groups.Remove(group);
-        await db.SaveChangesAsync(ct);
+        var deleted = await DeletionRace.SaveAsync(db, group, logger, ct);
         InvalidateSegmentCaches(hostCleanup);
         await CleanupDependencyBlobsBestEffortAsync(hostCleanup.BlobIds, ct);
         foreach (var blobId in ownedBlobIds)
             await CleanupBlobBestEffortAsync(blobId, deleteGenerated: true, ct);
-        return true;
+        return deleted;
     }
 
     private async Task<bool> DeleteFaceAsync(int id, CancellationToken ct)

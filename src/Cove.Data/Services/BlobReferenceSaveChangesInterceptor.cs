@@ -11,7 +11,7 @@ public sealed class BlobReferenceSaveChangesInterceptor(
     IBlobReferenceCoordinator coordinator,
     IServiceProvider serviceProvider,
     ILogger<BlobReferenceSaveChangesInterceptor> logger,
-    BlobReferenceTransactionCoordinator? transactionCoordinator = null) : SaveChangesInterceptor
+    BlobReferenceTransactionCoordinator? transactionCoordinator = null) : SaveChangesInterceptor, IDisposable
 {
     private IBlobReferenceLease? _lease;
     private IReadOnlyList<string> _cleanupBlobIds = [];
@@ -33,6 +33,7 @@ public sealed class BlobReferenceSaveChangesInterceptor(
         }
 
         RejectExplicitTransaction(eventData.Context);
+        RejectHeldLease();
         var lease = coordinator.Acquire();
         try
         {
@@ -65,6 +66,7 @@ public sealed class BlobReferenceSaveChangesInterceptor(
         }
 
         RejectExplicitTransaction(eventData.Context);
+        RejectHeldLease();
         var lease = await coordinator.AcquireAsync(cancellationToken);
         try
         {
@@ -106,6 +108,29 @@ public sealed class BlobReferenceSaveChangesInterceptor(
     {
         ResetPending();
         return Task.CompletedTask;
+    }
+
+    // EF reports concurrency conflicts through these hooks instead of SaveChangesFailed. Without them
+    // a lost delete race leaks the process-wide lease and every later blob-referencing save waits forever.
+    // IsSuppressed only reflects interceptors registered before this one; this interceptor must stay
+    // ahead of any interceptor that suppresses concurrency exceptions.
+    public override InterceptionResult ThrowingConcurrencyException(
+        ConcurrencyExceptionEventData eventData,
+        InterceptionResult result)
+    {
+        if (!result.IsSuppressed)
+            ResetPending();
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult> ThrowingConcurrencyExceptionAsync(
+        ConcurrencyExceptionEventData eventData,
+        InterceptionResult result,
+        CancellationToken cancellationToken = default)
+    {
+        if (!result.IsSuppressed)
+            ResetPending();
+        return ValueTask.FromResult(result);
     }
 
     public override void SaveChangesCanceled(DbContextEventData eventData) => ResetPending();
@@ -183,6 +208,14 @@ public sealed class BlobReferenceSaveChangesInterceptor(
         }
     }
 
+    // Checked before acquiring: the gate is not reentrant, so a lease this scope still holds would make the
+    // acquire wait forever instead of reaching the guard in SetPending.
+    private void RejectHeldLease()
+    {
+        if (_lease != null)
+            throw new InvalidOperationException("Concurrent SaveChanges calls are not supported for a Cove database context.");
+    }
+
     private void SetPending(IBlobReferenceLease lease, IReadOnlyList<string> cleanupBlobIds)
     {
         if (_lease != null)
@@ -205,6 +238,18 @@ public sealed class BlobReferenceSaveChangesInterceptor(
     }
 
     private void ReleaseLease() => Interlocked.Exchange(ref _lease, null)?.Dispose();
+
+    // Backstop for a save that ended through a path EF reports to no interceptor hook. The lease gate is
+    // process-wide, so leaking it past this scope would block every later blob-referencing save.
+    public void Dispose()
+    {
+        var lease = Interlocked.Exchange(ref _lease, null);
+        if (lease == null)
+            return;
+        logger.LogWarning("Released a blob-reference lease that was still held when its database scope ended");
+        _cleanupBlobIds = [];
+        lease.Dispose();
+    }
 
     private async ValueTask ReleaseLeaseAsync()
     {

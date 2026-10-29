@@ -574,6 +574,7 @@ export function TagDetailPage({ id, onNavigate }: Props) {
         message={`Delete "${tag.name}"? This cannot be undone.`}
         onConfirm={() => deleteMut.mutate()}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
       />
       <DetailMergeDialog
         open={mergeOpen}

@@ -1579,6 +1579,7 @@ export function VideoDetailPage({ id, initialSeekTo, initialTab, initialCut, onN
         message={`Are you sure you want to delete "${video.title || "Untitled"}"? This cannot be undone.`}
         onConfirm={(opts) => deleteMut.mutate(opts?.deleteFile)}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
         showDeleteFile={canDeleteVideoFiles}
       />
       <ConfirmDialog

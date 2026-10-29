@@ -181,6 +181,62 @@ public sealed class CleanServiceMemoryTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Fact]
+    public async Task CleanFailureDoesNotLeakIntoTheNextDeletionInTheBatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"cove-clean-failure-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var failure = new FirstImageDeleteFailure();
+            var options = new DbContextOptionsBuilder<CoveContext>()
+                .UseSqlite($"Data Source={Path.Combine(root, "library.db")};Pooling=False")
+                .AddInterceptors(failure).Options;
+            var services = new ServiceCollection();
+            services.AddScoped(_ => new CoveContext(options));
+            AddDeletionServices(services);
+            await using var provider = services.BuildServiceProvider();
+            await using (var db = new CoveContext(options))
+            {
+                await db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+                var folder = new Folder { Path = root };
+                db.AddRange(
+                    new Image { Title = "first", Files = [new ImageFile { ParentFolder = folder, Basename = "first.jpg" }] },
+                    new Image { Title = "second", Files = [new ImageFile { ParentFolder = folder, Basename = "second.jpg" }] });
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+
+            failure.Armed = true;
+            var jobs = new CapturingJobs(new InspectionGuard(), TestContext.Current.CancellationToken);
+            new CleanService(jobs, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CleanService>.Instance).StartClean();
+            await jobs.Completion;
+
+            // The failed image stays for the next clean; the second deletion must not replay its staged delete.
+            await using var verify = new CoveContext(options);
+            Assert.NotNull(failure.FailedImageId);
+            Assert.Equal([failure.FailedImageId.Value], await verify.Images.Select(image => image.Id).ToListAsync(TestContext.Current.CancellationToken));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private sealed class FirstImageDeleteFailure : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        public int? FailedImageId { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (Armed && FailedImageId is null
+                && eventData.Context!.ChangeTracker.Entries<Image>().FirstOrDefault(entry => entry.State == EntityState.Deleted) is { } deleted)
+            {
+                FailedImageId = deleted.Entity.Id;
+                throw new DbUpdateException("Injected save failure");
+            }
+            return ValueTask.FromResult(result);
+        }
+    }
+
     private static void AddDeletionServices(IServiceCollection services, IEventBus? eventBus = null,
         IThumbnailService? thumbnails = null)
     {

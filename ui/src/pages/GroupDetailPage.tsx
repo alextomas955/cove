@@ -455,6 +455,7 @@ export function GroupDetailPage({ id, onNavigate }: Props) {
         message={`Delete "${group.name}"? This cannot be undone.`}
         onConfirm={() => deleteMut.mutate()}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
       />
 
       <EntityHeroLayout

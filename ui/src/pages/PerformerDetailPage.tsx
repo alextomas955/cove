@@ -713,6 +713,7 @@ export function PerformerDetailPage({ id, onNavigate }: Props) {
         message={`Are you sure you want to delete "${performer.name}"? This cannot be undone.`}
         onConfirm={() => deleteMut.mutate()}
         onCancel={() => setConfirmDelete(false)}
+        isPending={deleteMut.isPending}
       />
       <DetailMergeDialog
         open={mergeOpen}

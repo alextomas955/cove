@@ -187,6 +187,7 @@ public class CleanService(
         {
             // A fresh scope per batch keeps the change tracker bounded across large cleans.
             using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CoveContext>();
             var deletion = scope.ServiceProvider.GetRequiredService<BulkEntityDeletionService>();
             foreach (var id in ids)
             {
@@ -202,6 +203,9 @@ public class CleanService(
                 catch (Exception ex)
                 {
                     removal.Failed++;
+                    // A failed save leaves its staged changes tracked, and the next deletion's save in this
+                    // scope would replay them, deleting this entity without its cleanup.
+                    db.ChangeTracker.Clear();
                     logger.LogWarning(ex, "Clean could not remove orphaned {Kind} {Id}", kind, id);
                     // Keep the failed entity's file rows so the next clean still classifies it as an orphan
                     // (a fileless entity is never an orphan in a path-scoped clean).
